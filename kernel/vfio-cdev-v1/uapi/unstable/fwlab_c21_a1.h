@@ -1,0 +1,108 @@
+/* SPDX-FileCopyrightText: 2026 Evanshenf */
+/* SPDX-License-Identifier: GPL-2.0-only */
+
+#ifndef FWLAB_C21_A1_H
+#define FWLAB_C21_A1_H
+
+/*
+ * Disposable C2.1 test wire contract.
+ *
+ * This is not a firmware, HIF, NFC, media, or stable userspace ABI.  Every
+ * multi-byte field is little-endian.  Implementations must access records by
+ * byte offset and must not cast them to native or packed C structures.
+ */
+
+#define FWLAB_C21_A1_ABI_MAJOR 1U
+#define FWLAB_C21_A1_ABI_MINOR 0U
+
+#define FWLAB_C21_RECORD_SIZE 64U
+#define FWLAB_C21_CONTROL_REGION_SIZE 4096U
+#define FWLAB_C21_DATA_REGION_SIZE 4096U
+#define FWLAB_C21_MAX_COPY_LENGTH 256U
+#define FWLAB_C21_IOAS_PAGE_SIZE 4096U
+#define FWLAB_C21_MAX_ERRNO 4095U
+
+/* Relative offsets inside the non-mappable control region. */
+#define FWLAB_C21_SUBMIT_OFFSET 0x000U
+#define FWLAB_C21_RESULT_OFFSET 0x040U
+#define FWLAB_C21_STATE_OFFSET 0x080U
+
+/* FourCC bytes as a little-endian u32. */
+#define FWLAB_C21_REQUEST_MAGIC 0x31415746U /* "FWA1" */
+#define FWLAB_C21_RESULT_MAGIC 0x31525746U  /* "FWR1" */
+#define FWLAB_C21_STATE_MAGIC 0x31535746U   /* "FWS1" */
+
+/* Request field offsets. */
+#define FWLAB_C21_REQ_MAGIC 0x00U
+#define FWLAB_C21_REQ_ABI_MAJOR 0x04U
+#define FWLAB_C21_REQ_ABI_MINOR 0x06U
+#define FWLAB_C21_REQ_STRUCT_SIZE 0x08U
+#define FWLAB_C21_REQ_OPERATION 0x0aU
+#define FWLAB_C21_REQ_FLAGS 0x0cU
+#define FWLAB_C21_REQ_SEQUENCE 0x10U
+#define FWLAB_C21_REQ_EXPECTED_GENERATION 0x18U
+#define FWLAB_C21_REQ_IOVA 0x20U
+#define FWLAB_C21_REQ_LENGTH 0x28U
+#define FWLAB_C21_REQ_RESERVED0 0x2cU
+#define FWLAB_C21_REQ_RESERVED1 0x30U
+#define FWLAB_C21_REQ_RESERVED2 0x38U
+
+#define FWLAB_C21_OP_COPY_IOAS_TO_BUFFER 1U
+#define FWLAB_C21_OP_COPY_BUFFER_TO_IOAS 2U
+
+/* Result field offsets. */
+#define FWLAB_C21_RES_MAGIC 0x00U
+#define FWLAB_C21_RES_ABI_MAJOR 0x04U
+#define FWLAB_C21_RES_ABI_MINOR 0x06U
+#define FWLAB_C21_RES_STRUCT_SIZE 0x08U
+#define FWLAB_C21_RES_OPERATION 0x0aU
+#define FWLAB_C21_RES_FLAGS 0x0cU
+#define FWLAB_C21_RES_SEQUENCE 0x10U
+#define FWLAB_C21_RES_GENERATION 0x18U
+#define FWLAB_C21_RES_IOVA 0x20U
+#define FWLAB_C21_RES_REQUESTED_LENGTH 0x28U
+#define FWLAB_C21_RES_OP_ERRNO 0x2cU
+#define FWLAB_C21_RES_RESERVED1 0x30U
+#define FWLAB_C21_RES_RESERVED2 0x38U
+
+#define FWLAB_C21_RES_F_VALID (1U << 0)
+#define FWLAB_C21_RES_F_DEST_MAY_HAVE_PARTIAL (1U << 1)
+#define FWLAB_C21_RES_F_ALL                                                   \
+	(FWLAB_C21_RES_F_VALID | FWLAB_C21_RES_F_DEST_MAY_HAVE_PARTIAL)
+
+/* State field offsets. */
+#define FWLAB_C21_ST_MAGIC 0x00U
+#define FWLAB_C21_ST_ABI_MAJOR 0x04U
+#define FWLAB_C21_ST_ABI_MINOR 0x06U
+#define FWLAB_C21_ST_STRUCT_SIZE 0x08U
+#define FWLAB_C21_ST_DEVICE_STATE 0x0aU
+#define FWLAB_C21_ST_FLAGS 0x0cU
+#define FWLAB_C21_ST_GENERATION 0x10U
+#define FWLAB_C21_ST_LAST_SEQUENCE 0x18U
+#define FWLAB_C21_ST_NEXT_SEQUENCE 0x20U
+#define FWLAB_C21_ST_MAX_COPY_LENGTH 0x28U
+#define FWLAB_C21_ST_DATA_REGION_SIZE 0x2cU
+#define FWLAB_C21_ST_RESERVED1 0x30U
+#define FWLAB_C21_ST_RESERVED2 0x38U
+
+#define FWLAB_C21_STATE_CLOSED 0U
+#define FWLAB_C21_STATE_OPEN_UNATTACHED 1U
+#define FWLAB_C21_STATE_OPEN_ATTACHED 2U
+#define FWLAB_C21_STATE_CLOSING 3U
+#define FWLAB_C21_STATE_DEAD 4U
+
+#define FWLAB_C21_ST_F_OPEN (1U << 0)
+#define FWLAB_C21_ST_F_ATTACHED (1U << 1)
+#define FWLAB_C21_ST_F_RESULT_VALID (1U << 2)
+#define FWLAB_C21_ST_F_SEQUENCE_EXHAUSTED (1U << 3)
+#define FWLAB_C21_ST_F_DEAD (1U << 4)
+#define FWLAB_C21_ST_F_ALL                                                   \
+	(FWLAB_C21_ST_F_OPEN | FWLAB_C21_ST_F_ATTACHED |                    \
+	 FWLAB_C21_ST_F_RESULT_VALID | FWLAB_C21_ST_F_SEQUENCE_EXHAUSTED |  \
+	 FWLAB_C21_ST_F_DEAD)
+
+struct fwlab_c21_wire_record {
+	unsigned char bytes[FWLAB_C21_RECORD_SIZE];
+};
+
+#endif /* FWLAB_C21_A1_H */

@@ -10,3 +10,5 @@ Kernel code owns mechanism and a generated memory-safety envelope, not a second 
 The first implementation is the deliberately inert [H0 synthetic PCI enumeration probe](host-pci-h0/README.md). It has no storage class, BAR, DMA or IRQ and exists only to validate exported host-bridge APIs and cleanup.
 
 The independent [V0 emulated VFIO cdev contract harness](vfio-cdev-v0/README.md) validates cdev/iommufd ownership and a software region without pretending to be a PCI function.
+
+The [V1 work area](vfio-cdev-v1/README.md) begins with the C2.1 A-prime wire/state contract and injected fake copy-provider seam. C2.1 contains no VFIO device or real IOAS provider; those remain separate later gates.
