@@ -12,3 +12,10 @@ out/
 *.qcow2
 *.wal
 compile_commands.json
+*.ko
+*.o
+*.mod
+*.mod.c
+*.cmd
+Module.symvers
+modules.order

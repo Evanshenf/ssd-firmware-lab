@@ -26,7 +26,7 @@ The L1 system disk, private NAND backing and exported synthetic namespace are th
 
 Use the L1 distribution GA 7.0 kernel as the primary development baseline. Do not add a second custom kernel until an exported-API PoC identifies the exact missing mechanism. Upstream 6.18 LTS is a later compatibility lane, not the default L1 boot kernel.
 
-Use a stable virtual serial/by-id for the media disk, exclude it from backup/snapshot/replication/live migration, and set `backup=0` in the VM configuration. Pin cache mode, AIO and iothread settings. Before any power-failure durability claim, prove Flush/FUA propagation through L1 QEMU, the L0 storage layer and the physical device; otherwise report only daemon-crash consistency.
+Use a stable virtual serial/by-id for the media disk, exclude it from backup/snapshot/replication/live migration, and set `backup=0` in the VM configuration. Do not assume a per-disk `snapshot=0` option makes a whole-VM snapshot safe: verify the actual hypervisor behavior. For a system-only snapshot, stop the VM, record the complete media-drive identity/options, safely detach (not delete) the raw-media volume, snapshot the system disk, then reattach the same volume. Pin cache mode, AIO and iothread settings. Before any power-failure durability claim, prove Flush/FUA propagation through L1 QEMU, the L0 storage layer and the physical device; otherwise report only daemon-crash consistency.
 
 ## Two implementation phases
 

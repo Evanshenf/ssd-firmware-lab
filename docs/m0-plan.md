@@ -13,6 +13,8 @@ Confirm independent authorship, per-file licensing, immutable provenance and tra
 
 Start on an exact Ubuntu GA 7.0 package/ABI/config/compiler tuple and test a reserved physical aperture, BAR claim, mapping type, ordering and a minimal doorbell path. Use exported APIs first; a custom kernel requires evidence of the exact missing export/core change. Stop the adapter design on aliasing, unbounded polling loss or unexplained ordering. Nested evidence is `Profile-Nested`; graduation requires repetition on bare metal with an equally exact kernel evidence tuple.
 
+The no-BAR H0 exported-API sub-gate passed on `Profile-Nested`; see the [recorded result](results/2026-08-28-m0-h0-nested.md). BAR/PAT, IRQ, DMA, native-driver and bare-metal gates remain open.
+
 ## M0-2: Host DMA gate
 
 For one explicit Host profile, account for every DMA address, mapping direction, range, lifetime and revocation. Unknown DMA paths fail closed. Never treat a generic DMA address as a physical pointer. Stop Host data-path work if any arbitrary or untracked access remains.
