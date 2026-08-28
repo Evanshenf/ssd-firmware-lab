@@ -31,6 +31,8 @@ The platform-device V0 cdev/iommufd ownership and software-region sub-gate passe
 
 The unprivileged [C2.1 A-prime contract and fake-provider gate](results/2026-08-28-c2-1-a-prime-fake-provider.md) also passed. It freezes the disposable wire, partial-side-effect rules and atomic per-device lifecycle transition seam without opening VFIO or an IOAS. The real `vfio_dma_rw()` provider, kernel build/load and all later mechanisms remain separate stopped gates.
 
+The bounded [C2.2 synchronous IOAS-copy gate](results/2026-08-28-c2-2-ioas-copy-nested.md) passed on `Profile-Nested` for one exact mapped page and both MAP/ATTACH orders. Permission/hole/partial characterization, lifecycle races, pinning, IRQ, BAR, PCI and QEMU remain stopped independent gates.
+
 ## M0-5: persistence lattice
 
 Use a tiny geometry to enumerate B/A/C/S crash points, checkpoint rollover, trims, relocations and reset fences. Require one recoverable physical truth, no resurrected trim, no dual live mapping and no success completion ahead of its declared durability. Removing any Host-side decoded mapping cache must not prevent firmware recovery from its NAND/OOB metadata.

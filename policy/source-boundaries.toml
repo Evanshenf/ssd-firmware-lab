@@ -126,6 +126,30 @@ allowed_unfrozen_names = ["README.md"]
 "tests/unit/vfio-c21/pthread_lock.h" = "caf935abb14fb1a98ab0aff66a3fe6511b26119ceaa9d8f59bfbafc6483596a6"
 "tests/unit/vfio-c21/test_c21.c" = "465df1234e710a4acb72bf826e2a0b9e51f38344a35d3056fe5de2da82fb5bd0"
 
+[freeze.c2_2]
+baseline_commit = "95e7a052ffc8320d13b1ec23ea82f0de21afe830"
+closed_build_input_roots = [
+  "docs/results/2026-08-28-c2-2-ioas-copy-nested.md",
+  "kernel/vfio-cdev-v1/Makefile",
+  "kernel/vfio-cdev-v1/providers/vfio_rw.c",
+  "kernel/vfio-cdev-v1/providers/vfio_rw.h",
+  "kernel/vfio-cdev-v1/v1_main.c",
+  "tests/privileged/c2_2_vfio_cdev_v1.sh",
+  "tools/vfio-cdev-v1/Makefile",
+  "tools/vfio-cdev-v1/vfio_cdev_v1_c2_2.c",
+]
+allowed_unfrozen_names = []
+
+[freeze.c2_2.files]
+"docs/results/2026-08-28-c2-2-ioas-copy-nested.md" = "8e4e09adc5bea27c9e07394d19b5d0491fb9fa54aace445464a32f1779db4b48"
+"kernel/vfio-cdev-v1/Makefile" = "f2aff02eb1434f7697a15b90030dc004016003e5485e6dcff77c7f63d6af6b2a"
+"kernel/vfio-cdev-v1/providers/vfio_rw.c" = "116395dec88f1b14f5b2d4602adf8dd6d8f3c52f939a38b62e548beddb89b3ee"
+"kernel/vfio-cdev-v1/providers/vfio_rw.h" = "d0a7717ef092ebd89758e72f178de4e7f55c7d4efa47aaf9294e4cda18c84d11"
+"kernel/vfio-cdev-v1/v1_main.c" = "c5f1c610360e04d581c5f7a8f1bd4f0354ee34cec59c7c6fc93a309989494c79"
+"tests/privileged/c2_2_vfio_cdev_v1.sh" = "6636cc8f9211b43a9698d501ecb0f369cb8d84b3050f7614217109fb1b271931"
+"tools/vfio-cdev-v1/Makefile" = "f1ce1d90eff6d30ded93046a694087ccce3c25f14d8954ace1840c63f32c87a0"
+"tools/vfio-cdev-v1/vfio_cdev_v1_c2_2.c" = "bb5697496abadfdb552c26caafbb12dc6cbdbe66532730e4de4debbc03a42bd4"
+
 [layer_fakes]
 roots = ["core", "nfc", "media", "frontends"]
 target = "fake-link"
