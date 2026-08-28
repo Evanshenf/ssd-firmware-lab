@@ -241,6 +241,24 @@ EXPECTED_C2_3_FILES = {
     "tools/vfio-cdev-v1-c23/vfio_cdev_v1_c23.c":
         "66c851c59deb78a77d6385ee060829f6513ee874e30bf8d661ac85bc22fcb18c",
 }
+EXPECTED_C2_4_BASELINE = "eb5f351a2fc39e7a59c348d38fbc0e037a73d7ec"
+EXPECTED_C2_4_CLOSED_ROOTS = [
+    "docs/results/2026-08-28-c2-4-lifecycle-race-nested.md",
+    "tests/privileged/c2_4_vfio_cdev_v1.sh",
+    "tools/vfio-cdev-v1-c24/Makefile",
+    "tools/vfio-cdev-v1-c24/c24.c",
+]
+EXPECTED_C2_4_UNFROZEN_NAMES = []
+EXPECTED_C2_4_FILES = {
+    "docs/results/2026-08-28-c2-4-lifecycle-race-nested.md":
+        "150c33e5c10f2b9ad9049529750693cafc491d6b330cb7175edf3edf0e4446d8",
+    "tests/privileged/c2_4_vfio_cdev_v1.sh":
+        "12bc26d54cfc0b203df47aa5480b603a70b17c16d5addb36af4c5c201f28d2db",
+    "tools/vfio-cdev-v1-c24/Makefile":
+        "4a1f0cd62d61121342a04242b4ebe6cec9c0ce8e76a308be12a06d5128e488da",
+    "tools/vfio-cdev-v1-c24/c24.c":
+        "4d568b3b1359cc2f5d5b4c5cc1a95122c1281871463fe66e4c6cb11853a112f6",
+}
 EXPECTED_FREEZES = {
     "cycle01": {
         "label": "Cycle 01",
@@ -269,6 +287,13 @@ EXPECTED_FREEZES = {
         "closed_build_input_roots": EXPECTED_C2_3_CLOSED_ROOTS,
         "allowed_unfrozen_names": EXPECTED_C2_3_UNFROZEN_NAMES,
         "files": EXPECTED_C2_3_FILES,
+    },
+    "c2_4": {
+        "label": "C2.4",
+        "baseline_commit": EXPECTED_C2_4_BASELINE,
+        "closed_build_input_roots": EXPECTED_C2_4_CLOSED_ROOTS,
+        "allowed_unfrozen_names": EXPECTED_C2_4_UNFROZEN_NAMES,
+        "files": EXPECTED_C2_4_FILES,
     },
 }
 EXPECTED_LAYER_FAKES = {

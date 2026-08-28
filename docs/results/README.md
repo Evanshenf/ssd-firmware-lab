@@ -11,3 +11,4 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 - [2026-08-28: C2.1 A-prime contract and fake provider](2026-08-28-c2-1-a-prime-fake-provider.md)
 - [2026-08-28: C2.2 synchronous IOAS copy on Profile-Nested](2026-08-28-c2-2-ioas-copy-nested.md)
 - [2026-08-28: C2.3 IOAS protection/range characterization on Profile-Nested](2026-08-28-c2-3-negative-characterization-nested.md)
+- [2026-08-28: C2.4 lifecycle and bounded real-race robustness on Profile-Nested](2026-08-28-c2-4-lifecycle-race-nested.md)

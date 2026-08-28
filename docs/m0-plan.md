@@ -35,6 +35,8 @@ The bounded [C2.2 synchronous IOAS-copy gate](results/2026-08-28-c2-2-ioas-copy-
 
 The [C2.3 protection/range characterization](results/2026-08-28-c2-3-negative-characterization-nested.md) passed its exact permission, malformed, alignment, partial-unmap and adjacent-page rejection matrix. Lifecycle mutation and concurrency remain stopped for C2.4.
 
+The [C2.4 lifecycle and bounded real-race gate](results/2026-08-28-c2-4-lifecycle-race-nested.md) passed replacement, unwind, duplicate-detach, serial close/reopen, unload-open ordering and fixed-count real-iommufd stress. The stress observed only its action-first class; deterministic two-order serialization remains the C2.1 injected-fake evidence. C2.5 two-instance/architecture isolation is the only remaining Cycle 02 gate.
+
 ## M0-5: persistence lattice
 
 Use a tiny geometry to enumerate B/A/C/S crash points, checkpoint rollover, trims, relocations and reset fences. Require one recoverable physical truth, no resurrected trim, no dual live mapping and no success completion ahead of its declared durability. Removing any Host-side decoded mapping cache must not prevent firmware recovery from its NAND/OOB metadata.
