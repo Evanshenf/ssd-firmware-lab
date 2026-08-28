@@ -93,4 +93,4 @@ Replaced by hardware: PCIe link/config/BAR, requester DMA, queue walkers, comple
 
 Platform-specific: boot, RTOS/runtime, linker map, interrupt controller, timers, cache/coherency and atomics.
 
-Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md) and [ADR-0003](adr/0003-firmware-hardware-contract.md).
+Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md), [ADR-0003](adr/0003-firmware-hardware-contract.md) and [ADR-0004](adr/0004-kernel-baseline.md).

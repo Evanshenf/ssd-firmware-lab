@@ -24,6 +24,8 @@ The L1 system disk, private NAND backing and exported synthetic namespace are th
 - L2: 4–6 vCPUs, 4–8 GiB RAM and a 20–40 GiB independent system disk.
 - Record exact L0/L1/L2 kernels, QEMU, adapter revision, CPU model and storage cache/flush configuration in every result.
 
+Use the L1 distribution GA 7.0 kernel as the primary development baseline. Do not add a second custom kernel until an exported-API PoC identifies the exact missing mechanism. Upstream 6.18 LTS is a later compatibility lane, not the default L1 boot kernel.
+
 Use a stable virtual serial/by-id for the media disk, exclude it from backup/snapshot/replication/live migration, and set `backup=0` in the VM configuration. Pin cache mode, AIO and iothread settings. Before any power-failure durability claim, prove Flush/FUA propagation through L1 QEMU, the L0 storage layer and the physical device; otherwise report only daemon-crash consistency.
 
 ## Two implementation phases
@@ -34,4 +36,4 @@ In M4/M5, the Host synthetic adapter creates the test NVMe in L1. After all L1 u
 
 ## Evidence label
 
-Nested KVM is appropriate for firmware semantics, Guest-driver behavior, FTL/NFC/recovery, fault injection, ISS integration and relative performance. Label it `Profile-Nested`. Repeat Host BAR/memory-type, DMA, interrupt and raw power-failure graduation on bare metal with an exact upstream kernel commit/config/compiler/module ABI.
+Nested KVM is appropriate for firmware semantics, Guest-driver behavior, FTL/NFC/recovery, fault injection, ISS integration and relative performance. Label it `Profile-Nested`. Repeat Host BAR/memory-type, DMA, interrupt and raw power-failure graduation on bare metal with an exact distribution/upstream source revision, package ABI, config, compiler and module identity.

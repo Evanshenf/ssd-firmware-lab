@@ -11,7 +11,7 @@ Confirm independent authorship, per-file licensing, immutable provenance and tra
 
 ## M0-1: synthetic BAR, memory type and doorbells
 
-On an exact upstream kernel commit/config/compiler/ABI, test a reserved physical aperture, BAR claim, mapping type, ordering and a minimal doorbell path. Stop the adapter design on aliasing, unbounded polling loss or unexplained ordering. Nested evidence is `Profile-Nested`; graduation requires repetition on bare metal.
+Start on an exact Ubuntu GA 7.0 package/ABI/config/compiler tuple and test a reserved physical aperture, BAR claim, mapping type, ordering and a minimal doorbell path. Use exported APIs first; a custom kernel requires evidence of the exact missing export/core change. Stop the adapter design on aliasing, unbounded polling loss or unexplained ordering. Nested evidence is `Profile-Nested`; graduation requires repetition on bare metal with an equally exact kernel evidence tuple.
 
 ## M0-2: Host DMA gate
 

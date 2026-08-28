@@ -23,7 +23,7 @@ Add resource scheduling, staged read/program, erase, ECC/retry, page FTL, GC/WL,
 
 ## M4 — Host synthetic PCI (8–12 weeks, experimental)
 
-Only after BAR, Host-DMA and containment gates pass, add the Host synthetic adapter. Graduate it only after native driver data verification with IOMMU/interrupt remapping enabled and exact bare-metal kernel evidence. Nested results alone do not graduate it.
+Only after BAR, Host-DMA and containment gates pass, add the Host synthetic adapter. Begin on the distribution GA 7.0 kernel with GPL out-of-tree modules and exported APIs. Introduce a custom kernel only after recording the exact missing export/core change. Graduate the adapter only after native driver data verification with IOMMU/interrupt remapping enabled and exact bare-metal kernel evidence. Nested results alone do not graduate it.
 
 ## M5 — custom VFIO owner adapter (6–10 weeks, experimental)
 
@@ -36,5 +36,5 @@ Build a RISC-V-first bare-metal SoC profile, then an ARM adapter and semantic di
 ## CI levels
 
 - Pull requests: format/static checks, unit/property tests, sanitizer/fuzz smoke, SPDX/provenance policy. No root, KVM, module loading or raw media.
-- Nightly: pinned kernel/QEMU/adapter matrices, differential and power-cut coverage on disposable runners.
+- Nightly: the pinned primary GA kernel plus a secondary upstream 6.18 LTS compatibility lane, pinned QEMU/adapter matrices, differential and power-cut coverage on disposable runners.
 - Release: applicable storage tests, full power-domain matrix, reproducible builds, support/evidence matrix and known limitations.

@@ -3,12 +3,39 @@
 
 schema_version: 1
 sources:
+  - id: ubuntu-26.04-release-notes
+    title: Ubuntu 26.04 LTS release notes
+    url: https://documentation.ubuntu.com/release-notes/26.04/summary-for-lts-users/
+    revision: "26.04 LTS; accessed 2026-08-28"
+    license: CC-BY-SA-3.0
+    purpose: distribution GA 7.0 kernel baseline
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: linux-v7.0-kernel-api
+    title: Linux v7.0 source tag
+    url: https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/+/refs/tags/v7.0/
+    revision: "refs/tags/v7.0"
+    license: GPL-2.0-only
+    purpose: VFIO, iommufd and PCI endpoint API comparison; no source copied
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: kernel-org-active-releases
+    title: Linux kernel active releases
+    url: https://www.kernel.org/releases.html
+    revision: "accessed 2026-08-28"
+    license: informational-site-terms
+    purpose: 6.18 LTS maintenance status
+    code_copied: false
+    allowed_paths: [docs]
+
   - id: linux-kernel-docs-6.18
     title: Linux kernel documentation 6.18
     url: https://docs.kernel.org/6.18/
     revision: "6.18 documentation release"
     license: GPL-2.0-only
-    purpose: public PCI endpoint, VFIO, iommufd, DMA and nested-KVM interface research
+    purpose: secondary LTS compatibility reference for PCI endpoint, VFIO, iommufd, DMA and nested-KVM research
     code_copied: false
     allowed_paths: [docs]
 
