@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: 2026 Evanshenf
+SPDX-License-Identifier: GPL-2.0-only
+
+Future Linux kernel source in this directory is GPL-2.0-only. Each source file
+must still carry its own SPDX identifier and the required module-license
+declaration. This marker does not imply that kernel source already exists.

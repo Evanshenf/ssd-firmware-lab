@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[project]
+stage = "pre-alpha-design-baseline"
+
+[gate.official_recognition]
+required = false
+scope = "project-publication-and-independent-open-source-development"
+
+[gate.source_and_protocol_boundary]
+status = "enforced"
+requirements = [
+  "independent-authorship",
+  "per-file-spdx",
+  "immutable-provenance",
+  "human-review",
+]
+forbidden_artifacts = [
+  "official-specification-pdf",
+  "official-logo-or-certification-mark",
+  "near-verbatim-register-opcode-bitfield-table",
+  "raw-model-transcript",
+]
+
+[gate.protocol_implementation_basis]
+status = "review-required"
+blocks_initial_design_repository = false
+review_questions = [
+  "independent-authorship-and-source-provenance",
+  "third-party-document-and-code-license",
+  "applicable-patent-or-implementation-rights-when-relevant",
+]
+not_equivalent_to = [
+  "official-recognition",
+  "certification",
+  "membership-application",
+]
+
+[gate.raw_media]
+status = "design-only"
+runtime_autoformat = false
+discard_default = false
+requires_explicit_initializer = true
+
+[gate.host_adapter]
+status = "experimental-unimplemented"
+requires_bare_metal_graduation = true
+
+[gate.owner_switch]
+status = "experimental-unimplemented"
+concurrent_owners_allowed = false

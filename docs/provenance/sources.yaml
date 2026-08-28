@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+schema_version: 1
+sources:
+  - id: linux-kernel-docs-6.18
+    title: Linux kernel documentation 6.18
+    url: https://docs.kernel.org/6.18/
+    revision: "6.18 documentation release"
+    license: GPL-2.0-only
+    purpose: public PCI endpoint, VFIO, iommufd, DMA and nested-KVM interface research
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: libvfio-user-research-snapshot
+    title: libvfio-user project
+    url: https://github.com/nutanix/libvfio-user
+    revision: "323f4cb6cddc3713fb7aebe44436f28b28b5413a"
+    license: BSD-3-Clause
+    purpose: vfio-user adapter feasibility and public API research
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: nvm-express-public-site
+    title: NVM Express public information site
+    url: https://nvmexpress.org/
+    revision: "accessed 2026-08-28"
+    license: third-party-terms
+    purpose: terminology and interoperability context only
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: nvm-express-trademark-guidelines-2021
+    title: NVM Express Trademark and Logo Usage Guidelines
+    url: https://nvmexpress.org/wp-content/uploads/NVM-Express-Logo-and-Trademark-Guidelines_Updated-2.2.2021_Final.pdf
+    revision: "updated 2021-02-01; accessed 2026-08-28"
+    license: third-party-terms
+    purpose: project-name and mark-use risk review; document not redistributed
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: reuse-spec-3.3
+    title: REUSE Specification 3.3
+    url: https://reuse.software/spec-3.3/
+    revision: "3.3"
+    license: CC-BY-SA-4.0
+    purpose: repository licensing metadata conventions
+    code_copied: false
+    allowed_paths: [docs, policy, scripts]
+
+  - id: github-actions-checkout
+    title: actions/checkout
+    url: https://github.com/actions/checkout
+    revision: "11d5960a326750d5838078e36cf38b85af677262"
+    license: MIT
+    purpose: pinned CI checkout action
+    code_copied: false
+    allowed_paths: [.github]
+
+  - id: fsfe-reuse-action
+    title: FSFE REUSE action
+    url: https://github.com/fsfe/reuse-action
+    revision: "676e2d560c9a403aa252096d99fcab3e1132b0f5"
+    license: GPL-3.0-or-later
+    purpose: pinned CI license-compliance action
+    code_copied: false
+    allowed_paths: [.github]

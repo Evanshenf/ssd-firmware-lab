@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+__pycache__/
+*.py[cod]
+.cache/
+.venv/
+build/
+out/
+*.img
+*.raw
+*.qcow2
+*.wal
+compile_commands.json

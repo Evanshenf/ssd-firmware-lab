@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[licenses]
+user_space = "BSD-3-Clause"
+kernel_source = "GPL-2.0-only"
+documentation = "CC-BY-4.0"
+
+[paths]
+gpl_source_roots = ["kernel"]
+documentation_extensions = [".md"]
+forbidden_roots = ["vendor", "third_party/gpl", "private", "internal"]
+
+[provenance]
+manifest = "docs/provenance/sources.yaml"
+moving_revisions_for_code = false
+raw_model_transcripts = false
+third_party_submodules = false
