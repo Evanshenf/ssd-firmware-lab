@@ -11,6 +11,101 @@ gpl_source_roots = ["kernel"]
 documentation_extensions = [".md"]
 forbidden_roots = ["vendor", "third_party/gpl", "private", "internal"]
 
+[architecture]
+portable_roots = ["core", "media", "nfc"]
+constrained_source_extensions = [
+  ".asm",
+  ".c",
+  ".cc",
+  ".cpp",
+  ".cxx",
+  ".h",
+  ".hh",
+  ".hpp",
+  ".hxx",
+  ".inc",
+  ".inl",
+  ".ipp",
+  ".s",
+  ".tcc",
+]
+portable_public_include_roots = [
+  "include/fwlab/contracts",
+  "include/fwlab/portable",
+]
+portable_private_include_roots = ["include/fwlab/private"]
+unstable_uapi_roots = [
+  "include/fwlab/unstable",
+  "kernel/vfio-cdev-v1",
+  "tools/vfio-cdev-v1",
+]
+kernel_vfio_directory_prefix = "vfio-"
+portable_forbidden_include_prefixes = [
+  "asm/",
+  "asm-generic/",
+  "exec/",
+  "hw/",
+  "linux/",
+  "qapi/",
+  "qemu/",
+  "sysemu/",
+  "uapi/linux/",
+]
+portable_forbidden_include_basenames = [
+  "iommufd.h",
+  "libvfio-user.h",
+  "vfio-user.h",
+  "vfio.h",
+]
+portable_forbidden_include_fragments = [
+  "unstable/",
+  "vfio-c21",
+  "vfio-cdev-v1",
+  "vfio_c21",
+  "vfio_cdev_v1",
+  "vfio_v1",
+]
+portable_forbidden_build_fragments = [
+  "include/fwlab/unstable",
+  "iommufd",
+  "kernel/vfio-",
+  "libvfio-user",
+  "qemu",
+  "tools/vfio-",
+  "vfio",
+]
+
+[freeze.cycle01]
+baseline_commit = "0f8ece41c863b19ddc28d8dea52e67a1905e7425"
+closed_build_input_roots = [
+  "kernel/host-pci-h0",
+  "kernel/vfio-cdev-v0",
+  "tools/vfio-cdev-v0",
+]
+allowed_unfrozen_names = ["README.md"]
+
+[freeze.cycle01.files]
+"docs/results/2026-08-28-cycle-01-evidence-manifest.md" = "5bafe54e4c5a739b0c173db2b224a86bbc03454a345316a9b5c7fcda44bf28db"
+"docs/results/2026-08-28-m0-h0-nested.md" = "4f4e4cd0b0c5762dd480a818c78bd75a14da9f9f7a39aa2a29abefa1fa8c1309"
+"docs/results/2026-08-28-m0-vfio-cdev-v0-nested.md" = "e264b3401ae600e8aba7dae76a037878ff94e0247a19acdfe7146b4c07dbb96e"
+"kernel/host-pci-h0/Makefile" = "7e1301e467cf2f44df0e7add77f6e5c142f92ffd26c1eaaa1cb2f303f45e9a5f"
+"kernel/host-pci-h0/ssd_fwlab_host_h0.c" = "f282c72422f2aa4e9c501787a6485a7794917d76f8f6e53cec351027685288fc"
+"kernel/vfio-cdev-v0/Makefile" = "87be2cf0d5f4fda348f48cbb4184570b646d5b303c5cfba8ed2c59e41e504140"
+"kernel/vfio-cdev-v0/ssd_fwlab_vfio_v0.c" = "a91e0c3d8ca209691bc679d8ff59d62ef2e6bad36c0248b188ea1e4ff2201a2b"
+"tests/privileged/m0_host_bridge_h0.sh" = "547c9f227b121c36dd9c6aab3d0d5996e62c24cb121f9fd4f7a9246e6a3275ea"
+"tests/privileged/m0_vfio_cdev_v0.sh" = "0d1cfcb405e48d2da01c1a00a69044cfd2eed7c1729724173937b5cce7d1bf70"
+"tools/vfio-cdev-v0/Makefile" = "b7cd64e80de107cc28b844bdb955d41e3b0e807517ea03506056cede678fabac"
+"tools/vfio-cdev-v0/vfio_cdev_v0_smoke.c" = "6f9882b09ec5dba783982199acf16e25f257b5139a31e8b39315d0734d1299fd"
+
+[layer_fakes]
+roots = ["core", "nfc", "media", "frontends"]
+target = "fake-link"
+output_variable = "FWLAB_FAKE_OUTPUT"
+source_extensions = [".asm", ".c", ".cc", ".cpp", ".cxx", ".s"]
+ignored_directories = ["build", "fakes", "out", "tests"]
+require_elf = true
+run_output = true
+
 [provenance]
 manifest = "docs/provenance/sources.yaml"
 moving_revisions_for_code = false
