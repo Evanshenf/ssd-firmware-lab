@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-.PHONY: check policy c21-unit c22-build layer-fakes links reuse-check
+.PHONY: check policy c21-unit c22-build c23-build layer-fakes links reuse-check
 
-check: policy c21-unit c22-build layer-fakes links
+check: policy c21-unit c22-build c23-build layer-fakes links
 	python3 scripts/check_spdx.py
 	git diff --check
 	git diff --cached --check
@@ -32,6 +32,19 @@ c22-build:
 		sh -n tests/privileged/c2_2_vfio_cdev_v1.sh; \
 	else \
 		echo "C2.2 privileged syntax: SKIP (script not present)"; \
+	fi
+
+c23-build:
+	@if [ -f tools/vfio-cdev-v1-c23/Makefile ]; then \
+		$(MAKE) -C tools/vfio-cdev-v1-c23; \
+		./tools/vfio-cdev-v1-c23/build/vfio_cdev_v1_c23 --selftest; \
+	else \
+		echo "C2.3 userspace build: SKIP (tool not present)"; \
+	fi
+	@if [ -f tests/privileged/c2_3_vfio_cdev_v1.sh ]; then \
+		sh -n tests/privileged/c2_3_vfio_cdev_v1.sh; \
+	else \
+		echo "C2.3 privileged syntax: SKIP (script not present)"; \
 	fi
 
 layer-fakes:
