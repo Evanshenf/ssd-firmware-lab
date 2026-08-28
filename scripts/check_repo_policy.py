@@ -148,6 +148,67 @@ EXPECTED_CYCLE01_FILES = {
     "tools/vfio-cdev-v0/vfio_cdev_v0_smoke.c":
         "6f9882b09ec5dba783982199acf16e25f257b5139a31e8b39315d0734d1299fd",
 }
+EXPECTED_C2_1_BASELINE = "3ca449f017cba1a9cd9dbbe3ef1e2c23a4fd16f8"
+EXPECTED_C2_1_CLOSED_ROOTS = [
+    "kernel/vfio-cdev-v1/contract",
+    "kernel/vfio-cdev-v1/uapi/unstable",
+    "tests/unit/vfio-c21",
+]
+EXPECTED_C2_1_UNFROZEN_NAMES = ["README.md"]
+EXPECTED_C2_1_FILES = {
+    "docs/results/2026-08-28-c2-1-a-prime-fake-provider.md":
+        "781e71b7b99135537d78e88824b99b6d18eb5c013bd094f8b12f6ecbbe8dfeab",
+    "kernel/vfio-cdev-v1/contract/c21_compat.h":
+        "b45da665ba2f4aa487b2fd57d72779ffb88bbbfdfe810267169387d21383fe0c",
+    "kernel/vfio-cdev-v1/contract/c21_copy.h":
+        "faef3cc3eca984c7027168d170b16f6d54552af3d76d13ac04c920c70f906b80",
+    "kernel/vfio-cdev-v1/contract/c21_state.c":
+        "68079ddd88a1a7ffe51762a4aa7c765ba34993c2bf3cb75c75cc4a2b52ecefbf",
+    "kernel/vfio-cdev-v1/contract/c21_state.h":
+        "834c3208a89f67197745df93500c5e4f22c5b2c82f36c3188198797a4eb39c36",
+    "kernel/vfio-cdev-v1/contract/c21_wire.c":
+        "cc1289758471a21976330bd9339d2fa9e6d1519becdba791375cb3146c67ad0b",
+    "kernel/vfio-cdev-v1/contract/c21_wire.h":
+        "d4e07b52ca6516b48c53bd502368ba92ec29cd8adad398075974229b5e715929",
+    "kernel/vfio-cdev-v1/uapi/unstable/fwlab_c21_a1.h":
+        "12d5441802117e65b8492161c33d2eda256402aca9e919456ab7acb9f1c34269",
+    "tests/unit/vfio-c21/Makefile":
+        "2abf3e27030fc3cec90d645cc04c6683fe1417b530d30346d2544e994ea50054",
+    "tests/unit/vfio-c21/fake_copy.c":
+        "7fe45bc38f7a792943713f35666f2c4d470d7c347586443b6d7a346543e5204d",
+    "tests/unit/vfio-c21/fake_copy.h":
+        "ead0fdd51f018164417461c57aba7563ccf8b11bde64f7dd41b5b0d94476d23b",
+    "tests/unit/vfio-c21/fake_transition.c":
+        "32617dbc89c8e251502983d98a865800997d7ea5f2d2c2edfd90d14a8fb9aebb",
+    "tests/unit/vfio-c21/fake_transition.h":
+        "72f592df849ea94c7a21fb553f0254aae3a396ca85b2341d5184feb8d1982eaa",
+    "tests/unit/vfio-c21/fuzz_wire.c":
+        "f9cf5e825eacb036c23efa5972a4aa2f8c99bac5d2c001e984832d58b2328d65",
+    "tests/unit/vfio-c21/golden_vectors.h":
+        "31dbbe0e30542926099c3033832cb7b878c258570faddebd1ac2ce5417f2d9d4",
+    "tests/unit/vfio-c21/pthread_lock.c":
+        "438a388e0dcd832126277d3da829f56aeb55e3edfc751beaa8857b0bbb01bac2",
+    "tests/unit/vfio-c21/pthread_lock.h":
+        "caf935abb14fb1a98ab0aff66a3fe6511b26119ceaa9d8f59bfbafc6483596a6",
+    "tests/unit/vfio-c21/test_c21.c":
+        "465df1234e710a4acb72bf826e2a0b9e51f38344a35d3056fe5de2da82fb5bd0",
+}
+EXPECTED_FREEZES = {
+    "cycle01": {
+        "label": "Cycle 01",
+        "baseline_commit": EXPECTED_CYCLE01_BASELINE,
+        "closed_build_input_roots": EXPECTED_CYCLE01_CLOSED_ROOTS,
+        "allowed_unfrozen_names": EXPECTED_CYCLE01_UNFROZEN_NAMES,
+        "files": EXPECTED_CYCLE01_FILES,
+    },
+    "c2_1": {
+        "label": "C2.1",
+        "baseline_commit": EXPECTED_C2_1_BASELINE,
+        "closed_build_input_roots": EXPECTED_C2_1_CLOSED_ROOTS,
+        "allowed_unfrozen_names": EXPECTED_C2_1_UNFROZEN_NAMES,
+        "files": EXPECTED_C2_1_FILES,
+    },
+}
 EXPECTED_LAYER_FAKES = {
     "roots": ["core", "nfc", "media", "frontends"],
     "target": "fake-link",
@@ -451,40 +512,51 @@ def check_build_boundary(relative: Path, text: str, failures: list[str]) -> None
                 )
 
 
-def check_cycle01_freeze(
-    files: list[tuple[Path, Path]], boundaries: dict, failures: list[str]
+def check_freeze(
+    name: str, expected: dict, files: list[tuple[Path, Path]],
+    boundaries: dict, failures: list[str]
 ) -> None:
-    cycle01 = boundaries.get("freeze", {}).get("cycle01", {})
-    if cycle01.get("baseline_commit") != EXPECTED_CYCLE01_BASELINE:
-        failures.append("Cycle 01 frozen baseline commit changed or is missing")
-    if cycle01.get("closed_build_input_roots") != EXPECTED_CYCLE01_CLOSED_ROOTS:
-        failures.append("Cycle 01 closed build-input roots changed or are incomplete")
-    if cycle01.get("allowed_unfrozen_names") != EXPECTED_CYCLE01_UNFROZEN_NAMES:
-        failures.append("Cycle 01 unfrozen-name exception changed or is incomplete")
-    if cycle01.get("files") != EXPECTED_CYCLE01_FILES:
-        failures.append("Cycle 01 frozen file/hash manifest changed or is incomplete")
+    label = expected["label"]
+    expected_policy = {
+        key: value for key, value in expected.items() if key != "label"
+    }
+    actual_policy = boundaries.get("freeze", {}).get(name, {})
+    if actual_policy != expected_policy:
+        failures.append(f"{label} frozen policy/hash manifest changed or is incomplete")
 
-    for relative_text, expected in EXPECTED_CYCLE01_FILES.items():
+    for relative_text, expected_hash in expected["files"].items():
         path = ROOT / relative_text
         if not path.is_file() or path.is_symlink():
-            failures.append(f"Cycle 01 frozen file missing or not regular: {relative_text}")
+            failures.append(f"{label} frozen file missing or not regular: {relative_text}")
             continue
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
-        if actual != expected:
+        if actual != expected_hash:
             failures.append(
-                f"Cycle 01 frozen file hash mismatch: {relative_text}; "
-                f"expected {expected}, got {actual}"
+                f"{label} frozen file hash mismatch: {relative_text}; "
+                f"expected {expected_hash}, got {actual}"
             )
 
-    frozen = {Path(path) for path in EXPECTED_CYCLE01_FILES}
-    allowed_names = set(EXPECTED_CYCLE01_UNFROZEN_NAMES)
+    frozen = {Path(path) for path in expected["files"]}
+    allowed_names = set(expected["allowed_unfrozen_names"])
+    closed_roots = expected["closed_build_input_roots"]
     for _, relative in files:
-        if not any(is_under(relative, root) for root in EXPECTED_CYCLE01_CLOSED_ROOTS):
+        if not any(is_under(relative, root) for root in closed_roots):
             continue
         if relative not in frozen and relative.name not in allowed_names:
             failures.append(
-                f"new build input is forbidden in frozen Cycle 01 directory: {relative}"
+                f"new input is forbidden in frozen {label} directory: {relative}"
             )
+
+
+def check_freezes(
+    files: list[tuple[Path, Path]], boundaries: dict, failures: list[str]
+) -> None:
+    actual_names = set(boundaries.get("freeze", {}))
+    expected_names = set(EXPECTED_FREEZES)
+    if actual_names != expected_names:
+        failures.append("frozen scope set changed or is incomplete")
+    for name, expected in EXPECTED_FREEZES.items():
+        check_freeze(name, expected, files, boundaries, failures)
 
 
 def main() -> int:
@@ -496,7 +568,7 @@ def main() -> int:
         failures.append("source architecture boundary matrix changed or is incomplete")
     if boundaries.get("layer_fakes") != EXPECTED_LAYER_FAKES:
         failures.append("layer-fake policy changed or is incomplete")
-    check_cycle01_freeze(project_entries, boundaries, failures)
+    check_freezes(project_entries, boundaries, failures)
 
     for forbidden in FORBIDDEN_ROOTS:
         if (ROOT / forbidden).exists():

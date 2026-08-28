@@ -29,6 +29,8 @@ Prototype standard QEMU consumption of a VFIO cdev/iommufd device with configura
 
 The platform-device V0 cdev/iommufd ownership and software-region sub-gate passed on `Profile-Nested`; see the [recorded result](results/2026-08-28-m0-vfio-cdev-v0-nested.md). PCI/QEMU, mmap/BAR, IRQ, IOVA access, pinning and owner-switch gates remain open.
 
+The unprivileged [C2.1 A-prime contract and fake-provider gate](results/2026-08-28-c2-1-a-prime-fake-provider.md) also passed. It freezes the disposable wire, partial-side-effect rules and atomic per-device lifecycle transition seam without opening VFIO or an IOAS. The real `vfio_dma_rw()` provider, kernel build/load and all later mechanisms remain separate stopped gates.
+
 ## M0-5: persistence lattice
 
 Use a tiny geometry to enumerate B/A/C/S crash points, checkpoint rollover, trims, relocations and reset fences. Require one recoverable physical truth, no resurrected trim, no dual live mapping and no success completion ahead of its declared durability. Removing any Host-side decoded mapping cache must not prevent firmware recovery from its NAND/OOB metadata.
