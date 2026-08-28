@@ -27,6 +27,8 @@ At every stage—capture, DMA-in, firmware, NFC, DMA-out and publication—kill,
 
 Prototype standard QEMU consumption of a VFIO cdev/iommufd device with configuration/BAR regions, one interrupt mechanism, reset and baseline IOVA reads/writes. Do not add zero-copy until exact leases can be synchronously revoked. A standalone PoC can proceed independently; a full owner switch depends on a validated Host adapter and zero-reference proof.
 
+The platform-device V0 cdev/iommufd ownership and software-region sub-gate passed on `Profile-Nested`; see the [recorded result](results/2026-08-28-m0-vfio-cdev-v0-nested.md). PCI/QEMU, mmap/BAR, IRQ, IOVA access, pinning and owner-switch gates remain open.
+
 ## M0-5: persistence lattice
 
 Use a tiny geometry to enumerate B/A/C/S crash points, checkpoint rollover, trims, relocations and reset fences. Require one recoverable physical truth, no resurrected trim, no dual live mapping and no success completion ahead of its declared durability. Removing any Host-side decoded mapping cache must not prevent firmware recovery from its NAND/OOB metadata.

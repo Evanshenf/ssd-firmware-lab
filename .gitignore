@@ -19,3 +19,4 @@ compile_commands.json
 *.cmd
 Module.symvers
 modules.order
+tools/vfio-cdev-v0/vfio_cdev_v0_smoke
