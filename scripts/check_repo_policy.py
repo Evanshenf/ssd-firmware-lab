@@ -223,6 +223,24 @@ EXPECTED_C2_2_FILES = {
     "tools/vfio-cdev-v1/vfio_cdev_v1_c2_2.c":
         "bb5697496abadfdb552c26caafbb12dc6cbdbe66532730e4de4debbc03a42bd4",
 }
+EXPECTED_C2_3_BASELINE = "bf99d04ba9d1670a382d9a985fe6a47a7f494504"
+EXPECTED_C2_3_CLOSED_ROOTS = [
+    "docs/results/2026-08-28-c2-3-negative-characterization-nested.md",
+    "tests/privileged/c2_3_vfio_cdev_v1.sh",
+    "tools/vfio-cdev-v1-c23/Makefile",
+    "tools/vfio-cdev-v1-c23/vfio_cdev_v1_c23.c",
+]
+EXPECTED_C2_3_UNFROZEN_NAMES = []
+EXPECTED_C2_3_FILES = {
+    "docs/results/2026-08-28-c2-3-negative-characterization-nested.md":
+        "45db9b793b65e457877610cdc3376790e15f7d7b3d640851ec59b4a469592aff",
+    "tests/privileged/c2_3_vfio_cdev_v1.sh":
+        "21dabcc8dedd27b3c8a8687ea90babb0f25523f5a842ed0088e42380b0ee0f98",
+    "tools/vfio-cdev-v1-c23/Makefile":
+        "7dc18874e91a260f737dfb689dec9af796091ea095a7f64e3af392b0d37b8052",
+    "tools/vfio-cdev-v1-c23/vfio_cdev_v1_c23.c":
+        "66c851c59deb78a77d6385ee060829f6513ee874e30bf8d661ac85bc22fcb18c",
+}
 EXPECTED_FREEZES = {
     "cycle01": {
         "label": "Cycle 01",
@@ -244,6 +262,13 @@ EXPECTED_FREEZES = {
         "closed_build_input_roots": EXPECTED_C2_2_CLOSED_ROOTS,
         "allowed_unfrozen_names": EXPECTED_C2_2_UNFROZEN_NAMES,
         "files": EXPECTED_C2_2_FILES,
+    },
+    "c2_3": {
+        "label": "C2.3",
+        "baseline_commit": EXPECTED_C2_3_BASELINE,
+        "closed_build_input_roots": EXPECTED_C2_3_CLOSED_ROOTS,
+        "allowed_unfrozen_names": EXPECTED_C2_3_UNFROZEN_NAMES,
+        "files": EXPECTED_C2_3_FILES,
     },
 }
 EXPECTED_LAYER_FAKES = {
