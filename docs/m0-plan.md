@@ -35,7 +35,9 @@ The bounded [C2.2 synchronous IOAS-copy gate](results/2026-08-28-c2-2-ioas-copy-
 
 The [C2.3 protection/range characterization](results/2026-08-28-c2-3-negative-characterization-nested.md) passed its exact permission, malformed, alignment, partial-unmap and adjacent-page rejection matrix. Lifecycle mutation and concurrency remain stopped for C2.4.
 
-The [C2.4 lifecycle and bounded real-race gate](results/2026-08-28-c2-4-lifecycle-race-nested.md) passed replacement, unwind, duplicate-detach, serial close/reopen, unload-open ordering and fixed-count real-iommufd stress. The stress observed only its action-first class; deterministic two-order serialization remains the C2.1 injected-fake evidence. C2.5 two-instance/architecture isolation is the only remaining Cycle 02 gate.
+The [C2.4 lifecycle and bounded real-race gate](results/2026-08-28-c2-4-lifecycle-race-nested.md) passed replacement, unwind, duplicate-detach, serial close/reopen, unload-open ordering and fixed-count real-iommufd stress. The stress observed only its action-first class; deterministic two-order serialization remains the C2.1 injected-fake evidence.
+
+The [C2.5 two-instance and architecture-isolation gate](results/2026-08-29-c2-5-two-instance-isolation-nested.md) passed its bounded two-cdev/IOAS matrix, peer removal with a live survivor, current dependency-direction checks and an independent clean-boot H0 regression on `Profile-Nested`. This completes Cycle 02 at 5/5 and triggers the scheduled architecture review; it does not authorize the next mechanism or establish Isolated-B* runtime containment.
 
 ## M0-5: persistence lattice
 

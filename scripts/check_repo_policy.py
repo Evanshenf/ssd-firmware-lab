@@ -259,6 +259,38 @@ EXPECTED_C2_4_FILES = {
     "tools/vfio-cdev-v1-c24/c24.c":
         "4d568b3b1359cc2f5d5b4c5cc1a95122c1281871463fe66e4c6cb11853a112f6",
 }
+EXPECTED_C2_5_BASELINE = "e3e518e15c5eb600d6e1f757deb214096d907bbb"
+EXPECTED_C2_5_CLOSED_ROOTS = [
+    "docs/results/2026-08-29-c2-5-two-instance-isolation-nested.md",
+    "Makefile",
+    "kernel/vfio-cdev-v1-peer-fixture",
+    "scripts/check_c25_architecture.py",
+    "tests/privileged/c2_5_vfio_cdev_v1.sh",
+    "tools/vfio-cdev-v1-c25",
+]
+EXPECTED_C2_5_UNFROZEN_NAMES = ["README.md"]
+EXPECTED_C2_5_FILES = {
+    "docs/results/2026-08-29-c2-5-two-instance-isolation-nested.md":
+        "76e2bf54e8f72360521656be9ed6ed163edca281012eeedbb0d1a91332ef1b23",
+    "Makefile":
+        "8375459e4c2dfa0e0427fc36aff3aed89a7598f50036162cb0187e4b157660d0",
+    "kernel/vfio-cdev-v1-peer-fixture/Makefile":
+        "e215628ee3633494f7a8b60558a951c293b3b238369216df47678b030f5b4126",
+    "kernel/vfio-cdev-v1-peer-fixture/ssd_fwlab_v1_peer_fixture.c":
+        "f56c611ced95f06e48c5078395bd77fe4328d6bd13e47143786e696662ffb60d",
+    "scripts/check_c25_architecture.py":
+        "4a1733cb22baae5e99b55ae1c151fdef3f2d635874352405ea543d55221bc570",
+    "tests/privileged/c2_5_vfio_cdev_v1.sh":
+        "612892b74ede04906a1fea7d7ba90871b44546de483bdcee8acb8a4834edf310",
+    "tools/vfio-cdev-v1-c25/Makefile":
+        "2176c6bebc3459b58cb328de1e20423cae27e72d2c01d4b0593e64671bd50d49",
+    "tools/vfio-cdev-v1-c25/c25_oracle.c":
+        "5c6b4ecb5583e20575538db865131ae9c3f141438fc38ec73c80e2460e53e66d",
+    "tools/vfio-cdev-v1-c25/c25_session.c":
+        "0a59137bff00fd730cbb5a74b29bb5eaf23e611572cf2286609cd10c13dfc56c",
+    "tools/vfio-cdev-v1-c25/c25_session.h":
+        "efbf2485f9f77c4e7de97be7ea37f59296a2e5443516c3b6595d34c9f647dd73",
+}
 EXPECTED_FREEZES = {
     "cycle01": {
         "label": "Cycle 01",
@@ -294,6 +326,13 @@ EXPECTED_FREEZES = {
         "closed_build_input_roots": EXPECTED_C2_4_CLOSED_ROOTS,
         "allowed_unfrozen_names": EXPECTED_C2_4_UNFROZEN_NAMES,
         "files": EXPECTED_C2_4_FILES,
+    },
+    "c2_5": {
+        "label": "C2.5",
+        "baseline_commit": EXPECTED_C2_5_BASELINE,
+        "closed_build_input_roots": EXPECTED_C2_5_CLOSED_ROOTS,
+        "allowed_unfrozen_names": EXPECTED_C2_5_UNFROZEN_NAMES,
+        "files": EXPECTED_C2_5_FILES,
     },
 }
 EXPECTED_LAYER_FAKES = {
