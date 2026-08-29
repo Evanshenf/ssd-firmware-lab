@@ -186,6 +186,9 @@ static int decode_result(const unsigned char wire[FWLAB_C21_RECORD_SIZE],
 	    !result->sequence || !result->generation ||
 	    !result->requested_length ||
 	    result->requested_length > FWLAB_C21_MAX_COPY_LENGTH ||
+	    result->iova > UINT64_MAX - (result->requested_length - 1U) ||
+	    (result->iova & (FWLAB_C21_IOAS_PAGE_SIZE - 1U)) >
+		    FWLAB_C21_IOAS_PAGE_SIZE - result->requested_length ||
 	    result->op_errno > 0 || result->op_errno < -4095 ||
 	    (!!(result->flags & FWLAB_C21_RES_F_DEST_MAY_HAVE_PARTIAL) !=
 	     (result->operation == FWLAB_C21_OP_COPY_BUFFER_TO_IOAS &&
@@ -387,11 +390,14 @@ int c25_owner_open(struct c25_owner *owner)
 	return owner->iommu_fd < 0 ? -errno : 0;
 }
 
-void c25_owner_close(struct c25_owner *owner)
+int c25_owner_close(struct c25_owner *owner)
 {
-	if (owner->iommu_fd >= 0)
-		close(owner->iommu_fd);
+	int ret = 0;
+
+	if (owner->iommu_fd >= 0 && close(owner->iommu_fd))
+		ret = -errno;
 	owner->iommu_fd = -1;
+	return ret;
 }
 
 int c25_session_begin(struct c25_session *session, struct c25_owner *owner,
@@ -543,18 +549,34 @@ int c25_session_reset(struct c25_session *session)
 	return 0;
 }
 
-void c25_session_cleanup(struct c25_session *session)
+int c25_session_cleanup(struct c25_session *session)
 {
+	int first_error = 0;
+	int ret;
+
 	if (session->attached && session->device_fd >= 0) {
-		if (c25_session_detach(session))
-			(void)c25_session_close_device(session);
+		ret = c25_session_detach(session);
+		if (ret) {
+			first_error = ret;
+			ret = c25_session_close_device(session);
+			if (!first_error && ret)
+				first_error = ret;
+		}
 	}
-	(void)c25_session_unmap(session);
-	(void)c25_session_destroy_ioas(session);
-	(void)c25_session_close_device(session);
-	if (session->page)
-		munmap(session->page, C25_PAGE_SIZE);
+	ret = c25_session_unmap(session);
+	if (!first_error && ret)
+		first_error = ret;
+	ret = c25_session_destroy_ioas(session);
+	if (!first_error && ret)
+		first_error = ret;
+	ret = c25_session_close_device(session);
+	if (!first_error && ret)
+		first_error = ret;
+	if (session->page && munmap(session->page, C25_PAGE_SIZE) &&
+	    !first_error)
+		first_error = -errno;
 	session->page = NULL;
+	return first_error;
 }
 
 int c25_submit(struct c25_session *session, uint16_t operation,
@@ -599,6 +621,10 @@ int c25_submit(struct c25_session *session, uint16_t operation,
 	if (ret)
 		return ret;
 	if (after.generation != before.generation ||
+	    after.device_state != before.device_state ||
+	    after.device_state != FWLAB_C21_STATE_OPEN_ATTACHED ||
+	    !(after.flags & FWLAB_C21_ST_F_OPEN) ||
+	    !(after.flags & FWLAB_C21_ST_F_ATTACHED) ||
 	    after.last_sequence != before.next_sequence ||
 	    after.next_sequence != before.next_sequence + 1U ||
 	    !(after.flags & FWLAB_C21_ST_F_RESULT_VALID))
@@ -663,6 +689,8 @@ int c25_selftest(void)
 	};
 	struct c25_observation left;
 	struct c25_observation right;
+	unsigned char base_pattern[C25_PAGE_SIZE];
+	unsigned char peer_pattern[C25_PAGE_SIZE];
 	unsigned char request[FWLAB_C21_RECORD_SIZE];
 
 	if (validate_region_layout(regions))
@@ -707,6 +735,10 @@ int c25_selftest(void)
 	right = left;
 	right.result_valid = !right.result_valid;
 	if (c25_observation_equal(&left, &right))
+		return -1;
+	c25_fill_pattern(base_pattern, sizeof(base_pattern), 0x41U);
+	c25_fill_pattern(peer_pattern, sizeof(peer_pattern), 0xb2U);
+	if (!memcmp(base_pattern, peer_pattern, sizeof(base_pattern)))
 		return -1;
 	printf("C2.5 pure wire/layout/observation selftest: PASS\n");
 	return 0;

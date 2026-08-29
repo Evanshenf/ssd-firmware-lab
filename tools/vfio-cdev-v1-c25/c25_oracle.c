@@ -359,8 +359,8 @@ static int run_parallel_smoke(struct c25_session *base,
 	pthread_barrier_t barrier;
 	pthread_t threads[2];
 	struct c25_parallel_arg args[2] = {
-		{ .session = base, .barrier = &barrier, .seed = 0x4100U },
-		{ .session = peer, .barrier = &barrier, .seed = 0xb200U },
+		{ .session = base, .barrier = &barrier, .seed = 0x41U },
+		{ .session = peer, .barrier = &barrier, .seed = 0xb2U },
 	};
 	int created = 0;
 	int ret;
@@ -437,6 +437,7 @@ static int run_two_instance(const char *base_path, const char *peer_path)
 	struct c25_owner owner = { .iommu_fd = -1 };
 	struct c25_session base;
 	struct c25_session peer;
+	bool matrix_complete = false;
 	int ret;
 
 	memset(&base, 0, sizeof(base));
@@ -521,15 +522,27 @@ static int run_two_instance(const char *base_path, const char *peer_path)
 	ret = close_peer_while_base_survives(&base, &peer);
 	if (ret)
 		goto out;
-	printf("C2.5 two-instance real-provider oracle: PASS\n");
+	matrix_complete = true;
 	goto out;
 
 protocol_error:
 	ret = -EPROTO;
 out:
-	c25_session_cleanup(&peer);
-	c25_session_cleanup(&base);
-	c25_owner_close(&owner);
+	{
+		int cleanup_ret;
+
+		cleanup_ret = c25_session_cleanup(&peer);
+		if (!ret && cleanup_ret)
+			ret = cleanup_ret;
+		cleanup_ret = c25_session_cleanup(&base);
+		if (!ret && cleanup_ret)
+			ret = cleanup_ret;
+		cleanup_ret = c25_owner_close(&owner);
+		if (!ret && cleanup_ret)
+			ret = cleanup_ret;
+	}
+	if (!ret && matrix_complete)
+		printf("C2.5 two-instance real-provider oracle: PASS\n");
 	return ret;
 }
 
@@ -551,6 +564,7 @@ static int run_survivor_hold(const char *base_path)
 	struct c25_owner owner = { .iommu_fd = -1 };
 	struct c25_session base;
 	struct c25_observation before;
+	bool post_remove_complete = false;
 	int ret;
 
 	memset(&base, 0, sizeof(base));
@@ -590,11 +604,21 @@ static int run_survivor_hold(const char *base_path)
 				 C25_INITIAL_OFFSET + 53U);
 	if (ret)
 		goto out;
-	printf("C2.5 survivor after peer remove: PASS\n");
+	post_remove_complete = true;
 
 out:
-	c25_session_cleanup(&base);
-	c25_owner_close(&owner);
+	{
+		int cleanup_ret;
+
+		cleanup_ret = c25_session_cleanup(&base);
+		if (!ret && cleanup_ret)
+			ret = cleanup_ret;
+		cleanup_ret = c25_owner_close(&owner);
+		if (!ret && cleanup_ret)
+			ret = cleanup_ret;
+	}
+	if (!ret && post_remove_complete)
+		printf("C2.5 survivor after peer remove: PASS\n");
 	return ret;
 }
 

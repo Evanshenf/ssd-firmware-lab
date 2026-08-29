@@ -29,14 +29,17 @@ expected_module_srcversion=FFE4E0F87FA9FA275C67192
 
 module_owned=0
 peer_owned=0
-module_load_armed=0
-peer_load_armed=0
 media_checks_armed=0
 base_vfio_name=
 peer_vfio_name=
+base_vfio_rdev=
+peer_vfio_rdev=
 media_write_before=
 module_srcversion=
 peer_module_srcversion=
+boot_id_before=
+dmesg_marker=
+taint_before=
 hold_pid=
 hold_dir=
 hold_fifo=
@@ -45,7 +48,9 @@ hold_writer_open=0
 hold_reaped=0
 hold_rc=
 gate_lock_dir=/run/ssd-fwlab
-gate_lock_path=$gate_lock_dir/c2-5-vfio-v1.lock
+# C2.4 froze this pathname. Reusing it is the only way to make the frozen
+# C2.4 wrapper and C2.5 mutually exclusive without changing C2.4 evidence.
+gate_lock_path=$gate_lock_dir/c2-4-vfio-v1.lock
 
 media_write_counters()
 {
@@ -193,15 +198,17 @@ wait_cdev_node()
 cdev_open_count()
 {
 	cdev_node=$1
+	if ! cdev_rdev=$(stat -Lc '%t:%T' -- "$cdev_node"); then
+		echo "could not resolve cdev identity: $cdev_node" >&2
+		return 1
+	fi
 	open_count=0
 	for descriptor in /proc/[0-9]*/fd/*; do
 		[ -L "$descriptor" ] || continue
-		descriptor_target=$(readlink "$descriptor" 2>/dev/null || :)
-		case "$descriptor_target" in
-			"$cdev_node"|"$cdev_node (deleted)")
-				open_count=$((open_count + 1))
-				;;
-		esac
+		if descriptor_rdev=$(stat -Lc '%t:%T' -- "$descriptor" 2>/dev/null) &&
+		   [ "$descriptor_rdev" = "$cdev_rdev" ]; then
+			open_count=$((open_count + 1))
+		fi
 	done
 	printf '%s\n' "$open_count"
 }
@@ -320,7 +327,17 @@ cleanup()
 {
 	cleanup_rc=$1
 	cleanup_scope=0
-	trap - EXIT HUP INT TERM
+	trap - EXIT HUP INT QUIT TERM
+	if [ "$cleanup_rc" -ne 0 ] && [ -n "$dmesg_marker" ]; then
+		cleanup_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || :)
+		cleanup_taint=$(cat /proc/sys/kernel/tainted 2>/dev/null || :)
+		cleanup_dmesg_end=$(dmesg 2>/dev/null | wc -l || :)
+		echo "phase=cleanup-diagnostics rc=$cleanup_rc boot=${cleanup_boot:-unavailable} taint=${cleanup_taint:-unavailable} log_start=$dmesg_marker log_end=${cleanup_dmesg_end:-unavailable}" >&2
+		if cleanup_log=$(dmesg 2>/dev/null |
+			tail -n "+$((dmesg_marker + 1))" | tail -n 200); then
+			printf '%s\n' "$cleanup_log" >&2
+		fi
+	fi
 
 	if ! release_hold_helper_cleanup; then
 		[ "$cleanup_rc" -ne 0 ] || cleanup_rc=1
@@ -332,7 +349,7 @@ cleanup()
 		[ "$cleanup_rc" -ne 0 ] || cleanup_rc=1
 	fi
 
-	if [ "$peer_owned" -eq 1 ] || [ "$peer_load_armed" -eq 1 ]; then
+	if [ "$peer_owned" -eq 1 ]; then
 		cleanup_scope=1
 		if module_is_loaded "$peer_module_name"; then
 			if loaded_peer_matches_artifact; then
@@ -349,10 +366,9 @@ cleanup()
 			fi
 		fi
 		peer_owned=0
-		peer_load_armed=0
 	fi
 
-	if [ "$module_owned" -eq 1 ] || [ "$module_load_armed" -eq 1 ]; then
+	if [ "$module_owned" -eq 1 ]; then
 		cleanup_scope=1
 		if module_is_loaded "$module_name"; then
 			if loaded_module_matches_artifact; then
@@ -369,7 +385,6 @@ cleanup()
 			fi
 		fi
 		module_owned=0
-		module_load_armed=0
 	fi
 
 	if [ "$cleanup_scope" -eq 1 ]; then
@@ -411,6 +426,7 @@ cleanup()
 trap 'cleanup $?' EXIT
 trap 'cleanup 129' HUP
 trap 'cleanup 130' INT
+trap 'cleanup 131' QUIT
 trap 'cleanup 143' TERM
 
 for required_command in awk cat dmesg findmnt flock grep id insmod install \
@@ -470,7 +486,7 @@ if [ -L "$gate_lock_path" ] || [ ! -f "$gate_lock_path" ] ||
 	exit 1
 fi
 if ! flock -n 8; then
-	echo "another C2.5 privileged gate owns $gate_lock_path" >&2
+	echo "another C2.4/C2.5 V1 gate owns $gate_lock_path" >&2
 	exit 1
 fi
 
@@ -497,15 +513,16 @@ fi
 
 module_vermagic=$(modinfo -F vermagic "$module_path")
 peer_module_vermagic=$(modinfo -F vermagic "$peer_module_path")
+kernel_release=$(uname -r)
 case "$module_vermagic" in
-	"$(uname -r) "*) ;;
+	"$kernel_release "*) ;;
 	*)
 		echo "V1 module vermagic does not match running kernel: $module_vermagic" >&2
 		exit 1
 		;;
 esac
 case "$peer_module_vermagic" in
-	"$(uname -r) "*) ;;
+	"$kernel_release "*) ;;
 	*)
 		echo "peer fixture vermagic does not match running kernel: $peer_module_vermagic" >&2
 		exit 1
@@ -535,7 +552,7 @@ if [ -z "$peer_module_srcversion" ]; then
 fi
 tool_sha256=$(sha256sum "$tool_path" | awk '{ print $1 }')
 script_sha256=$(sha256sum "$0" | awk '{ print $1 }')
-echo "phase=artifact-identity module_sha256=$module_sha256 peer_sha256=$peer_module_sha256 tool_sha256=$tool_sha256 script_sha256=$script_sha256 srcversion=$module_srcversion peer_srcversion=$peer_module_srcversion vfio_dma_rw_crc=$vfio_dma_rw_crc"
+echo "phase=artifact-identity kernel_release=$kernel_release module_vermagic=$module_vermagic peer_vermagic=$peer_module_vermagic module_sha256=$module_sha256 peer_sha256=$peer_module_sha256 tool_sha256=$tool_sha256 script_sha256=$script_sha256 srcversion=$module_srcversion peer_srcversion=$peer_module_srcversion vfio_dma_rw_crc=$vfio_dma_rw_crc"
 
 if timeout -k 2s 10s "$tool_path" --selftest; then
 	:
@@ -581,8 +598,13 @@ if [ "$preload_module_sha256" != "$expected_module_sha256" ]; then
 	echo "frozen V1 module changed immediately before insmod: $preload_module_sha256" >&2
 	exit 1
 fi
-module_load_armed=1
-insmod "$module_path"
+if insmod "$module_path"; then
+	module_owned=1
+else
+	module_insmod_rc=$?
+	echo "frozen V1 insmod failed; ownership was not acquired: rc=$module_insmod_rc" >&2
+	exit 1
+fi
 postload_module_sha256=$(sha256sum "$module_path" | awk '{ print $1 }')
 if [ "$postload_module_sha256" != "$preload_module_sha256" ]; then
 	echo "V1 module path changed across insmod: before=$preload_module_sha256 after=$postload_module_sha256" >&2
@@ -591,8 +613,6 @@ fi
 if ! loaded_module_matches_artifact; then
 	exit 1
 fi
-module_owned=1
-module_load_armed=0
 if [ ! -d "$base_platform_path" ] || [ ! -L "$base_platform_path/driver" ] ||
    [ "$(v1_platform_count)" -ne 1 ]; then
 	echo "frozen V1 did not create exactly its base platform device" >&2
@@ -608,6 +628,7 @@ if ! wait_cdev_node "$base_vfio_name"; then
 	echo "base VFIO cdev node was not created: $base_vfio_name" >&2
 	exit 1
 fi
+base_vfio_rdev=$(stat -Lc '%t:%T' -- "/dev/vfio/devices/$base_vfio_name")
 echo "phase=base-cdev-ready sysfs=$base_platform_path node=/dev/vfio/devices/$base_vfio_name"
 
 preload_peer_sha256=$(sha256sum "$peer_module_path" | awk '{ print $1 }')
@@ -615,8 +636,13 @@ if [ "$preload_peer_sha256" != "$peer_module_sha256" ]; then
 	echo "peer fixture changed immediately before insmod: $preload_peer_sha256" >&2
 	exit 1
 fi
-peer_load_armed=1
-insmod "$peer_module_path"
+if insmod "$peer_module_path"; then
+	peer_owned=1
+else
+	peer_insmod_rc=$?
+	echo "peer fixture insmod failed; ownership was not acquired: rc=$peer_insmod_rc" >&2
+	exit 1
+fi
 postload_peer_sha256=$(sha256sum "$peer_module_path" | awk '{ print $1 }')
 if [ "$postload_peer_sha256" != "$preload_peer_sha256" ]; then
 	echo "peer fixture path changed across insmod: before=$preload_peer_sha256 after=$postload_peer_sha256" >&2
@@ -625,8 +651,6 @@ fi
 if ! loaded_peer_matches_artifact; then
 	exit 1
 fi
-peer_owned=1
-peer_load_armed=0
 if [ ! -d "$peer_platform_path" ] || [ ! -L "$peer_platform_path/driver" ] ||
    [ "$(v1_platform_count)" -ne 2 ]; then
 	echo "peer fixture did not create exactly one additional V1 platform device" >&2
@@ -644,6 +668,11 @@ if ! wait_cdev_node "$peer_vfio_name"; then
 fi
 if [ "$base_vfio_name" = "$peer_vfio_name" ]; then
 	echo "base and peer resolved to the same VFIO cdev: $base_vfio_name" >&2
+	exit 1
+fi
+peer_vfio_rdev=$(stat -Lc '%t:%T' -- "/dev/vfio/devices/$peer_vfio_name")
+if [ "$base_vfio_rdev" = "$peer_vfio_rdev" ]; then
+	echo "base and peer have the same character-device identity: $base_vfio_rdev" >&2
 	exit 1
 fi
 echo "phase=two-cdev-topology base_sysfs=$base_platform_path base_cdev=/dev/vfio/devices/$base_vfio_name peer_sysfs=$peer_platform_path peer_cdev=/dev/vfio/devices/$peer_vfio_name"
@@ -670,7 +699,11 @@ if [ "$tool_rc" -ne 0 ]; then
 fi
 echo "phase=c2.5-two-instance-oracle-passed"
 
-if [ "$(cdev_open_count "/dev/vfio/devices/$peer_vfio_name")" -ne 0 ]; then
+if ! peer_open_count=$(cdev_open_count "/dev/vfio/devices/$peer_vfio_name"); then
+	echo "could not scan peer cdev users after the main oracle" >&2
+	exit 1
+fi
+if [ "$peer_open_count" -ne 0 ]; then
 	echo "peer cdev still has an open fd after the main oracle" >&2
 	exit 1
 fi
@@ -703,7 +736,11 @@ if ! grep -Fxq 'C2.5 survivor READY' "$hold_log"; then
 	echo "survivor helper did not become ready" >&2
 	exit 1
 fi
-if [ "$(cdev_open_count "/dev/vfio/devices/$base_vfio_name")" -lt 1 ]; then
+if ! base_open_count=$(cdev_open_count "/dev/vfio/devices/$base_vfio_name"); then
+	echo "could not scan base cdev users for the survivor helper" >&2
+	exit 1
+fi
+if [ "$base_open_count" -lt 1 ]; then
 	echo "survivor helper did not retain the base cdev" >&2
 	exit 1
 fi
@@ -712,12 +749,30 @@ if [ "$base_module_refcnt" -lt 1 ]; then
 	echo "live base cdev did not retain the frozen V1 module: refcnt=$base_module_refcnt" >&2
 	exit 1
 fi
-if [ "$(cdev_open_count "/dev/vfio/devices/$peer_vfio_name")" -ne 0 ]; then
+if ! peer_open_count=$(cdev_open_count "/dev/vfio/devices/$peer_vfio_name"); then
+	echo "could not rescan peer cdev users before fixture removal" >&2
+	exit 1
+fi
+if [ "$peer_open_count" -ne 0 ]; then
 	echo "peer cdev is still open before fixture removal" >&2
 	exit 1
 fi
 if [ "$(cat "/sys/module/$peer_module_name/refcnt")" -ne 0 ]; then
 	echo "peer fixture module has an unexpected live reference" >&2
+	exit 1
+fi
+current_base_rdev=$(stat -Lc '%t:%T' -- "/dev/vfio/devices/$base_vfio_name")
+current_peer_rdev=$(stat -Lc '%t:%T' -- "/dev/vfio/devices/$peer_vfio_name")
+if [ "$current_base_rdev" != "$base_vfio_rdev" ] ||
+   [ "$current_peer_rdev" != "$peer_vfio_rdev" ]; then
+	echo "base or peer cdev identity changed before fixture removal" >&2
+	exit 1
+fi
+base_driver_target=$(readlink "$base_platform_path/driver")
+peer_driver_target=$(readlink "$peer_platform_path/driver")
+if [ "${base_driver_target##*/}" != "$platform_name" ] ||
+   [ "${peer_driver_target##*/}" != "$platform_name" ]; then
+	echo "base or peer driver binding changed before fixture removal" >&2
 	exit 1
 fi
 echo "phase=survivor-ready base_open=yes peer_open=no"
@@ -859,4 +914,5 @@ if ! hold_resources_absent; then
 	exit 1
 fi
 
+echo "phase=final-health taint_before=$taint_before taint_after=$taint_after media_writes=$media_write_before boot_id=$boot_id_after"
 echo "C2.5 V1 two-instance and survivor-removal privileged gate: PASS"

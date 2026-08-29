@@ -16,6 +16,8 @@ H0_ROOT = Path("kernel/host-pci-h0")
 V1_ROOT = Path("kernel/vfio-cdev-v1")
 FIXTURE_ROOT = Path("kernel/vfio-cdev-v1-peer-fixture")
 A1_HEADER = V1_ROOT / "uapi/unstable/fwlab_c21_a1.h"
+C24_WRAPPER = Path("tests/privileged/c2_4_vfio_cdev_v1.sh")
+C25_WRAPPER = Path("tests/privileged/c2_5_vfio_cdev_v1.sh")
 PORTABLE_ROOTS = (
     Path("core"),
     Path("media"),
@@ -202,6 +204,42 @@ def check_unstable_boundary(files: list[Path], failures: list[str]) -> None:
         print("C2.5 portable implementation sources: none (design-only)")
 
 
+def check_wrapper_ownership(failures: list[str]) -> None:
+    c24_text = read_text(C24_WRAPPER, failures)
+    c25_text = read_text(C25_WRAPPER, failures)
+    if c24_text is None or c25_text is None:
+        return
+
+    lock_pattern = re.compile(r"^gate_lock_path=(\S+)$", re.MULTILINE)
+    c24_locks = lock_pattern.findall(c24_text)
+    c25_locks = lock_pattern.findall(c25_text)
+    if len(c24_locks) != 1 or c24_locks != c25_locks:
+        failures.append(
+            "C2.4 and C2.5 must acquire the same frozen V1 gate lock: "
+            f"C2.4={c24_locks}, C2.5={c25_locks}"
+        )
+    if "load_armed" in c25_text:
+        failures.append(
+            "C2.5 must not infer module ownership from an interrupted load attempt"
+        )
+    required_fragments = (
+        'if insmod "$module_path"; then',
+        'if insmod "$peer_module_path"; then',
+        "module_owned=1",
+        "peer_owned=1",
+        "stat -Lc '%t:%T'",
+    )
+    for fragment in required_fragments:
+        if fragment not in c25_text:
+            failures.append(
+                f"{C25_WRAPPER}: missing ownership/identity guard: {fragment}"
+            )
+    if 'readlink "$descriptor"' in c25_text:
+        failures.append(
+            f"{C25_WRAPPER}: open-cdev scan must compare dev_t, not path text"
+        )
+
+
 def main() -> int:
     failures: list[str] = []
     try:
@@ -214,6 +252,7 @@ def main() -> int:
     check_cross_dependencies(files, failures)
     check_fixture(files, failures)
     check_unstable_boundary(files, failures)
+    check_wrapper_ownership(failures)
 
     if failures:
         print("C2.5 architecture isolation check failed:", file=sys.stderr)
@@ -223,6 +262,7 @@ def main() -> int:
     print("C2.5 H0/V1 dependency direction: PASS")
     print("C2.5 peer fixture boundary: PASS")
     print("C2.5 unstable/portable boundary: PASS")
+    print("C2.5 shared-lock/module-ownership boundary: PASS")
     return 0
 
 

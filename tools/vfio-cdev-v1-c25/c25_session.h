@@ -67,11 +67,11 @@ struct c25_observation {
 
 int c25_selftest(void);
 int c25_owner_open(struct c25_owner *owner);
-void c25_owner_close(struct c25_owner *owner);
+int c25_owner_close(struct c25_owner *owner);
 int c25_session_begin(struct c25_session *session, struct c25_owner *owner,
 		      const char *label, const char *device_path,
 		      uint64_t iova);
-void c25_session_cleanup(struct c25_session *session);
+int c25_session_cleanup(struct c25_session *session);
 int c25_session_map(struct c25_session *session);
 int c25_session_unmap(struct c25_session *session);
 int c25_session_attach(struct c25_session *session);
