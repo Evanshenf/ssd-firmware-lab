@@ -25,23 +25,64 @@ EXPECTED_POLICY = {
     "require_elf": True,
     "run_output": True,
 }
+EXPECTED_COMPONENTS = {
+    "c3_2": {
+        "directory": "core/c32",
+        "target": "fake-link",
+        "output_variable": "FWLAB_FAKE_OUTPUT",
+        "require_elf": True,
+        "run_output": True,
+    },
+}
 
 
-def load_policy() -> dict:
+def load_policy() -> tuple[dict, dict]:
     try:
         with POLICY.open("rb") as stream:
-            policy = tomllib.load(stream).get("layer_fakes", {})
+            document = tomllib.load(stream)
+            policy = document.get("layer_fakes", {})
+            components = document.get("portable_components", {})
     except (OSError, tomllib.TOMLDecodeError) as error:
         print(f"Layer fake policy is unavailable: {error}", file=sys.stderr)
         raise SystemExit(1) from error
     if policy != EXPECTED_POLICY:
         print("Layer fake policy changed or is incomplete", file=sys.stderr)
         raise SystemExit(1)
-    return policy
+    if components != EXPECTED_COMPONENTS:
+        print("Portable component policy changed or is incomplete",
+              file=sys.stderr)
+        raise SystemExit(1)
+    return policy, components
+
+
+def validate_output(
+    output: Path, label: Path, require_elf: bool, run_output: bool,
+    failures: list[str]
+) -> None:
+    if not output.is_file() or output.is_symlink():
+        failures.append(f"{label}: fake-link did not create its output")
+        return
+    if require_elf:
+        with output.open("rb") as stream:
+            if stream.read(4) != b"\x7fELF":
+                failures.append(f"{label}: fake-link output is not an ELF binary")
+                return
+    if run_output:
+        if not os.access(output, os.X_OK):
+            failures.append(f"{label}: fake-link output is not executable")
+            return
+        try:
+            run = subprocess.run([str(output)], cwd=ROOT, check=False,
+                                 timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            failures.append(f"{label}: cannot execute fake-link output: {error}")
+            return
+        if run.returncode:
+            failures.append(f"{label}: fake-link output exited with {run.returncode}")
 
 
 def main() -> int:
-    policy = load_policy()
+    policy, components = load_policy()
     suffixes = set(policy["source_extensions"])
     ignored = set(policy["ignored_directories"])
     failures = []
@@ -94,37 +135,43 @@ def main() -> int:
                     f"{result.returncode}"
                 )
                 continue
-            if not output.is_file() or output.is_symlink():
+            validate_output(output, label, policy["require_elf"],
+                            policy["run_output"], failures)
+
+        for offset, (name, component) in enumerate(sorted(components.items())):
+            directory = ROOT / component["directory"]
+            label = Path(component["directory"])
+            makefile = directory / "Makefile"
+            if not directory.is_dir() or directory.is_symlink():
+                failures.append(f"{name}: component directory is unavailable")
+                continue
+            if not makefile.is_file() or makefile.is_symlink():
+                failures.append(f"{label}: component Makefile is unavailable")
+                continue
+            output = output_root / f"component-{offset}.fake"
+            print(f"Portable component fake link: {label}")
+            try:
+                result = subprocess.run(
+                    [
+                        "make", "-f", "Makefile", "-C", str(directory),
+                        component["target"],
+                        f"{component['output_variable']}={output}",
+                    ],
+                    cwd=ROOT,
+                    check=False,
+                    timeout=180,
+                )
+            except (OSError, subprocess.TimeoutExpired) as error:
+                failures.append(f"{label}: cannot run fake-link target: {error}")
+                continue
+            if result.returncode:
                 failures.append(
-                    f"{label}: {policy['target']} did not create "
-                    f"{policy['output_variable']}"
+                    f"{label}: {component['target']} exited with "
+                    f"{result.returncode}"
                 )
                 continue
-            if policy["require_elf"]:
-                with output.open("rb") as stream:
-                    if stream.read(4) != b"\x7fELF":
-                        failures.append(
-                            f"{label}: fake-link output is not an ELF binary"
-                        )
-                        continue
-            if policy["run_output"]:
-                if not os.access(output, os.X_OK):
-                    failures.append(f"{label}: fake-link output is not executable")
-                    continue
-                try:
-                    run = subprocess.run(
-                        [str(output)], cwd=ROOT, check=False, timeout=30
-                    )
-                except (OSError, subprocess.TimeoutExpired) as error:
-                    failures.append(
-                        f"{label}: cannot execute fake-link output: {error}"
-                    )
-                    continue
-                if run.returncode:
-                    failures.append(
-                        f"{label}: fake-link output exited with "
-                        f"{run.returncode}"
-                    )
+            validate_output(output, label, component["require_elf"],
+                            component["run_output"], failures)
 
     if failures:
         print("Layer fake links failed:", file=sys.stderr)

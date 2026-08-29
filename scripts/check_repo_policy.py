@@ -439,6 +439,15 @@ EXPECTED_LAYER_FAKES = {
     "require_elf": True,
     "run_output": True,
 }
+EXPECTED_PORTABLE_COMPONENTS = {
+    "c3_2": {
+        "directory": "core/c32",
+        "target": "fake-link",
+        "output_variable": "FWLAB_FAKE_OUTPUT",
+        "require_elf": True,
+        "run_output": True,
+    },
+}
 
 
 def project_files():
@@ -789,6 +798,8 @@ def main() -> int:
         failures.append("source architecture boundary matrix changed or is incomplete")
     if boundaries.get("layer_fakes") != EXPECTED_LAYER_FAKES:
         failures.append("layer-fake policy changed or is incomplete")
+    if boundaries.get("portable_components") != EXPECTED_PORTABLE_COMPONENTS:
+        failures.append("portable-component policy changed or is incomplete")
     check_freezes(project_entries, boundaries, failures)
 
     for forbidden in FORBIDDEN_ROOTS:

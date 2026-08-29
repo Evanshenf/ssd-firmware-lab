@@ -54,6 +54,8 @@ This independent project is not affiliated with, endorsed by, recognized by, or 
 
 - [Requirements](docs/requirements.md)
 - [Architecture](docs/architecture.md)
+- [Portable command lifecycle core](core/README.md)
+- [Executable persistence model](core/c32/README.md)
 - [Milestone-0 risk plan](docs/m0-plan.md)
 - [Roadmap](docs/roadmap.md)
 - [Architecture decisions](docs/adr/README.md)
