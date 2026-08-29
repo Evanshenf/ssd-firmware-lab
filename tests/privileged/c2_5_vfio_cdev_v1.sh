@@ -40,6 +40,8 @@ peer_module_srcversion=
 boot_id_before=
 dmesg_marker=
 taint_before=
+load_signal_deferred=0
+pending_signal=0
 hold_pid=
 hold_dir=
 hold_fifo=
@@ -328,6 +330,8 @@ cleanup()
 	cleanup_rc=$1
 	cleanup_scope=0
 	trap - EXIT HUP INT QUIT TERM
+	load_signal_deferred=0
+	pending_signal=0
 	if [ "$cleanup_rc" -ne 0 ] && [ -n "$dmesg_marker" ]; then
 		cleanup_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || :)
 		cleanup_taint=$(cat /proc/sys/kernel/tainted 2>/dev/null || :)
@@ -423,11 +427,33 @@ cleanup()
 	exit "$cleanup_rc"
 }
 
+handle_signal()
+{
+	signal_rc=$1
+	if [ "$load_signal_deferred" -eq 1 ]; then
+		if [ "$pending_signal" -eq 0 ]; then
+			pending_signal=$signal_rc
+		fi
+		return 0
+	fi
+	cleanup "$signal_rc"
+}
+
+finish_deferred_signal()
+{
+	load_signal_deferred=0
+	if [ "$pending_signal" -ne 0 ]; then
+		deferred_signal_rc=$pending_signal
+		pending_signal=0
+		cleanup "$deferred_signal_rc"
+	fi
+}
+
 trap 'cleanup $?' EXIT
-trap 'cleanup 129' HUP
-trap 'cleanup 130' INT
-trap 'cleanup 131' QUIT
-trap 'cleanup 143' TERM
+trap 'handle_signal 129' HUP
+trap 'handle_signal 130' INT
+trap 'handle_signal 131' QUIT
+trap 'handle_signal 143' TERM
 
 for required_command in awk cat dmesg findmnt flock grep id insmod install \
 	kill mkfifo mktemp modinfo modprobe readlink rm rmdir rmmod sha256sum \
@@ -598,11 +624,19 @@ if [ "$preload_module_sha256" != "$expected_module_sha256" ]; then
 	echo "frozen V1 module changed immediately before insmod: $preload_module_sha256" >&2
 	exit 1
 fi
+load_signal_deferred=1
+pending_signal=0
 if insmod "$module_path"; then
+	module_load_rc=0
 	module_owned=1
 else
 	module_insmod_rc=$?
-	echo "frozen V1 insmod failed; ownership was not acquired: rc=$module_insmod_rc" >&2
+	module_load_rc=$module_insmod_rc
+	module_owned=0
+fi
+finish_deferred_signal
+if [ "$module_load_rc" -ne 0 ]; then
+	echo "frozen V1 insmod failed; ownership was not acquired: rc=$module_load_rc" >&2
 	exit 1
 fi
 postload_module_sha256=$(sha256sum "$module_path" | awk '{ print $1 }')
@@ -636,11 +670,19 @@ if [ "$preload_peer_sha256" != "$peer_module_sha256" ]; then
 	echo "peer fixture changed immediately before insmod: $preload_peer_sha256" >&2
 	exit 1
 fi
+load_signal_deferred=1
+pending_signal=0
 if insmod "$peer_module_path"; then
+	peer_load_rc=0
 	peer_owned=1
 else
 	peer_insmod_rc=$?
-	echo "peer fixture insmod failed; ownership was not acquired: rc=$peer_insmod_rc" >&2
+	peer_load_rc=$peer_insmod_rc
+	peer_owned=0
+fi
+finish_deferred_signal
+if [ "$peer_load_rc" -ne 0 ]; then
+	echo "peer fixture insmod failed; ownership was not acquired: rc=$peer_load_rc" >&2
 	exit 1
 fi
 postload_peer_sha256=$(sha256sum "$peer_module_path" | awk '{ print $1 }')

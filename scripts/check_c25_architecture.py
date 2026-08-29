@@ -228,6 +228,9 @@ def check_wrapper_ownership(failures: list[str]) -> None:
         "module_owned=1",
         "peer_owned=1",
         "stat -Lc '%t:%T'",
+        "handle_signal()",
+        "finish_deferred_signal()",
+        "trap 'handle_signal 143' TERM",
     )
     for fragment in required_fragments:
         if fragment not in c25_text:
@@ -238,6 +241,28 @@ def check_wrapper_ownership(failures: list[str]) -> None:
         failures.append(
             f"{C25_WRAPPER}: open-cdev scan must compare dev_t, not path text"
         )
+    load_patterns = {
+        "V1": re.compile(
+            r'load_signal_deferred=1\s+pending_signal=0\s+'
+            r'if insmod "\$module_path"; then\s+'
+            r'module_load_rc=0\s+module_owned=1\s+else\s+.*?'
+            r'module_owned=0\s+fi\s+finish_deferred_signal',
+            re.DOTALL,
+        ),
+        "peer": re.compile(
+            r'load_signal_deferred=1\s+pending_signal=0\s+'
+            r'if insmod "\$peer_module_path"; then\s+'
+            r'peer_load_rc=0\s+peer_owned=1\s+else\s+.*?'
+            r'peer_owned=0\s+fi\s+finish_deferred_signal',
+            re.DOTALL,
+        ),
+    }
+    for label, pattern in load_patterns.items():
+        if not pattern.search(c25_text):
+            failures.append(
+                f"{C25_WRAPPER}: {label} load must commit ownership before "
+                "processing a deferred signal"
+            )
 
 
 def main() -> int:
