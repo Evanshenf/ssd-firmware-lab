@@ -5,13 +5,19 @@
 
 - Date: 2026-08-29
 - Cycle result: five narrow portable/headless sub-gates passed
-- Disposition: **GRADUATED_FIXED_PROFILE / REVIEW_PENDING**
+- Current disposition: **REVIEW_HOLD / C3.5a REQUIRED**
+- Post-review erratum:
+  [C3.5 review hold](2026-08-29-c3-5-review-hold.md)
 - Evidence profile: unprivileged behavioral/Host-native portable firmware and
   user-mode cross-ISA execution
 
 This manifest freezes the five-gate Cycle 03 chain without extending any
 result into an NVMe transport, hardware DMA/interrupt, PCI endpoint, physical
 power-loss or raw-media claim.
+
+The five recorded sub-gate runs completed, but Cycle 03 is not graduated. A
+post-review source audit found three Critical C3.5 failure-path defects; C3.5a
+must close them before the cycle can leave `REVIEW_HOLD`.
 
 ## Immutable gate identities
 

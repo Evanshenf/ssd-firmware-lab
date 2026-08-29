@@ -4,12 +4,18 @@
 # C3.5 integrated headless firmware graduation result
 
 - Date: 2026-08-29
-- Disposition: **GRADUATED_FIXED_PROFILE / REVIEW_PENDING**
+- Current disposition: **REVIEW_HOLD / C3.5a REQUIRED**
+- Post-review erratum:
+  [C3.5 review hold](2026-08-29-c3-5-review-hold.md)
 - Immutable source commit: `48567dae4f3246c2eddb83a28a30c526947dbc86`
 - Frozen prerequisites: C3.1 through C3.4 and ADR-0002/0003/0006/0007
 - Evidence capture: `2026-08-29T17:43:59Z`
 - Execution profile: unprivileged native and user-mode cross-ISA tests using
   memory or newly created, immediately unlinked regular files
+
+> The test results below remain the recorded outcomes for their exact successful
+> workloads. A post-review source audit found three Critical failure-path defects,
+> so the graduation claim is withdrawn pending C3.5a.
 
 ## What graduated
 

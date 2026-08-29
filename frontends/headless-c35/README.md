@@ -3,6 +3,11 @@
 
 # C3.5 integrated headless firmware graduation
 
+> **Review status:** `REVIEW_HOLD / C3.5a REQUIRED`. The recorded success-path
+> tests remain reproducible evidence, but a post-review source audit found trace
+> bounds, failure-atomic publication/finalization and finite-reset cleanup defects.
+> See the [public hold record](../../docs/results/2026-08-29-c3-5-review-hold.md).
+
 This directory composes the frozen C3.1 command lifecycle, C3.2 persistence
 policy, C3.3 programmable NAND controller model and C3.4 crash-consistent
 mapping/file media behind one transport-free headless interface. It adds no
