@@ -33,6 +33,13 @@ EXPECTED_COMPONENTS = {
         "require_elf": True,
         "run_output": True,
     },
+    "c3_4": {
+        "directory": "core/c34",
+        "target": "fake-link",
+        "output_variable": "FWLAB_FAKE_OUTPUT",
+        "require_elf": True,
+        "run_output": True,
+    },
 }
 
 

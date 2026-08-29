@@ -92,3 +92,30 @@ sources:
     purpose: pinned CI license-compliance action
     code_copied: false
     allowed_paths: [.github]
+
+  - id: linux-man-pages-positioned-io
+    title: Linux man-pages pread and pwrite
+    url: https://man7.org/linux/man-pages/man2/pwrite64.2.html
+    revision: "man-pages project page; accessed 2026-08-29"
+    license: Linux-man-pages-copyleft
+    purpose: positioned-I/O short-transfer behavior used to define complete-transfer loops; no source copied
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: posix-fdatasync
+    title: POSIX fdatasync interface
+    url: https://man7.org/linux/man-pages/man3/fdatasync.3p.html
+    revision: "POSIX interface page; accessed 2026-08-29"
+    license: POSIX-documentation-terms
+    purpose: Host substrate barrier terminology only; not NAND durability
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: linux-ext4-jbd2-journal-6.17
+    title: Linux ext4 journal documentation
+    url: https://docs.kernel.org/6.17/filesystems/ext4/journal.html
+    revision: "Linux 6.17 documentation"
+    license: GPL-2.0-only
+    purpose: general commit-record and idempotent replay behavior; no implementation source copied
+    code_copied: false
+    allowed_paths: [docs]

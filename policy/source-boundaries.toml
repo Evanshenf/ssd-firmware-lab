@@ -371,6 +371,13 @@ output_variable = "FWLAB_FAKE_OUTPUT"
 require_elf = true
 run_output = true
 
+[portable_components.c3_4]
+directory = "core/c34"
+target = "fake-link"
+output_variable = "FWLAB_FAKE_OUTPUT"
+require_elf = true
+run_output = true
+
 [provenance]
 manifest = "docs/provenance/sources.yaml"
 moving_revisions_for_code = false
