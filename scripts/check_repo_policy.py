@@ -262,6 +262,7 @@ EXPECTED_C2_4_FILES = {
 EXPECTED_C2_5_BASELINE = "e3e518e15c5eb600d6e1f757deb214096d907bbb"
 EXPECTED_C2_5_CLOSED_ROOTS = [
     "docs/results/2026-08-29-c2-5-two-instance-isolation-nested.md",
+    "docs/results/2026-08-29-cycle-02-evidence-manifest.md",
     "Makefile",
     "kernel/vfio-cdev-v1-peer-fixture",
     "scripts/check_c25_architecture.py",
@@ -272,6 +273,8 @@ EXPECTED_C2_5_UNFROZEN_NAMES = ["README.md"]
 EXPECTED_C2_5_FILES = {
     "docs/results/2026-08-29-c2-5-two-instance-isolation-nested.md":
         "76e2bf54e8f72360521656be9ed6ed163edca281012eeedbb0d1a91332ef1b23",
+    "docs/results/2026-08-29-cycle-02-evidence-manifest.md":
+        "572bbfd9cb4cf44d78703a3de949d2e21e84c179996248dfc7d363ed21a8cbdd",
     "Makefile":
         "8375459e4c2dfa0e0427fc36aff3aed89a7598f50036162cb0187e4b157660d0",
     "kernel/vfio-cdev-v1-peer-fixture/Makefile":

@@ -186,6 +186,7 @@ allowed_unfrozen_names = []
 baseline_commit = "e3e518e15c5eb600d6e1f757deb214096d907bbb"
 closed_build_input_roots = [
   "docs/results/2026-08-29-c2-5-two-instance-isolation-nested.md",
+  "docs/results/2026-08-29-cycle-02-evidence-manifest.md",
   "Makefile",
   "kernel/vfio-cdev-v1-peer-fixture",
   "scripts/check_c25_architecture.py",
@@ -196,6 +197,7 @@ allowed_unfrozen_names = ["README.md"]
 
 [freeze.c2_5.files]
 "docs/results/2026-08-29-c2-5-two-instance-isolation-nested.md" = "76e2bf54e8f72360521656be9ed6ed163edca281012eeedbb0d1a91332ef1b23"
+"docs/results/2026-08-29-cycle-02-evidence-manifest.md" = "572bbfd9cb4cf44d78703a3de949d2e21e84c179996248dfc7d363ed21a8cbdd"
 "Makefile" = "8375459e4c2dfa0e0427fc36aff3aed89a7598f50036162cb0187e4b157660d0"
 "kernel/vfio-cdev-v1-peer-fixture/Makefile" = "e215628ee3633494f7a8b60558a951c293b3b238369216df47678b030f5b4126"
 "kernel/vfio-cdev-v1-peer-fixture/ssd_fwlab_v1_peer_fixture.c" = "f56c611ced95f06e48c5078395bd77fe4328d6bd13e47143786e696662ffb60d"

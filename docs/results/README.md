@@ -13,3 +13,4 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 - [2026-08-28: C2.3 IOAS protection/range characterization on Profile-Nested](2026-08-28-c2-3-negative-characterization-nested.md)
 - [2026-08-28: C2.4 lifecycle and bounded real-race robustness on Profile-Nested](2026-08-28-c2-4-lifecycle-race-nested.md)
 - [2026-08-29: C2.5 two-instance and architecture isolation on Profile-Nested](2026-08-29-c2-5-two-instance-isolation-nested.md)
+- [2026-08-29: Cycle 02 sanitized evidence manifest and review disposition](2026-08-29-cycle-02-evidence-manifest.md)
