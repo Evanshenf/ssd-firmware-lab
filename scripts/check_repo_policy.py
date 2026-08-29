@@ -306,6 +306,72 @@ EXPECTED_C3_PREREQ_FILES = {
     "docs/adr/0007-command-durability-and-persistence-policy.md":
         "503a3791ef2ad741a5a05e8c6d2f04c22a9e99da4ca6a6a599f1cae7c78798cf",
 }
+EXPECTED_C3_1_BASELINE = "df13d3747ed01b1d7895f9c7a0ccc63072410dd4"
+EXPECTED_C3_1_CLOSED_ROOTS = [
+    "core/Makefile",
+    "core/c31.c",
+    "core/c31_codec.c",
+    "core/c31_internal.h",
+    "core/fakes/c31_fake_dma.c",
+    "core/fakes/c31_fake_dma.h",
+    "core/fakes/c31_fake_main.c",
+    "core/fakes/c31_fake_nfc.c",
+    "core/fakes/c31_fake_nfc.h",
+    "core/fakes/c31_fake_provider.c",
+    "core/fakes/c31_fake_provider.h",
+    "core/tests/fuzz_c31.c",
+    "core/tests/model_c31.c",
+    "core/tests/test_c31.c",
+    "include/fwlab/contracts/c31_provider.h",
+    "include/fwlab/portable/c31.h",
+    "include/fwlab/portable/c31_codec.h",
+    "include/fwlab/portable/c31_types.h",
+    "scripts/check_c31_cross.py",
+    "docs/results/2026-08-29-c3-1-portable-lifecycle.md",
+]
+EXPECTED_C3_1_UNFROZEN_NAMES = []
+EXPECTED_C3_1_FILES = {
+    "core/Makefile":
+        "2f56d74b4997003b5cb4aec42c36866f2dc97c7e818a9ca73b42a4391e274178",
+    "core/c31.c":
+        "9535dd53f52a4736cee53a4ca9f9536f5916ef8b54581f32e767d313993e6b48",
+    "core/c31_codec.c":
+        "98766c7a39b75b723352c024815b72928a6f80ea2d9bf17a909bc6c21b76dcd4",
+    "core/c31_internal.h":
+        "b25ed32f0384393dc4268dd9c921aecbb149415bfc22924de9e092bedef997d9",
+    "core/fakes/c31_fake_dma.c":
+        "8fd0edefd709a010568b3fe6aab95a4b7f3268973a2e5e829f241f22e3dbd6de",
+    "core/fakes/c31_fake_dma.h":
+        "8f9f29fc0e0c318361dfb799621540d3f7d26c77021907f6a6827d75e9eaf071",
+    "core/fakes/c31_fake_main.c":
+        "0dc56ba62865e5694e775b9c5d672f90b671fd3a2569accf9b87fa3919cca0fe",
+    "core/fakes/c31_fake_nfc.c":
+        "1b95f0f1c38125e3b3b74fe1db3ab9b86e02d2dca5492a7ea96c100ec6eecbd5",
+    "core/fakes/c31_fake_nfc.h":
+        "0bb41eb6ec1aa112bce000f4e7c5877f750c41ae568fdcc2befbacc97ca91c3e",
+    "core/fakes/c31_fake_provider.c":
+        "20870983bb219df7b70626c0d024c62299bd617516d6110aaa321b3cd1ae61a6",
+    "core/fakes/c31_fake_provider.h":
+        "54f1395b78db86fa11bdcf7ca81155592483c1bc1aa5c64135dc1a29dd980cd9",
+    "core/tests/fuzz_c31.c":
+        "25975b950153f1b0db72b4a5f0410e04aa553f9b744e286840cdd96e27117d21",
+    "core/tests/model_c31.c":
+        "e1e4474e7c4ff8e135103d99f6f624a24803b709988826f94aa8ca1ff505ad4c",
+    "core/tests/test_c31.c":
+        "a4732e2e24ea821353ec07a0552db5a9572dd949a3742e80bdc1a25b3be96380",
+    "include/fwlab/contracts/c31_provider.h":
+        "6a48aee94834d50b7b67d1f6d7fc9cc43b4f00f10e50927970a800ac59ffdc66",
+    "include/fwlab/portable/c31.h":
+        "c2dced10b4965cb026e208d8dd4650b7fcd213486b48bfb4e9026f1fd2cb73db",
+    "include/fwlab/portable/c31_codec.h":
+        "c4ede29686cb548f4a04cea72b7de56abea2f4f173791bb15b4e783e19334ba4",
+    "include/fwlab/portable/c31_types.h":
+        "b1ee94f66203b096e85b3afa55fa790246348c01749c42d9df27a0a2e1a21c7c",
+    "scripts/check_c31_cross.py":
+        "bc1d5c798c8a0152e02e4014acf24d519ed2b0ebd25e8d162fac894830430cbf",
+    "docs/results/2026-08-29-c3-1-portable-lifecycle.md":
+        "59bf29b0ceccd0c494ace26eea28027f9217385ca45fe2b0facf5163c9f8cc25",
+}
 EXPECTED_FREEZES = {
     "cycle01": {
         "label": "Cycle 01",
@@ -355,6 +421,13 @@ EXPECTED_FREEZES = {
         "closed_build_input_roots": EXPECTED_C3_PREREQ_CLOSED_ROOTS,
         "allowed_unfrozen_names": EXPECTED_C3_PREREQ_UNFROZEN_NAMES,
         "files": EXPECTED_C3_PREREQ_FILES,
+    },
+    "c3_1": {
+        "label": "C3.1",
+        "baseline_commit": EXPECTED_C3_1_BASELINE,
+        "closed_build_input_roots": EXPECTED_C3_1_CLOSED_ROOTS,
+        "allowed_unfrozen_names": EXPECTED_C3_1_UNFROZEN_NAMES,
+        "files": EXPECTED_C3_1_FILES,
     },
 }
 EXPECTED_LAYER_FAKES = {
