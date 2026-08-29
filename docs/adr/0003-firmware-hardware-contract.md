@@ -12,6 +12,11 @@ Software HIF, an ISS SoC model and future endpoint HIF logic present the same po
 
 ## Canonical command boundary
 
+ADR-0006 refines how full identity crosses this boundary: HIF retains and
+interprets owner/queue/ring/CID fields and binds them into an opaque origin
+token. Portable firmware does not parse those transport fields; it interprets
+only its portable instance, controller epoch and command UID.
+
 Raw command bytes, transport address graphs, Host/guest/IO virtual addresses, page-frame identities, pins, IOAS objects and raw traces stay in trusted HIF. Raw trace is disabled by default, sensitive when enabled and excluded from public test artifacts.
 
 Firmware receives a versioned, address-free canonical descriptor containing:

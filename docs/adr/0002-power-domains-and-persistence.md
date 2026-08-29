@@ -14,6 +14,11 @@
 
 ## B/A/C/S ordering
 
+ADR-0007 is the executable command-level refinement of this ordering. It names
+these points B_phys/A_phys/C_phys/OUTCOME_DELIVERED and separately defines
+mapping commit, checkpoint commit and external volatile/durable success. It
+does not replace the physical ordering below.
+
 ```text
 stage payload to inactive slot and flush
   ≺ B: durable BEGIN

@@ -36,6 +36,10 @@ The trusted HIF retains raw submissions and all transport addresses. It validate
 
 A capability binds exact range/direction plus controller instance, owner, reset, per-queue generation and command identity. Reset, unmap, queue recreation or owner change revokes it. Old events may release old resources but cannot DMA, publish a completion/interrupt or mutate new firmware state.
 
+The expanded owner/queue identity is HIF-private. Per ADR-0006, HIF binds it
+into an opaque origin token; portable firmware interprets only its own instance,
+controller epoch and command UID and never parses QID, CID or ring layout.
+
 ## Command identity and lifecycle
 
 ```text
@@ -53,6 +57,10 @@ A capability binds exact range/direction plus controller instance, owner, reset,
 ACCEPTED → DISPATCHED → HELD/RUNNING → CANCEL_PENDING
          → COMPLETION_READY → PUBLISHED → ACKED
 ```
+
+This diagram describes the full HIF-plus-firmware path. The portable core owns
+command state through immutable completion intent and a one-use completion
+lease; HIF alone owns physical PUBLISHED/ACKED queue and notification state.
 
 Held asynchronous events, Abort, queue-delete barriers, reset acknowledgements and forced daemon cancellation use this state machine. Firmware produces completion intent; only HIF publishes the physical queue entry and interrupt, preserving:
 
@@ -93,4 +101,4 @@ Replaced by hardware: PCIe link/config/BAR, requester DMA, queue walkers, comple
 
 Platform-specific: boot, RTOS/runtime, linker map, interrupt controller, timers, cache/coherency and atomics.
 
-Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md), [ADR-0003](adr/0003-firmware-hardware-contract.md) and [ADR-0004](adr/0004-kernel-baseline.md).
+Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md), [ADR-0003](adr/0003-firmware-hardware-contract.md), [ADR-0004](adr/0004-kernel-baseline.md), [ADR-0005](adr/0005-synchronous-ioas-copy-gate.md), [ADR-0006](adr/0006-portable-command-lifecycle-contract.md) and [ADR-0007](adr/0007-command-durability-and-persistence-policy.md).

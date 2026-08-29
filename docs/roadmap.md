@@ -13,6 +13,18 @@ Freeze public contracts and run the BAR, Host-DMA, runtime-death, custom-VFIO an
 
 Build a fixed-arena portable firmware core, headless HIF, fake DMA/NFC, memory media and deterministic trace oracle. Exit on sanitizer/property/fuzz checks and stale-free reset/queue lifecycle.
 
+The current Cycle 03 correctness sequence is intentionally transport-free:
+
+1. portable headless command lifecycle with fake providers;
+2. executable persistence lattice;
+3. programmable NFC/NAND model;
+4. minimal crash-consistent mapping with file-backed test media;
+5. integrated portability and provider-replaceability graduation.
+
+ADR-0006 and ADR-0007 freeze the lifecycle and durability prerequisites. They
+do not themselves open an implementation gate. IRQ, BAR, PCI, QEMU, native
+NVMe binding and raw media remain later independent work.
+
 ## M2 — `vfio-user` guest (6–8 weeks)
 
 Pin a `libvfio-user` revision behind a thin adapter. Exercise an unmodified Linux guest with file media and a minimal raw-block adapter. Raw initialization is a separate identity-checked command; discard remains off. Exit on data verification, repeated enable/reset/queue cycles and fail-closed unmap/runtime restart.
