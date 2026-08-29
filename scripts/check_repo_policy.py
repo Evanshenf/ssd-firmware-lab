@@ -294,6 +294,18 @@ EXPECTED_C2_5_FILES = {
     "tools/vfio-cdev-v1-c25/c25_session.h":
         "efbf2485f9f77c4e7de97be7ea37f59296a2e5443516c3b6595d34c9f647dd73",
 }
+EXPECTED_C3_PREREQ_BASELINE = "5c45bd9e45a3d2e3cf44476f70c956b9e25e9a6b"
+EXPECTED_C3_PREREQ_CLOSED_ROOTS = [
+    "docs/adr/0006-portable-command-lifecycle-contract.md",
+    "docs/adr/0007-command-durability-and-persistence-policy.md",
+]
+EXPECTED_C3_PREREQ_UNFROZEN_NAMES = []
+EXPECTED_C3_PREREQ_FILES = {
+    "docs/adr/0006-portable-command-lifecycle-contract.md":
+        "a74d46ce0f0337a155e8563cefbe3bbf142cda0d3fc1eb901757f6f320856bd3",
+    "docs/adr/0007-command-durability-and-persistence-policy.md":
+        "503a3791ef2ad741a5a05e8c6d2f04c22a9e99da4ca6a6a599f1cae7c78798cf",
+}
 EXPECTED_FREEZES = {
     "cycle01": {
         "label": "Cycle 01",
@@ -336,6 +348,13 @@ EXPECTED_FREEZES = {
         "closed_build_input_roots": EXPECTED_C2_5_CLOSED_ROOTS,
         "allowed_unfrozen_names": EXPECTED_C2_5_UNFROZEN_NAMES,
         "files": EXPECTED_C2_5_FILES,
+    },
+    "c3_prereq": {
+        "label": "Cycle 03 prerequisites",
+        "baseline_commit": EXPECTED_C3_PREREQ_BASELINE,
+        "closed_build_input_roots": EXPECTED_C3_PREREQ_CLOSED_ROOTS,
+        "allowed_unfrozen_names": EXPECTED_C3_PREREQ_UNFROZEN_NAMES,
+        "files": EXPECTED_C3_PREREQ_FILES,
     },
 }
 EXPECTED_LAYER_FAKES = {

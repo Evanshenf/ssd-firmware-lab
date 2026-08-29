@@ -208,6 +208,18 @@ allowed_unfrozen_names = ["README.md"]
 "tools/vfio-cdev-v1-c25/c25_session.c" = "0a59137bff00fd730cbb5a74b29bb5eaf23e611572cf2286609cd10c13dfc56c"
 "tools/vfio-cdev-v1-c25/c25_session.h" = "efbf2485f9f77c4e7de97be7ea37f59296a2e5443516c3b6595d34c9f647dd73"
 
+[freeze.c3_prereq]
+baseline_commit = "5c45bd9e45a3d2e3cf44476f70c956b9e25e9a6b"
+closed_build_input_roots = [
+  "docs/adr/0006-portable-command-lifecycle-contract.md",
+  "docs/adr/0007-command-durability-and-persistence-policy.md",
+]
+allowed_unfrozen_names = []
+
+[freeze.c3_prereq.files]
+"docs/adr/0006-portable-command-lifecycle-contract.md" = "a74d46ce0f0337a155e8563cefbe3bbf142cda0d3fc1eb901757f6f320856bd3"
+"docs/adr/0007-command-durability-and-persistence-policy.md" = "503a3791ef2ad741a5a05e8c6d2f04c22a9e99da4ca6a6a599f1cae7c78798cf"
+
 [layer_fakes]
 roots = ["core", "nfc", "media", "frontends"]
 target = "fake-link"
