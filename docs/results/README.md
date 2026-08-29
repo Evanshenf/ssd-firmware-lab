@@ -16,3 +16,4 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 - [2026-08-29: Cycle 02 sanitized evidence manifest and review disposition](2026-08-29-cycle-02-evidence-manifest.md)
 - [2026-08-29: C3.1 portable command-lifecycle gate opening](2026-08-29-c3-1-opening.md)
 - [2026-08-29: C3.1 portable command-lifecycle result](2026-08-29-c3-1-portable-lifecycle.md)
+- [2026-08-29: C3.2 executable persistence-policy result](2026-08-29-c3-2-executable-persistence.md)

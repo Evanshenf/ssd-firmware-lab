@@ -372,6 +372,54 @@ EXPECTED_C3_1_FILES = {
     "docs/results/2026-08-29-c3-1-portable-lifecycle.md":
         "59bf29b0ceccd0c494ace26eea28027f9217385ca45fe2b0facf5163c9f8cc25",
 }
+EXPECTED_C3_2_BASELINE = "73ec2419103d202ce8f270f2f20ce34c292f73f9"
+EXPECTED_C3_2_CLOSED_ROOTS = [
+    "core/c32",
+    "include/fwlab/contracts/persistence_facts.h",
+    "include/fwlab/portable/persistence_policy.h",
+    "scripts/check_c32_architecture.py",
+    "scripts/check_c32_cross.py",
+    "docs/results/2026-08-29-c3-2-executable-persistence.md",
+]
+EXPECTED_C3_2_UNFROZEN_NAMES = ["README.md"]
+EXPECTED_C3_2_FILES = {
+    "core/c32/Makefile":
+        "2d1335969e5373fb0260f1586361906bf04771ea6de88b5f5339b74fec2680ac",
+    "core/c32/c32_canonical.c":
+        "4e8b5ff34917b78352951600829116a1dda90f82cd2344169fd4291083d1d4cc",
+    "core/c32/c32_internal.h":
+        "91857434f24bc5c54a2ae5e24eb0a45f5f24990153e483697626a68f84c50570",
+    "core/c32/c32_invariants.c":
+        "421f979eebc61270e529f62d2d1f02f1d370a6d49199f642b41cbe4a739f3255",
+    "core/c32/c32_model.c":
+        "643484af4bb347125168276e96584be1f977f64c01ef6a1f7db9f9eb9b824cc8",
+    "core/c32/c32_policy.c":
+        "a761c86492eb91dfa697690f976afd59248432350946498a6ffb0f28b3403fa9",
+    "core/c32/c32_recovery.c":
+        "944ff6f37190d21be950a07efe95adcbf69f590a270c8a4c85cc74c5a0dab9a0",
+    "core/c32/fakes/c32_fake_main.c":
+        "317c9c0644a05cbfb5fa0e99e188320a90a52a146bfa4c01f840016293c9acef",
+    "core/c32/tests/broken_c32.c":
+        "e61e4f0f319fa2e5547601bad4ce5eaff711f66dca0abd2b896dad874654bbbb",
+    "core/c32/tests/model_c32.c":
+        "7001a2ddba90daef49d008787ff60d4edb2cc51b7147efb08c33c2e506838f9b",
+    "core/c32/tests/test_invariants.c":
+        "5f82c2afa2175886b4b09a9915bad541d32ecda427c10ae152221d059c853021",
+    "core/c32/tests/test_policy.c":
+        "7954520efc38e12f13544ce3528ee7c59ce4d3991af4492c9618d9018a5afc50",
+    "core/c32/tests/test_recovery.c":
+        "5fe94a6a9c65b88cdb5896f4020d4576bf01d6a9733f737f880b717d4b75c535",
+    "include/fwlab/contracts/persistence_facts.h":
+        "c08942af70f63ad765311e9bf0ca69f42e7ab0e6add15958e4f6f6543c98b1d2",
+    "include/fwlab/portable/persistence_policy.h":
+        "1e57c776791e491dcdae9b26b640afd82c1516237bed3ba27f5ebfed1169d665",
+    "scripts/check_c32_architecture.py":
+        "16a0c0435f623203f219f947c1584eb01195c0c9f5661dfcdb3c50dc88283a3b",
+    "scripts/check_c32_cross.py":
+        "97f74c6e2467c049b3435d2587206627d88355966c62246ba0b7ec746b9a6bfe",
+    "docs/results/2026-08-29-c3-2-executable-persistence.md":
+        "4808eac5827309f849f0a207a14270d0999533c818aacc37acbc91157107ebfc",
+}
 EXPECTED_FREEZES = {
     "cycle01": {
         "label": "Cycle 01",
@@ -428,6 +476,13 @@ EXPECTED_FREEZES = {
         "closed_build_input_roots": EXPECTED_C3_1_CLOSED_ROOTS,
         "allowed_unfrozen_names": EXPECTED_C3_1_UNFROZEN_NAMES,
         "files": EXPECTED_C3_1_FILES,
+    },
+    "c3_2": {
+        "label": "C3.2",
+        "baseline_commit": EXPECTED_C3_2_BASELINE,
+        "closed_build_input_roots": EXPECTED_C3_2_CLOSED_ROOTS,
+        "allowed_unfrozen_names": EXPECTED_C3_2_UNFROZEN_NAMES,
+        "files": EXPECTED_C3_2_FILES,
     },
 }
 EXPECTED_LAYER_FAKES = {
