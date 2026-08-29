@@ -18,3 +18,6 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 - [2026-08-29: C3.1 portable command-lifecycle result](2026-08-29-c3-1-portable-lifecycle.md)
 - [2026-08-29: C3.2 executable persistence-policy result](2026-08-29-c3-2-executable-persistence.md)
 - [2026-08-29: C3.3 programmable NAND/NFC result](2026-08-29-c3-3-programmable-nfc.md)
+- [2026-08-29: C3.4 crash-consistent mapping and ordinary-file media result](2026-08-29-c3-4-crash-consistent-mapping.md)
+- [2026-08-29: C3.5 integrated fixed-profile headless graduation](2026-08-29-c3-5-headless-graduation.md)
+- [2026-08-29: Cycle 03 portable firmware evidence manifest](2026-08-29-cycle-03-evidence-manifest.md)
