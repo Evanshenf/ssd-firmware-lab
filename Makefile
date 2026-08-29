@@ -1,9 +1,11 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-.PHONY: check policy c21-unit c22-build c23-build c24-build layer-fakes links reuse-check
+.PHONY: check policy c21-unit c22-build c23-build c24-build c25-build \
+	c25-architecture layer-fakes links reuse-check
 
-check: policy c21-unit c22-build c23-build c24-build layer-fakes links
+check: policy c21-unit c22-build c23-build c24-build c25-build \
+	c25-architecture layer-fakes links
 	python3 scripts/check_spdx.py
 	git diff --check
 	git diff --cached --check
@@ -58,6 +60,25 @@ c24-build:
 		sh -n tests/privileged/c2_4_vfio_cdev_v1.sh; \
 	else \
 		echo "C2.4 privileged syntax: SKIP (script not present)"; \
+	fi
+
+c25-build:
+	@if [ -f tools/vfio-cdev-v1-c25/Makefile ]; then \
+		$(MAKE) -C tools/vfio-cdev-v1-c25 check; \
+	else \
+		echo "C2.5 userspace build: SKIP (tool not present)"; \
+	fi
+	@if [ -f tests/privileged/c2_5_vfio_cdev_v1.sh ]; then \
+		sh -n tests/privileged/c2_5_vfio_cdev_v1.sh; \
+	else \
+		echo "C2.5 privileged syntax: SKIP (script not present)"; \
+	fi
+
+c25-architecture:
+	@if [ -f scripts/check_c25_architecture.py ]; then \
+		python3 scripts/check_c25_architecture.py; \
+	else \
+		echo "C2.5 architecture isolation: SKIP (checker not present)"; \
 	fi
 
 layer-fakes:

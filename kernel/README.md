@@ -12,3 +12,8 @@ The first implementation is the deliberately inert [H0 synthetic PCI enumeration
 The independent [V0 emulated VFIO cdev contract harness](vfio-cdev-v0/README.md) validates cdev/iommufd ownership and a software region without pretending to be a PCI function.
 
 The [V1 work area](vfio-cdev-v1/README.md) begins with the C2.1 A-prime wire/state contract and injected fake copy-provider seam. C2.1 contains no VFIO device or real IOAS provider; those remain separate later gates.
+
+The [C2.5 peer fixture](vfio-cdev-v1-peer-fixture/README.md) is a separate,
+test-only platform-device instantiator. It adds no V1 implementation: it asks
+the frozen V1 driver to probe one extra device so per-instance state and remove
+isolation can be tested without changing earlier evidence inputs.
