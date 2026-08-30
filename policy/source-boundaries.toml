@@ -423,6 +423,48 @@ allowed_unfrozen_names = ["README.md"]
 "scripts/check_c34_cross.py" = "3cce28638f8045cc9aa8d2df56c0f3d2c54d47be7481c02b3756e6ab59fb4fdc"
 "docs/results/2026-08-29-c3-4-crash-consistent-mapping.md" = "b111c4af64e26ab19b296eb68324128a14f0d3d81d2814e3d79950b6031ce268"
 
+[freeze.c4_1]
+baseline_commit = "31e07d8006911b3bb2838c816caa23ded856c4b6"
+closed_build_input_roots = [
+  "core/c4-nvme/c41_action.c",
+  "core/c4-nvme/c41_codec.c",
+  "core/c4-nvme/c41_profile.c",
+  "core/c4-nvme/fakes/c41_fake_main.c",
+  "core/c4-nvme/tests/model_c41.c",
+  "core/c4-nvme/tests/test_c41_portable.c",
+  "frontends/headless-c4/c41_wire.c",
+  "frontends/headless-c4/c41_wire.h",
+  "frontends/headless-c4/fakes/c41_fake_main.c",
+  "frontends/headless-c4/tests/fuzz_c41.c",
+  "frontends/headless-c4/tests/test_c41_wire.c",
+  "include/fwlab/contracts/hif_action.h",
+  "include/fwlab/portable/nvme_codec.h",
+  "include/fwlab/portable/nvme_types.h",
+  "docs/adr/0008-generalized-nvme-command-graph-boundary.md",
+  "docs/legal/c4-1-source-boundary-review.md",
+  "docs/results/2026-08-30-c4-1-source-profile-wire.md",
+]
+allowed_unfrozen_names = []
+
+[freeze.c4_1.files]
+"core/c4-nvme/c41_action.c" = "8932d127ae3603b48cfdd0143c675bff7e3fd3e062ae286308307ef4f70f3963"
+"core/c4-nvme/c41_codec.c" = "2fb0b5acd94266f023c300e6ab120607e322c230bc52ff12674fa0fea7dc50ac"
+"core/c4-nvme/c41_profile.c" = "b975f04eddb38a0d08c6c23c4007f8bb90ac719f5513132ebf2e38df739a82ec"
+"core/c4-nvme/fakes/c41_fake_main.c" = "6073f06e770cc2dd94ea73bfea93525835f7ac4716e4ebba39a888de30b7fc8b"
+"core/c4-nvme/tests/model_c41.c" = "d2f18c925c4f64384dc539db5547bab4858275d3a18bc7749370ae462956940f"
+"core/c4-nvme/tests/test_c41_portable.c" = "392b3991fed86a55316ce3a7a3546aa186ce3cbddddac28e25ce5539ffb05b97"
+"frontends/headless-c4/c41_wire.c" = "3b9f682bcc253cfcd4b384a29d8c279363a8203c98c5c63ee133445dc322671b"
+"frontends/headless-c4/c41_wire.h" = "0c0f188312cb67e7f57d19697fbf32767b3dcf2b161c0670a29de8882937ebea"
+"frontends/headless-c4/fakes/c41_fake_main.c" = "8bb93e73c7458bc066de2d2e085cd3d22b15f685232ff5e108f37b2a189e1542"
+"frontends/headless-c4/tests/fuzz_c41.c" = "946a0cb16c2512e37bdc2cde8f858c942640f734e4fe641aaa7ca23d7624cd58"
+"frontends/headless-c4/tests/test_c41_wire.c" = "32258f426a86bbf2d4080b7e4d3c0a2b8ebc46288dc2586071530bb116477a49"
+"include/fwlab/contracts/hif_action.h" = "c1afc74c228f1d467671faba256d94a452bd948d1c2fe0f94765b1db3b878956"
+"include/fwlab/portable/nvme_codec.h" = "5ae3d488412bbfd69fa8cc1f441472f0cb9d3da8b3ba833177aaeaa671f8370f"
+"include/fwlab/portable/nvme_types.h" = "f65e9313e33206c9c98b2b485a5cae74a0523cf4062403b18658516f2e08019f"
+"docs/adr/0008-generalized-nvme-command-graph-boundary.md" = "2ee8f526bff088d96b0c9669ae9187ecdb4c8b36f50be7439f97f50bfe8b8db0"
+"docs/legal/c4-1-source-boundary-review.md" = "952b09bb63fbbad7d52ac2c87ac10d77ef9f441cf3ef55ebc4ec74d252dedcbf"
+"docs/results/2026-08-30-c4-1-source-profile-wire.md" = "976749d535542c110fc4138e9c120a1e431afeb53e6af4a5b1a3de2ba388db23"
+
 [layer_fakes]
 roots = ["core", "nfc", "media", "frontends"]
 target = "fake-link"
