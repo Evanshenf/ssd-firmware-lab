@@ -5,7 +5,7 @@
 
 - Date: 2026-08-29
 - Cycle result: five narrow sub-gates plus C3.5a/C3.5b remediation passed
-- Current disposition: **REVIEW_HOLD / C3.5b PASS / REVIEW_PENDING**
+- Current disposition: **REVIEW_HOLD / C3.5c REQUIRED**
 - Post-review erratum:
   [C3.5 review hold](2026-08-29-c3-5-review-hold.md)
 - Evidence profile: unprivileged behavioral/Host-native portable firmware and
@@ -19,8 +19,10 @@ The five recorded sub-gate runs completed, but Cycle 03 is not graduated. A
 post-review source audit found three Critical C3.5 failure-path defects. C3.5a
 closed the trace-arithmetic and reset-exhaustion defects, but targeted review
 found a tokenless-wrapper blocker and a trace-metadata coherence requirement.
-C3.5b addresses that follow-up; the cycle remains in `REVIEW_HOLD` pending
-narrow review of the new pair.
+C3.5b addressed that follow-up, but its targeted review found that reset could
+still exhaust a shared teardown-token counter and that active-reset takeover
+mutated state before proving teardown admission. C3.5c must close that blocker;
+the cycle remains in `REVIEW_HOLD`.
 
 ## Immutable gate identities
 
@@ -160,7 +162,7 @@ multi-geometry FTL profile is future work.
 
 Before post-review this was labeled `GRADUATED_FIXED_PROFILE / REVIEW_PENDING`.
 That label remains withdrawn; the current disposition is
-`REVIEW_HOLD / C3.5b PASS / REVIEW_PENDING` until a separate reviewed closure.
+`REVIEW_HOLD / C3.5c REQUIRED` until a separate reviewed closure.
 
 ## Architecture and safety closure
 
@@ -177,8 +179,8 @@ debug/lab machine, physical SSD or raw device participated in Cycle 03.
 
 ## Review and next-step lock
 
-Cycle 03 has reached its review cadence. The next action is the targeted
-file-based ChatGPT Pro review of the exact C3.5b source/evidence pair. The
+Cycle 03 has reached its review cadence. The next action is C3.5c source and
+evidence followed by targeted file-based ChatGPT Pro review. The
 private raw review is not public evidence and cannot be described as
 independent reproduction, certification, endorsement or official recognition.
 

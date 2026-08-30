@@ -4,7 +4,7 @@
 # C3.5 integrated headless firmware graduation result
 
 - Date: 2026-08-29
-- Current disposition: **REVIEW_HOLD / C3.5b PASS / REVIEW_PENDING**
+- Current disposition: **REVIEW_HOLD / C3.5c REQUIRED**
 - Post-review erratum:
   [C3.5 review hold](2026-08-29-c3-5-review-hold.md)
 - Immutable source commit: `48567dae4f3246c2eddb83a28a30c526947dbc86`
@@ -15,7 +15,8 @@
 
 > The test results below remain the recorded outcomes for their exact successful
 > workloads. A post-review source audit found three Critical failure-path defects,
-> so the graduation claim remains withdrawn pending reviewed C3.5b closure.
+> so the graduation claim remains withdrawn pending C3.5c remediation and
+> review.
 
 ## What graduated
 
@@ -261,7 +262,8 @@ User-mode P execution proves the target Linux libc/syscall ABI against the
 same Host kernel/filesystem; it is not QEMU storage-device evidence. No root
 privilege, KVM, debug machine, extra SSD or raw media was used.
 
-The fixed-profile result remains `REVIEW_PENDING` until targeted review of the
-exact [C3.5b source/evidence pair](2026-08-30-c3-5b-wrapper-recovery.md).
-That review is not certification, recognition, endorsement or an independent
-test reproduction.
+Targeted review of the
+[C3.5b source/evidence pair](2026-08-30-c3-5b-wrapper-recovery.md) found that
+reset could still consume shared teardown-token capacity. C3.5c remediation
+and review are required. The review is not certification, recognition,
+endorsement or an independent test reproduction.

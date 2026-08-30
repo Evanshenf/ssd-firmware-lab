@@ -6,7 +6,7 @@
 - Date: 2026-08-29
 - Reviewed source: `48567dae4f3246c2eddb83a28a30c526947dbc86`
 - Reviewed evidence: `4d3641aa62c6cb27babb15b2dc13fbfac3324acb`
-- Current disposition: **REVIEW_HOLD / C3.5b PASS / REVIEW_PENDING**
+- Current disposition: **REVIEW_HOLD / C3.5c REQUIRED**
 
 The scheduled Cycle 03 second-opinion review found three source-level defects.
 They were then checked directly against the immutable public source and
@@ -111,8 +111,11 @@ trace cache/record coherence.
 
 The follow-up C3.5b source/evidence pair reports `PASS / REVIEW_PENDING`; see
 the [wrapper-recovery result](2026-08-30-c3-5b-wrapper-recovery.md). This does
-not remove the hold. A targeted review of the exact C3.5b pair and a separate
-closure commit are still required.
+not remove the hold. Its targeted review found that reset and teardown still
+shared a finite control-token counter and that active-reset takeover mutated
+state before proving teardown admission. C3.5c must provide a reset-inaccessible
+teardown reserve, failure-atomic takeover and new reviewed evidence before a
+separate closure commit can be considered.
 
 NVMe protocol/queues, device DMA, IRQ/MSI-X, BAR/PCI, VFIO, QEMU-device,
 Host-native binding, raw media, physical NAND/FPGA, real PLP/power failure,

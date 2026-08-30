@@ -22,6 +22,12 @@ close the review hold. Closure still requires a targeted review of this exact
 source/evidence pair and a separate public closure commit if no Critical
 finding remains.
 
+Follow-up status: that targeted review closed the trace-coherence item but
+found a remaining cleanup-admission Critical. Reset and teardown shared one
+finite control-token counter, and active-reset takeover modified control state
+before proving teardown allocation. C3.5c remediation is required;
+REVIEW_HOLD remains active.
+
 ## Exported wrapper recovery
 
 The canonical token API is unchanged. Bounded submit, completion, reset and
@@ -83,7 +89,8 @@ encode the observer reservation generation. The full validator traverses all
 records and proves:
 
 - zero events if and only if cached UID/generation/offset are zero;
-- publication ordinals and generations are nonzero and strictly ordered;
+- publication ordinals are zero-based and contiguous; reservation generations
+  are nonzero and strictly increasing;
 - cached last UID, generation and offset equal the actual last encoded
   publication record, including when a projection follows it;
 - active and recorded generation/UID ordering matches `next_generation`;
