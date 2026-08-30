@@ -26,6 +26,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends \
             clang gcc-aarch64-linux-gnu gcc-riscv64-linux-gnu \
-            gcc-s390x-linux-gnu qemu-user
+            gcc-s390x-linux-gnu libc6-dev-arm64-cross \
+            libc6-dev-riscv64-cross libc6-dev-s390x-cross qemu-user
       - name: Run C4.1 portable and memory-HIF matrix
         run: make -C frontends/headless-c4 check-all
