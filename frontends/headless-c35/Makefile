@@ -383,6 +383,7 @@ clean:
 		build/c35a_model build/c35a_broken \
 		build/c35_poison_cleanup_tests \
 		build/c35_phase_takeover_tests \
+		build/c35_wrapper_recovery_tests \
 		build/c35_lane_s build/c35_lane_m build/c35_lane_b build/c35_lane_p \
 		build/c35_lane_s.map build/c35_lane_m.map \
 		build/c35_lane_b.map build/c35_lane_p.map \
@@ -404,6 +405,7 @@ clean:
 		build/clang/c35a_model build/clang/c35a_broken \
 		build/clang/c35_poison_cleanup_tests \
 		build/clang/c35_phase_takeover_tests \
+		build/clang/c35_wrapper_recovery_tests \
 		build/clang/c35_lane_s build/clang/c35_lane_m \
 		build/clang/c35_lane_b build/clang/c35_lane_p \
 		build/clang/c35_lane_s.map build/clang/c35_lane_m.map \
@@ -426,6 +428,7 @@ clean:
 		build/sanitize/c35a_model build/sanitize/c35a_broken \
 		build/sanitize/c35_poison_cleanup_tests \
 		build/sanitize/c35_phase_takeover_tests \
+		build/sanitize/c35_wrapper_recovery_tests \
 		build/sanitize/c35_lane_s build/sanitize/c35_lane_m \
 		build/sanitize/c35_lane_b build/sanitize/c35_lane_p \
 		build/sanitize/c35_lane_s.map build/sanitize/c35_lane_m.map \
