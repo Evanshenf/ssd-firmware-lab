@@ -77,8 +77,9 @@ modify C3.1-C3.4 source.
 - 126 M/B reset executions, with old/new recovered outcomes determined by raw
   authority and no third value;
 - 13 composition families, 243 states, 350 transitions and 74 stale probes;
-- all 5,544 complete macro schedules and 20,586 distinct exact prefixes, plus
-  36 selected live twin schedules;
+- 924 unique actor-choice strings forming 5,544 labeled reference-product
+  cases and 20,586 within-matrix unique prefix labels, with only 36 selected
+  live twin schedules in the historical C3.5 source;
 - 16 shortest new broken variants, vector `26665ac74fd7c4f9`;
 - 192 barrier-started MM/BB/MB pthread twin runs under Clang TSan;
 - native/GCC/Clang/ASan/UBSan/static-analysis gates and exact
@@ -103,9 +104,9 @@ Second, the full C3.4 firmware remains one fixed geometry. The separate C3.3
 dual-geometry test proves NFC provider/media isolation only. A versioned
 multi-geometry FTL profile is future work.
 
-These limitations are why the disposition is
-`GRADUATED_FIXED_PROFILE / REVIEW_PENDING`, not an unqualified completion of
-all future firmware or transport work.
+Before post-review this was labeled `GRADUATED_FIXED_PROFILE / REVIEW_PENDING`.
+That label is withdrawn; the current disposition remains
+`REVIEW_HOLD / C3.5a REQUIRED` until a separate remediation closure.
 
 ## Architecture and safety closure
 

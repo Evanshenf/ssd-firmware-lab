@@ -281,7 +281,8 @@ static int run_live_schedule(
     uint8_t family,
     uint16_t schedule,
     const struct c35_prefix reference_a[C35_MACRO_ACTIONS + 1u],
-    const struct c35_prefix reference_b[C35_MACRO_ACTIONS + 1u]
+    const struct c35_prefix reference_b[C35_MACRO_ACTIONS + 1u],
+    uint32_t *observations
 )
 {
     struct c35_instance instance[2];
@@ -291,6 +292,9 @@ static int run_live_schedule(
 
     CHECK(instance_start(&instance[0], lane_a, family, 0));
     CHECK(instance_start(&instance[1], lane_b, family, 1));
+    CHECK(prefix_equal_runtime(&reference_a[0], instance[0].runtime));
+    CHECK(prefix_equal_runtime(&reference_b[0], instance[1].runtime));
+    ++*observations;
     for (position = 0; position < C35_SCHEDULE_BITS; ++position) {
         unsigned int actor = (schedule >> position) & 1u;
         unsigned int peer = actor ^ 1u;
@@ -308,6 +312,7 @@ static int run_live_schedule(
             peer == 0 ? &reference_a[progress[peer]] :
                         &reference_b[progress[peer]],
             instance[peer].runtime));
+        ++*observations;
     }
     CHECK(progress[0] == C35_MACRO_ACTIONS &&
           progress[1] == C35_MACRO_ACTIONS);
@@ -379,7 +384,8 @@ static int replay_all_schedules(
 static int test_schedule_matrix(
     uint32_t *complete_schedules,
     uint32_t *distinct_prefixes,
-    uint32_t *live_schedules
+    uint32_t *live_schedules,
+    uint32_t *live_observations
 )
 {
     static const enum c35_lane pairs[3][2] = {
@@ -387,7 +393,6 @@ static int test_schedule_matrix(
         {C35_LANE_BYTE, C35_LANE_BYTE},
         {C35_LANE_MEMORY, C35_LANE_BYTE},
     };
-    static const unsigned int live_index[6] = {0, 1, 231, 462, 692, 923};
     uint16_t schedules[C35_SCHEDULES];
     unsigned int mask;
     unsigned int count = 0;
@@ -417,11 +422,11 @@ static int test_schedule_matrix(
             CHECK(replay_all_schedules(
                 schedules, reference_a, reference_b, distinct_prefixes));
             *complete_schedules += C35_SCHEDULES;
-            for (live = 0; live < 6; ++live) {
+            for (live = 0; live < C35_SCHEDULES; ++live) {
                 CHECK(run_live_schedule(
                     pairs[pair][0], pairs[pair][1], (uint8_t)family,
-                    schedules[live_index[live]], reference_a,
-                    reference_b));
+                    schedules[live], reference_a, reference_b,
+                    live_observations));
                 ++*live_schedules;
             }
             free(reference_b);
@@ -449,7 +454,8 @@ static int wait_ready(
         if (state == FWLAB_C31_CMD_COMPLETION_READY) {
             return 1;
         }
-        if (fwlab_c31_step(runtime->lifecycle, 1, &step) !=
+        if (runtime->lifecycle_port.ops->step(
+                runtime->lifecycle_port.context, 1, &step) !=
             FWLAB_C31_API_OK) {
             return 0;
         }
@@ -466,6 +472,7 @@ static int test_cross_identity_and_reset(
     struct c35_request request;
     struct c35_submission submission;
     struct c35_semantic_result semantic;
+    struct c35_txid cross_txid;
     struct fwlab_c31_completion_intent intent;
     enum fwlab_c31_lifecycle_state state;
     struct c35_trace trace_b;
@@ -491,17 +498,29 @@ static int test_cross_identity_and_reset(
     request = c35_request_read(0);
     CHECK(c35_headless_submit_observed(
         &instance[0].runtime->headless, &request, &submission) == C35_OK);
-    CHECK(instance[1].runtime->headless.binding.ops->register_after_submit(
-        instance[1].runtime->headless.binding.context, &submission.request,
-        &submission.command,
-        instance[1].runtime->headless.owner_epoch, &request) == C35_INVALID);
+    memset(&cross_txid, 0, sizeof(cross_txid));
+    cross_txid.instance_nonce = instance[1].runtime->nonce;
+    cross_txid.uid = UINT64_C(0x7350);
+    cross_txid.owner_epoch = instance[1].runtime->headless.owner_epoch;
+    cross_txid.generation = 1;
+    CHECK(instance[1].runtime->headless.binding.ops->registration_prepare(
+        instance[1].runtime->headless.binding.context, &cross_txid,
+        &submission.request, instance[1].runtime->headless.owner_epoch,
+        &request) == C35_OK);
+    CHECK(instance[1].runtime->headless.binding.ops->registration_commit(
+        instance[1].runtime->headless.binding.context, &cross_txid,
+        &submission.command) == C35_INVALID);
+    CHECK(instance[1].runtime->headless.binding.ops->registration_abort(
+        instance[1].runtime->headless.binding.context, &cross_txid) == C35_OK);
+    CHECK(instance[1].runtime->headless.binding.ops->transaction_retire(
+        instance[1].runtime->headless.binding.context, &cross_txid) == C35_OK);
     CHECK(fwlab_c31_command_state(
         instance[1].runtime->lifecycle, &submission.command, &state) ==
         FWLAB_C31_API_STALE_TOKEN);
     CHECK(wait_ready(instance[0].runtime, &submission.command));
-    CHECK(instance[1].runtime->headless.binding.ops->result_copy_before_consume(
-        instance[1].runtime->headless.binding.context, &submission.command,
-        &intent, &semantic) == C35_STALE);
+    CHECK(instance[1].runtime->headless.binding.ops->result_prepare(
+        instance[1].runtime->headless.binding.context, &cross_txid,
+        &submission.command, &intent, &semantic) != C35_OK);
     CHECK(c35_headless_complete(
         &instance[0].runtime->headless, &submission.command,
         &semantic, &intent) == C35_OK);
@@ -581,17 +600,21 @@ int main(void)
     uint32_t schedules = 0;
     uint32_t prefixes = 0;
     uint32_t live = 0;
+    uint32_t observations = 0;
 
-    CHECK(test_schedule_matrix(&schedules, &prefixes, &live));
-    CHECK(schedules == 5544 && prefixes == 20586 && live == 36);
+    CHECK(test_schedule_matrix(
+        &schedules, &prefixes, &live, &observations));
+    CHECK(schedules == 5544 && prefixes == 20586 && live == 5544 &&
+          observations == 72072);
     CHECK(test_cross_identity_and_reset(
         C35_LANE_MEMORY, C35_LANE_MEMORY));
     CHECK(test_cross_identity_and_reset(C35_LANE_BYTE, C35_LANE_BYTE));
     CHECK(test_cross_identity_and_reset(C35_LANE_MEMORY, C35_LANE_BYTE));
     CHECK(test_bundle_exclusion());
     CHECK(test_posix_pair());
-    printf("C3.5 isolation schedules: PASS (%" PRIu32
-           " complete / %" PRIu32 " distinct prefixes / %" PRIu32
-           " live twin schedules)\n", schedules, prefixes, live);
+    printf("C3.5a isolation schedules: PASS (924 unique actor-choice "
+           "strings / %" PRIu32 " labeled live executions / %" PRIu32
+           " within-matrix unique prefix labels / %" PRIu32
+           " live prefix observations)\n", live, prefixes, observations);
     return 0;
 }

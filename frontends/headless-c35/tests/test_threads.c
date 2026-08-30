@@ -169,7 +169,7 @@ static int execute_instance(
     ok = 1;
 out:
     if (!ok && runtime != NULL && runtime->lifecycle != NULL &&
-        !runtime->headless.teardown_complete) {
+        runtime->headless.service_phase != C35_SERVICE_DEAD) {
         (void)c35_runtime_teardown(runtime);
     }
     if (storage != NULL && storage->initialized && !storage->bundle.claimed)

@@ -30,6 +30,20 @@ static void make_uuid(uint8_t uuid[16], enum c35_lane lane, uint32_t cut)
     uuid[15] ^= (uint8_t)(cut >> 24);
 }
 
+static struct c35_txid test_txid(
+    const struct c35_runtime *runtime,
+    uint64_t uid
+)
+{
+    struct c35_txid txid;
+
+    txid.instance_nonce = runtime->nonce;
+    txid.uid = uid;
+    txid.owner_epoch = runtime->headless.owner_epoch;
+    txid.generation = (uint32_t)uid;
+    return txid;
+}
+
 static int step_until_ready(
     struct c35_runtime *runtime,
     const struct fwlab_c31_command_handle *command,
@@ -51,7 +65,8 @@ static int step_until_ready(
             return 1;
         }
         if (count == 512 ||
-            fwlab_c31_step(runtime->lifecycle, 1, &step) !=
+            runtime->lifecycle_port.ops->step(
+                runtime->lifecycle_port.context, 1, &step) !=
                 FWLAB_C31_API_OK) {
             return 0;
         }
@@ -144,6 +159,7 @@ static int run_reset_cut(
     struct c35_request read;
     struct c35_semantic_result result;
     struct fwlab_c31_completion_intent intent;
+    struct c35_txid stale_txid;
     enum fwlab_c31_lifecycle_state state;
     const uint8_t old_value[C35_ATOM_BYTES] = {
         0xa1, 0xa1, 0xa1, 0xa1, 0xa1, 0xa1, 0xa1, 0xa1,
@@ -169,18 +185,20 @@ static int run_reset_cut(
                 runtime->lifecycle, &submission.command, &state) !=
                 FWLAB_C31_API_OK ||
             state == FWLAB_C31_CMD_COMPLETION_READY ||
-            fwlab_c31_step(runtime->lifecycle, 1, &step) !=
+            runtime->lifecycle_port.ops->step(
+                runtime->lifecycle_port.context, 1, &step) !=
                 FWLAB_C31_API_OK) {
             goto out;
         }
     }
+    stale_txid = test_txid(runtime, UINT64_C(0x7000) + cut);
     if (c35_headless_reset(&runtime->headless, 8192) != C35_OK ||
         fwlab_c31_command_state(
             runtime->lifecycle, &submission.command, &state) !=
             FWLAB_C31_API_STALE_TOKEN ||
-        runtime->headless.binding.ops->result_copy_before_consume(
-            runtime->headless.binding.context, &submission.command,
-            &intent, &result) != C35_STALE) {
+        runtime->headless.binding.ops->result_prepare(
+            runtime->headless.binding.context, &stale_txid,
+            &submission.command, &intent, &result) == C35_OK) {
         goto out;
     }
     read = c35_request_read(0);
@@ -213,6 +231,8 @@ static int run_lease_boundaries(enum c35_lane lane)
         struct fwlab_c31_completion_lease lease;
         struct fwlab_c31_completion_intent intent;
         struct c35_semantic_result semantic;
+        struct c35_txid result_txid;
+        enum c35_result_state result_state;
         enum fwlab_c31_lifecycle_state state;
         uint32_t depth;
         const uint8_t old_value[C35_ATOM_BYTES] = {
@@ -231,27 +251,33 @@ static int run_lease_boundaries(enum c35_lane lane)
             FWLAB_PERSIST_DEFAULT, &submission,
             old_value, new_value));
         CHECK(step_until_ready(runtime, &submission.command, &depth));
-        CHECK(fwlab_c31_completion_acquire(
-            runtime->lifecycle, &submission.command, &lease, &intent) ==
+        result_txid = test_txid(
+            runtime, UINT64_C(0x7100) + boundary);
+        CHECK(runtime->lifecycle_port.ops->completion_acquire(
+            runtime->lifecycle_port.context, &submission.command,
+            &lease, &intent) ==
             FWLAB_C31_API_OK);
-        CHECK(runtime->headless.binding.ops->result_copy_before_consume(
-            runtime->headless.binding.context, &submission.command,
-            &intent, &semantic) == C35_OK);
+        CHECK(runtime->headless.binding.ops->result_prepare(
+            runtime->headless.binding.context, &result_txid,
+            &submission.command, &intent, &semantic) == C35_OK);
         if (boundary == 1) {
-            CHECK(fwlab_c31_completion_consume(
-                runtime->lifecycle, &lease) == FWLAB_C31_API_OK);
+            CHECK(runtime->lifecycle_port.ops->completion_consume(
+                runtime->lifecycle_port.context, &lease) ==
+                  FWLAB_C31_API_OK);
         }
         CHECK(c35_headless_reset(&runtime->headless, 8192) == C35_OK);
-        CHECK(fwlab_c31_completion_consume(
-            runtime->lifecycle, &lease) != FWLAB_C31_API_OK);
-        CHECK(fwlab_c31_completion_release(
-            runtime->lifecycle, &lease) != FWLAB_C31_API_OK);
+        CHECK(runtime->lifecycle_port.ops->completion_consume(
+            runtime->lifecycle_port.context, &lease) != FWLAB_C31_API_OK);
+        CHECK(runtime->lifecycle_port.ops->completion_release(
+            runtime->lifecycle_port.context, &lease) != FWLAB_C31_API_OK);
         CHECK(fwlab_c31_command_state(
             runtime->lifecycle, &submission.command, &state) ==
             FWLAB_C31_API_STALE_TOKEN);
-        CHECK(runtime->headless.binding.ops->result_copy_before_consume(
-            runtime->headless.binding.context, &submission.command,
-            &intent, &semantic) == C35_STALE);
+        CHECK(runtime->headless.binding.ops->result_query(
+            runtime->headless.binding.context, &result_txid,
+            &result_state) == C35_OK);
+        CHECK(result_state == C35_RESULT_CLEARED_BY_RESET ||
+              result_state == C35_RESULT_ACKED);
         ok = cleanup_case(runtime, storage);
         free(runtime);
         free(storage);
@@ -273,6 +299,7 @@ static int test_identity_matrix(void)
     struct c35_semantic_result result;
     enum fwlab_c31_lifecycle_state state;
     struct fwlab_c31_command_handle mutated;
+    struct c35_txid result_txid;
     uint8_t uuid[16];
     uint32_t depth;
     unsigned int mutation;
@@ -287,19 +314,20 @@ static int test_identity_matrix(void)
     CHECK(c35_headless_submit_observed(
         &runtime->headless, &request, &first) == C35_OK);
     CHECK(step_until_ready(runtime, &first.command, &depth));
-    CHECK(fwlab_c31_completion_acquire(
-        runtime->lifecycle, &first.command, &lease1, &intent) ==
+    result_txid = test_txid(runtime, UINT64_C(0x7200));
+    CHECK(runtime->lifecycle_port.ops->completion_acquire(
+        runtime->lifecycle_port.context, &first.command, &lease1, &intent) ==
         FWLAB_C31_API_OK);
-    CHECK(fwlab_c31_completion_release(runtime->lifecycle, &lease1) ==
-          FWLAB_C31_API_OK);
-    CHECK(fwlab_c31_completion_consume(runtime->lifecycle, &lease1) !=
-          FWLAB_C31_API_OK);
-    CHECK(fwlab_c31_completion_acquire(
-        runtime->lifecycle, &first.command, &lease2, &intent) ==
+    CHECK(runtime->lifecycle_port.ops->completion_release(
+        runtime->lifecycle_port.context, &lease1) == FWLAB_C31_API_OK);
+    CHECK(runtime->lifecycle_port.ops->completion_consume(
+        runtime->lifecycle_port.context, &lease1) != FWLAB_C31_API_OK);
+    CHECK(runtime->lifecycle_port.ops->completion_acquire(
+        runtime->lifecycle_port.context, &first.command, &lease2, &intent) ==
         FWLAB_C31_API_OK);
     CHECK(lease2.lease_generation != lease1.lease_generation);
-    CHECK(fwlab_c31_completion_release(runtime->lifecycle, &lease1) !=
-          FWLAB_C31_API_OK);
+    CHECK(runtime->lifecycle_port.ops->completion_release(
+        runtime->lifecycle_port.context, &lease1) != FWLAB_C31_API_OK);
 
     for (mutation = 0; mutation < 5; ++mutation) {
         mutated = first.command;
@@ -316,19 +344,22 @@ static int test_identity_matrix(void)
         }
         CHECK(fwlab_c31_command_state(
             runtime->lifecycle, &mutated, &state) != FWLAB_C31_API_OK);
-        CHECK(runtime->headless.binding.ops->result_copy_before_consume(
-            runtime->headless.binding.context, &mutated, &intent,
-            &result) == C35_STALE);
+        CHECK(runtime->headless.binding.ops->result_prepare(
+            runtime->headless.binding.context, &result_txid, &mutated,
+            &intent, &result) != C35_OK);
     }
-    CHECK(runtime->headless.binding.ops->result_copy_before_consume(
-        runtime->headless.binding.context, &first.command, &intent,
-        &result) == C35_OK);
-    CHECK(fwlab_c31_completion_consume(runtime->lifecycle, &lease2) ==
-          FWLAB_C31_API_OK);
-    CHECK(runtime->headless.binding.ops->result_ack_after_consume(
-        runtime->headless.binding.context, &first.command) == C35_OK);
-    CHECK(fwlab_c31_completion_release(runtime->lifecycle, &lease2) !=
-          FWLAB_C31_API_OK);
+    CHECK(runtime->headless.binding.ops->result_prepare(
+        runtime->headless.binding.context, &result_txid, &first.command,
+        &intent, &result) == C35_OK);
+    CHECK(runtime->lifecycle_port.ops->completion_consume(
+        runtime->lifecycle_port.context, &lease2) == FWLAB_C31_API_OK);
+    CHECK(runtime->headless.binding.ops->result_ack(
+        runtime->headless.binding.context, &result_txid,
+        &first.command) == C35_OK);
+    CHECK(runtime->headless.binding.ops->transaction_retire(
+        runtime->headless.binding.context, &result_txid) == C35_OK);
+    CHECK(runtime->lifecycle_port.ops->completion_release(
+        runtime->lifecycle_port.context, &lease2) != FWLAB_C31_API_OK);
     CHECK(fwlab_c31_command_state(
         runtime->lifecycle, &first.command, &state) ==
         FWLAB_C31_API_STALE_TOKEN);

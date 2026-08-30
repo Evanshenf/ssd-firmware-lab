@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Audit the frozen C3.5 archive, lane links, and canonical projections."""
+"""Audit the C3.5a portable-core archive, final links, and projections."""
 
 from __future__ import annotations
 
@@ -18,7 +18,10 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = ROOT / "frontends" / "headless-c35"
 BUILD = COMPONENT / "build"
-ARCHIVE = BUILD / "libfwlab_firmware_c35.a"
+ARCHIVE = BUILD / "libfwlab_portable_core_c31_c34.a"
+EXPECTED_ARCHIVE_SHA256 = (
+    "b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f"
+)
 
 ARCHIVE_MEMBERS = [
     "c31.o",
@@ -156,7 +159,10 @@ def audit_archive() -> str:
         )
         if rebuilt.read_bytes() != ARCHIVE.read_bytes():
             fail("deterministic archive reconstruction differs")
-    return hashlib.sha256(ARCHIVE.read_bytes()).hexdigest()
+    digest = hashlib.sha256(ARCHIVE.read_bytes()).hexdigest()
+    if digest != EXPECTED_ARCHIVE_SHA256:
+        fail(f"portable-core archive changed: {digest}")
+    return digest
 
 
 def audit_headless_boundary() -> None:
@@ -170,10 +176,33 @@ def audit_headless_boundary() -> None:
     if match:
         fail(f"provider branch token in generic headless: {match.group(0)}")
 
+    with tempfile.TemporaryDirectory(prefix="c35a-headless-") as directory:
+        for name in ("c35_headless", "c35_finalizer"):
+            obj = Path(directory) / f"{name}.o"
+            subprocess.check_call([
+                os.environ.get("CC", "cc"), "-std=c11", "-fno-common",
+                "-I", str(ROOT / "include"),
+                "-I", str(COMPONENT),
+                "-c", str(COMPONENT / f"{name}.c"), "-o", str(obj),
+            ])
+            trace_symbols = {
+                symbol for symbol in symbols(obj, True)
+                if symbol.startswith("c35_trace_")
+            }
+            if trace_symbols:
+                fail(f"observer entered authoritative {name} object: "
+                     f"{sorted(trace_symbols)}")
+
     for path in COMPONENT.rglob("*.c"):
-        if "pthread_" in path.read_text(encoding="utf-8") and \
+        text = path.read_text(encoding="utf-8")
+        if "pthread_" in text and \
                 path.name != "test_threads.c":
             fail(f"pthread outside dedicated isolation driver: {path}")
+        if path.name != "c35_lifecycle_port.c" and re.search(
+                r"\bfwlab_c31_(?:submit|step|completion_(?:acquire|release|"
+                r"consume)|abort_(?:request|ack)|reset_(?:begin|ack)|"
+                r"teardown_(?:begin|ack))\s*\(", text):
+            fail(f"direct C31 mutation bypasses lifecycle port: {path}")
 
 
 def lane_output(lane: str, mode: str) -> bytes:
@@ -200,10 +229,10 @@ def audit_lane_links(archive_hash: str) -> dict[str, str]:
         if not binary.is_file() or not link_map.is_file():
             fail(f"missing {lane} lane link artifact")
         map_text = link_map.read_text(encoding="utf-8", errors="replace")
-        if "libfwlab_firmware_c35.a" not in map_text:
+        if "libfwlab_portable_core_c31_c34.a" not in map_text:
             fail(f"lane {lane} did not consume frozen firmware archive")
         pulled = set(re.findall(
-            r"libfwlab_firmware_c35\.a\(([^)]+)\)", map_text))
+            r"libfwlab_portable_core_c31_c34\.a\(([^)]+)\)", map_text))
         expected_pulled = ({"c31.o", "c31_codec.o"} if lane == "s"
                            else set(ARCHIVE_MEMBERS))
         if pulled != expected_pulled:
@@ -216,6 +245,8 @@ def audit_lane_links(archive_hash: str) -> dict[str, str]:
             fail("byte lane linked POSIX adapter")
         if lane == "p" and "c34_file_posix_format" not in map_text:
             fail("POSIX lane omitted its isolated fd adapter")
+        if "c35_fault_lifecycle" in map_text or "c35_fault_binding" in map_text:
+            fail(f"test fault decorator entered final lane {lane}")
         undefined = symbols(binary, True)
         if lane != "p" and undefined & POSIX_SYMBOLS:
             fail(f"POSIX symbol leaked into lane {lane}: "
@@ -252,12 +283,16 @@ def audit_lane_links(archive_hash: str) -> dict[str, str]:
     container = {lane: lane_output(lane, "container") for lane in "bp"}
     if container["b"] != container["p"]:
         fail("E_container B/P byte projection mismatch")
+    two_atom = {lane: lane_output(lane, "two-atom") for lane in "mbp"}
+    if two_atom["m"] != two_atom["b"] or two_atom["m"] != two_atom["p"]:
+        fail("two-atom M/B/P canonical projection mismatch")
 
     return {
         "archive": archive_hash,
         "life": hashlib.sha256(life["s"]).hexdigest(),
         "semantic_raw": hashlib.sha256(semantic["m"]).hexdigest(),
         "container": hashlib.sha256(container["b"]).hexdigest(),
+        "two_atom": hashlib.sha256(two_atom["m"]).hexdigest(),
     }
 
 
@@ -267,9 +302,9 @@ def main() -> int:
         audit_headless_boundary()
         hashes = audit_lane_links(archive_hash)
     except (RuntimeError, subprocess.CalledProcessError) as error:
-        print(f"C3.5 architecture: FAIL: {error}", file=sys.stderr)
+        print(f"C3.5a architecture: FAIL: {error}", file=sys.stderr)
         return 1
-    print("C3.5 architecture: PASS " + " ".join(
+    print("C3.5a architecture: PASS " + " ".join(
         f"{name}={value}" for name, value in hashes.items()))
     return 0
 

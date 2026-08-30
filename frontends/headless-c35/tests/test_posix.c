@@ -94,16 +94,21 @@ static int test_failed_profile_cleanup(void)
         0x35, 0x50, 0x46, 0x41, 0x49, 0x4c, 0x20, 0x26,
         0x08, 0x29, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
     };
+    uint8_t before[C34_FILE_IMAGE_BYTES];
+    uint8_t after[C34_FILE_IMAGE_BYTES];
     int owned_fd;
 
     CHECK(storage != NULL && runtime != NULL);
     CHECK(c35_storage_init(storage, C35_LANE_POSIX, uuid));
     owned_fd = storage->fd;
+    CHECK(c35_storage_container(storage, before));
     config.geometry.pages_per_block = C34_PAGES_PER_BLOCK + 1u;
     CHECK(!c35_runtime_init_profile(
         runtime, storage, C35_LANE_POSIX, UINT64_C(0x3550f001),
         config.fault.seed, 0, 0, 0x355f, &config));
     CHECK(!storage->bundle.claimed);
+    CHECK(c35_storage_container(storage, after));
+    CHECK(memcmp(before, after, sizeof(before)) == 0);
     CHECK(c35_storage_close(storage));
     errno = 0;
     CHECK(fcntl(owned_fd, F_GETFD) == -1 && errno == EBADF);

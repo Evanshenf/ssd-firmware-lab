@@ -31,12 +31,19 @@ static int storage_bundle_init(struct c35_storage *storage)
 {
     struct fwlab_nand_media media;
     struct c34_physical_txn_provider physical;
+    struct c35_media_endpoint media_endpoint;
+    struct c35_physical_endpoint physical_endpoint;
+    uint64_t coherence_cookie = UINT64_C(0xb35d1e0000000000) |
+                                (uint64_t)storage->lane;
 
-    return storage_providers(storage, &media, &physical) &&
-           c35_bundle_init(
-               &storage->bundle, UINT64_C(0xb35d1e0000000000) |
-                   (uint64_t)storage->lane, 1, 1, &media, &physical) ==
-               C35_OK;
+    if (!storage_providers(storage, &media, &physical)) return 0;
+    c35_media_endpoint_make(
+        &media_endpoint, &storage->profile, coherence_cookie, &media);
+    c35_physical_endpoint_make(
+        &physical_endpoint, &storage->profile, coherence_cookie, &physical);
+    return c35_bundle_init(
+               &storage->bundle, &media_endpoint, &physical_endpoint) ==
+           C35_OK;
 }
 #endif
 
@@ -93,11 +100,11 @@ struct fwlab_nfc_model_config c35_test_nfc_config(uint64_t seed)
     config.capacity.trace_entries = 512;
     config.capacity.scratch_main_bytes = C34_MAIN_BYTES;
     config.capacity.scratch_oob_bytes = C34_OOB_BYTES;
-    config.capacity.operation_generation_limit = 256;
-    config.capacity.cache_generation_limit = 256;
-    config.capacity.controller_epoch_limit = 16;
-    config.capacity.submit_sequence_limit = 512;
-    config.capacity.operation_uid_limit = 256;
+    config.capacity.operation_generation_limit = 32;
+    config.capacity.cache_generation_limit = 32;
+    config.capacity.controller_epoch_limit = 17;
+    config.capacity.submit_sequence_limit = 32;
+    config.capacity.operation_uid_limit = 32;
     config.capacity.virtual_tick_limit = UINT64_C(1000000);
     config.successful_erase_limit = 4;
     return config;
@@ -136,7 +143,15 @@ int c35_storage_init(
     memset(storage, 0, sizeof(*storage));
     storage->lane = (uint8_t)lane;
     storage->fd = -1;
-    memcpy(storage->uuid, uuid, sizeof(storage->uuid));
+    storage->image_serial = (uint32_t)uuid[12] |
+                            ((uint32_t)uuid[13] << 8) |
+                            ((uint32_t)uuid[14] << 16) |
+                            ((uint32_t)uuid[15] << 24);
+    if (storage->image_serial == 0) storage->image_serial = 1;
+    c35_profile_fixed(&storage->profile);
+    c35_persistent_credits_init(&storage->credits);
+    c35_profile_uuid(
+        &storage->profile, storage->image_serial, storage->uuid);
 #if C35_HAS_SCRIPTED
     if (lane == C35_LANE_SCRIPTED) {
         storage->initialized = 1;
@@ -339,7 +354,8 @@ int c35_runtime_init(
 }
 
 static int fixed_profile_valid(
-    const struct fwlab_nfc_model_config *config
+    const struct fwlab_nfc_model_config *config,
+    const struct fwlab_c31_capacity *capacity
 )
 {
     return config != NULL &&
@@ -354,7 +370,14 @@ static int fixed_profile_valid(
            config->geometry.max_programs_per_erase == 1 &&
            config->geometry.program_order == FWLAB_NFC_PROGRAM_ASCENDING &&
            config->ecc.main_covered_bytes == C34_MAIN_BYTES &&
-           config->ecc.oob_covered_bytes == C34_OOB_BYTES;
+           config->ecc.oob_covered_bytes == C34_OOB_BYTES &&
+           config->capacity.operation_generation_limit == 32 &&
+           config->capacity.cache_generation_limit == 32 &&
+           config->capacity.controller_epoch_limit == 17 &&
+           config->capacity.submit_sequence_limit == 32 &&
+           config->capacity.operation_uid_limit == 32 &&
+           c35_fixed_capacity_dominance_valid(
+               capacity, config, 32, 16, 16, 1);
 }
 
 int c35_runtime_init_profile(
@@ -377,7 +400,8 @@ int c35_runtime_init_profile(
         lane > C35_LANE_POSIX ||
         (C35_TEST_LANE_MASK & (1u << (unsigned int)lane)) == 0 ||
         storage->lane != (uint8_t)lane || nonce == 0 ||
-        (lane != C35_LANE_SCRIPTED && !fixed_profile_valid(nfc_config))) {
+        (lane != C35_LANE_SCRIPTED &&
+         !fixed_profile_valid(nfc_config, &capacity))) {
         return 0;
     }
     memset(runtime, 0, sizeof(*runtime));
@@ -444,15 +468,16 @@ int c35_runtime_init_profile(
         c34_config.persistence.size = sizeof(c34_config.persistence);
         c34_config.persistence.cache_enabled = cache_enabled;
         c34_config.persistence.plp_kind = FWLAB_PERSIST_PLP_NONE;
-        c34_config.inner_uid_limit = 256;
-        c34_config.physical_op_limit = 256;
-        c34_config.physical_sequence_limit = 256;
+        c34_config.inner_uid_limit = 32;
+        c34_config.physical_op_limit = 16;
+        c34_config.physical_sequence_limit = 16;
         if (c34_init(
                 runtime->c34_arena.bytes, sizeof(runtime->c34_arena.bytes),
                 &c34_config, &buffers, &nfc, &media, &physical,
                 &runtime->firmware) != C34_OK ||
             c35_c34_binding_init(
-                &runtime->c34_binding, runtime->firmware, nonce, 1) !=
+                &runtime->c34_binding, runtime->firmware,
+                &storage->credits, nonce, 1) !=
                 C35_OK) {
             goto fail;
         }
@@ -463,32 +488,106 @@ int c35_runtime_init_profile(
     if (fwlab_c31_init(
             runtime->c31_arena.bytes, sizeof(runtime->c31_arena.bytes),
             &capacity, nonce, &providers, &runtime->lifecycle) !=
-            FWLAB_C31_API_OK ||
-        c35_headless_init(
-            &runtime->headless, runtime->lifecycle, &binding,
-            &runtime->trace, nonce, 1, actor) != C35_OK) {
+            FWLAB_C31_API_OK) {
+        goto fail;
+    }
+    runtime->lifecycle_port = c35_lifecycle_port_native(runtime->lifecycle);
+    if (c35_headless_init(
+            &runtime->headless, &runtime->lifecycle_port, &binding,
+            nonce, 1, capacity.controller_epoch_limit,
+            UINT64_C(512), UINT64_C(512), actor) != C35_OK) {
         goto fail;
     }
     return 1;
 
 fail:
     if (runtime->claimed) {
-        (void)c35_bundle_release(runtime->bundle, nonce);
-        runtime->claimed = 0;
+        bool released = false;
+        enum c35_result release = c35_bundle_release(runtime->bundle, nonce);
+
+        if (release == C35_OK ||
+            (c35_bundle_release_query(
+                 runtime->bundle, nonce, &released) == C35_OK && released)) {
+            runtime->claimed = 0;
+            runtime->bundle_released = 1;
+        }
     }
     return 0;
 }
 
+static enum c35_result observe_publication(
+    struct c35_runtime *runtime,
+    const struct c35_publication *publication
+)
+{
+    enum c35_result result;
+
+    if (publication == NULL ||
+        publication->version != C35_PUBLICATION_VERSION) {
+        runtime->last_observation = C35_OBSERVATION_LOST_INVALID_SINK;
+        return C35_INVALID;
+    }
+    result = c35_trace_append(&runtime->trace, publication);
+    runtime->last_observation = result == C35_OK ?
+        C35_OBSERVATION_RECORDED :
+        result == C35_NO_CAPACITY ? C35_OBSERVATION_LOST_NO_CAPACITY :
+                                    C35_OBSERVATION_LOST_INVALID_SINK;
+    return result;
+}
+
 int c35_runtime_teardown(struct c35_runtime *runtime)
 {
-    if (c35_headless_teardown(&runtime->headless, 8192) != C35_OK) {
-        return 0;
+    struct c35_operation_status status;
+    struct c35_operation_token token;
+    enum c35_result result;
+    unsigned int iteration;
+
+    if (runtime == NULL || runtime->dma_operation.used) return 0;
+    if (runtime->headless.instance_nonce == 0) {
+        bool released = false;
+
+        if (!runtime->claimed) return 1;
+        result = c35_bundle_release(runtime->bundle, runtime->nonce);
+        if (result != C35_OK &&
+            (c35_bundle_release_query(
+                 runtime->bundle, runtime->nonce, &released) != C35_OK ||
+             !released)) return 0;
+        runtime->claimed = 0;
+        runtime->bundle_released = 1;
+        return 1;
     }
-    if (runtime->claimed &&
-        c35_bundle_release(runtime->bundle, runtime->nonce) != C35_OK) {
-        return 0;
+    if (runtime->teardown_committed && runtime->bundle_released &&
+        !runtime->finalizer.used) return 1;
+    if (!runtime->finalizer.used) {
+        result = c35_finalizer_start(
+            &runtime->finalizer, &runtime->headless, runtime->bundle,
+            runtime->nonce, &token);
+        if (result != C35_OK) return 0;
+    } else {
+        token = runtime->finalizer.token;
     }
+    memset(&status, 0, sizeof(status));
+    for (iteration = 0; iteration < 8192; ++iteration) {
+        result = c35_finalizer_progress(
+            &runtime->finalizer, &token, 1, &status);
+        if (result == C35_OK || result != C35_IN_PROGRESS) break;
+    }
+    if (result != C35_OK || status.call_state != C35_CALL_DONE) return 0;
+    if (status.publication_valid) {
+        runtime->teardown_publication = status.publication;
+        runtime->teardown_committed =
+            status.commit_state == C35_COMMIT_COMMITTED;
+    }
+    runtime->bundle_released = runtime->finalizer.bundle_released;
+    if (status.outcome != C35_OK ||
+        status.cleanup_state != C35_CLEANUP_COMPLETE) return 0;
     runtime->claimed = 0;
+    if (!runtime->teardown_observed) {
+        (void)observe_publication(
+            runtime, &runtime->teardown_publication);
+        runtime->teardown_observed = 1;
+    }
+    if (c35_finalizer_retire(&runtime->finalizer, &token) != C35_OK) return 0;
     return 1;
 }
 
@@ -501,91 +600,491 @@ int c35_runtime_projection(
            c35_bundle_projection(runtime->bundle, bytes) == C35_OK;
 }
 
+static int dma_token_equal(
+    const struct c35_operation_token *left,
+    const struct c35_operation_token *right
+)
+{
+    return left != NULL && right != NULL &&
+           left->instance_nonce == right->instance_nonce &&
+           left->uid == right->uid && left->generation == right->generation &&
+           left->kind == C35_OPERATION_DMA && right->kind == C35_OPERATION_DMA &&
+           left->reserved[0] == 0 && left->reserved[1] == 0 &&
+           left->reserved[2] == 0 && right->reserved[0] == 0 &&
+           right->reserved[1] == 0 && right->reserved[2] == 0;
+}
+
+static int dma_command_valid(
+    const struct c35_runtime *runtime,
+    const struct fwlab_c31_command_handle *command
+)
+{
+    return command->instance_nonce == runtime->nonce &&
+           command->command_uid != 0 && command->controller_epoch != 0 &&
+           command->slot_generation != 0;
+}
+
+static int dma_lease_valid(
+    const struct c35_runtime *runtime,
+    const struct c35_dma_transaction *operation
+)
+{
+    const struct fwlab_c31_completion_lease *lease = &operation->lease;
+    const struct fwlab_c31_command_handle *command = &operation->command;
+
+    return dma_command_valid(runtime, &lease->command) &&
+           lease->command.command_uid == command->command_uid &&
+           lease->command.controller_epoch == command->controller_epoch &&
+           lease->command.slot == command->slot &&
+           lease->command.slot_generation == command->slot_generation &&
+           lease->lease_generation != 0 && lease->reserved == 0;
+}
+
+static enum c35_result dma_map_c31(enum fwlab_c31_api_result result)
+{
+    switch (result) {
+    case FWLAB_C31_API_OK: return C35_OK;
+    case FWLAB_C31_API_NO_CAPACITY: return C35_NO_CAPACITY;
+    case FWLAB_C31_API_INVALID_CONTRACT: return C35_INVALID;
+    case FWLAB_C31_API_WRONG_STATE: return C35_WRONG_STATE;
+    case FWLAB_C31_API_STALE_TOKEN: return C35_STALE;
+    case FWLAB_C31_API_UNSUPPORTED_VERSION: return C35_UNSUPPORTED_VERSION;
+    case FWLAB_C31_API_COUNTER_EXHAUSTED: return C35_COUNTER_EXHAUSTED;
+    case FWLAB_C31_API_NOT_FOUND: return C35_NOT_FOUND;
+    case FWLAB_C31_API_INVARIANT_FAILURE: return C35_INVARIANT;
+    default: return C35_INVARIANT;
+    }
+}
+
+static void dma_finish(
+    struct c35_dma_transaction *operation,
+    enum c35_result outcome,
+    uint32_t commit_state,
+    uint32_t cleanup_state
+)
+{
+    operation->outcome = outcome;
+    operation->commit_state = commit_state;
+    operation->cleanup_state = cleanup_state;
+    operation->phase = C35_DMA_DONE;
+    operation->finished = 1;
+}
+
+static void dma_publication(
+    const struct c35_runtime *runtime,
+    struct c35_dma_transaction *operation
+)
+{
+    struct c35_publication *publication = &operation->publication;
+
+    memset(publication, 0, sizeof(*publication));
+    publication->version = C35_PUBLICATION_VERSION;
+    publication->size = sizeof(*publication);
+    publication->kind = C35_PUBLICATION_DMA;
+    publication->actor = runtime->actor;
+    publication->completion_result = (uint8_t)operation->intent.result;
+    publication->effect_class = operation->intent.fault.effect_class;
+    publication->epoch = runtime->headless.owner_epoch;
+    publication->commit_state = C35_COMMIT_COMMITTED;
+    publication->publication_uid = UINT64_C(0x35ad000000000000) ^
+                                   operation->token.uid;
+    memcpy(publication->semantic.payload[0], operation->output,
+           C35_ATOM_BYTES);
+}
+
+static void dma_status_fill(
+    const struct c35_runtime *runtime,
+    const struct c35_dma_transaction *operation,
+    struct c35_operation_status *status
+)
+{
+    memset(status, 0, sizeof(*status));
+    status->version = C35_OPERATION_VERSION;
+    status->size = sizeof(*status);
+    status->token = operation->token;
+    status->call_state = operation->finished ?
+        C35_CALL_DONE : C35_CALL_IN_PROGRESS;
+    status->operation_kind = C35_OPERATION_DMA;
+    status->commit_state = (uint8_t)operation->commit_state;
+    status->cleanup_state = (uint8_t)operation->cleanup_state;
+    status->outcome = operation->outcome;
+    status->service_phase = runtime->headless.service_phase;
+    status->internal_phase = operation->phase;
+    status->cause_domain = operation->cause_domain;
+    status->cause_code = operation->cause_code;
+    status->retry_class = operation->finished ? C35_RETRY_NONE :
+                          C35_RETRY_SAME_TOKEN;
+    status->publication_valid =
+        operation->publication.version == C35_PUBLICATION_VERSION;
+    if (status->publication_valid) status->publication = operation->publication;
+}
+
+enum c35_result c35_dma_start(
+    struct c35_runtime *runtime,
+    const uint8_t input[C35_ATOM_BYTES],
+    struct c35_operation_token *token
+)
+{
+    struct c35_dma_transaction *operation;
+    uint64_t identity;
+
+    if (runtime == NULL || input == NULL || token == NULL ||
+        runtime->headless.service_phase != C35_SERVICE_READY)
+        return C35_INVALID;
+    if (runtime->dma_operation.used) return C35_WRONG_STATE;
+    if (runtime->dma_next == 0 || runtime->dma_next > 512 ||
+        runtime->dma_next > UINT32_MAX) return C35_COUNTER_EXHAUSTED;
+    identity = runtime->dma_next++;
+    operation = &runtime->dma_operation;
+    memset(operation, 0, sizeof(*operation));
+    operation->used = 1;
+    operation->phase = C35_DMA_REGISTER_BUFFER;
+    operation->outcome = C35_IN_PROGRESS;
+    operation->commit_state = C35_COMMIT_NOT_STARTED;
+    operation->capability_index = -1;
+    operation->token.instance_nonce = runtime->nonce;
+    operation->token.uid = identity;
+    operation->token.generation = (uint32_t)identity;
+    operation->token.kind = C35_OPERATION_DMA;
+    memcpy(operation->input, input, C35_ATOM_BYTES);
+    operation->descriptor.version = FWLAB_C31_CONTRACT_VERSION;
+    operation->descriptor.size = sizeof(operation->descriptor);
+    operation->descriptor.origin.word[0] = runtime->nonce ^ identity;
+    operation->descriptor.origin.word[1] = UINT64_C(0xd3500000) | identity;
+    operation->descriptor.trace_cookie = identity;
+    operation->descriptor.provider_request.word[0] =
+        UINT64_C(0xd350000000000000) | identity;
+    operation->descriptor.provider_request.word[1] = ~identity;
+    operation->descriptor.capability.word[0] =
+        UINT64_C(0xca35000000000000) | identity;
+    operation->descriptor.capability.word[1] =
+        UINT64_C(0xcb35000000000000) | identity;
+    operation->descriptor.controller_region = 0;
+    operation->descriptor.length = C35_ATOM_BYTES;
+    operation->descriptor.provider_kind = FWLAB_C31_PROVIDER_DMA;
+    operation->descriptor.dma_direction = FWLAB_C31_DMA_TO_CONTROLLER;
+    operation->scenario.request = operation->descriptor.provider_request;
+    operation->scenario.terminal = FWLAB_C31_PROVIDER_SUCCESS;
+    operation->scenario.effect_class = FWLAB_C31_EFFECT_FULL;
+    *token = operation->token;
+    return C35_OK;
+}
+
+static void dma_progress_one(
+    struct c35_runtime *runtime,
+    struct c35_dma_transaction *operation
+)
+{
+    enum fwlab_c31_api_result lower;
+    enum fwlab_c31_lifecycle_state state;
+
+    switch (operation->phase) {
+    case C35_DMA_REGISTER_BUFFER:
+        operation->capability_index = c31_fake_dma_register(
+            &runtime->dma, &operation->descriptor.capability,
+            &operation->descriptor.origin, runtime->nonce,
+            runtime->headless.owner_epoch, FWLAB_C31_DMA_TO_CONTROLLER,
+            operation->input, C35_ATOM_BYTES);
+        if (operation->capability_index >= 0)
+            operation->phase = C35_DMA_ADD_SCENARIO;
+        else
+            dma_finish(operation, C35_NO_CAPACITY,
+                       C35_COMMIT_NOT_STARTED, C35_CLEANUP_COMPLETE);
+        break;
+    case C35_DMA_ADD_SCENARIO:
+        if (c31_fake_dma_add(&runtime->dma, &operation->scenario))
+            operation->phase = C35_DMA_SUBMIT;
+        else
+            dma_finish(operation, C35_COUNTER_EXHAUSTED,
+                       C35_COMMIT_NOT_STARTED, C35_CLEANUP_COMPLETE);
+        break;
+    case C35_DMA_SUBMIT:
+        lower = runtime->lifecycle_port.ops->submit(
+            runtime->lifecycle_port.context, &operation->descriptor,
+            &operation->command);
+        if (lower == FWLAB_C31_API_OK) {
+            operation->command_valid = 1;
+            operation->phase = C35_DMA_WAIT_READY;
+        } else if (dma_command_valid(runtime, &operation->command)) {
+            operation->command_valid = 1;
+            operation->cause_domain = C35_CAUSE_C31;
+            operation->cause_code = (uint32_t)lower;
+            operation->phase = C35_DMA_SUBMIT_QUERY;
+        } else {
+            if (runtime->lifecycle_port.ops->phase(
+                    runtime->lifecycle_port.context) ==
+                FWLAB_C31_INSTANCE_FAULTED)
+                runtime->headless.service_phase = C35_SERVICE_FAULTED_CLEANUP;
+            dma_finish(operation, dma_map_c31(lower),
+                       C35_COMMIT_NOT_STARTED, C35_CLEANUP_COMPLETE);
+        }
+        break;
+    case C35_DMA_SUBMIT_QUERY:
+        lower = runtime->lifecycle_port.ops->command_state(
+            runtime->lifecycle_port.context, &operation->command, &state);
+        if (lower == FWLAB_C31_API_OK)
+            operation->phase = C35_DMA_WAIT_READY;
+        else if (lower == FWLAB_C31_API_STALE_TOKEN ||
+                 lower == FWLAB_C31_API_NOT_FOUND)
+            dma_finish(operation, dma_map_c31(
+                           (enum fwlab_c31_api_result)operation->cause_code),
+                       C35_COMMIT_NOT_STARTED, C35_CLEANUP_COMPLETE);
+        break;
+    case C35_DMA_WAIT_READY:
+        lower = runtime->lifecycle_port.ops->command_state(
+            runtime->lifecycle_port.context, &operation->command, &state);
+        if (lower == FWLAB_C31_API_OK &&
+            state == FWLAB_C31_CMD_COMPLETION_READY) {
+            operation->phase = C35_DMA_ACQUIRE;
+        } else if (lower == FWLAB_C31_API_OK) {
+            struct fwlab_c31_step_result step;
+
+            lower = runtime->lifecycle_port.ops->step(
+                runtime->lifecycle_port.context, 1, &step);
+            if (lower != FWLAB_C31_API_OK) {
+                operation->cause_domain = C35_CAUSE_C31;
+                operation->cause_code = (uint32_t)lower;
+                if (runtime->lifecycle_port.ops->phase(
+                        runtime->lifecycle_port.context) ==
+                    FWLAB_C31_INSTANCE_FAULTED) {
+                    runtime->headless.service_phase =
+                        C35_SERVICE_FAULTED_CLEANUP;
+                    dma_finish(operation, dma_map_c31(lower),
+                               C35_COMMIT_UNKNOWN, C35_CLEANUP_PENDING);
+                }
+            }
+        } else if (lower != FWLAB_C31_API_NO_CAPACITY) {
+            dma_finish(operation, dma_map_c31(lower),
+                       C35_COMMIT_NOT_STARTED, C35_CLEANUP_COMPLETE);
+        }
+        break;
+    case C35_DMA_ACQUIRE:
+        lower = runtime->lifecycle_port.ops->completion_acquire(
+            runtime->lifecycle_port.context, &operation->command,
+            &operation->lease, &operation->intent);
+        if (lower == FWLAB_C31_API_OK) {
+            operation->lease_valid = 1;
+            operation->phase = C35_DMA_CAPTURE;
+        } else {
+            operation->cause_domain = C35_CAUSE_C31;
+            operation->cause_code = (uint32_t)lower;
+            operation->phase = C35_DMA_ACQUIRE_QUERY;
+        }
+        break;
+    case C35_DMA_ACQUIRE_QUERY:
+        lower = runtime->lifecycle_port.ops->command_state(
+            runtime->lifecycle_port.context, &operation->command, &state);
+        if (lower == FWLAB_C31_API_OK &&
+            state == FWLAB_C31_CMD_COMPLETION_LEASED &&
+            dma_lease_valid(runtime, operation)) {
+            operation->lease_valid = 1;
+            operation->phase = C35_DMA_CAPTURE;
+        } else if (lower == FWLAB_C31_API_OK &&
+                   state == FWLAB_C31_CMD_COMPLETION_READY) {
+            memset(&operation->lease, 0, sizeof(operation->lease));
+            operation->phase = C35_DMA_ACQUIRE;
+        }
+        break;
+    case C35_DMA_CAPTURE:
+        if (operation->intent.result != FWLAB_C31_COMPLETION_SUCCESS) {
+            dma_finish(operation, C35_PROVIDER_FAILURE,
+                       C35_COMMIT_NOT_STARTED, C35_CLEANUP_PENDING);
+        } else {
+            memcpy(operation->output,
+                   c31_fake_dma_controller(&runtime->dma, 0),
+                   C35_ATOM_BYTES);
+            operation->phase = C35_DMA_CONSUME;
+        }
+        break;
+    case C35_DMA_CONSUME:
+        lower = runtime->lifecycle_port.ops->completion_consume(
+            runtime->lifecycle_port.context, &operation->lease);
+        if (lower == FWLAB_C31_API_OK) {
+            operation->lease_valid = 0;
+            dma_publication(runtime, operation);
+            dma_finish(operation, C35_OK, C35_COMMIT_COMMITTED,
+                       C35_CLEANUP_COMPLETE);
+        } else {
+            operation->cause_domain = C35_CAUSE_C31;
+            operation->cause_code = (uint32_t)lower;
+            operation->phase = C35_DMA_CONSUME_QUERY;
+        }
+        break;
+    case C35_DMA_CONSUME_QUERY:
+        lower = runtime->lifecycle_port.ops->command_state(
+            runtime->lifecycle_port.context, &operation->command, &state);
+        if ((lower == FWLAB_C31_API_STALE_TOKEN ||
+             lower == FWLAB_C31_API_NOT_FOUND) &&
+            runtime->lifecycle_port.ops->phase(
+                runtime->lifecycle_port.context) == FWLAB_C31_INSTANCE_READY) {
+            operation->lease_valid = 0;
+            dma_publication(runtime, operation);
+            dma_finish(operation, C35_OK, C35_COMMIT_COMMITTED,
+                       C35_CLEANUP_COMPLETE);
+        } else if (lower == FWLAB_C31_API_OK &&
+                   state == FWLAB_C31_CMD_COMPLETION_LEASED) {
+            operation->phase = C35_DMA_CONSUME;
+        }
+        break;
+    default:
+        dma_finish(operation, C35_INVARIANT, C35_COMMIT_UNKNOWN,
+                   C35_CLEANUP_POISONED);
+        runtime->headless.service_phase = C35_SERVICE_POISONED;
+        break;
+    }
+}
+
+enum c35_result c35_dma_progress(
+    struct c35_runtime *runtime,
+    const struct c35_operation_token *token,
+    uint32_t budget,
+    struct c35_operation_status *status
+)
+{
+    struct c35_dma_transaction *operation;
+    uint32_t used = 0;
+
+    if (runtime == NULL || token == NULL || status == NULL)
+        return C35_INVALID;
+    operation = &runtime->dma_operation;
+    if (!operation->used || !dma_token_equal(&operation->token, token))
+        return C35_STALE;
+    while (!operation->finished && used < budget) {
+        dma_progress_one(runtime, operation);
+        ++used;
+    }
+    dma_status_fill(runtime, operation, status);
+    status->units_used = used;
+    return operation->finished ? C35_OK : C35_IN_PROGRESS;
+}
+
+enum c35_result c35_dma_query(
+    const struct c35_runtime *runtime,
+    const struct c35_operation_token *token,
+    struct c35_operation_status *status
+)
+{
+    const struct c35_dma_transaction *operation;
+
+    if (runtime == NULL || token == NULL || status == NULL)
+        return C35_INVALID;
+    operation = &runtime->dma_operation;
+    if (!operation->used || !dma_token_equal(&operation->token, token))
+        return C35_STALE;
+    dma_status_fill(runtime, operation, status);
+    status->units_used = 0;
+    return operation->finished ? C35_OK : C35_IN_PROGRESS;
+}
+
+enum c35_result c35_dma_finalize(
+    const struct c35_runtime *runtime,
+    const struct c35_operation_token *token,
+    struct c35_operation_status *status,
+    uint8_t output[C35_ATOM_BYTES],
+    struct c35_publication *publication
+)
+{
+    enum c35_result result;
+
+    if (output == NULL || publication == NULL) return C35_INVALID;
+    result = c35_dma_query(runtime, token, status);
+    if (result != C35_OK) return result;
+    if (status->outcome == C35_OK && status->publication_valid) {
+        memcpy(output, runtime->dma_operation.output, C35_ATOM_BYTES);
+        *publication = runtime->dma_operation.publication;
+    }
+    return C35_OK;
+}
+
+enum c35_result c35_dma_retire(
+    struct c35_runtime *runtime,
+    const struct c35_operation_token *token
+)
+{
+    if (runtime == NULL || token == NULL || !runtime->dma_operation.used ||
+        !runtime->dma_operation.finished ||
+        !dma_token_equal(&runtime->dma_operation.token, token))
+        return C35_STALE;
+    memset(&runtime->dma_operation, 0, sizeof(runtime->dma_operation));
+    return C35_OK;
+}
+
+enum c35_result c35_dma_capture_status(
+    struct c35_runtime *runtime,
+    const uint8_t input[C35_ATOM_BYTES],
+    uint8_t output[C35_ATOM_BYTES],
+    struct c35_operation_status *status,
+    struct c35_publication *publication
+)
+{
+    struct c35_operation_token token;
+    unsigned int iteration;
+    enum c35_result result = c35_dma_start(runtime, input, &token);
+
+    if (result != C35_OK) return result;
+    for (iteration = 0; iteration < 1024; ++iteration) {
+        result = c35_dma_progress(runtime, &token, 1, status);
+        if (result == C35_OK || result != C35_IN_PROGRESS) break;
+    }
+    if (result == C35_OK)
+        result = c35_dma_finalize(
+            runtime, &token, status, output, publication);
+    if (status->call_state == C35_CALL_DONE) {
+        enum c35_result outcome = (enum c35_result)status->outcome;
+
+        (void)c35_dma_retire(runtime, &token);
+        return result == C35_OK ? outcome : result;
+    }
+    return result;
+}
+
 int c35_dma_capture(
     struct c35_runtime *runtime,
     const uint8_t input[C35_ATOM_BYTES],
     uint8_t output[C35_ATOM_BYTES]
 )
 {
-    uint64_t identity = runtime->dma_next++;
-    struct fwlab_c31_command_descriptor descriptor;
-    struct c31_fake_dma_scenario scenario;
+    struct c35_operation_status status;
+    struct c35_publication publication;
+    enum c35_result result = c35_dma_capture_status(
+        runtime, input, output, &status, &publication);
+
+    if (result != C35_OK) return 0;
+    (void)observe_publication(runtime, &publication);
+    return 1;
+}
+
+enum c35_result c35_run_command_status(
+    struct c35_runtime *runtime,
+    const struct c35_request *request,
+    struct c35_semantic_result *result,
+    struct c35_operation_status *status
+)
+{
     struct fwlab_c31_command_handle command;
-    struct fwlab_c31_completion_lease lease;
-    struct fwlab_c31_completion_intent intent;
-    struct c35_trace_event event;
+    struct c35_operation_token token;
+    enum c35_result operation;
     unsigned int iteration;
 
-    memset(&descriptor, 0, sizeof(descriptor));
-    descriptor.version = FWLAB_C31_CONTRACT_VERSION;
-    descriptor.size = sizeof(descriptor);
-    descriptor.origin.word[0] = runtime->nonce ^ identity;
-    descriptor.origin.word[1] = UINT64_C(0xd3500000) | identity;
-    descriptor.trace_cookie = identity;
-    descriptor.provider_request.word[0] = UINT64_C(0xd350000000000000) |
-                                          identity;
-    descriptor.provider_request.word[1] = ~identity;
-    descriptor.capability.word[0] = UINT64_C(0xca35000000000000) |
-                                    identity;
-    descriptor.capability.word[1] = UINT64_C(0xcb35000000000000) |
-                                    identity;
-    descriptor.controller_region = 0;
-    descriptor.length = C35_ATOM_BYTES;
-    descriptor.provider_kind = FWLAB_C31_PROVIDER_DMA;
-    descriptor.dma_direction = FWLAB_C31_DMA_TO_CONTROLLER;
-    if (c31_fake_dma_register(
-            &runtime->dma, &descriptor.capability, &descriptor.origin,
-            runtime->nonce, runtime->headless.owner_epoch,
-            FWLAB_C31_DMA_TO_CONTROLLER, input, C35_ATOM_BYTES) < 0) {
-        return 0;
+    if (runtime == NULL || request == NULL || result == NULL || status == NULL)
+        return C35_INVALID;
+    operation = c35_headless_submit(&runtime->headless, request, &command);
+    if (operation != C35_OK) return operation;
+    operation = c35_completion_start(&runtime->headless, &command, &token);
+    if (operation != C35_OK) return operation;
+    memset(status, 0, sizeof(*status));
+    for (iteration = 0; iteration < 8192; ++iteration) {
+        operation = c35_operation_progress(
+            &runtime->headless, &token, 1, status);
+        if (operation == C35_OK || operation != C35_IN_PROGRESS) break;
     }
-    memset(&scenario, 0, sizeof(scenario));
-    scenario.request = descriptor.provider_request;
-    scenario.terminal = FWLAB_C31_PROVIDER_SUCCESS;
-    scenario.effect_class = FWLAB_C31_EFFECT_FULL;
-    if (!c31_fake_dma_add(&runtime->dma, &scenario) ||
-        fwlab_c31_submit(runtime->lifecycle, &descriptor, &command) !=
-            FWLAB_C31_API_OK) {
-        return 0;
+    if (status->publication_valid) {
+        *result = status->publication.semantic;
+        (void)observe_publication(runtime, &status->publication);
     }
-    for (iteration = 0; iteration < 256; ++iteration) {
-        enum fwlab_c31_lifecycle_state state;
-        struct fwlab_c31_step_result step;
-
-        if (fwlab_c31_command_state(
-                runtime->lifecycle, &command, &state) != FWLAB_C31_API_OK) {
-            return 0;
-        }
-        if (state == FWLAB_C31_CMD_COMPLETION_READY) {
-            break;
-        }
-        if (fwlab_c31_step(runtime->lifecycle, 1, &step) !=
-            FWLAB_C31_API_OK) {
-            return 0;
-        }
-    }
-    if (iteration == 256 ||
-        fwlab_c31_completion_acquire(
-            runtime->lifecycle, &command, &lease, &intent) !=
-            FWLAB_C31_API_OK ||
-        intent.result != FWLAB_C31_COMPLETION_SUCCESS) {
-        return 0;
-    }
-    memcpy(output, c31_fake_dma_controller(&runtime->dma, 0),
-           C35_ATOM_BYTES);
-    if (fwlab_c31_completion_consume(runtime->lifecycle, &lease) !=
-        FWLAB_C31_API_OK) {
-        return 0;
-    }
-    memset(&event, 0, sizeof(event));
-    event.kind = C35_TRACE_DMA;
-    event.actor = runtime->actor;
-    event.completion_result = (uint8_t)intent.result;
-    event.effect_class = intent.fault.effect_class;
-    event.epoch = runtime->headless.owner_epoch;
-    event.ordinal = runtime->trace.events;
-    memcpy(event.semantic.payload[0], output, C35_ATOM_BYTES);
-    return c35_trace_append(&runtime->trace, &event) == C35_OK;
+    if (status->call_state == C35_CALL_DONE)
+        (void)c35_operation_retire(&runtime->headless, &token);
+    return operation == C35_OK ? (enum c35_result)status->outcome : operation;
 }
 
 int c35_run_command(
@@ -594,14 +1093,13 @@ int c35_run_command(
     struct c35_semantic_result *result
 )
 {
-    struct fwlab_c31_command_handle command;
-    struct fwlab_c31_completion_intent intent;
+    struct c35_operation_status status;
+    enum c35_result operation = c35_run_command_status(
+        runtime, request, result, &status);
 
-    return c35_headless_submit(
-               &runtime->headless, request, &command) == C35_OK &&
-           c35_headless_complete(
-               &runtime->headless, &command, result, &intent) == C35_OK &&
-           intent.result == FWLAB_C31_COMPLETION_SUCCESS;
+    return operation == C35_OK && status.publication_valid &&
+           status.publication.completion_result ==
+               FWLAB_C31_COMPLETION_SUCCESS;
 }
 
 static struct c35_request request_base(uint8_t kind)
@@ -609,7 +1107,7 @@ static struct c35_request request_base(uint8_t kind)
     struct c35_request request;
 
     memset(&request, 0, sizeof(request));
-    request.version = C35_BINDING_VERSION;
+    request.version = C35_REQUEST_VERSION;
     request.size = sizeof(request);
     request.kind = kind;
     request.scope = 9;
@@ -642,8 +1140,35 @@ struct c35_request c35_request_write(
     return request;
 }
 
+struct c35_request c35_request_write_mask(
+    uint8_t mask,
+    uint8_t durability,
+    uint32_t sequence,
+    const uint8_t payload[C35_ATOMS][C35_ATOM_BYTES]
+)
+{
+    struct c35_request request = request_base(C35_WRITE);
+
+    request.durability_kind = durability;
+    request.atom_mask = mask;
+    request.atom = 0;
+    request.sequence = sequence;
+    memcpy(request.payload, payload, sizeof(request.payload));
+    return request;
+}
+
 struct c35_request c35_request_trim(
     uint8_t atom,
+    uint8_t durability,
+    uint32_t sequence
+)
+{
+    return c35_request_trim_mask(
+        (uint8_t)(1u << atom), durability, sequence);
+}
+
+struct c35_request c35_request_trim_mask(
+    uint8_t mask,
     uint8_t durability,
     uint32_t sequence
 )
@@ -651,8 +1176,8 @@ struct c35_request c35_request_trim(
     struct c35_request request = request_base(C35_TRIM);
 
     request.durability_kind = durability;
-    request.atom_mask = (uint8_t)(1u << atom);
-    request.atom = atom;
+    request.atom_mask = mask;
+    request.atom = 0;
     request.sequence = sequence;
     return request;
 }

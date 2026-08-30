@@ -155,20 +155,21 @@ Each named mutation produced a shortest counterexample within depth 16:
 
 ## Schedule and thread isolation
 
-For each of the MM, BB and MB provider pairs, both frozen six-action twin
-families replay every order-preserving interleaving:
+The historical C3.5 checker enumerated 924 unique six-plus-six actor-choice
+strings. Applied to both frozen twin families and the MM, BB and MB pairs, they
+formed labeled reference-product cases:
 
 ```text
 2 families x 3 pairs x C(12,6)
-  = 5,544 complete macro schedules
-  = 20,586 distinct exact prefixes
+  = 5,544 labeled reference-product cases
+  = 20,586 within-matrix unique prefix labels
 ```
 
-Every exact prefix updates one actor's full canonical trace/raw projection and
-checks that the peer projection remains byte-identical. Thirty-six selected
-schedules also run two live firmware/media instances and compare each prefix
-against a separately executed solo reference. The exhaustive claim applies to
-this frozen macro grammar, not to arbitrary C call or thread schedules.
+The reference-product replay updates one actor's recorded solo projection and
+checks that the peer reference is unchanged. Only 36 selected cases ran two
+live firmware/media instances in the reviewed C3.5 source. C3.5a does not
+reinterpret that historical run; it adds a new 5,544-live matrix. Both claims
+are limited to the frozen macro grammar, not arbitrary C calls or threads.
 
 The native pthread driver performs 64 barrier-started repetitions for MM, BB
 and MB, alternating twin-write and asymmetric workloads. Each thread owns one
@@ -192,11 +193,16 @@ support.
 
 ## Archive, link and portability evidence
 
-`libfwlab_firmware_c35.a` contains exactly 12 objects: frozen C3.1 core/codec,
+The historical artifact named `libfwlab_firmware_c35.a` contains exactly 12
+objects: frozen C3.1 core/codec,
 C3.2 policy and the nine C3.4 production objects. Its member order and
 dependency files match the explicit allowlist; deterministic reconstruction is
 byte-identical. It has no global writable/BSS/common symbol and no heap,
 thread, clock, random, file syscall or transport dependency.
+
+C3.5a renames the same byte-identical 12-object artifact to
+`libfwlab_portable_core_c31_c34.a` so the archive is not mistaken for the
+integrated C3.5 stack.
 
 The S link pulls only C3.1 objects from the archive. M/B/P pull the complete
 fixed firmware graph. M contains no file engine, B contains no POSIX adapter,

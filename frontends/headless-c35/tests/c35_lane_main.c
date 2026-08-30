@@ -48,6 +48,14 @@ static int emit_life(void)
 }
 
 #if C35_LANE_KIND != C35_LANE_SCRIPTED
+static void put_u32(uint8_t bytes[4], uint32_t value)
+{
+    bytes[0] = (uint8_t)value;
+    bytes[1] = (uint8_t)(value >> 8);
+    bytes[2] = (uint8_t)(value >> 16);
+    bytes[3] = (uint8_t)(value >> 24);
+}
+
 static int run_semantic(
     struct c35_storage *storage,
     struct c35_runtime *runtime,
@@ -118,6 +126,107 @@ static int emit_semantic(int container_only)
          write_exact(raw, sizeof(raw)));
     return c35_storage_close(&storage) && ok;
 }
+
+static void encode_semantic(
+    const struct c35_semantic_result *result,
+    uint8_t bytes[64]
+)
+{
+    unsigned int atom;
+
+    memset(bytes, 0, 64);
+    bytes[0] = result->status;
+    bytes[1] = result->request_kind;
+    bytes[2] = result->atom_mask;
+    bytes[3] = result->present_mask;
+    bytes[4] = result->witness_class;
+    bytes[5] = result->witness_reason;
+    for (atom = 0; atom < C35_ATOMS; ++atom) {
+        bytes[8 + atom] = result->logical_kind[atom];
+        bytes[10 + atom] = result->logical_version[atom];
+        bytes[12 + atom] = result->logical_copy[atom];
+        put_u32(&bytes[16 + atom * 4u], result->value_crc[atom]);
+        memcpy(&bytes[24 + atom * C35_ATOM_BYTES], result->payload[atom],
+               C35_ATOM_BYTES);
+    }
+}
+
+static int two_atom_restart(
+    struct c35_runtime *runtime,
+    struct c35_storage *storage,
+    uint32_t scenario
+)
+{
+    return c35_runtime_teardown(runtime) && c35_storage_restart(storage) &&
+           c35_runtime_init(
+               runtime, storage, C35_LANE_KIND,
+               UINT64_C(0x35aa0011223344),
+               UINT64_C(0x7f6e5d4c3b2a1908), 0, 0, scenario);
+}
+
+static int emit_two_atom(void)
+{
+    struct c35_storage storage;
+    struct c35_runtime runtime;
+    struct c35_semantic_result result;
+    struct c35_request request;
+    uint8_t payload[C35_ATOMS][C35_ATOM_BYTES];
+    const uint8_t (*payload_view)[C35_ATOM_BYTES];
+    uint8_t canonical[10][64];
+    uint8_t raw[3][C35_RAW_PROJECTION_BYTES];
+    unsigned int atom;
+    unsigned int output = 0;
+    int ok;
+
+    for (atom = 0; atom < C35_ATOM_BYTES; ++atom) {
+        payload[0][atom] = (uint8_t)(0x20u + atom * 3u);
+        payload[1][atom] = (uint8_t)(0xe0u - atom * 5u);
+    }
+    payload_view = (const uint8_t (*)[C35_ATOM_BYTES])(const void *)payload;
+    if (!c35_storage_init(&storage, C35_LANE_KIND, lane_uuid) ||
+        !c35_runtime_init(
+            &runtime, &storage, C35_LANE_KIND,
+            UINT64_C(0x35aa0011223344),
+            UINT64_C(0x7f6e5d4c3b2a1908), 0, 0, 0x35aa0001))
+        return 0;
+    request = c35_request_write_mask(
+        UINT8_C(0x03), FWLAB_PERSIST_SELF_DURABLE, 1, payload_view);
+    if (!c35_run_command(&runtime, &request, &result)) return 0;
+    encode_semantic(&result, canonical[output++]);
+    for (atom = 0; atom < C35_ATOMS; ++atom) {
+        request = c35_request_read((uint8_t)atom);
+        if (!c35_run_command(&runtime, &request, &result)) return 0;
+        encode_semantic(&result, canonical[output++]);
+    }
+    if (!c35_runtime_projection(&runtime, raw[0]) ||
+        !two_atom_restart(&runtime, &storage, 0x35aa0002)) return 0;
+    for (atom = 0; atom < C35_ATOMS; ++atom) {
+        request = c35_request_read((uint8_t)atom);
+        if (!c35_run_command(&runtime, &request, &result)) return 0;
+        encode_semantic(&result, canonical[output++]);
+    }
+    if (!c35_runtime_projection(&runtime, raw[1])) return 0;
+    request = c35_request_trim_mask(
+        UINT8_C(0x03), FWLAB_PERSIST_SELF_DURABLE, 2);
+    if (!c35_run_command(&runtime, &request, &result)) return 0;
+    encode_semantic(&result, canonical[output++]);
+    for (atom = 0; atom < C35_ATOMS; ++atom) {
+        request = c35_request_read((uint8_t)atom);
+        if (!c35_run_command(&runtime, &request, &result)) return 0;
+        encode_semantic(&result, canonical[output++]);
+    }
+    if (!two_atom_restart(&runtime, &storage, 0x35aa0003)) return 0;
+    for (atom = 0; atom < C35_ATOMS; ++atom) {
+        request = c35_request_read((uint8_t)atom);
+        if (!c35_run_command(&runtime, &request, &result)) return 0;
+        encode_semantic(&result, canonical[output++]);
+    }
+    if (output != 10 || !c35_runtime_projection(&runtime, raw[2]) ||
+        !c35_runtime_teardown(&runtime)) return 0;
+    ok = write_exact(canonical, sizeof(canonical)) &&
+         write_exact(raw, sizeof(raw)) && c35_storage_close(&storage);
+    return ok;
+}
 #endif
 
 int main(int argc, char **argv)
@@ -129,6 +238,8 @@ int main(int argc, char **argv)
         return emit_semantic(0) ? 0 : 1;
     if (strcmp(argv[1], "container") == 0)
         return emit_semantic(1) ? 0 : 1;
+    if (strcmp(argv[1], "two-atom") == 0)
+        return emit_two_atom() ? 0 : 1;
 #endif
     return 2;
 }

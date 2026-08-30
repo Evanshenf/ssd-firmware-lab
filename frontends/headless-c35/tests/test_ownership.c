@@ -33,6 +33,7 @@ static int test_backpressure_cancel(enum c35_lane lane)
     struct c35_submission second;
     struct c35_request request;
     struct c35_semantic_result semantic;
+    struct c35_publication publication;
     struct fwlab_c31_completion_intent intent;
     struct fwlab_c31_abort_ticket ticket;
     enum fwlab_c31_abort_outcome outcome;
@@ -73,25 +74,31 @@ static int test_backpressure_cancel(enum c35_lane lane)
             saw_backpressure = 1;
             break;
         }
-        CHECK(fwlab_c31_step(runtime->lifecycle, 1, &step) ==
+        CHECK(runtime->lifecycle_port.ops->step(
+                  runtime->lifecycle_port.context, 1, &step) ==
               FWLAB_C31_API_OK);
     }
     CHECK(saw_backpressure);
-    CHECK(fwlab_c31_abort_request(
-        runtime->lifecycle, &first.command, &ticket, &outcome) ==
+    CHECK(runtime->lifecycle_port.ops->abort_request(
+        runtime->lifecycle_port.context, &first.command, &ticket, &outcome) ==
         FWLAB_C31_API_OK);
     CHECK(outcome == FWLAB_C31_ABORT_PENDING);
-    CHECK(c35_headless_complete(
-        &runtime->headless, &first.command, &semantic, &intent) == C35_OK);
+    CHECK(c35_headless_complete_observed(
+        &runtime->headless, &first.command, &semantic, &intent,
+        &publication) == C35_OK);
+    CHECK(c35_trace_append(&runtime->trace, &publication) == C35_OK);
     CHECK(intent.result == FWLAB_C31_COMPLETION_ABORTED);
     CHECK(fwlab_c31_abort_query(
         runtime->lifecycle, &ticket, &outcome) == FWLAB_C31_API_OK);
     CHECK(outcome == FWLAB_C31_ABORT_TERMINAL ||
           outcome == FWLAB_C31_ABORT_TOO_LATE);
-    CHECK(fwlab_c31_abort_ack(runtime->lifecycle, &ticket) ==
+    CHECK(runtime->lifecycle_port.ops->abort_ack(
+        runtime->lifecycle_port.context, &ticket) ==
           FWLAB_C31_API_OK);
-    CHECK(c35_headless_complete(
-        &runtime->headless, &second.command, &semantic, &intent) == C35_OK);
+    CHECK(c35_headless_complete_observed(
+        &runtime->headless, &second.command, &semantic, &intent,
+        &publication) == C35_OK);
+    CHECK(c35_trace_append(&runtime->trace, &publication) == C35_OK);
     CHECK(intent.result == FWLAB_C31_COMPLETION_SUCCESS);
     CHECK(runtime->trace.events == 2);
     ok = c35_runtime_teardown(runtime) && c35_storage_close(storage);
@@ -103,23 +110,38 @@ static int test_backpressure_cancel(enum c35_lane lane)
 
 struct rejecting_binding {
     struct fwlab_c31 *lifecycle;
+    struct c35_binding inner;
     uint8_t observed_accepted;
+    uint8_t prepared;
+    uint8_t aborted;
+    uint8_t retired;
 };
 
-static enum c35_result reject_register(
+static enum c35_result reject_prepare(
     void *context,
+    const struct c35_txid *txid,
     const struct fwlab_c31_request_token *token,
-    const struct fwlab_c31_command_handle *command,
     uint32_t owner_epoch,
     const struct c35_request *request
 )
 {
     struct rejecting_binding *rejecting = context;
+
+    rejecting->prepared = 1;
+    return rejecting->inner.ops->registration_prepare(
+        rejecting->inner.context, txid, token, owner_epoch, request);
+}
+
+static enum c35_result reject_commit(
+    void *context,
+    const struct c35_txid *txid,
+    const struct fwlab_c31_command_handle *command
+)
+{
+    struct rejecting_binding *rejecting = context;
     enum fwlab_c31_lifecycle_state state;
 
-    (void)token;
-    (void)owner_epoch;
-    (void)request;
+    (void)txid;
     if (fwlab_c31_command_state(
             rejecting->lifecycle, command, &state) == FWLAB_C31_API_OK &&
         state == FWLAB_C31_CMD_ACCEPTED) {
@@ -128,57 +150,173 @@ static enum c35_result reject_register(
     return C35_NO_CAPACITY;
 }
 
-static enum c35_result unused_result(
+static enum c35_result reject_registration_query(
     void *context,
+    const struct c35_txid *txid,
+    enum c35_registration_state *state
+)
+{
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->registration_query(
+        rejecting->inner.context, txid, state);
+}
+
+static enum c35_result reject_registration_abort(
+    void *context,
+    const struct c35_txid *txid
+)
+{
+    struct rejecting_binding *rejecting = context;
+    enum c35_result result = rejecting->inner.ops->registration_abort(
+        rejecting->inner.context, txid);
+
+    if (result == C35_OK) rejecting->aborted = 1;
+    return result;
+}
+
+static enum c35_result reject_result_prepare(
+    void *context,
+    const struct c35_txid *txid,
     const struct fwlab_c31_command_handle *command,
     const struct fwlab_c31_completion_intent *intent,
     struct c35_semantic_result *result
 )
 {
-    (void)context; (void)command; (void)intent; (void)result;
-    return C35_INVARIANT;
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->result_prepare(
+        rejecting->inner.context, txid, command, intent, result);
 }
 
-static enum c35_result unused_ack(
+static enum c35_result reject_result_query(
     void *context,
+    const struct c35_txid *txid,
+    enum c35_result_state *state
+)
+{
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->result_query(
+        rejecting->inner.context, txid, state);
+}
+
+static enum c35_result reject_result_abort(
+    void *context,
+    const struct c35_txid *txid
+)
+{
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->result_abort(
+        rejecting->inner.context, txid);
+}
+
+static enum c35_result reject_result_ack(
+    void *context,
+    const struct c35_txid *txid,
     const struct fwlab_c31_command_handle *command
 )
 {
-    (void)context; (void)command;
-    return C35_INVARIANT;
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->result_ack(
+        rejecting->inner.context, txid, command);
 }
 
-static enum c35_result unused_reset(void *context)
+static enum c35_result reject_reset_recover(
+    void *context,
+    const struct c35_txid *txid,
+    uint32_t old_epoch,
+    uint32_t new_epoch
+)
 {
-    (void)context;
-    return C35_INVARIANT;
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->reset_recover(
+        rejecting->inner.context, txid, old_epoch, new_epoch);
 }
 
-static enum c35_result unused_snapshot(
+static enum c35_result reject_reset_query(
+    void *context,
+    const struct c35_txid *txid,
+    enum c35_reset_state *state
+)
+{
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->reset_query(
+        rejecting->inner.context, txid, state);
+}
+
+static enum c35_result reject_transaction_retire(
+    void *context,
+    const struct c35_txid *txid
+)
+{
+    struct rejecting_binding *rejecting = context;
+    enum c35_result result = rejecting->inner.ops->transaction_retire(
+        rejecting->inner.context, txid);
+
+    if (result == C35_OK) rejecting->retired = 1;
+    return result;
+}
+
+static enum c35_result reject_teardown_finalize(void *context)
+{
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->teardown_finalize(rejecting->inner.context);
+}
+
+static enum c35_result reject_snapshot(
     void *context,
     struct c35_semantic_result *result
 )
 {
-    (void)context; (void)result;
-    return C35_INVARIANT;
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->semantic_snapshot(
+        rejecting->inner.context, result);
 }
 
-static enum c35_result unused_quiescent(void *context, bool *quiescent)
+static enum c35_result reject_quiescent(void *context, bool *quiescent)
 {
-    (void)context; (void)quiescent;
-    return C35_INVARIANT;
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->quiescent(
+        rejecting->inner.context, quiescent);
+}
+
+static enum c35_result reject_cause_query(
+    void *context,
+    struct c35_cause_detail *cause
+)
+{
+    struct rejecting_binding *rejecting = context;
+
+    return rejecting->inner.ops->cause_query(rejecting->inner.context, cause);
 }
 
 static const struct c35_binding_ops rejecting_ops = {
-    .version = C35_BINDING_VERSION,
+    .version = C35_BINDING_OPS_VERSION,
     .size = sizeof(struct c35_binding_ops),
     .reserved = 0,
-    .register_after_submit = reject_register,
-    .result_copy_before_consume = unused_result,
-    .result_ack_after_consume = unused_ack,
-    .post_reset_recover = unused_reset,
-    .semantic_snapshot = unused_snapshot,
-    .quiescent = unused_quiescent,
+    .registration_prepare = reject_prepare,
+    .registration_commit = reject_commit,
+    .registration_query = reject_registration_query,
+    .registration_abort = reject_registration_abort,
+    .result_prepare = reject_result_prepare,
+    .result_query = reject_result_query,
+    .result_abort = reject_result_abort,
+    .result_ack = reject_result_ack,
+    .reset_recover = reject_reset_recover,
+    .reset_query = reject_reset_query,
+    .transaction_retire = reject_transaction_retire,
+    .teardown_finalize = reject_teardown_finalize,
+    .semantic_snapshot = reject_snapshot,
+    .quiescent = reject_quiescent,
+    .cause_query = reject_cause_query,
 };
 
 static int test_registration_rollback(void)
@@ -202,11 +340,15 @@ static int test_registration_rollback(void)
     original = runtime->headless.binding;
     memset(&rejecting, 0, sizeof(rejecting));
     rejecting.lifecycle = runtime->lifecycle;
+    rejecting.inner = original;
     runtime->headless.binding.ops = &rejecting_ops;
     runtime->headless.binding.context = &rejecting;
     CHECK(c35_headless_submit(
         &runtime->headless, &request, &command) == C35_NO_CAPACITY);
+    CHECK(rejecting.prepared);
     CHECK(rejecting.observed_accepted);
+    CHECK(rejecting.aborted);
+    CHECK(rejecting.retired);
     runtime->headless.binding = original;
     CHECK(c35_run_command(runtime, &request, &semantic));
     CHECK(c35_run_command(runtime, &request, &semantic));
@@ -223,6 +365,6 @@ int main(void)
     CHECK(test_backpressure_cancel(C35_LANE_BYTE));
     CHECK(test_registration_rollback());
     puts("C3.5 ownership: PASS (M/B backpressure-cancel + "
-         "submit/register rollback)");
+         "prepare/submit/commit rollback)");
     return 0;
 }
