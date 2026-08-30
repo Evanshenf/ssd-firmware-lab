@@ -340,6 +340,7 @@ static int local_hif_commit_pending(
 int c42_poll_ready(struct c42_controller *controller)
 {
     uint32_t offset;
+    int poll_needed = 0;
 
     if (!c42_controller_valid(controller) ||
         controller->phase != C42_CONTROLLER_READY ||
@@ -349,10 +350,7 @@ int c42_poll_ready(struct c42_controller *controller)
     if (local_hif_commit_pending(controller)) {
         return 0;
     }
-    if (controller->ready_poll_pending != 0) {
-        controller->ready_poll_pending = 0;
-        return poll_ready_once(controller);
-    }
+    controller->ready_poll_pending = 0;
     for (offset = 0; offset < controller->config.command_capacity; ++offset) {
         uint16_t selected = (uint16_t)(
             (controller->ready_cursor + offset) %
@@ -361,7 +359,7 @@ int c42_poll_ready(struct c42_controller *controller)
         struct c42_command_record *command = &controller->commands[selected];
 
         if (command->state == C42_COMMAND_HIF_COMMITTED) {
-            controller->ready_poll_pending = 1;
+            poll_needed = 1;
             continue;
         }
         if (command->state == C42_COMMAND_READY &&
@@ -379,8 +377,7 @@ int c42_poll_ready(struct c42_controller *controller)
             return prepare_consume(controller, selected);
         }
     }
-    if (controller->ready_poll_pending != 0) {
-        controller->ready_poll_pending = 0;
+    if (poll_needed != 0) {
         return poll_ready_once(controller);
     }
     return 0;

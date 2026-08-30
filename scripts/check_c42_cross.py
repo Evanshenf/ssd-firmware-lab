@@ -40,9 +40,11 @@ PROGRAMS = {
         [*COMMON], HIF / "tests/test_c42_remediation.c"
     ),
     "c42_dut_replay": (
-        [*COMMON, HIF / "tests/c42_reference.c"],
+        [*COMMON, HIF / "tests/c42_reference.c",
+         HIF / "tests/c42_dut_bfs.c"],
         HIF / "tests/test_c42_dut_replay.c"
     ),
+    "c42_public_abi": ([], HIF / "tests/test_c42_public_abi.c"),
     "c42_model": ([*MODEL], HIF / "tests/model_c42.c"),
     "c42_broken": ([*MODEL], HIF / "tests/broken_c42.c"),
     "c42_fuzz": ([*COMMON], HIF / "tests/fuzz_c42.c"),

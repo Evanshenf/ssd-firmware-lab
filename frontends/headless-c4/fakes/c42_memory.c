@@ -249,9 +249,9 @@ enum c42_result c42_fake_memory_direct_push(
         injection->omit_status > 1 || injection->write_status > 1 ||
         injection->apply_effect > 1 ||
         injection->logical_effect > C42_MEMORY_RETIRED + 2u ||
+        injection->applied_effect > C42_MEMORY_RETIRED + 2u ||
         injection->prefix > 15 || injection->committed > 2 ||
-        injection->quiescent > 2 || injection->reserved[0] != 0 ||
-        injection->reserved[1] != 0) {
+        injection->quiescent > 2 || injection->reserved != 0) {
         return C42_INVALID;
     }
     memory->direct[memory->direct_count] = *injection;
@@ -479,7 +479,7 @@ static enum c42_memory_result fake_scrub_abort(
             status->quiescent = direct->quiescent;
         }
         if (direct->apply_effect != 0 &&
-            direct->logical_effect == C42_MEMORY_RETIRED) {
+            direct->applied_effect == C42_MEMORY_RETIRED) {
             record->retired = 1;
         }
         return (enum c42_memory_result)direct->result;
@@ -534,7 +534,7 @@ static enum c42_memory_result scrub_retire_common(
             status->quiescent = direct->quiescent;
         }
         if (direct->apply_effect != 0 &&
-            direct->logical_effect == C42_MEMORY_RETIRED) {
+            direct->applied_effect == C42_MEMORY_RETIRED) {
             record->retired = 1;
         }
         return (enum c42_memory_result)direct->result;

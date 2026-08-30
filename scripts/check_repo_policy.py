@@ -716,12 +716,15 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "frontends/headless-c4/tests/c42_support.h",
     "frontends/headless-c4/tests/c42_reference.c",
     "frontends/headless-c4/tests/c42_reference.h",
+    "frontends/headless-c4/tests/c42_dut_bfs.c",
+    "frontends/headless-c4/tests/c42_dut_bfs.h",
     "frontends/headless-c4/tests/test_c42_queue.c",
     "frontends/headless-c4/tests/test_c42_publication.c",
     "frontends/headless-c4/tests/test_c42_identity.c",
     "frontends/headless-c4/tests/test_c42_reset_delete.c",
     "frontends/headless-c4/tests/test_c42_remediation.c",
     "frontends/headless-c4/tests/test_c42_dut_replay.c",
+    "frontends/headless-c4/tests/test_c42_public_abi.c",
     "frontends/headless-c4/tests/test_c42_thread.c",
     "frontends/headless-c4/tests/c42_model.c",
     "frontends/headless-c4/tests/c42_model.h",
@@ -747,7 +750,7 @@ EXPECTED_C4_2_FILES = {
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/c42_sources.mk":
-        "25ab7eab0a53346256af9de14ffafa8956fb51a03ad7351cfe928e9d3150c9a6",
+        "753c476caeae9de844fcff496fcd49f208fdfc0b47a978e7554ec120a8f83d84",
     "frontends/headless-c4/hif/c42.h":
         "619fa57028d0b7c1817fa5101fc6aa9269c643df583895d5431599afc6ad1be3",
     "frontends/headless-c4/hif/c42_internal.h":
@@ -759,7 +762,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/hif/c42_queue.c":
         "97510d09d250bc39b9b7e3e230e5378c5727d12c5b5865cfe9ab70e194d3fcd3",
     "frontends/headless-c4/hif/c42_publication.c":
-        "9be52e8e0e4a73f75edff2cfb31cd278ca60e12783b3033079fa3defa9eb8048",
+        "06b2ae8e034552de98bfe3a1bd595b5f5e1d36a110530ac8c11de70276739035",
     "frontends/headless-c4/hif/c42_runtime.c":
         "350f5b897fd632fbb5ba8388b3c7b109dc30f797c8b996cc7c376aa003c34a29",
     "frontends/headless-c4/fakes/c42_command.c":
@@ -771,9 +774,9 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/fakes/c42_event.h":
         "ccb4c34b94e1a3b6ff46c8687b6af29a42df2a39ae5c5e99be766c59715a9ff4",
     "frontends/headless-c4/fakes/c42_memory.c":
-        "c1efb689a4f21379c1b49c07fcbb61a1fba0ceb5d1edaf1b7c3fd4c9c7fdce3d",
+        "72709e225001d4df66c95794be148becbee27a81ffb3032512efcb69df71a779",
     "frontends/headless-c4/fakes/c42_memory.h":
-        "6826cc9945e3ec2ac9387e33a8827b40afe94a656eb3bf3050f434dc09cba91c",
+        "1dd481ad0a6635e234255352f8afe1c1f8e428d14339ed2887bdc42bcf89198f",
     "frontends/headless-c4/fakes/c42_fake_main.c":
         "e0479faa676ac64e4083b637ef8b965ffcc2ad019d9382ab60db49c1771594a1",
     "frontends/headless-c4/tests/c42_support.c":
@@ -781,9 +784,13 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/c42_support.h":
         "6830ee74ad5e92d08a8fb8df09170239f855c800b8069e541e77b4d34f277e54",
     "frontends/headless-c4/tests/c42_reference.c":
-        "bd15e73856807447cab171b0869d222fb8f549555fef50f263e9a99ab58689b1",
+        "bb71a8fa5a2c38654c6f6faa4a28624115e6e2326908fc821d0d5e9c2558b573",
     "frontends/headless-c4/tests/c42_reference.h":
-        "0c6c792317f3ac9565dafa638de609afe9b4d760b0df57d53dfab92654657df3",
+        "c77470483d0dd6558a0cf39b55ee4ec15dc20ac0afd15333350f2845f9489204",
+    "frontends/headless-c4/tests/c42_dut_bfs.c":
+        "4328f37dc992d553528bfb1a7e17ffb85c654fb81ca49574f4c78e613ac3074e",
+    "frontends/headless-c4/tests/c42_dut_bfs.h":
+        "847cea1418ae76827bf5b088be2e012a420a88b04fc031c53770a93f929c9381",
     "frontends/headless-c4/tests/test_c42_queue.c":
         "40e7e7a141e3d78fc34a959446d7fcbb197e48635d277e3ed76402f06224de73",
     "frontends/headless-c4/tests/test_c42_publication.c":
@@ -793,9 +800,11 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/test_c42_reset_delete.c":
         "f0e4bcfd2e7e3bc9f4ea88a60788eab104fdc0efcb3ed65d38e904146cd8744a",
     "frontends/headless-c4/tests/test_c42_remediation.c":
-        "d54358782a4e5cf712ac9a71e0ea53c00cfa3bf7b62380da2baddbc121568707",
+        "6ac119cca556cd7824d66aa427b8fb823fe843001c13948a198e6c2bd5298f3e",
     "frontends/headless-c4/tests/test_c42_dut_replay.c":
-        "467228fa345faf953de00804d0f51ce37206f8b369aabe66e82f166fc36d6107",
+        "087637f4c81a9b5d159bc772582f54a1fe2dbdecb765f6c8e3a5f7ffead60a21",
+    "frontends/headless-c4/tests/test_c42_public_abi.c":
+        "51d9f18df23e115c5fd70f7ab8b4fec758e391616b338b518b7eb306258a9f19",
     "frontends/headless-c4/tests/test_c42_thread.c":
         "e61d683dcccce3416cc381f38060266985154baad88fb2764b6c217aa249a1e3",
     "frontends/headless-c4/tests/c42_model.c":
@@ -809,15 +818,15 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/fuzz_c42.c":
         "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54",
     "scripts/check_c42_architecture.py":
-        "d7aac7f76b0319a14762f95cde425d25635d8cccd2dcf1e63717ccbaf9039317",
+        "b5ae9a480e6870b7d9dea989a6d6b70a9609e3410e824d22d07de3555ec3da24",
     "scripts/check_c42_analysis.py":
         "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a",
     "scripts/check_c42_determinism.py":
-        "ce04e8fe48566df7b43bf5a88c37de1be4177ea5f3a4cddece0d1386e629f4ed",
+        "dde4e1c13608f31390ea1fb10ddc8605914b567d3bb975fdc3953d3a32ef3333",
     "scripts/check_c42_cross.py":
-        "c7998c68772fc33f64e248252bb9da2e06d1c359aee763dec081cf95b55663c3",
+        "df599133d087607cba7ca9d34d7c12687ed307922f4fa8d69d0fe56da7d2a592",
     "scripts/check_c42_dynamic_mutations.py":
-        "b9f8827d29284c331921fe0d876a725cbf5ec9e622ba43ae961758c54e532ab6",
+        "e326f9f7aec7914f1117c08db9a6f50963a5f4ab755329ff681c9a21b40b22a5",
 }
 
 EXPECTED_FREEZES = {
@@ -1335,6 +1344,10 @@ def check_freezes(
         check_freeze(name, expected, files, boundaries, failures)
 
 
+EXPECTED_C42_RULES_SHA256 = \
+    "42b24510188f978c535c8f377429507a2f496b42f1efe80166ec59332ce60131"
+
+
 def check_c42_build_closure(failures: list[str]) -> None:
     makefile = (ROOT / "frontends/headless-c4/Makefile").read_text(
         encoding="utf-8"
@@ -1342,9 +1355,19 @@ def check_c42_build_closure(failures: list[str]) -> None:
     source_list = (ROOT / "frontends/headless-c4/c42_sources.mk").read_text(
         encoding="utf-8"
     )
+    begin = "# C42_FROZEN_RULES_BEGIN\n"
+    end = "# C42_FROZEN_RULES_END\n"
+    if makefile.count(begin) != 1 or makefile.count(end) != 1:
+        failures.append("C4.2 frozen Makefile rule markers are missing or ambiguous")
+    else:
+        rules = makefile.split(begin, 1)[1].split(end, 1)[0]
+        if hashlib.sha256(rules.encode("utf-8")).hexdigest() != \
+                EXPECTED_C42_RULES_SHA256:
+            failures.append("C4.2 frozen Makefile rule block changed")
     required_make_tokens = (
         "include c42_sources.mk", "$(C42_SOURCES)",
         "$(C42_FAKE_SOURCES)", "$(C42_SUPPORT)", "$(C42_REFERENCE)",
+        "$(C42_HEADERS)", "$(C42_ALL_INPUTS)", "$(C42_CHECK_TARGETS)",
         "check-c42-remediation", "check-c42-replay",
         "check-c42-dynamic-mutations", "check-c42-architecture",
     )
@@ -1355,18 +1378,61 @@ def check_c42_build_closure(failures: list[str]) -> None:
             r"^C42_(?:SOURCES|FAKE_SOURCES|SUPPORT|REFERENCE)\s*[:+?]?=",
             makefile, re.MULTILINE):
         failures.append("C4.2 frozen source list is overridden in shared Makefile")
+    if re.search(
+            r"^C42_(?:HEADERS|TEST_SOURCES|ALL_INPUTS|CHECK_TARGETS)\s*[:+?]?=",
+            makefile, re.MULTILINE):
+        failures.append("C4.2 frozen build closure is overridden in shared Makefile")
     required_sources = (
         "hif/c42_identity.c", "hif/c42_queue.c",
         "hif/c42_publication.c", "hif/c42_runtime.c",
         "fakes/c42_event.c", "fakes/c42_memory.c", "fakes/c42_command.c",
-        "tests/c42_support.c", "tests/c42_reference.c",
+        "tests/c42_support.c", "tests/c42_reference.c", "tests/c42_dut_bfs.c",
+        "tests/test_c42_queue.c", "tests/test_c42_publication.c",
+        "tests/test_c42_identity.c", "tests/test_c42_reset_delete.c",
         "tests/test_c42_remediation.c", "tests/test_c42_dut_replay.c",
+        "tests/test_c42_public_abi.c",
         "tests/c42_model.c", "tests/model_c42.c", "tests/broken_c42.c",
-        "tests/fuzz_c42.c", "tests/test_c42_thread.c",
+        "tests/fuzz_c42.c", "tests/test_c42_thread.c", "fakes/c42_fake_main.c",
+        "hif/c42.h", "hif/c42_internal.h", "hif/c42_memory_port.h",
+        "fakes/c42_event.h", "fakes/c42_memory.h", "fakes/c42_command.h",
+        "tests/c42_support.h", "tests/c42_reference.h",
+        "tests/c42_dut_bfs.h", "tests/c42_model.h",
+        "../../include/fwlab/contracts/hif_command_port.h",
     )
     for source in required_sources:
         if source not in source_list:
             failures.append(f"C4.2 frozen source list is incomplete: {source}")
+    database = subprocess.run(
+        ["make", "-C", str(ROOT / "frontends/headless-c4"), "-qp"],
+        cwd=ROOT, check=False, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        timeout=30,
+    )
+    if database.returncode != 0:
+        failures.append("C4.2 make database could not be resolved")
+        return
+
+    def target_prerequisites(name: str) -> list[str] | None:
+        prefix = f"{name}:"
+        matches = [
+            line[len(prefix):].strip().split()
+            for line in database.stdout.splitlines()
+            if line.startswith(prefix)
+        ]
+        return matches[0] if len(matches) == 1 else None
+
+    expected_targets = {
+        "check-c42-build-closure", "check-c42-unit", "check-c42-model",
+        "check-c42-negative", "check-c42-fuzz",
+        "check-c42-local-determinism", "check-c42-architecture",
+        "check-c42-dynamic-mutations", "check-c42-replay",
+    }
+    actual_targets = target_prerequisites("check-c42")
+    if actual_targets is None or set(actual_targets) != expected_targets:
+        failures.append("C4.2 check-c42 resolved dependency graph is incomplete")
+    actual_inputs = target_prerequisites("check-c42-build-closure")
+    if actual_inputs is None or set(actual_inputs) != set(required_sources):
+        failures.append("C4.2 resolved build-input closure differs from manifest")
 
 
 def main() -> int:

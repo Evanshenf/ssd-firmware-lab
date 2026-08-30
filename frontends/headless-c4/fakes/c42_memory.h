@@ -45,10 +45,11 @@ struct c42_fake_memory_direct_injection {
     uint8_t write_status;
     uint8_t apply_effect;
     uint8_t logical_effect;
+    uint8_t applied_effect;
     uint8_t prefix;
     uint8_t committed;
     uint8_t quiescent;
-    uint8_t reserved[2];
+    uint8_t reserved;
 };
 
 struct c42_fake_memory_mapping {

@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include "c42_reference.h"
+#include "c42_dut_bfs.h"
 #include "c42_support.h"
 
 #include <stdio.h>
@@ -698,8 +699,29 @@ static void replay_family(family_fn family)
     cut_limit = UINT32_MAX;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    struct c42_dut_bfs_summary summary = {0};
+    const char *only_family = NULL;
+
+    if (argc == 3 && strcmp(argv[1], "--family") == 0) {
+        only_family = argv[2];
+    } else if (argc != 1) {
+        fprintf(stderr, "C4.2 DUT reference FAIL: invalid arguments\n");
+        return 1;
+    }
+    if (!c42_dut_bfs_run(only_family, &summary)) {
+        return 1;
+    }
+    printf("C4.2 DUT reference BFS: PASS families=%u states=%u "
+           "transitions=%u comparisons=%u depth=%u successors=%u "
+           "caps=32768/262144/20/8 fresh-action-replay=yes\n",
+           summary.families, summary.states, summary.transitions,
+           summary.comparisons, summary.maximum_depth,
+           summary.maximum_successors);
+    if (only_family != NULL) {
+        return 0;
+    }
     replay_family(family_create);
     replay_family(family_batch);
     replay_family(family_backpressure);
@@ -715,8 +737,9 @@ int main(void)
     if (failures != 0 || families != 12) {
         return 1;
     }
-    printf("C4.2 DUT-anchored replay: PASS families=%u paths=%u nodes=%u "
-           "comparisons=%u fresh-prefix-replay=yes independent-cqe=literal-le\n",
+    printf("C4.2 fixed-scenario regressions: PASS families=%u "
+           "assertion-prefixes=%u assertion-invocations=%u checks=%u "
+           "fresh-fixture=yes literal-le-cqe=yes\n",
            families, replay_paths, nodes, comparisons);
     return 0;
 }

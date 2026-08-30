@@ -6,6 +6,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define C42_TEST_NOINLINE __attribute__((noinline))
+#else
+#define C42_TEST_NOINLINE
+#endif
+
 static int failures;
 static uint32_t executions;
 
@@ -71,7 +77,7 @@ static int reset_to_cold(struct c42_test_fixture *fixture)
            status.state == C42_CONTROL_COMMITTED;
 }
 
-static void test_admission_closed_matrix(void)
+static C42_TEST_NOINLINE void test_admission_closed_matrix(void)
 {
     static const uint32_t bad_results[] = {1, 2, 3, 4, 6, 7, 8, 9};
     static const uint32_t bad_states[] = {
@@ -139,7 +145,7 @@ static void test_admission_closed_matrix(void)
     }
 }
 
-static void test_memory_status_matrix(void)
+static C42_TEST_NOINLINE void test_memory_status_matrix(void)
 {
     uint32_t variant;
 
@@ -196,7 +202,7 @@ static void test_memory_status_matrix(void)
     }
 }
 
-static void test_completion_consume_closed_matrix(void)
+static C42_TEST_NOINLINE void test_completion_consume_closed_matrix(void)
 {
     static const uint32_t acquire_results[] = {
         FWLAB_HIF_PORT_NO_CAPACITY,
@@ -269,7 +275,7 @@ static void test_completion_consume_closed_matrix(void)
     }
 }
 
-static void test_exact_object_malformed_states(void)
+static C42_TEST_NOINLINE void test_exact_object_malformed_states(void)
 {
     struct c42_test_fixture fixture;
     struct c42_fake_command_injection injection = {0};
@@ -329,7 +335,7 @@ static uint32_t cleanup_query_total(
     return total;
 }
 
-static void test_ultra_critical_regressions(void)
+static C42_TEST_NOINLINE void test_ultra_critical_regressions(void)
 {
     struct c42_test_fixture fixture;
     struct c42_fake_command_injection injection = {0};
@@ -445,7 +451,7 @@ static void test_ultra_critical_regressions(void)
     }
 }
 
-static void test_observer_state_mapping(void)
+static C42_TEST_NOINLINE void test_observer_state_mapping(void)
 {
     struct c42_test_fixture fixture;
     struct c42_observer_v2 observer;
@@ -496,7 +502,33 @@ struct observer_coverage {
     uint8_t command[256];
     uint8_t reconcile[256];
     uint8_t notification[256];
+    uint8_t command_sequence[32];
+    uint8_t reconcile_sequence[16];
+    uint8_t notification_sequence[16];
+    uint8_t command_length;
+    uint8_t reconcile_length;
+    uint8_t notification_length;
 };
+
+static void append_state(
+    uint8_t *sequence,
+    uint8_t *length,
+    uint8_t capacity,
+    uint8_t state)
+{
+    if (*length != 0 && sequence[*length - 1u] == state) return;
+    if (*length < capacity) sequence[(*length)++] = state;
+}
+
+static int state_sequence_equal(
+    const uint8_t *actual,
+    uint8_t actual_length,
+    const uint8_t *expected,
+    size_t expected_length)
+{
+    return actual_length == expected_length &&
+           memcmp(actual, expected, expected_length) == 0;
+}
 
 static int collect_observer_coverage(
     struct c42_test_fixture *fixture,
@@ -517,10 +549,28 @@ static int collect_observer_coverage(
             coverage->notification[observer->notifications[index].state] = 1;
         }
     }
+    append_state(
+        coverage->command_sequence, &coverage->command_length,
+        sizeof(coverage->command_sequence), observer->commands[0].state
+    );
+    if (observer->reconciles[0].in_use != 0) {
+        append_state(
+            coverage->reconcile_sequence, &coverage->reconcile_length,
+            sizeof(coverage->reconcile_sequence),
+            observer->reconciles[0].state
+        );
+    }
+    if (observer->notifications[0].in_use != 0) {
+        append_state(
+            coverage->notification_sequence, &coverage->notification_length,
+            sizeof(coverage->notification_sequence),
+            observer->notifications[0].state
+        );
+    }
     return 1;
 }
 
-static void test_observer_reachable_state_coverage(void)
+static C42_TEST_NOINLINE void test_observer_reachable_state_coverage(void)
 {
     static const uint8_t expected_command[] = {
         C42_OBSERVER_COMMAND_FREE,
@@ -553,7 +603,35 @@ static void test_observer_reachable_state_coverage(void)
         C42_OBSERVER_NOTIFY_CONSUMED,
         C42_OBSERVER_NOTIFY_SUPPRESSED,
     };
-    struct observer_coverage coverage = {{0}, {0}, {0}};
+    static const uint8_t lifecycle_command[] = {
+        C42_OBSERVER_COMMAND_FREE,
+        C42_OBSERVER_COMMAND_CAPTURED,
+        C42_OBSERVER_COMMAND_PREPARE_QUERY,
+        C42_OBSERVER_COMMAND_PORT_RESERVED,
+        C42_OBSERVER_COMMAND_ADMIT_QUERY,
+        C42_OBSERVER_COMMAND_PORT_COMMITTED,
+        C42_OBSERVER_COMMAND_HIF_COMMITTED,
+        C42_OBSERVER_COMMAND_READY,
+        C42_OBSERVER_COMMAND_LEASED,
+        C42_OBSERVER_COMMAND_CONSUME_PREPARE,
+        C42_OBSERVER_COMMAND_PUB_RESERVED,
+        C42_OBSERVER_COMMAND_MARKER_RECONCILE,
+        C42_OBSERVER_COMMAND_FREE,
+    };
+    static const uint8_t lifecycle_reconcile[] = {
+        C42_OBSERVER_RECONCILE_RESERVED,
+        C42_OBSERVER_RECONCILE_PREPARED,
+        C42_OBSERVER_RECONCILE_COMMIT_UNKNOWN,
+        C42_OBSERVER_RECONCILE_CLEANUP_PENDING,
+        C42_OBSERVER_RECONCILE_RETIRE_READY,
+    };
+    static const uint8_t lifecycle_notification[] = {
+        C42_OBSERVER_NOTIFY_RESERVED,
+        C42_OBSERVER_NOTIFY_READY,
+        C42_OBSERVER_NOTIFY_ACQUIRED,
+        C42_OBSERVER_NOTIFY_CONSUMED,
+    };
+    struct observer_coverage coverage = {0};
     struct c42_test_fixture fixture;
     struct c42_fake_command_script script = {0};
     struct c42_fake_command_injection injection = {0};
@@ -601,6 +679,24 @@ static void test_observer_reachable_state_coverage(void)
               fixture.controller, &notification.token) == C42_OK &&
           collect_observer_coverage(&fixture, &coverage, &observer),
           "observer notification acquired/consumed states");
+    check(state_sequence_equal(
+              coverage.command_sequence, coverage.command_length,
+              lifecycle_command,
+              sizeof(lifecycle_command) / sizeof(lifecycle_command[0])) &&
+          state_sequence_equal(
+              coverage.reconcile_sequence, coverage.reconcile_length,
+              lifecycle_reconcile,
+              sizeof(lifecycle_reconcile) /
+                  sizeof(lifecycle_reconcile[0])) &&
+          state_sequence_equal(
+              coverage.notification_sequence, coverage.notification_length,
+              lifecycle_notification,
+              sizeof(lifecycle_notification) /
+                  sizeof(lifecycle_notification[0])),
+          "observer public states map to exact lifecycle transitions");
+    coverage.command_length = 0;
+    coverage.reconcile_length = 0;
+    coverage.notification_length = 0;
 
     executions++;
     check(c42_test_fixture_init_with_nonce(
@@ -712,7 +808,7 @@ static void test_observer_reachable_state_coverage(void)
     }
 }
 
-static void test_output_sentinels_and_poll(void)
+static C42_TEST_NOINLINE void test_output_sentinels_and_poll(void)
 {
     struct c42_test_fixture fixture;
     struct c42_fake_command_injection injection = {0};
@@ -796,7 +892,7 @@ static void test_output_sentinels_and_poll(void)
     }
 }
 
-static void test_literal_single_pass_ready_scan(void)
+static C42_TEST_NOINLINE void test_literal_single_pass_ready_scan(void)
 {
     struct c42_test_fixture fixture;
     struct c42_fake_command_script script = {0};
@@ -856,8 +952,10 @@ static void test_literal_single_pass_ready_scan(void)
                   fixture.controller, &observer) == C42_OK &&
               fixture.command.acquire_count == acquire_before + 1u &&
               observer.commands[1].state == C42_OBSERVER_COMMAND_LEASED &&
-              observer.ready_poll_pending == 1,
-              "F18 same pass notes poll and leases later READY");
+              observer.ready_poll_pending == 0 &&
+              observer.commands[0].state ==
+                  C42_OBSERVER_COMMAND_HIF_COMMITTED,
+              "F18 same pass notes demand and leases later READY");
     }
     {
         struct c42_step_result result = {0};
@@ -867,12 +965,14 @@ static void test_literal_single_pass_ready_scan(void)
               c42_observer_read_v2(
                   fixture.controller, &observer) == C42_OK &&
               observer.ready_poll_pending == 0 &&
-              observer.commands[0].state == C42_OBSERVER_COMMAND_READY,
-              "F18 pending poll is next bounded action");
+              observer.commands[0].state ==
+                  C42_OBSERVER_COMMAND_HIF_COMMITTED &&
+              observer.commands[1].state == C42_OBSERVER_COMMAND_PUB_RESERVED,
+              "F18 local consume remains ahead of provider poll");
     }
 }
 
-static void test_ack_noncommitted_rejected(void)
+static C42_TEST_NOINLINE void test_ack_noncommitted_rejected(void)
 {
     struct c42_test_fixture fixture;
     struct c42_observer_v2 observer;
@@ -913,7 +1013,7 @@ static void test_ack_noncommitted_rejected(void)
           "F13 ACK cannot consume RESERVED/BODY slot");
 }
 
-static void test_direct_memory_and_bool_outputs(void)
+static C42_TEST_NOINLINE void test_direct_memory_and_bool_outputs(void)
 {
     struct c42_test_fixture fixture;
     struct c42_queue_memory_cap cap;
@@ -1004,7 +1104,7 @@ static void test_direct_memory_and_bool_outputs(void)
           "F13 memory bool omission recovers by same-key query");
 }
 
-static void test_reset_exported_api_cuts(void)
+static C42_TEST_NOINLINE void test_reset_exported_api_cuts(void)
 {
     struct c42_test_fixture fixture;
     struct c42_queue_memory_cap cap;
@@ -1100,7 +1200,7 @@ static void test_reset_exported_api_cuts(void)
           "F14 teardown supersedes then ACK-clears candidate");
 }
 
-static void test_notification_and_raw_reset_cut(void)
+static C42_TEST_NOINLINE void test_notification_and_raw_reset_cut(void)
 {
     struct c42_test_fixture fixture;
     struct c42_notification notification = {0};
@@ -1177,7 +1277,7 @@ static int delete_queue(
            status.state == C42_CONTROL_COMMITTED;
 }
 
-static void test_sq_candidate_cq_delete(void)
+static C42_TEST_NOINLINE void test_sq_candidate_cq_delete(void)
 {
     struct c42_test_fixture fixture;
     struct c42_queue_memory_cap replacement;
@@ -1230,7 +1330,7 @@ static void test_sq_candidate_cq_delete(void)
           "F15 quiescing CQ rejects new SQ candidate");
 }
 
-static void test_scrub_retire_and_recreate(void)
+static C42_TEST_NOINLINE void test_scrub_retire_and_recreate(void)
 {
     struct c42_test_fixture fixture;
     struct c42_queue_memory_cap cap;
@@ -1334,7 +1434,7 @@ static void test_scrub_retire_and_recreate(void)
           "F16 fresh generation recreates after provider retirement");
 }
 
-static void test_scrub_abort_paths(void)
+static C42_TEST_NOINLINE void test_scrub_abort_paths(void)
 {
     struct c42_test_fixture fixture;
     struct c42_queue_memory_cap cap;
@@ -1429,12 +1529,12 @@ static void test_scrub_abort_paths(void)
         );
         descriptor = descriptor_for(&fixture, &cap, C42_QUEUE_CQ);
         direct.operation = C42_FAKE_MEMORY_SCRUB_ABORT;
-        direct.result = C42_MEMORY_IN_PROGRESS;
-        direct.omit_status = 1;
+        direct.result = C42_MEMORY_OK;
+        direct.write_status = 1;
         direct.apply_effect = 1;
-        direct.logical_effect = C42_MEMORY_RETIRED;
+        direct.logical_effect = C42_MEMORY_UNKNOWN;
+        direct.applied_effect = C42_MEMORY_RETIRED;
         direct.committed = 1;
-        direct.quiescent = 1;
         check(c42_fake_memory_map(
                   &fixture.memory, &cap, fixture.depth) == C42_OK &&
               c42_candidate_prepare(
@@ -1459,7 +1559,7 @@ static void test_scrub_abort_paths(void)
     }
 }
 
-static void test_scrub_retire_response_loss(void)
+static C42_TEST_NOINLINE void test_scrub_retire_response_loss(void)
 {
     struct c42_test_fixture fixture;
     struct c42_queue_memory_cap cap;
@@ -1477,12 +1577,12 @@ static void test_scrub_retire_response_loss(void)
     );
     descriptor = descriptor_for(&fixture, &cap, C42_QUEUE_CQ);
     direct.operation = C42_FAKE_MEMORY_SCRUB_RETIRE;
-    direct.result = C42_MEMORY_IN_PROGRESS;
-    direct.omit_status = 1;
+    direct.result = C42_MEMORY_OK;
+    direct.write_status = 1;
     direct.apply_effect = 1;
-    direct.logical_effect = C42_MEMORY_RETIRED;
+    direct.logical_effect = C42_MEMORY_UNKNOWN;
+    direct.applied_effect = C42_MEMORY_RETIRED;
     direct.committed = 1;
-    direct.quiescent = 1;
     check(c42_fake_memory_map(&fixture.memory, &cap, fixture.depth) == C42_OK &&
           c42_candidate_prepare(
               fixture.controller, &descriptor, &candidate) == C42_OK &&
@@ -1525,7 +1625,7 @@ static int bytes_are_zero(const void *value, size_t size)
     return 1;
 }
 
-static void test_v2_abi_and_observer_representation(void)
+static C42_TEST_NOINLINE void test_v2_abi_and_observer_representation(void)
 {
     struct c42_test_fixture fixture;
     union c42_test_arena arena;
@@ -1582,51 +1682,93 @@ static void test_v2_abi_and_observer_representation(void)
           "ABI observer object representation is deterministic and reserved-zero");
 }
 
-static void test_reserve_sqhd_and_ready_fairness(void)
+static C42_TEST_NOINLINE void test_reserve_sqhd_and_ready_fairness(void)
 {
     struct c42_test_fixture fixture;
     struct c42_fake_command_script script = {0};
     struct c42_snapshot snapshot = {0};
     struct c42_observer_v2 observer;
+    struct c42_cq_head_event ack = {0};
     uint8_t cqe[C42_CQE_BYTES];
     uint32_t step;
     int found_a = 0;
+    uint32_t acquire_before;
 
     executions++;
     check(c42_test_fixture_init_with_nonce(
-              &fixture, 4, 0, UINT64_C(0xa178000000000001)),
+               &fixture, 4, 0, UINT64_C(0xa178000000000001)),
           "F17/F18 fixture");
+    check(c42_test_submit(&fixture, 0, 0, 1, 160) &&
+          c42_test_submit(&fixture, 0, 1, 2, 161) &&
+          c42_test_submit(&fixture, 0, 2, 3, 162) &&
+          c42_test_run(&fixture, 256, 4) &&
+          c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
+          snapshot.cq[0].pending_or_unacked == 3,
+          "F18 establish full CQ before READY scan");
+    acquire_before = fixture.command.acquire_count;
+    check(c42_test_submit(&fixture, 0, 3, 0, 171) &&
+          c42_test_submit(&fixture, 0, 0, 1, 172),
+          "F17/F18 submit two commands while CQ is full");
+    for (step = 0; step < 128; ++step) {
+        struct c42_step_result result = {0};
+        uint16_t index;
+        uint8_t ready = 0;
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              c42_observer_read_v2(
+                  fixture.controller, &observer) == C42_OK,
+              "F18 reach two READY records behind full CQ");
+        for (index = 0; index < observer.command_capacity; ++index) {
+            if (observer.commands[index].state ==
+                    C42_OBSERVER_COMMAND_READY &&
+                (observer.commands[index].command_id == 171 ||
+                 observer.commands[index].command_id == 172)) {
+                ready++;
+            }
+        }
+        if (ready == 2) break;
+    }
+    check(step < 128 && fixture.command.acquire_count == acquire_before,
+          "F18 full CQ permits polling but no completion lease");
+
+    ack.instance_nonce = fixture.config.instance_nonce;
+    ack.controller_epoch = fixture.config.initial_controller_epoch;
+    ack.ring_generation = fixture.cq_cap[0].ring_generation;
+    ack.queue_id = 0;
+    ack.new_head = 1;
+    check(c42_cq_head_event_apply(
+              fixture.controller, &ack) == C42_OK,
+          "F18 open one CQ slot");
     script.inject_operation = C42_FAKE_COMMAND_CONSUME_PREPARE;
     script.inject_result = FWLAB_HIF_PORT_IN_PROGRESS;
-    script.inject_count = 128;
+    script.inject_count = 1000;
     script.inject_omit_outputs = 1;
     c42_fake_command_set_script(&fixture.command, &script);
-    check(c42_test_submit(&fixture, 0, 0, 1, 171) &&
-          c42_test_submit(&fixture, 0, 1, 2, 172),
-          "F17/F18 submit two same-SQ commands");
     for (step = 0; step < 128; ++step) {
         check(c42_test_run(&fixture, 1, 1),
               "F17/F18 bounded one-unit progress");
         check(c42_snapshot_read(fixture.controller, &snapshot) == C42_OK,
               "F17/F18 snapshot");
-        if (snapshot.sq[0].device_index == 2 &&
-            fixture.command.acquire_count == 2) {
+        if (snapshot.sq[0].device_index == 1 &&
+            fixture.command.acquire_count == acquire_before + 2u) {
             break;
         }
     }
-    if (step == 128 || fixture.command.acquire_count != 2) {
+    if (step == 128 ||
+        fixture.command.acquire_count != acquire_before + 2u) {
         fprintf(stderr,
-                "F18 debug: step=%u acquire=%u sqhd=%u phase=%u inject_left=%u\n",
-                step, fixture.command.acquire_count,
-                snapshot.sq[0].device_index, snapshot.phase,
-                fixture.command.script.inject_count);
+            "F18 debug: step=%u acquire=%u sqhd=%u phase=%u inject_left=%u\n",
+            step, fixture.command.acquire_count,
+            snapshot.sq[0].device_index, snapshot.phase,
+            fixture.command.script.inject_count);
     }
-    check(step < 128 && fixture.command.acquire_count == 2,
-          "F18 permanent consume delay cannot starve second READY lease");
+    check(step < 128 &&
+          fixture.command.acquire_count == acquire_before + 2u,
+          "F18 permanent consume delay cannot starve later READY lease");
     memset(&script, 0, sizeof(script));
     c42_fake_command_set_script(&fixture.command, &script);
     check(c42_test_run(&fixture, 128, 4),
-          "F17 release consume delay and publish");
+          "F17 release consume delay and publish one available slot");
     memset(&observer, 0xa5, sizeof(observer));
     check(c42_observer_read_v2(
               fixture.controller, &observer) == C42_OK &&
@@ -1635,7 +1777,7 @@ static void test_reserve_sqhd_and_ready_fairness(void)
           observer.instance_nonce == fixture.config.instance_nonce &&
           observer.command_capacity == fixture.config.command_capacity &&
           observer.cq[0].ring_generation == 1 &&
-          observer.cq[0].unacked_count == 2,
+          observer.cq[0].unacked_count == 3,
           "F17 observer v2 normalized state");
     for (step = 0; step < fixture.depth; ++step) {
         check(c42_fake_memory_read_cqe(
@@ -1643,10 +1785,10 @@ static void test_reserve_sqhd_and_ready_fairness(void)
               "F17 read CQE");
         if (get_u16(cqe + 12) == 171) {
             found_a = 1;
-            check(get_u16(cqe + 8) == 2,
+            check(get_u16(cqe + 8) == 1,
                   "F17 SQHD sampled at actual slot reserve");
             check(observer.cq[0].slots[step].command_id == 171 &&
-                  observer.cq[0].slots[step].submission_queue_head == 2 &&
+                  observer.cq[0].slots[step].submission_queue_head == 1 &&
                   memcmp(
                       observer.cq[0].slots[step].wire,
                       cqe, sizeof(cqe)) == 0,
@@ -1655,6 +1797,37 @@ static void test_reserve_sqhd_and_ready_fairness(void)
         }
     }
     check(found_a, "F17 delayed command CQE found");
+
+    executions++;
+    memset(&script, 0, sizeof(script));
+    found_a = 0;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa178000000000002)),
+          "F17 acquire-to-reserve delay fixture");
+    script.inject_operation = C42_FAKE_COMMAND_CONSUME_PREPARE;
+    script.inject_result = FWLAB_HIF_PORT_IN_PROGRESS;
+    script.inject_count = 8;
+    script.inject_omit_outputs = 1;
+    c42_fake_command_set_script(&fixture.command, &script);
+    check(c42_test_submit(&fixture, 0, 0, 1, 173) &&
+          c42_test_submit(&fixture, 0, 1, 2, 174) &&
+          c42_test_run(&fixture, 512, 1) &&
+          c42_observer_read_v2(
+              fixture.controller, &observer) == C42_OK,
+          "F17 advance second SQ head during first consume delay");
+    for (step = 0; step < fixture.depth; ++step) {
+        check(c42_fake_memory_read_cqe(
+                  &fixture.memory, 0, (uint16_t)step, cqe) == C42_OK,
+              "F17 read acquire-delay CQE");
+        if (get_u16(cqe + 12) == 173) {
+            found_a = 1;
+            check(get_u16(cqe + 8) == 2 &&
+                  observer.cq[0].slots[step].submission_queue_head == 2,
+                  "F17 acquire snapshot cannot replace reserve-time SQHD");
+            break;
+        }
+    }
+    check(found_a, "F17 acquire-delay command CQE found");
 }
 
 int main(void)

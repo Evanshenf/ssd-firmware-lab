@@ -81,11 +81,24 @@ def run(command: list[str], timeout: int = 300) -> subprocess.CompletedProcess[s
 
 
 def origin_encodes_raw(text: str) -> bool:
-    return re.search(
+    if re.search(
         r"origin\.word\s*\[[01]\]\s*=\s*[^;]*\b"
         r"(?:command_id|queue_id|cid|qid|sqid|raw)\b",
         text,
-    ) is not None
+    ) is not None:
+        return True
+    assignment = re.compile(
+        r"\b([A-Za-z_]\w*)\s*=\s*[^;]*\b"
+        r"(?:command_id|queue_id|cid|qid|sqid|raw)\b[^;]*;"
+    )
+    for match in assignment.finditer(text):
+        alias = re.escape(match.group(1))
+        local_tail = text[match.end():match.end() + 2048]
+        if re.search(
+                rf"origin\.word\s*\[[01]\]\s*=\s*[^;]*\b{alias}\b",
+                local_tail):
+            return True
+    return False
 
 
 def hif_mints_handle(text: str) -> bool:
@@ -181,7 +194,8 @@ def source_mutations() -> list[dict[str, object]]:
             "needle": "HIF origin encodes a raw queue identity",
             "edits": [("frontends/headless-c4/hif/c42_queue.c",
                        "command->origin.word[1] = origin_uid;",
-                       "command->origin.word[1] = command->command_id;")],
+                       "uint64_t raw_identity_value = command->command_id;\n"
+                       "    command->origin.word[1] = raw_identity_value;")],
         },
         {
             "name": "AM_HIF_MINTS_GRAPH_HANDLE",

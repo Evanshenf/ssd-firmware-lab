@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -75,9 +76,20 @@ def mutations() -> list[dict[str, object]]:
                     "        return C42_INVALID;\n"
                     "    }")]},
         {"name": "BM_SQHD_AT_CAPTURE", "target": "c42_remediation_unit",
-         "edits": [("frontends/headless-c4/hif/c42_publication.c",
-                    "    command->sqhd_snapshot = sq->device_head;",
-                    "    command->sqhd_snapshot = 0;")]},
+         "edits": [
+             ("frontends/headless-c4/hif/c42_publication.c",
+              "    command->intent = intent;\n"
+              "    command->lease = lease;\n"
+              "    command->state = C42_COMMAND_LEASED;",
+              "    command->intent = intent;\n"
+              "    command->lease = lease;\n"
+              "    command->sqhd_snapshot =\n"
+              "        controller->sq[command->sq_index].device_head;\n"
+              "    command->state = C42_COMMAND_LEASED;"),
+             ("frontends/headless-c4/hif/c42_publication.c",
+              "    command->sqhd_snapshot = sq->device_head;",
+              "    (void)command->sqhd_snapshot;"),
+         ]},
         {"name": "BM_CQ_OVERWRITE_FULL", "target": "c42_publication_unit",
          "edits": [("frontends/headless-c4/hif/c42_publication.c",
                     "    if (cq->life != C42_QUEUE_LIVE ||\n"
@@ -114,13 +126,22 @@ def mutations() -> list[dict[str, object]]:
                     "        return progress_marker(controller, command_index);\n"
                     "    }")]},
         {"name": "BM_CID_RELEASE_BEFORE_CROSS_COMMIT", "target": "c42_publication_unit",
-         "edits": [("frontends/headless-c4/hif/c42_publication.c",
-                    "    command->state = C42_COMMAND_MARKER_RECONCILE;\n"
-                    "    slot->state = C42_SLOT_MARKER_VISIBLE_RECONCILE;",
-                    "    c42_release_command_record(controller,\n"
-                    "        (uint16_t)(command - controller->commands));\n"
-                    "    command->state = C42_COMMAND_MARKER_RECONCILE;\n"
-                    "    slot->state = C42_SLOT_MARKER_VISIBLE_RECONCILE;")]},
+         "edits": [
+             ("frontends/headless-c4/hif/c42_identity.c",
+              "    return (command->state >= C42_COMMAND_HIF_COMMITTED &&\n"
+              "            command->state <= C42_COMMAND_RELEASE_RECONCILE) ||\n"
+              "           command->state == C42_COMMAND_CONSUME_POISON_HOLD;",
+              "    return (command->state >= C42_COMMAND_HIF_COMMITTED &&\n"
+              "            command->state <= C42_COMMAND_RELEASE_RECONCILE &&\n"
+              "            command->state != C42_COMMAND_MARKER_RECONCILE) ||\n"
+              "           command->state == C42_COMMAND_CONSUME_POISON_HOLD;"),
+             ("frontends/headless-c4/hif/c42_queue.c",
+              "        if (command->state != C42_COMMAND_FREE &&\n"
+              "            command->sq_index == sq_index &&",
+              "        if (command->state != C42_COMMAND_FREE &&\n"
+              "            command->state != C42_COMMAND_MARKER_RECONCILE &&\n"
+              "            command->sq_index == sq_index &&"),
+         ]},
         {"name": "BM_CID_HELD_UNTIL_HOST_ACK", "target": "c42_identity_unit",
          "edits": [("frontends/headless-c4/hif/c42_publication.c",
                     "    c42_release_command_record(controller, command_index);",
@@ -174,6 +195,30 @@ def mutations() -> list[dict[str, object]]:
     ]
 
 
+MUTANT_FAMILY = {
+    "BM_HEAD_ADVANCES_BEFORE_ADMISSION_RECONCILE": "F04-sq-invalid-cid",
+    "BM_REREAD_SQE_ON_BACKPRESSURE": "F03-capture-backpressure",
+    "BM_DUPLICATE_CID_ALLOWED": "F04-sq-invalid-cid",
+    "BM_MATCH_CID_WITHOUT_RING_GENERATION": "F08-cid-reuse-target",
+    "BM_INVALID_TAIL_REMAINS_LIVE": "F04-sq-invalid-cid",
+    "BM_SQHD_AT_CAPTURE": "F05-delayed-out-of-order",
+    "BM_CQ_OVERWRITE_FULL": "F07-cq-full-lease",
+    "BM_PHASE_TOGGLE_ON_ACK": "F06-cq-phase-ack",
+    "BM_MARKER_VISIBLE_BEFORE_BODY": "F09-publication-faults",
+    "BM_CONSUME_COMMIT_BEFORE_MARKER": "F09-publication-faults",
+    "BM_CID_RELEASE_BEFORE_CROSS_COMMIT": "F08-cid-reuse-target",
+    "BM_CID_HELD_UNTIL_HOST_ACK": "F08-cid-reuse-target",
+    "BM_ACK_NONCOMMITTED_SLOT": "F04-sq-invalid-cid",
+    "BM_BLIND_REWRITE_UNKNOWN_MARKER": "F09-publication-faults",
+    "BM_NOTIFY_BEFORE_CROSS_COMMIT": "F09-publication-faults",
+    "BM_DELETE_CQ_WITH_UNACKED": "F10-delete-tombstone",
+    "BM_CREATE_LIVE_BEFORE_SCRUB": "F01-create-contract",
+    "BM_RECREATE_BEFORE_TOMBSTONE_CLEAR": "F10-delete-tombstone",
+    "BM_RESET_REOPEN_BEFORE_REVOKE": "F11-reset-teardown",
+    "BM_DELETE_DROPS_DOORBELLED_SQE": "F10-delete-tombstone",
+}
+
+
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -195,7 +240,14 @@ def replace_unique(path: Path, before: str, after: str) -> None:
     path.write_text(changed, encoding="utf-8")
 
 
-def build_binary(root: Path, compiler: str, target: str, output: Path) -> bytes:
+def build_binary(
+    root: Path,
+    compiler: str,
+    target: str,
+    output: Path,
+    arguments: tuple[str, ...] = (),
+    expected_family: str | None = None,
+) -> bytes:
     make_target = output / target
     build = subprocess.run(
         ["make", "-C", str(root / "frontends/headless-c4"),
@@ -206,16 +258,37 @@ def build_binary(root: Path, compiler: str, target: str, output: Path) -> bytes:
     if build.returncode != 0 or not make_target.is_file():
         raise RuntimeError(f"{compiler}/{target} compile failed:\n{build.stdout}")
     run = subprocess.run(
-        [str(make_target)], cwd=root, check=False,
+        [str(make_target), *arguments], cwd=root, check=False,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120,
     )
     if run.returncode == 0:
         raise RuntimeError(f"mutant escaped: {compiler}/{target}")
-    if run.returncode != 1 or b"FAIL:" not in run.stdout:
+    expected = None if expected_family is None else (
+        f"C4.2 DUT reference FAIL: family={expected_family} path=".encode()
+    )
+    if run.returncode != 1 or b"FAIL:" not in run.stdout or (
+            expected is not None and expected not in run.stdout):
         raise RuntimeError(
             f"mutant died without an oracle mismatch: {compiler}/{target}: "
             f"return={run.returncode}\n{run.stdout.decode(errors='replace')}"
         )
+    if expected_family is not None:
+        pattern = re.compile(
+            rb"C4\.2 DUT reference FAIL: family=" +
+            re.escape(expected_family.encode()) + rb" path=([^ \r\n]+)"
+        )
+        paths = pattern.findall(run.stdout)
+        if len(paths) != 1:
+            raise RuntimeError(
+                f"{compiler}/{target} did not emit one named reference path:\n"
+                f"{run.stdout.decode(errors='replace')}"
+            )
+        path = paths[0].decode(errors="strict")
+        if path not in ("<bootstrap>", "<root>") and \
+                len(path.split(">")) > 20:
+            raise RuntimeError(
+                f"{compiler}/{target} counterexample exceeds depth 20: {path}"
+            )
     return run.stdout
 
 
@@ -244,6 +317,7 @@ def main() -> int:
             raise RuntimeError(f"unknown mutation selection: {args.only}")
         for mutation in selected:
             name = str(mutation["name"])
+            family = MUTANT_FAMILY[name]
             allowed = {str(edit[0]) for edit in mutation["edits"]}
             with tempfile.TemporaryDirectory(
                     prefix=f"c42-mutant-{name.lower()}-") as directory:
@@ -272,11 +346,16 @@ def main() -> int:
                     )
                     replay_output = build_binary(
                         mutant_root, compiler, "c42_dut_replay",
-                        Path(directory) / f"build-{compiler}"
+                        Path(directory) / f"build-{compiler}",
+                        ("--family", family), family
                     )
                     outputs.append(selected_output + replay_output)
                 if outputs[0] != outputs[1]:
-                    raise RuntimeError(f"{name} GCC/Clang mismatch differs")
+                    raise RuntimeError(
+                        f"{name} GCC/Clang mismatch differs:\n"
+                        f"--- gcc ---\n{outputs[0].decode(errors='replace')}\n"
+                        f"--- clang ---\n{outputs[1].decode(errors='replace')}"
+                    )
                 total += 1
                 print(f"C4.2 production mutant {name}: PASS")
     except (OSError, RuntimeError, subprocess.CalledProcessError,
