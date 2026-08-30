@@ -59,6 +59,7 @@ static int test_reset_boundary(enum c35_lane lane)
     struct c35_semantic_result semantic;
     uint8_t uuid[16];
     unsigned int reset;
+    unsigned int denial;
     int ok;
 
     CHECK(storage != NULL && runtime != NULL);
@@ -84,17 +85,33 @@ static int test_reset_boundary(enum c35_lane lane)
     }
     CHECK(counter.calls[C35_LIFECYCLE_CUT_RESET_BEGIN] == 15);
     CHECK(fwlab_c31_phase(runtime->lifecycle) == FWLAB_C31_INSTANCE_READY);
-    CHECK(c35_reset_start(&runtime->headless, &token) == C35_OK);
-    CHECK(c35_operation_finalize(
-        &runtime->headless, &token, &status) == C35_OK);
-    CHECK(status.outcome == C35_COUNTER_EXHAUSTED &&
-          status.commit_state == C35_COMMIT_NOT_STARTED &&
-          status.cleanup_state == C35_CLEANUP_NONE &&
-          status.service_phase == C35_SERVICE_READY &&
-          !status.publication_valid);
+    for (denial = 0; denial < 497; ++denial) {
+        CHECK(c35_reset_start(&runtime->headless, &token) == C35_OK);
+        CHECK(c35_operation_finalize(
+            &runtime->headless, &token, &status) == C35_OK);
+        CHECK(status.outcome == C35_COUNTER_EXHAUSTED &&
+              status.commit_state == C35_COMMIT_NOT_STARTED &&
+              status.cleanup_state == C35_CLEANUP_NONE &&
+              status.service_phase == C35_SERVICE_READY &&
+              !status.publication_valid);
+        CHECK(c35_operation_retire(&runtime->headless, &token) == C35_OK);
+    }
+    CHECK(runtime->headless.next_control_uid == 513 &&
+          runtime->headless.next_teardown_uid == 1);
+    {
+        struct c35_headless before = runtime->headless;
+        struct c35_operation_token rejected;
+        struct c35_operation_token rejected_before;
+
+        memset(&rejected, 0xa5, sizeof(rejected));
+        rejected_before = rejected;
+        CHECK(c35_reset_start(&runtime->headless, &rejected) ==
+              C35_COUNTER_EXHAUSTED);
+        CHECK(memcmp(&before, &runtime->headless, sizeof(before)) == 0 &&
+              memcmp(&rejected, &rejected_before, sizeof(rejected)) == 0);
+    }
     CHECK(counter.calls[C35_LIFECYCLE_CUT_RESET_BEGIN] == 15);
     CHECK(fwlab_c31_phase(runtime->lifecycle) == FWLAB_C31_INSTANCE_READY);
-    CHECK(c35_operation_retire(&runtime->headless, &token) == C35_OK);
     CHECK(c35_run_command(runtime, &request, &semantic));
     ok = c35_runtime_teardown(runtime) && !runtime->claimed;
     if (lane != C35_LANE_SCRIPTED)
@@ -199,6 +216,99 @@ static int low_teardown(struct low_fixture *fixture)
     free(fixture->arena);
     memset(fixture, 0, sizeof(*fixture));
     return ok;
+}
+
+static int low_finalizer_finish(struct low_fixture *fixture)
+{
+    struct c35_finalizer finalizer;
+    struct c35_operation_token token;
+    struct c35_operation_status status;
+    bool quiescent = false;
+    unsigned int iteration;
+    enum c35_result result;
+
+    memset(&finalizer, 0, sizeof(finalizer));
+    CHECK(c35_finalizer_start(
+        &finalizer, &fixture->headless, NULL,
+        fixture->headless.instance_nonce, &token) == C35_OK);
+    result = C35_IN_PROGRESS;
+    for (iteration = 0; iteration < 16384 && result == C35_IN_PROGRESS;
+         ++iteration) {
+        result = c35_finalizer_progress(&finalizer, &token, 1, &status);
+    }
+    CHECK(result == C35_OK && status.outcome == C35_OK &&
+          status.commit_state == C35_COMMIT_COMMITTED &&
+          status.cleanup_state == C35_CLEANUP_COMPLETE &&
+          finalizer.headless_retired && !finalizer.pending_retire &&
+          finalizer.bundle_released);
+    CHECK(c35_finalizer_retire(&finalizer, &token) == C35_OK);
+    CHECK(!fixture->headless.compat_active &&
+          !fixture->headless.compat_tombstone_valid &&
+          !fixture->headless.control_active &&
+          !fixture->headless.previous_control_used &&
+          fixture->headless.binding.ops->quiescent(
+              fixture->headless.binding.context, &quiescent) == C35_OK &&
+          quiescent &&
+          fwlab_c31_phase(fixture->lifecycle) == FWLAB_C31_INSTANCE_DEAD);
+    return 1;
+}
+
+static int test_teardown_reserve_low_limit(void)
+{
+    struct low_fixture fixture;
+    struct c35_publication publication;
+    struct c35_operation_status status;
+    struct c35_operation_token reset_token;
+
+    CHECK(low_open(&fixture, LOW_COMMAND_UID));
+    fixture.headless.control_uid_limit = 1;
+    CHECK(c35_headless_reset_status(
+        &fixture.headless, 0, &publication, &status) == C35_IN_PROGRESS);
+    CHECK(c35_headless_compat_query(
+        &fixture.headless, &reset_token, &status) == C35_IN_PROGRESS &&
+          reset_token.kind == C35_OPERATION_RESET && reset_token.uid == 1 &&
+          fixture.headless.next_control_uid == 2 &&
+          fixture.headless.next_teardown_uid == 1);
+    CHECK(low_finalizer_finish(&fixture));
+    free(fixture.arena);
+
+    CHECK(low_open(&fixture, LOW_COMMAND_UID));
+    fixture.headless.control_uid_limit = 1;
+    fixture.headless.controller_epoch_limit = 2;
+    CHECK(c35_headless_reset_status(
+        &fixture.headless, 16384, &publication, &status) == C35_OK &&
+          fixture.headless.owner_epoch == 2 &&
+          fixture.headless.next_control_uid == 2);
+    CHECK(low_finalizer_finish(&fixture));
+    free(fixture.arena);
+    return 1;
+}
+
+static int test_teardown_admission_nonmutation(void)
+{
+    struct low_fixture fixture;
+    struct c35_publication publication;
+    struct c35_operation_status status;
+    struct c35_operation_token token;
+    struct c35_operation_token token_before;
+    struct c35_headless before;
+
+    CHECK(low_open(&fixture, LOW_COMMAND_UID));
+    fixture.headless.control_uid_limit = 1;
+    CHECK(c35_headless_reset_status(
+        &fixture.headless, 0, &publication, &status) == C35_IN_PROGRESS);
+    fixture.headless.next_teardown_uid = 2;
+    before = fixture.headless;
+    memset(&token, 0x5a, sizeof(token));
+    token_before = token;
+    CHECK(c35_teardown_start(&fixture.headless, &token) ==
+          C35_COUNTER_EXHAUSTED);
+    CHECK(memcmp(&before, &fixture.headless, sizeof(before)) == 0 &&
+          memcmp(&token, &token_before, sizeof(token)) == 0);
+    fixture.headless.next_teardown_uid = 1;
+    CHECK(low_finalizer_finish(&fixture));
+    free(fixture.arena);
+    return 1;
 }
 
 static int test_runtime_limit(enum low_limit_kind kind)
@@ -669,6 +779,8 @@ int main(void)
     CHECK(test_runtime_limit(LOW_OPERATION_GENERATION));
     CHECK(test_runtime_limit(LOW_LEASE_GENERATION));
     CHECK(test_ticket_limit());
+    CHECK(test_teardown_reserve_low_limit());
+    CHECK(test_teardown_admission_nonmutation());
     CHECK(test_credit_guards());
     CHECK(test_c35_uid_limits());
     CHECK(test_scripted_scenario_limit());
@@ -677,7 +789,8 @@ int main(void)
     CHECK(test_live_physical_boundary(C35_LANE_POSIX));
     CHECK(test_reset_registration_reuse(C35_LANE_SCRIPTED));
     CHECK(test_reset_registration_reuse(C35_LANE_MEMORY));
-    puts("C3.5a limits/cleanup: PASS (15+1 resets x S/M/B/P; "
+    puts("C3.5c limits/cleanup: PASS (15+497+1 reset UID boundary x S/M/B/P; "
+         "independent teardown reserve; low-limit nonmutation; "
          "command/slot/op/lease/ticket fault teardown; guarded credits/UIDs; "
          "live inner30/physical16/record14 boundary)");
     return 0;

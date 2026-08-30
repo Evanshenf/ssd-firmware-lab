@@ -533,6 +533,82 @@ static int test_permanent_retire_retention(void)
     return 1;
 }
 
+static int test_permanent_retire_finalizer(void)
+{
+    struct fixture fixture;
+    struct c35_binding native;
+    struct c35_binding_ops failing_ops;
+    struct c35_request request = c35_request_read(0);
+    struct fwlab_c31_command_handle command;
+    struct c35_semantic_result semantic;
+    struct fwlab_c31_completion_intent intent;
+    struct c35_publication completion;
+    struct c35_publication teardown;
+    struct c35_operation_status status;
+    struct c35_operation_token pending;
+    struct c35_finalizer before_zero;
+
+    CHECK(fixture_open(&fixture, C35_LANE_POSIX));
+    CHECK(c35_headless_submit(
+        &fixture.runtime->headless, &request, &command) == C35_OK);
+    native = fixture.runtime->headless.binding;
+    failing_ops = *native.ops;
+    failing_ops.transaction_retire = always_fail_retire;
+    fixture.runtime->headless.binding.ops = &failing_ops;
+    CHECK(c35_headless_complete_status(
+        &fixture.runtime->headless, &command, 16384, &semantic, &intent,
+        &completion, &status) == C35_NO_CAPACITY);
+    CHECK(compat_token(
+        &fixture.runtime->headless, C35_OPERATION_COMPLETION, &pending,
+        &status));
+
+    CHECK(!c35_runtime_teardown(fixture.runtime));
+    CHECK(fixture.runtime->finalizer.used &&
+          fixture.runtime->finalizer.phase == C35_FINALIZER_PENDING_RETIRE &&
+          fixture.runtime->finalizer.pending_retire &&
+          fixture.runtime->claimed && fixture.storage->bundle.claimed &&
+          fixture.storage->fd >= 0 &&
+          c35_headless_compat_query(
+              &fixture.runtime->headless, &pending, &status) ==
+              C35_NOT_FOUND);
+    CHECK(c35_operation_query(
+        &fixture.runtime->headless, &pending, &status) == C35_OK &&
+          status.cleanup_state == C35_CLEANUP_PENDING &&
+          status.publication_valid &&
+          memcmp(&status.publication, &completion, sizeof(completion)) == 0);
+    CHECK(c35_finalizer_query(
+        &fixture.runtime->finalizer, &fixture.runtime->finalizer.token,
+        &status) == C35_IN_PROGRESS && status.publication_valid);
+    teardown = status.publication;
+
+    before_zero = fixture.runtime->finalizer;
+    CHECK(c35_finalizer_progress(
+        &fixture.runtime->finalizer, &fixture.runtime->finalizer.token, 0,
+        &status) == C35_IN_PROGRESS);
+    CHECK(memcmp(&before_zero, &fixture.runtime->finalizer,
+                 sizeof(before_zero)) == 0 &&
+          memcmp(&status.publication, &teardown, sizeof(teardown)) == 0);
+    CHECK(c35_finalizer_progress(
+        &fixture.runtime->finalizer, &fixture.runtime->finalizer.token, 1,
+        &status) == C35_IN_PROGRESS);
+    CHECK(fixture.runtime->finalizer.phase == C35_FINALIZER_PENDING_RETIRE &&
+          fixture.runtime->finalizer.pending_retire &&
+          !fixture.runtime->finalizer.bundle_released &&
+          fixture.storage->bundle.claimed &&
+          memcmp(&status.publication, &teardown, sizeof(teardown)) == 0);
+    CHECK(c35_operation_query(
+        &fixture.runtime->headless, &pending, &status) == C35_OK &&
+          memcmp(&status.publication, &completion, sizeof(completion)) == 0);
+
+    fixture.runtime->headless.binding = native;
+    CHECK(c35_runtime_teardown(fixture.runtime));
+    CHECK(!fixture.runtime->claimed && !fixture.storage->bundle.claimed &&
+          !fixture.runtime->finalizer.used &&
+          no_headless_residue(&fixture.runtime->headless));
+    CHECK(fixture_close(&fixture));
+    return 1;
+}
+
 int main(void)
 {
     CHECK(test_invalid_contract());
@@ -543,7 +619,8 @@ int main(void)
     CHECK(test_completed_teardown_adoption());
     CHECK(test_retire_faults());
     CHECK(test_permanent_retire_retention());
-    puts("C3.5b wrapper recovery: PASS (zero/short budget; same-token retry; "
-         "4-kind finalizer takeover; retire before/after/permanent faults)");
+    CHECK(test_permanent_retire_finalizer());
+    puts("C3.5c wrapper recovery: PASS (zero/short budget; same-token retry; "
+         "4-kind takeover; retire before/after/permanent wrapper+finalizer)");
     return 0;
 }

@@ -1,14 +1,15 @@
 <!-- SPDX-FileCopyrightText: 2026 Evanshenf -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
-# C3.5b wrapper-recoverable headless firmware remediation
+# C3.5c teardown-reserved headless firmware remediation
 
-> **Review status:** `REVIEW_HOLD / C3.5b REVIEW_PENDING`. C3.5a closed the
-> original trace-arithmetic and finite-reset defects, but targeted review found
-> that exported convenience wrappers could still hide their recovery token or
-> retirement failure. C3.5b addresses that follow-up; the hold remains until a
-> new evidence pair and targeted review are complete. The original finding is
-> recorded in the [public hold record](../../docs/results/2026-08-29-c3-5-review-hold.md).
+> **Review status:** `REVIEW_HOLD / C3.5c REVIEW_PENDING`. C3.5b made wrapper
+> tokens and retirement failure resumable, but targeted review found that reset
+> and teardown still shared one finite control-token counter. C3.5c gives
+> teardown an independent cleanup reserve and makes takeover admission
+> failure-atomic. The hold remains until a new evidence pair and targeted review
+> are complete. The original finding is recorded in the
+> [public hold record](../../docs/results/2026-08-29-c3-5-review-hold.md).
 
 This directory composes the frozen C3.1 lifecycle, C3.2 persistence policy,
 C3.3 programmable NAND controller and C3.4 mapping/file media behind a
@@ -41,9 +42,10 @@ submit_start / completion_start / reset_start / teardown_start
 
 `progress(..., 0)` is valid and does not mutate the instance. Final outcome,
 commit state, cleanup state, source layer/raw code, retry class and immutable
-publication remain queryable until explicit retirement. Data-operation and
-control-operation UID domains are separate, so business UID exhaustion cannot
-consume the teardown path.
+publication remain queryable until explicit retirement. Data-operation, reset
+and teardown UID domains are separate. The teardown domain contains one
+instance-lifetime cleanup token that reset wrappers and epoch denials cannot
+consume.
 
 The bounded compatibility wrappers use that same API and keep one explicit,
 caller-serialized recovery slot. `c35_headless_compat_query()` returns the
@@ -57,6 +59,11 @@ teardown work. It retires the headless teardown and any superseded wrapper
 token before bundle release. A completed headless teardown leaves a small
 adoption tombstone, so reaching C31 `DEAD` cannot strand a still-claimed
 storage bundle.
+
+Teardown proves its dedicated token capacity before moving, finishing or
+clearing an active reset. A capacity rejection is bitwise non-mutating.
+Reset-token exhaustion can therefore reject further reset identities without
+removing the independent path to C31 `DEAD` and bundle release.
 
 Binding v2 uses stable transaction IDs and explicit prepare/commit/query/abort
 or prepare/query/ACK ledgers. The permanent ordering is:
@@ -158,7 +165,9 @@ The remediation gates include:
 - checked/canary trace bounds and publication-UID idempotence;
 - forged trace-metadata rejection and encoded-generation coherence;
 - zero/short-budget recovery for all four wrapper families, explicit
-  before/after retirement errors and runtime-finalizer takeover;
+  before/after/permanent retirement errors and runtime-finalizer takeover;
+- minimum-capacity and fixed 512-reset-UID boundaries with an independent
+  teardown reserve, plus mutate-before-admit nonmutation;
 - 80 before/after-effect, zero-budget and repeated-finalize transaction cuts;
 - teardown takeover from six C31 command states, consume before/after and five
   reset phases;
@@ -169,7 +178,7 @@ The remediation gates include:
 - exact provider/profile/malformed-table and observer non-authority cases;
 - M/B/P two-atom write/trim with two rebuilds and exact semantic/raw/container
   comparison;
-- 16 legacy composition invariants plus 16 remediation invariants, with one
+- 16 legacy composition invariants plus 18 remediation invariants, with one
   shortest counterexample per named mutation;
 - all 924 unique 6+6 actor-choice strings across two families and three
   provider pairs: 5,544 fresh live executions, 20,586 within-matrix unique

@@ -47,6 +47,8 @@ static const char *const invariant_names[C35A_MODEL_FAMILIES] = {
     "A-FINALIZE-IDEMPOTENT",
     "A-WRAPPER-TOKEN-RETAINED",
     "A-RETIRE-ERROR-VISIBLE",
+    "A-TEARDOWN-RESERVE",
+    "A-TEARDOWN-ADMIT-FIRST",
 };
 
 static const char *const mutation_names[C35A_MODEL_FAMILIES] = {
@@ -66,6 +68,8 @@ static const char *const mutation_names[C35A_MODEL_FAMILIES] = {
     "BM_RELEASE_AFTER_MUTATION_RETRIES_RAW",
     "BM_WRAPPER_DROPS_TOKEN",
     "BM_RETIRE_ERROR_RETURNS_SUCCESS",
+    "BM_RESET_CONSUMES_TEARDOWN_RESERVE",
+    "BM_TAKEOVER_MUTATES_BEFORE_ADMIT",
 };
 
 const char *c35a_invariant_name(unsigned int family)
@@ -297,6 +301,21 @@ static unsigned int successors(
             add_successor(out, &count, &next, "retire-reconcile");
         }
         break;
+    case 16: /* reset denial cannot consume teardown reserve */
+        next.stage = 1; next.x = mutant ? 0 : 1; next.y = 1;
+        next.terminal = 1;
+        add_successor(out, &count, &next, "reset-domain-exhausted");
+        break;
+    case 17: /* capacity proof precedes takeover mutation */
+        if (source->stage == 0) {
+            next.stage = 1; next.x = 1;
+            add_successor(out, &count, &next, "active-reset");
+        } else {
+            next.stage = 2; next.y = 1; next.terminal = 1;
+            if (mutant) next.x = 0;
+            add_successor(out, &count, &next, "teardown-admission-fails");
+        }
+        break;
     default:
         break;
     }
@@ -327,6 +346,9 @@ static int invariant_holds(
     case 13: return state->x <= 1;
     case 14: return !(state->y && !state->x);
     case 15: return !(state->y && state->z);
+    case 16:
+    case 17:
+        return !(state->y && !state->x);
     default: return 0;
     }
 }

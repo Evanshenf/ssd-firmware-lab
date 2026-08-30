@@ -173,9 +173,11 @@ struct c35_headless {
     uint64_t next_request;
     uint64_t next_operation_uid;
     uint64_t next_control_uid;
+    uint64_t next_teardown_uid;
     uint64_t request_uid_limit;
     uint64_t operation_uid_limit;
     uint64_t control_uid_limit;
+    uint64_t teardown_uid_limit;
     uint32_t owner_epoch;
     uint32_t controller_epoch_limit;
     uint8_t actor;

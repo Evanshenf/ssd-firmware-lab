@@ -247,6 +247,13 @@ static int control_token_available(const struct c35_headless *headless)
            headless->next_control_uid <= UINT32_MAX;
 }
 
+static int teardown_token_available(const struct c35_headless *headless)
+{
+    return headless->next_teardown_uid != 0 &&
+           headless->next_teardown_uid <= headless->teardown_uid_limit &&
+           headless->next_teardown_uid <= UINT32_MAX;
+}
+
 static enum c35_result token_allocate(
     struct c35_headless *headless,
     uint8_t kind,
@@ -273,6 +280,7 @@ static enum c35_result control_token_allocate(
 {
     uint64_t uid;
 
+    if (kind != C35_OPERATION_RESET) return C35_INVALID;
     if (!control_token_available(headless)) return C35_COUNTER_EXHAUSTED;
     uid = headless->next_control_uid++;
     memset(token, 0, sizeof(*token));
@@ -280,6 +288,23 @@ static enum c35_result control_token_allocate(
     token->uid = uid;
     token->generation = (uint32_t)uid;
     token->kind = kind;
+    return C35_OK;
+}
+
+static enum c35_result teardown_token_prepare(
+    const struct c35_headless *headless,
+    struct c35_operation_token *token
+)
+{
+    uint64_t uid;
+
+    if (!teardown_token_available(headless)) return C35_COUNTER_EXHAUSTED;
+    uid = headless->next_teardown_uid;
+    memset(token, 0, sizeof(*token));
+    token->instance_nonce = headless->instance_nonce;
+    token->uid = uid;
+    token->generation = (uint32_t)uid;
+    token->kind = C35_OPERATION_TEARDOWN;
     return C35_OK;
 }
 
@@ -316,6 +341,7 @@ static enum c35_result control_allocate(
     struct c35_operation_token *token
 )
 {
+    if (kind != C35_OPERATION_RESET) return C35_INVALID;
     if (headless->control_active) return C35_WRONG_STATE;
     memset(&headless->control, 0, sizeof(headless->control));
     if (control_token_allocate(headless, kind, token) != C35_OK)
@@ -496,9 +522,11 @@ enum c35_result c35_headless_init(
     headless->next_request = 1;
     headless->next_operation_uid = 1;
     headless->next_control_uid = 1;
+    headless->next_teardown_uid = 1;
     headless->request_uid_limit = request_uid_limit;
     headless->operation_uid_limit = operation_uid_limit;
     headless->control_uid_limit = operation_uid_limit;
+    headless->teardown_uid_limit = 1;
     headless->owner_epoch = owner_epoch;
     headless->controller_epoch_limit = controller_epoch_limit;
     headless->actor = actor;
@@ -595,6 +623,7 @@ enum c35_result c35_teardown_start(
     struct c35_operation_token *token
 )
 {
+    struct c35_operation_token prepared;
     enum c35_result result;
 
     if (headless == NULL || token == NULL ||
@@ -603,6 +632,10 @@ enum c35_result c35_teardown_start(
         if (headless->control.kind == C35_OPERATION_TEARDOWN)
             return C35_WRONG_STATE;
         if (headless->previous_control_used) return C35_NO_CAPACITY;
+    }
+    result = teardown_token_prepare(headless, &prepared);
+    if (result != C35_OK) return result;
+    if (headless->control_active) {
         headless->previous_control = headless->control;
         headless->previous_control_used = 1;
         if (!headless->previous_control.finished) {
@@ -625,8 +658,16 @@ enum c35_result c35_teardown_start(
         memset(&headless->control, 0, sizeof(headless->control));
         headless->control_active = 0;
     }
-    result = control_allocate(headless, C35_OPERATION_TEARDOWN, token);
-    if (result != C35_OK) return result;
+    memset(&headless->control, 0, sizeof(headless->control));
+    headless->control.used = 1;
+    headless->control.kind = C35_OPERATION_TEARDOWN;
+    headless->control.token = prepared;
+    headless->control.outcome = C35_IN_PROGRESS;
+    headless->control.commit_state = C35_COMMIT_NOT_STARTED;
+    headless->control.cleanup_state = C35_CLEANUP_NONE;
+    headless->control_active = 1;
+    ++headless->next_teardown_uid;
+    *token = prepared;
     if (headless->active_slot != C35_NO_ACTIVE_SLOT)
         headless->operation[headless->active_slot].superseded = 1;
     headless->control.phase = C35_TEARDOWN_ALIGN;

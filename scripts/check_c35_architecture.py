@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Audit the C3.5b portable-core archive, final links, and projections."""
+"""Audit the C3.5c portable-core archive, final links, and projections."""
 
 from __future__ import annotations
 
@@ -191,6 +191,21 @@ def audit_headless_boundary() -> None:
     if "test_wrapper_recovery.c" not in makefile or \
             "$(WRAPPER_BIN)" not in makefile:
         fail("wrapper recovery test is outside the standard check gate")
+    for token in ("next_teardown_uid", "teardown_uid_limit"):
+        if token not in header or token not in source:
+            fail(f"missing protected teardown token domain: {token}")
+    teardown_start = source.index("enum c35_result c35_teardown_start")
+    teardown_end = source.index("static void fault_if_needed", teardown_start)
+    teardown_body = source[teardown_start:teardown_end]
+    proof = teardown_body.find("teardown_token_prepare")
+    mutations = [position for position in (
+        teardown_body.find("headless->previous_control ="),
+        teardown_body.find("memset(&headless->control"),
+    ) if position >= 0]
+    if proof < 0 or not mutations or proof > min(mutations):
+        fail("teardown mutates active control before capacity proof")
+    if "control_allocate(headless, C35_OPERATION_TEARDOWN" in source:
+        fail("reset and teardown still share the control-token allocator")
 
     with tempfile.TemporaryDirectory(prefix="c35a-headless-") as directory:
         for name in ("c35_headless", "c35_finalizer"):
@@ -320,9 +335,9 @@ def main() -> int:
         audit_headless_boundary()
         hashes = audit_lane_links(archive_hash)
     except (RuntimeError, subprocess.CalledProcessError) as error:
-        print(f"C3.5b architecture: FAIL: {error}", file=sys.stderr)
+        print(f"C3.5c architecture: FAIL: {error}", file=sys.stderr)
         return 1
-    print("C3.5b architecture: PASS " + " ".join(
+    print("C3.5c architecture: PASS " + " ".join(
         f"{name}={value}" for name, value in hashes.items()))
     return 0
 

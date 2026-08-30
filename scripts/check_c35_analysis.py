@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Run GCC and Clang static analyzers over the exact C3.5b production graph."""
+"""Run GCC and Clang static analyzers over the exact C3.5c production graph."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def command_base(compiler: str) -> list[str]:
 
 def main() -> int:
     if shutil.which("gcc") is None or shutil.which("clang") is None:
-        print("C3.5b analysis: FAIL: gcc/clang missing", file=sys.stderr)
+        print("C3.5c analysis: FAIL: gcc/clang missing", file=sys.stderr)
         return 1
     try:
         with tempfile.TemporaryDirectory(prefix="c35-analysis-") as directory:
@@ -68,9 +68,9 @@ def main() -> int:
                     "-o", str(output / f"clang-{index}.plist"),
                 ], cwd=ROOT)
     except subprocess.CalledProcessError as error:
-        print(f"C3.5b analysis: FAIL: {error}", file=sys.stderr)
+        print(f"C3.5c analysis: FAIL: {error}", file=sys.stderr)
         return 1
-    print(f"C3.5b analysis: PASS ({len(SOURCES)} exact sources; "
+    print(f"C3.5c analysis: PASS ({len(SOURCES)} exact sources; "
           "GCC -fanalyzer + Clang --analyze)")
     return 0
 
