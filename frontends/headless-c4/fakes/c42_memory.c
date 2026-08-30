@@ -76,8 +76,10 @@ static struct c42_fake_memory_outcome next_outcome(
     struct c42_fake_memory_outcome outcome = {0};
 
     outcome.operation = operation;
-    outcome.effect = operation == C42_FAKE_MEMORY_SCRUB_RETIRE ?
-                     C42_MEMORY_RETIRED : C42_MEMORY_FULL;
+    outcome.effect =
+        (operation == C42_FAKE_MEMORY_SCRUB_RETIRE ||
+         operation == C42_FAKE_MEMORY_SCRUB_ABORT) ?
+        C42_MEMORY_RETIRED : C42_MEMORY_FULL;
     outcome.prefix = full_prefix;
     outcome.committed = 1;
     if (memory->script_index < memory->script_count &&
@@ -214,7 +216,7 @@ enum c42_result c42_fake_memory_script_push(
     if (memory == NULL || outcome == NULL ||
         memory->script_count >= C42_FAKE_MEMORY_SCRIPT_MAX ||
         (outcome->operation < C42_FAKE_MEMORY_SCRUB ||
-         outcome->operation > C42_FAKE_MEMORY_TEARDOWN_QUIESCENT) ||
+         outcome->operation > C42_FAKE_MEMORY_SCRUB_ABORT) ||
         outcome->effect > C42_MEMORY_RETIRED + 2u ||
         outcome->prefix > 15 || outcome->committed > 1 ||
         outcome->status_committed > 2 || outcome->status_quiescent > 2 ||
@@ -224,6 +226,44 @@ enum c42_result c42_fake_memory_script_push(
     memory->script[memory->script_count] = *outcome;
     memory->script_count++;
     return C42_OK;
+}
+
+enum c42_result c42_fake_memory_direct_push(
+    struct c42_fake_memory *memory,
+    const struct c42_fake_memory_direct_injection *injection)
+{
+    if (memory == NULL || injection == NULL ||
+        memory->direct_count >= C42_FAKE_MEMORY_DIRECT_MAX ||
+        injection->operation < C42_FAKE_MEMORY_SCRUB ||
+        injection->operation > C42_FAKE_MEMORY_SCRUB_ABORT ||
+        injection->result > C42_MEMORY_RETIRED + 2u ||
+        injection->omit_status > 1 || injection->reserved != 0) {
+        return C42_INVALID;
+    }
+    memory->direct[memory->direct_count] = *injection;
+    memory->direct_count++;
+    return C42_OK;
+}
+
+static int direct_result_take(
+    struct c42_fake_memory *memory,
+    uint8_t operation,
+    enum c42_memory_result *result,
+    int *omit_status)
+{
+    const struct c42_fake_memory_direct_injection *injection;
+
+    if (memory->direct_index >= memory->direct_count) {
+        return 0;
+    }
+    injection = &memory->direct[memory->direct_index];
+    if (injection->operation != operation) {
+        return 0;
+    }
+    memory->direct_index++;
+    *result = (enum c42_memory_result)injection->result;
+    *omit_status = injection->omit_status != 0;
+    return 1;
 }
 
 static enum c42_memory_result fake_validate(
@@ -401,7 +441,9 @@ static enum c42_memory_result fake_scrub_abort(
 {
     struct c42_fake_memory *memory = context;
     struct c42_fake_memory_operation_record *record;
-    struct c42_fake_memory_outcome outcome = {0};
+    struct c42_fake_memory_outcome outcome;
+    enum c42_memory_result direct_result;
+    int omit_status;
 
     (void)depth;
     (void)inverse_phase;
@@ -415,12 +457,24 @@ static enum c42_memory_result fake_scrub_abort(
         !cap_equal(&record->capability, capability)) {
         return C42_MEMORY_STALE;
     }
-    outcome.operation = C42_FAKE_MEMORY_SCRUB;
-    outcome.effect = C42_MEMORY_RETIRED;
-    outcome.committed = record->committed;
-    status_fill(status, client_token, &outcome, record->prefix, 1);
+    if (direct_result_take(
+            memory, C42_FAKE_MEMORY_SCRUB_ABORT,
+            &direct_result, &omit_status)) {
+        if (omit_status == 0) {
+            memset(status, 0, sizeof(*status));
+        }
+        return direct_result;
+    }
+    outcome = next_outcome(memory, C42_FAKE_MEMORY_SCRUB_ABORT, 0);
+    status_fill(
+        status, client_token, &outcome, record->prefix,
+        (uint8_t)(outcome.effect == C42_MEMORY_RETIRED)
+    );
+    status->committed = record->committed;
     status_apply_override(status, &outcome);
-    record->retired = 1;
+    if (outcome.effect == C42_MEMORY_RETIRED) {
+        record->retired = 1;
+    }
     return C42_MEMORY_OK;
 }
 
@@ -435,6 +489,8 @@ static enum c42_memory_result scrub_retire_common(
     struct c42_fake_memory *memory = context;
     struct c42_fake_memory_operation_record *record;
     struct c42_fake_memory_outcome outcome;
+    enum c42_memory_result direct_result;
+    int omit_status;
 
     (void)inverse_phase;
     if (memory == NULL || capability == NULL || client_token == NULL ||
@@ -448,6 +504,14 @@ static enum c42_memory_result scrub_retire_common(
         !cap_equal(&record->capability, capability) ||
         record->committed == 0) {
         return C42_MEMORY_STALE;
+    }
+    if (direct_result_take(
+            memory, C42_FAKE_MEMORY_SCRUB_RETIRE,
+            &direct_result, &omit_status)) {
+        if (omit_status == 0) {
+            memset(status, 0, sizeof(*status));
+        }
+        return direct_result;
     }
     if (record->retired != 0) {
         memset(&outcome, 0, sizeof(outcome));

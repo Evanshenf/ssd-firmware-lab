@@ -226,7 +226,7 @@ void c42_fault_sq(
     c42_fault_controller(controller, cause);
 }
 
-static int command_is_active(const struct c42_command_record *command)
+int c42_command_record_active(const struct c42_command_record *command)
 {
     return (command->state >= C42_COMMAND_HIF_COMMITTED &&
             command->state <= C42_COMMAND_RELEASE_RECONCILE) ||
@@ -247,7 +247,8 @@ struct c42_command_record *c42_find_active(
     for (index = 0; index < controller->config.command_capacity; ++index) {
         struct c42_command_record *command = &controller->commands[index];
 
-        if (command_is_active(command) && command->sq_index == sq_index &&
+        if (c42_command_record_active(command) &&
+            command->sq_index == sq_index &&
             command->sq_ring_generation == sq_generation &&
             command->command_id == command_id) {
             return command;
@@ -270,7 +271,8 @@ const struct c42_command_record *c42_find_active_const(
     for (index = 0; index < controller->config.command_capacity; ++index) {
         const struct c42_command_record *command = &controller->commands[index];
 
-        if (command_is_active(command) && command->sq_index == sq_index &&
+        if (c42_command_record_active(command) &&
+            command->sq_index == sq_index &&
             command->sq_ring_generation == sq_generation &&
             command->command_id == command_id) {
             return command;
@@ -288,7 +290,7 @@ uint32_t c42_count_active(const struct c42_controller *controller)
         return 0;
     }
     for (index = 0; index < controller->config.command_capacity; ++index) {
-        if (command_is_active(&controller->commands[index])) {
+        if (c42_command_record_active(&controller->commands[index])) {
             count++;
         }
     }
@@ -320,8 +322,14 @@ uint32_t c42_count_publications(const struct c42_controller *controller)
         return 0;
     }
     for (index = 0; index < controller->config.command_capacity; ++index) {
+        uint8_t state = controller->commands[index].state;
+
         if (controller->publications[index].in_use != 0 &&
-            controller->commands[index].state >= C42_COMMAND_LEASED) {
+            (state == C42_COMMAND_LEASED ||
+             state == C42_COMMAND_CONSUME_PREPARE ||
+             state == C42_COMMAND_PUB_RESERVED ||
+             state == C42_COMMAND_MARKER_RECONCILE ||
+             state == C42_COMMAND_CONSUME_POISON_HOLD)) {
             count++;
         }
     }

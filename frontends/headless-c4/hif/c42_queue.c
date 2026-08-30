@@ -298,8 +298,15 @@ enum c42_result c42_candidate_prepare(
         c42_fault_controller(controller, C42_FAULT_PROVIDER_POISON);
         return C42_POISONED;
     }
+    if (memory_result == C42_MEMORY_STALE) {
+        return C42_STALE;
+    }
+    if (memory_result == C42_MEMORY_INVALID) {
+        return C42_INVALID;
+    }
     if (memory_result != C42_MEMORY_OK) {
-        return memory_result == C42_MEMORY_STALE ? C42_STALE : C42_INVALID;
+        c42_fault_controller(controller, C42_FAULT_PROVIDER_POISON);
+        return C42_POISONED;
     }
     if (!counter_available(&controller->candidate_uid) ||
         !generation_available(controller->next_candidate_generation)) {
@@ -329,12 +336,6 @@ enum c42_result c42_candidate_prepare(
     candidate->scrub_token.uid = uid;
     candidate->scrub_token.generation = generation;
     candidate->scrub_token.kind = C42_QUEUE_CQ;
-    memset(
-        &controller->candidate_tombstones[candidate_tombstone_index(
-            descriptor->kind, descriptor->queue_id)],
-        0,
-        sizeof(controller->candidate_tombstones[0])
-    );
     queue_prepare_life(controller, descriptor, queue_index);
     *token = candidate->token;
     return C42_OK;
@@ -375,8 +376,11 @@ static int progress_candidate_once(
             status.quiescent == 1) {
             candidate->provider_retired = 1;
             candidate->state = C42_CANDIDATE_ABORTED;
-        } else if (valid == 0 || effect == C42_MEMORY_POISONED ||
-                   effect == C42_MEMORY_INVALID) {
+        } else if (valid != 0 &&
+                   (effect == C42_MEMORY_IN_PROGRESS ||
+                    effect == C42_MEMORY_UNKNOWN)) {
+            candidate->state = C42_CANDIDATE_ABORTING;
+        } else {
             candidate->state = C42_CANDIDATE_POISONED;
             c42_fault_controller(controller, C42_FAULT_PROVIDER_POISON);
         }
@@ -724,7 +728,9 @@ enum c42_result c42_candidate_retire(
     effect = memory_effect(
         call_result, &status, &candidate->scrub_token, &valid
     );
-    if (effect == C42_MEMORY_IN_PROGRESS || effect == C42_MEMORY_UNKNOWN) {
+    if (valid != 0 &&
+        (effect == C42_MEMORY_IN_PROGRESS ||
+         effect == C42_MEMORY_UNKNOWN)) {
         candidate->state = C42_CANDIDATE_RETIRE_UNKNOWN;
         return C42_IN_PROGRESS;
     }
@@ -1110,7 +1116,9 @@ static int progress_admit(
     struct fwlab_hif_admission_key key = {0};
     struct fwlab_hif_command_ticket ticket = {0};
     enum fwlab_hif_admission_state state =
-        FWLAB_HIF_ADMISSION_NOT_STARTED;
+        (enum fwlab_hif_admission_state)(
+            FWLAB_HIF_ADMISSION_POISONED + 1u
+        );
     enum fwlab_hif_command_port_result result;
 
     admission_key_fill(command, &key);
@@ -1162,7 +1170,9 @@ static int progress_admit_poison(
     struct fwlab_hif_admission_key key;
     struct fwlab_hif_command_ticket ticket = {0};
     enum fwlab_hif_admission_state state =
-        FWLAB_HIF_ADMISSION_NOT_STARTED;
+        (enum fwlab_hif_admission_state)(
+            FWLAB_HIF_ADMISSION_POISONED + 1u
+        );
     enum fwlab_hif_command_port_result result;
 
     admission_key_fill(command, &key);

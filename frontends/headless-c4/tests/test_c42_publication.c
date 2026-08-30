@@ -181,6 +181,7 @@ static void test_delayed_out_of_order_sqhd_sampling(void)
     uint8_t sqe_b[C42_SQE_BYTES];
     uint8_t cqe_a[C42_CQE_BYTES];
     uint8_t cqe_b[C42_CQE_BYTES];
+    uint32_t step;
 
     check(c42_test_fixture_init(&fixture, 4, 0), "out-of-order fixture");
     script.poll_delay = 100;
@@ -199,9 +200,20 @@ static void test_delayed_out_of_order_sqhd_sampling(void)
     tail.new_tail = 2;
     check(c42_sq_tail_event_apply(fixture.controller, &tail) == C42_OK,
           "out-of-order batch tail");
-    check(c42_test_run(&fixture, 64, 4), "admit both before ready");
-    check(c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
-          snapshot.active_commands == 2 && snapshot.sq[0].device_index == 2,
+    for (step = 0; step < 64; ++step) {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK,
+              "admit both bounded step");
+        check(c42_snapshot_read(fixture.controller, &snapshot) == C42_OK,
+              "admit both bounded snapshot");
+        if (snapshot.active_commands == 2 &&
+            snapshot.sq[0].device_index == 2) {
+            break;
+        }
+    }
+    check(step < 64 && snapshot.active_commands == 2 &&
+          snapshot.sq[0].device_index == 2,
           "both commands active at SQ head two");
     script.poll_delay = 0;
     script.reverse_ready = 1;

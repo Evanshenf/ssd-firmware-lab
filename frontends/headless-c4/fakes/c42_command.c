@@ -230,6 +230,24 @@ void c42_fake_command_set_script(
     command->script = *script;
 }
 
+enum c42_result c42_fake_command_injection_push(
+    struct c42_fake_command *command,
+    const struct c42_fake_command_injection *injection)
+{
+    if (command == NULL || injection == NULL ||
+        command->injection_count >= C42_FAKE_COMMAND_INJECTIONS ||
+        injection->operation < C42_FAKE_COMMAND_PREPARE ||
+        injection->operation > C42_FAKE_COMMAND_TEARDOWN_QUIESCENT ||
+        injection->result > FWLAB_HIF_PORT_COUNTER_EXHAUSTED + 2u ||
+        injection->omit_outputs > 1 || injection->reserved[0] != 0 ||
+        injection->reserved[1] != 0 || injection->reserved[2] != 0) {
+        return C42_INVALID;
+    }
+    command->injections[command->injection_count] = *injection;
+    command->injection_count++;
+    return C42_OK;
+}
+
 static int injection_take(
     struct c42_fake_command *command,
     uint32_t operation,
@@ -237,6 +255,19 @@ static int injection_take(
     uint32_t *value,
     int *omit_outputs)
 {
+    if (command->injection_index < command->injection_count) {
+        const struct c42_fake_command_injection *injection =
+            &command->injections[command->injection_index];
+
+        if (injection->operation != operation) {
+            return 0;
+        }
+        command->injection_index++;
+        *result = (enum fwlab_hif_command_port_result)injection->result;
+        *value = injection->value;
+        *omit_outputs = injection->omit_outputs != 0;
+        return 1;
+    }
     if (command->script.inject_operation != operation ||
         command->script.inject_count == 0) {
         return 0;
@@ -377,6 +408,7 @@ static enum fwlab_hif_command_port_result prepare_abort_common(
     if (command == NULL || prepared == NULL || aborted == NULL) {
         return FWLAB_HIF_PORT_INVALID;
     }
+    command->prepare_abort_call_count++;
     record = find_prepared(command, prepared);
     if (record == NULL) {
         return FWLAB_HIF_PORT_STALE;

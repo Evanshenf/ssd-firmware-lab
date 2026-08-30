@@ -233,7 +233,9 @@ static int prepare_consume(
     struct c42_reconcile_record *reconcile =
         &controller->reconciles[command_index];
     struct fwlab_hif_consume_token consume = {0};
-    enum fwlab_hif_consume_state state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    enum fwlab_hif_consume_state state = (enum fwlab_hif_consume_state)(
+        FWLAB_HIF_CONSUME_POISONED + 1u
+    );
     enum fwlab_hif_command_port_result result;
 
     result = controller->providers.command.ops->consume_prepare(
@@ -305,7 +307,7 @@ int c42_poll_ready(struct c42_controller *controller)
 {
     struct fwlab_hif_ready_event event = {0};
     enum fwlab_hif_command_port_result result;
-    uint32_t count = 0;
+    uint32_t count = UINT32_MAX;
     uint32_t offset;
     int has_waiting = 0;
 
@@ -349,10 +351,6 @@ int c42_poll_ready(struct c42_controller *controller)
     result = controller->providers.command.ops->poll(
         controller->providers.command.context, 1, &event, 1, &count
     );
-    if (result == FWLAB_HIF_PORT_IN_PROGRESS ||
-        (result == FWLAB_HIF_PORT_OK && count == 0)) {
-        return 0;
-    }
     if (result != FWLAB_HIF_PORT_OK || count > 1 ||
         (count == 1 && !ready_event_valid(&event))) {
         c42_fault_controller(controller, C42_FAULT_READY_CONTRACT);
@@ -364,7 +362,7 @@ int c42_poll_ready(struct c42_controller *controller)
         }
         return 1;
     }
-    return 0;
+    return 1;
 }
 
 static int progress_release(
@@ -624,7 +622,9 @@ static int progress_cross_commit(
         &controller->publications[command_index];
     struct c42_reconcile_record *reconcile =
         &controller->reconciles[command_index];
-    enum fwlab_hif_consume_state state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    enum fwlab_hif_consume_state state = (enum fwlab_hif_consume_state)(
+        FWLAB_HIF_CONSUME_POISONED + 1u
+    );
     enum fwlab_hif_command_port_result result;
 
     if (publication->marker_visible == 0) {
@@ -710,7 +710,9 @@ int c42_progress_reconcile(struct c42_controller *controller)
 {
     uint32_t offset;
 
-    if (!c42_controller_valid(controller)) {
+    if (!c42_controller_valid(controller) ||
+        (controller->phase != C42_CONTROLLER_READY &&
+         controller->phase != C42_CONTROLLER_FAULTED_RESET_REQUIRED)) {
         return 0;
     }
     for (offset = 0; offset < controller->config.command_capacity; ++offset) {
@@ -720,7 +722,9 @@ int c42_progress_reconcile(struct c42_controller *controller)
         );
         struct c42_reconcile_record *record = &controller->reconciles[index];
         enum fwlab_hif_consume_state state =
-            FWLAB_HIF_CONSUME_NOT_STARTED;
+            (enum fwlab_hif_consume_state)(
+                FWLAB_HIF_CONSUME_POISONED + 1u
+            );
         enum fwlab_hif_command_port_result result;
 
         if (record->in_use == 0 || record->consume_known == 0) {

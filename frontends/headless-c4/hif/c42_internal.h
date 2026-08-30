@@ -302,6 +302,7 @@ int c42_operation_token_equal(
     const struct c42_operation_token *right
 );
 int c42_controller_valid(const struct c42_controller *controller);
+int c42_command_record_active(const struct c42_command_record *command);
 enum c42_result c42_counter_take(
     struct c42_counter *counter,
     uint64_t *value

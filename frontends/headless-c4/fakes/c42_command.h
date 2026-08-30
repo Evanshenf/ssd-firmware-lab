@@ -9,6 +9,7 @@
 #include "hif/c42.h"
 
 #define C42_FAKE_COMMAND_RECORDS 64u
+#define C42_FAKE_COMMAND_INJECTIONS 128u
 
 enum c42_fake_command_operation {
     C42_FAKE_COMMAND_PREPARE = 1,
@@ -45,6 +46,14 @@ struct c42_fake_command_script {
     uint8_t cleanup_pending;
     uint8_t inject_omit_outputs;
     uint8_t reserved[5];
+};
+
+struct c42_fake_command_injection {
+    uint32_t operation;
+    uint32_t result;
+    uint32_t value;
+    uint8_t omit_outputs;
+    uint8_t reserved[3];
 };
 
 struct c42_fake_command_record {
@@ -85,12 +94,17 @@ struct c42_fake_command {
     uint32_t active_limit;
     uint32_t prepare_attempts;
     uint32_t acquire_count;
+    uint32_t prepare_abort_call_count;
     uint32_t reset_old_epoch;
     uint32_t teardown_old_epoch;
     uint8_t reset_active;
     uint8_t teardown_active;
     uint8_t reserved[6];
+    uint32_t injection_count;
+    uint32_t injection_index;
     struct c42_fake_command_script script;
+    struct c42_fake_command_injection
+        injections[C42_FAKE_COMMAND_INJECTIONS];
     struct c42_fake_command_record records[C42_FAKE_COMMAND_RECORDS];
 };
 
@@ -106,6 +120,10 @@ struct fwlab_hif_command_port c42_fake_command_port(
 void c42_fake_command_set_script(
     struct c42_fake_command *command,
     const struct c42_fake_command_script *script
+);
+enum c42_result c42_fake_command_injection_push(
+    struct c42_fake_command *command,
+    const struct c42_fake_command_injection *injection
 );
 
 #endif

@@ -36,6 +36,29 @@ static int origins_differ(
            left->word[1] != right->word[1];
 }
 
+static int run_until_active(
+    struct c42_test_fixture *fixture,
+    uint32_t active,
+    uint16_t sq_head)
+{
+    uint32_t step;
+
+    for (step = 0; step < 64; ++step) {
+        struct c42_step_result result = {0};
+        struct c42_snapshot snapshot = {0};
+
+        if (c42_step(fixture->controller, 1, &result) != C42_OK ||
+            c42_snapshot_read(fixture->controller, &snapshot) != C42_OK) {
+            return 0;
+        }
+        if (snapshot.active_commands == active &&
+            snapshot.sq[0].device_index == sq_head) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static void test_snapshot_backpressure_and_target(void)
 {
     struct c42_test_fixture fixture;
@@ -74,7 +97,7 @@ static void test_snapshot_backpressure_and_target(void)
     check(c42_fake_memory_write_sqe(
               &fixture.memory, 0, 0, mutation) == C42_OK,
           "mutate after capture");
-    check(c42_test_run(&fixture, 32, 4), "admit after backpressure");
+    check(run_until_active(&fixture, 1, 1), "admit after backpressure");
     check(fixture.memory.capture_count == 1, "no reread on backpressure");
     check(c42_target_prepare(
               fixture.controller, 0, fixture.sq_cap[0].ring_generation, 21,
@@ -120,7 +143,7 @@ static void test_cid_reuse_and_epoch_revoke(void)
     script.poll_delay = 100;
     c42_fake_command_set_script(&fixture.command, &script);
     check(c42_test_submit(&fixture, 0, 0, 1, 31), "submit first");
-    check(c42_test_run(&fixture, 32, 4), "admit first");
+    check(run_until_active(&fixture, 1, 1), "admit first");
     check(c42_target_prepare(
               fixture.controller, 0, fixture.sq_cap[0].ring_generation, 31,
               &first) == C42_OK,
@@ -132,7 +155,7 @@ static void test_cid_reuse_and_epoch_revoke(void)
           "reuse CID before first ACK");
     script.poll_delay = 100;
     c42_fake_command_set_script(&fixture.command, &script);
-    check(c42_test_run(&fixture, 32, 4), "admit second");
+    check(run_until_active(&fixture, 1, 2), "admit second");
     check(c42_target_prepare(
               fixture.controller, 0, fixture.sq_cap[0].ring_generation, 31,
               &second) == C42_OK &&

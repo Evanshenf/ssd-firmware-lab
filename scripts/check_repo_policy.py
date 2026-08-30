@@ -688,6 +688,9 @@ EXPECTED_C4_1_FILES = {
         "976749d535542c110fc4138e9c120a1e431afeb53e6af4a5b1a3de2ba388db23",
 }
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
+EXPECTED_C4_2_STATUS = "transitional_review_hold"
+EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
+EXPECTED_C4_2_CANDIDATE = "b505016ffc433a388748f4953f89a3c826c67f2b"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     "docs/legal/c4-2-source-boundary-review.md",
     "docs/legal/c4-2a-source-boundary-review.md",
@@ -737,27 +740,27 @@ EXPECTED_C4_2_FILES = {
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/hif/c42.h":
-        "50645f90aae082c4534d0c22cb7a63069d6d4499a1626914ad3ca7a23595ed31",
+        "85121e61d92d75d51343fe341b95ec295b5899fc32f4ad32dfba62c37fa4f88e",
     "frontends/headless-c4/hif/c42_internal.h":
-        "908efcbbfe937ef7d0b469427b92d44484022db4e23970b6d203f1d3dc60f5ae",
+        "2ba9713fd816a2ba9686aa7a4092e616653cc5a58aecdf4ab81537f92eee7f02",
     "frontends/headless-c4/hif/c42_memory_port.h":
         "e419f02bcf9c761ae23b9c447723f4d9b9fc5ce9027a573903a0cebac0ee64bd",
     "frontends/headless-c4/hif/c42_identity.c":
-        "3f70f795b49232e10e72e844cffde464b2b27a8981bac260071fd7712c4daa01",
+        "f0e263a30a6568e9b0433332117e69414360926c83c5b53fafda81c1e66cd2aa",
     "frontends/headless-c4/hif/c42_queue.c":
-        "5ba0d99aa1bf716c97619221bbb26630b497c1179dd26020d47a4ec2d77e25bd",
+        "80ee91b601e20b463899388f254bc26ccc0839ebd25f8d4dd61a0579f9eae217",
     "frontends/headless-c4/hif/c42_publication.c":
-        "17a2970ce4dd262e1e06f63f8c8253c0b8cee2e75702dba1e93e9e263615f7d3",
+        "96762083774a887a36f04967b72f262a882d6ba6cee46a66bc275a885c094e19",
     "frontends/headless-c4/hif/c42_runtime.c":
-        "d213c3121d2045bb0def007532de7c3f5bd0f91d9aa9cfb4cd5b60bc557e4781",
+        "9947caaaf73a4d2135c6e3013064293171f40804d6efde321ad93fb56402c0f6",
     "frontends/headless-c4/fakes/c42_command.c":
-        "121596d4e215df85a0f82127df5af74cf6c845dc02aa33252d40a838fcd3f0ac",
+        "5e3c70e4a67892efbc34463e264b5d50bed5adaf5ca9109f4e665af9bd8c4fb8",
     "frontends/headless-c4/fakes/c42_command.h":
-        "11cc5bde2dcfa924aa18ae3e41477ab89c729545eeaa5b0fac9031f649ee98e6",
+        "f80697e22143089816150dbb822b86b2f1767e6b70fa8921b5e6df48877ee52c",
     "frontends/headless-c4/fakes/c42_memory.c":
-        "4c4c64e90038a796d41a248428d84c69224d5e49dc5d3f5cd1d8f0346bdcd841",
+        "2dd56618932c20a254ffe2e93b13cbf0df9edd25e23cf308829bd46246726954",
     "frontends/headless-c4/fakes/c42_memory.h":
-        "68177bba874493fbc3ad55e41821f52cf9f6ee0e0dd01029147c2979a1935e07",
+        "836a3282504ec8c079aa3b75d14d98ba9defa4ee6ac1946c4d25417cd53152ce",
     "frontends/headless-c4/fakes/c42_fake_main.c":
         "e0479faa676ac64e4083b637ef8b965ffcc2ad019d9382ab60db49c1771594a1",
     "frontends/headless-c4/tests/c42_support.c":
@@ -767,15 +770,15 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/test_c42_queue.c":
         "01ea3dfdb29b5379ced448eb8697055fae95eba582352b8f64e2eb348e9e9fdf",
     "frontends/headless-c4/tests/test_c42_publication.c":
-        "4994c663df0be95708033141446d8e1772ed9a30f6c8c91ce6b9fe421a9420d8",
+        "33f1a542f23d52a1139a9a011fca43f7215ced27846deed1b7147a72f584d32b",
     "frontends/headless-c4/tests/test_c42_identity.c":
-        "504d15ff5e03b23298f6709db916dc8fcdb6100d9103311a282559360cd099d2",
+        "dc06bcc53bfb11319d34323756c50f8b8934d129b29ca8c6ea728bbb86a68543",
     "frontends/headless-c4/tests/test_c42_reset_delete.c":
         "f0e4bcfd2e7e3bc9f4ea88a60788eab104fdc0efcb3ed65d38e904146cd8744a",
     "frontends/headless-c4/tests/test_c42_remediation.c":
-        "bf40a19e70f256ef24ae91b6a1ffd7cc39d969c0d55c9aa2639ac54ece6d7161",
+        "af49884662401d8837abe58f19a82859bd019abfdb0815319bdb474e9d8f6fb0",
     "frontends/headless-c4/tests/test_c42_thread.c":
-        "6fc1d6ce28cbdb2cbb837d3665d93e05429548eede5374ef9d39d57020be7a94",
+        "e61d683dcccce3416cc381f38060266985154baad88fb2764b6c217aa249a1e3",
     "frontends/headless-c4/tests/c42_model.c":
         "94a2c29bf95fefdf6e72a5f4dd3a6bee360a2fb43962f576936fe4311bd307af",
     "frontends/headless-c4/tests/c42_model.h":
@@ -883,7 +886,10 @@ EXPECTED_FREEZES = {
     },
     "c4_2": {
         "label": "C4.2",
+        "status": EXPECTED_C4_2_STATUS,
         "baseline_commit": EXPECTED_C4_2_BASELINE,
+        "historical_source_commit": EXPECTED_C4_2_HISTORICAL_SOURCE,
+        "candidate_implementation_commit": EXPECTED_C4_2_CANDIDATE,
         "closed_build_input_roots": EXPECTED_C4_2_CLOSED_ROOTS,
         "allowed_unfrozen_names": EXPECTED_C4_2_UNFROZEN_NAMES,
         "files": EXPECTED_C4_2_FILES,
@@ -1226,6 +1232,52 @@ def check_freeze(
     actual_policy = boundaries.get("freeze", {}).get(name, {})
     if actual_policy != expected_policy:
         failures.append(f"{label} frozen policy/hash manifest changed or is incomplete")
+
+    status = expected.get("status")
+    if status == "transitional_review_hold":
+        historical = expected.get("historical_source_commit", "")
+        candidate = expected.get("candidate_implementation_commit", "")
+        if historical != expected["baseline_commit"]:
+            failures.append(
+                f"{label} transitional historical source differs from baseline"
+            )
+        for role, commit in (("historical", historical), ("candidate", candidate)):
+            if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+                failures.append(f"{label} transitional {role} commit is malformed")
+                continue
+            exists = subprocess.run(
+                ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+                cwd=ROOT, check=False, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if exists.returncode != 0:
+                failures.append(f"{label} transitional {role} commit is missing")
+        if re.fullmatch(r"[0-9a-f]{40}", historical) is not None and \
+                re.fullmatch(r"[0-9a-f]{40}", candidate) is not None:
+            ancestry = subprocess.run(
+                ["git", "merge-base", "--is-ancestor", historical, candidate],
+                cwd=ROOT, check=False, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if ancestry.returncode != 0:
+                failures.append(
+                    f"{label} transitional candidate does not descend from historical source"
+                )
+    elif status == "source_frozen":
+        baseline = expected["baseline_commit"]
+        for relative_text, expected_hash in expected["files"].items():
+            if relative_text.startswith("docs/results/"):
+                continue
+            tree_read = subprocess.run(
+                ["git", "show", f"{baseline}:{relative_text}"],
+                cwd=ROOT, check=False, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            if tree_read.returncode != 0 or hashlib.sha256(
+                    tree_read.stdout).hexdigest() != expected_hash:
+                failures.append(
+                    f"{label} baseline tree/hash mismatch: {relative_text}"
+                )
 
     for relative_text, expected_hash in expected["files"].items():
         path = ROOT / relative_text

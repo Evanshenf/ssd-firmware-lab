@@ -10,6 +10,7 @@
 #include "hif/c42.h"
 
 #define C42_FAKE_MEMORY_SCRIPT_MAX 128u
+#define C42_FAKE_MEMORY_DIRECT_MAX 128u
 
 enum c42_fake_memory_operation {
     C42_FAKE_MEMORY_SCRUB = 1,
@@ -21,7 +22,8 @@ enum c42_fake_memory_operation {
     C42_FAKE_MEMORY_RESET_BEGIN = 7,
     C42_FAKE_MEMORY_RESET_QUIESCENT = 8,
     C42_FAKE_MEMORY_TEARDOWN_BEGIN = 9,
-    C42_FAKE_MEMORY_TEARDOWN_QUIESCENT = 10
+    C42_FAKE_MEMORY_TEARDOWN_QUIESCENT = 10,
+    C42_FAKE_MEMORY_SCRUB_ABORT = 11
 };
 
 struct c42_fake_memory_outcome {
@@ -32,6 +34,13 @@ struct c42_fake_memory_outcome {
     uint8_t status_committed;
     uint8_t status_quiescent;
     uint8_t status_override;
+    uint8_t reserved;
+};
+
+struct c42_fake_memory_direct_injection {
+    uint8_t operation;
+    uint8_t result;
+    uint8_t omit_status;
     uint8_t reserved;
 };
 
@@ -65,6 +74,8 @@ struct c42_fake_memory {
     uint32_t teardown_old_epoch;
     uint32_t script_count;
     uint32_t script_index;
+    uint32_t direct_count;
+    uint32_t direct_index;
     uint8_t reset_active;
     uint8_t teardown_active;
     uint8_t reserved[6];
@@ -73,6 +84,7 @@ struct c42_fake_memory {
     struct c42_fake_memory_operation_record scrub[C42_MAX_QUEUE_PAIRS];
     struct c42_fake_memory_operation_record publication[C42_MAX_QUEUE_PAIRS];
     struct c42_fake_memory_outcome script[C42_FAKE_MEMORY_SCRIPT_MAX];
+    struct c42_fake_memory_direct_injection direct[C42_FAKE_MEMORY_DIRECT_MAX];
     uint8_t sq[C42_MAX_QUEUE_PAIRS][C42_MAX_QUEUE_DEPTH][C42_SQE_BYTES];
     uint8_t cq[C42_MAX_QUEUE_PAIRS][C42_MAX_QUEUE_DEPTH][C42_CQE_BYTES];
 };
@@ -106,6 +118,10 @@ enum c42_result c42_fake_memory_read_cqe(
 enum c42_result c42_fake_memory_script_push(
     struct c42_fake_memory *memory,
     const struct c42_fake_memory_outcome *outcome
+);
+enum c42_result c42_fake_memory_direct_push(
+    struct c42_fake_memory *memory,
+    const struct c42_fake_memory_direct_injection *injection
 );
 
 #endif

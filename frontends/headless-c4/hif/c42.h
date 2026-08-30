@@ -107,6 +107,53 @@ enum c42_notification_state {
     C42_NOTIFICATION_SUPPRESSED = 4
 };
 
+enum c42_observer_slot_state_v2 {
+    C42_OBSERVER_SLOT_FREE = 0,
+    C42_OBSERVER_SLOT_RESERVED = 1,
+    C42_OBSERVER_SLOT_CQE_COMMITTED = 2,
+    C42_OBSERVER_SLOT_BODY_STAGED = 10,
+    C42_OBSERVER_SLOT_MARKER_RECONCILE = 11,
+    C42_OBSERVER_SLOT_INVALID = 255
+};
+
+enum c42_observer_command_state_v2 {
+    C42_OBSERVER_COMMAND_FREE = 0,
+    C42_OBSERVER_COMMAND_CAPTURED = 1,
+    C42_OBSERVER_COMMAND_PREPARE_QUERY = 2,
+    C42_OBSERVER_COMMAND_PORT_RESERVED = 3,
+    C42_OBSERVER_COMMAND_ADMIT_QUERY = 4,
+    C42_OBSERVER_COMMAND_PORT_COMMITTED = 5,
+    C42_OBSERVER_COMMAND_HIF_COMMITTED = 6,
+    C42_OBSERVER_COMMAND_READY = 7,
+    C42_OBSERVER_COMMAND_LEASED = 8,
+    C42_OBSERVER_COMMAND_CONSUME_PREPARE = 9,
+    C42_OBSERVER_COMMAND_PUB_RESERVED = 10,
+    C42_OBSERVER_COMMAND_MARKER_RECONCILE = 11,
+    C42_OBSERVER_COMMAND_RELEASE_RECONCILE = 12,
+    C42_OBSERVER_COMMAND_ABORT_RECONCILE = 13,
+    C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD = 14,
+    C42_OBSERVER_COMMAND_CONSUME_POISON_HOLD = 15,
+    C42_OBSERVER_COMMAND_INVALID = 255
+};
+
+enum c42_observer_reconcile_state_v2 {
+    C42_OBSERVER_RECONCILE_RESERVED = 0,
+    C42_OBSERVER_RECONCILE_PREPARED = 1,
+    C42_OBSERVER_RECONCILE_COMMIT_UNKNOWN = 2,
+    C42_OBSERVER_RECONCILE_CLEANUP_PENDING = 3,
+    C42_OBSERVER_RECONCILE_RETIRE_READY = 4,
+    C42_OBSERVER_RECONCILE_INVALID = 255
+};
+
+enum c42_observer_notification_state_v2 {
+    C42_OBSERVER_NOTIFY_RESERVED = 0,
+    C42_OBSERVER_NOTIFY_READY = 1,
+    C42_OBSERVER_NOTIFY_ACQUIRED = 2,
+    C42_OBSERVER_NOTIFY_CONSUMED = 3,
+    C42_OBSERVER_NOTIFY_SUPPRESSED = 4,
+    C42_OBSERVER_NOTIFY_INVALID = 255
+};
+
 struct c42_counter_seed {
     uint64_t next;
     uint64_t maximum;
@@ -266,8 +313,8 @@ struct c42_observer_slot_v2 {
     uint16_t ordinal;
     uint8_t phase;
     uint8_t state;
-    uint8_t origin_present;
-    uint8_t reserved0;
+    uint8_t owner_present;
+    uint8_t origin_matches_owner;
     uint8_t wire[C42_CQE_BYTES];
     uint32_t reserved[2];
 };
@@ -295,7 +342,7 @@ struct c42_observer_queue_v2 {
     uint8_t phase;
     uint8_t create_scrub_retired;
     uint8_t pending_ack_valid;
-    uint8_t reserved0[2];
+    uint8_t reserved0[8];
     struct c42_observer_slot_v2 slots[C42_MAX_QUEUE_DEPTH];
 };
 
@@ -319,7 +366,8 @@ struct c42_observer_command_v2 {
     uint8_t lease_ticket_matches;
     uint8_t consume_known;
     uint8_t reserved0;
-    uint32_t reserved[2];
+    uint8_t reserved1[2];
+    uint32_t reserved[3];
 };
 
 struct c42_observer_publication_v2 {
@@ -375,7 +423,7 @@ struct c42_observer_candidate_v2 {
     uint8_t retire_started;
     uint8_t provider_retired;
     uint8_t reserved0[3];
-    uint32_t reserved[2];
+    uint32_t reserved[3];
 };
 
 struct c42_observer_control_v2 {
@@ -389,7 +437,7 @@ struct c42_observer_control_v2 {
     uint8_t port_started;
     uint8_t memory_started;
     uint8_t reserved0[2];
-    uint32_t reserved[2];
+    uint32_t reserved[3];
 };
 
 struct c42_observer_target_v2 {
@@ -419,6 +467,7 @@ struct c42_observer_v2 {
     uint8_t sq_cursor;
     uint8_t ready_cursor;
     uint8_t reserved0;
+    uint8_t reserved1[4];
     struct c42_observer_queue_v2 sq[C42_MAX_QUEUE_PAIRS];
     struct c42_observer_queue_v2 cq[C42_MAX_QUEUE_PAIRS];
     struct c42_observer_candidate_v2

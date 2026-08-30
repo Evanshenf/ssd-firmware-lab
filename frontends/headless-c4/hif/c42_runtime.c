@@ -5,6 +5,31 @@
 
 #include <string.h>
 
+_Static_assert(sizeof(struct c42_observer_slot_v2) == 64,
+               "observer slot v2 ABI");
+_Static_assert(sizeof(struct c42_observer_queue_v2) == 2104,
+               "observer queue v2 ABI");
+_Static_assert(sizeof(struct c42_observer_command_v2) == 88,
+               "observer command v2 ABI");
+_Static_assert(sizeof(struct c42_observer_candidate_v2) == 64,
+               "observer candidate v2 ABI");
+_Static_assert(sizeof(struct c42_observer_control_v2) == 56,
+               "observer control v2 ABI");
+_Static_assert(sizeof(struct c42_observer_v2) == 26888,
+               "observer v2 ABI");
+_Static_assert(offsetof(struct c42_observer_v2, sq) == 40,
+               "observer v2 header ABI");
+_Static_assert(C42_OK == 0 && C42_POISONED == 12 &&
+               C42_SUPERSEDED == 13,
+               "component result numeric ABI");
+_Static_assert(C42_CANDIDATE_PREPARED == 1 &&
+               C42_CANDIDATE_POISONED == 7 &&
+               C42_CANDIDATE_RETIRED == 12,
+               "candidate state numeric ABI");
+_Static_assert(C42_MEMORY_OK == 0 && C42_MEMORY_IN_PROGRESS == 8 &&
+               C42_MEMORY_RETIRED == 9,
+               "memory result numeric ABI");
+
 static int seed_valid(const struct c42_counter_seed *seed)
 {
     return seed->next != 0 && seed->maximum != 0 &&
@@ -133,6 +158,9 @@ enum c42_result c42_step(
 
         if (c42_progress_queue_controls(controller) != 0) {
             progressed = 1;
+        } else if (controller->phase == C42_CONTROLLER_RESETTING ||
+                   controller->phase == C42_CONTROLLER_TEARING_DOWN) {
+            break;
         } else {
             for (offset = 0; offset < 4; ++offset) {
                 uint8_t lane = (uint8_t)(
@@ -263,10 +291,90 @@ static int observer_ticket_equal(
            left->generation == right->generation;
 }
 
+static uint8_t observer_slot_state(uint8_t state)
+{
+    switch (state) {
+    case C42_SLOT_FREE: return C42_OBSERVER_SLOT_FREE;
+    case C42_SLOT_RESERVED: return C42_OBSERVER_SLOT_RESERVED;
+    case C42_SLOT_BODY_STAGED: return C42_OBSERVER_SLOT_BODY_STAGED;
+    case C42_SLOT_MARKER_VISIBLE_RECONCILE:
+        return C42_OBSERVER_SLOT_MARKER_RECONCILE;
+    case C42_SLOT_CQE_COMMITTED:
+        return C42_OBSERVER_SLOT_CQE_COMMITTED;
+    default: return C42_OBSERVER_SLOT_INVALID;
+    }
+}
+
+static uint8_t observer_command_state(uint8_t state)
+{
+    switch (state) {
+    case C42_COMMAND_FREE: return C42_OBSERVER_COMMAND_FREE;
+    case C42_COMMAND_CAPTURED: return C42_OBSERVER_COMMAND_CAPTURED;
+    case C42_COMMAND_PREPARE_QUERY:
+        return C42_OBSERVER_COMMAND_PREPARE_QUERY;
+    case C42_COMMAND_PORT_RESERVED:
+        return C42_OBSERVER_COMMAND_PORT_RESERVED;
+    case C42_COMMAND_ADMIT_QUERY: return C42_OBSERVER_COMMAND_ADMIT_QUERY;
+    case C42_COMMAND_PORT_COMMITTED:
+        return C42_OBSERVER_COMMAND_PORT_COMMITTED;
+    case C42_COMMAND_HIF_COMMITTED:
+        return C42_OBSERVER_COMMAND_HIF_COMMITTED;
+    case C42_COMMAND_READY: return C42_OBSERVER_COMMAND_READY;
+    case C42_COMMAND_LEASED: return C42_OBSERVER_COMMAND_LEASED;
+    case C42_COMMAND_CONSUME_PREPARE:
+        return C42_OBSERVER_COMMAND_CONSUME_PREPARE;
+    case C42_COMMAND_PUB_RESERVED:
+        return C42_OBSERVER_COMMAND_PUB_RESERVED;
+    case C42_COMMAND_MARKER_RECONCILE:
+        return C42_OBSERVER_COMMAND_MARKER_RECONCILE;
+    case C42_COMMAND_RELEASE_RECONCILE:
+        return C42_OBSERVER_COMMAND_RELEASE_RECONCILE;
+    case C42_COMMAND_ABORT_RECONCILE:
+        return C42_OBSERVER_COMMAND_ABORT_RECONCILE;
+    case C42_COMMAND_ADMIT_POISON_HOLD:
+        return C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD;
+    case C42_COMMAND_CONSUME_POISON_HOLD:
+        return C42_OBSERVER_COMMAND_CONSUME_POISON_HOLD;
+    default: return C42_OBSERVER_COMMAND_INVALID;
+    }
+}
+
+static uint8_t observer_reconcile_state(uint8_t state)
+{
+    switch (state) {
+    case C42_RECONCILE_RESERVED:
+        return C42_OBSERVER_RECONCILE_RESERVED;
+    case C42_RECONCILE_PREPARED:
+        return C42_OBSERVER_RECONCILE_PREPARED;
+    case C42_RECONCILE_COMMIT_UNKNOWN:
+        return C42_OBSERVER_RECONCILE_COMMIT_UNKNOWN;
+    case C42_RECONCILE_CLEANUP_PENDING:
+        return C42_OBSERVER_RECONCILE_CLEANUP_PENDING;
+    case C42_RECONCILE_RETIRE_READY:
+        return C42_OBSERVER_RECONCILE_RETIRE_READY;
+    default: return C42_OBSERVER_RECONCILE_INVALID;
+    }
+}
+
+static uint8_t observer_notification_state(uint8_t state)
+{
+    switch (state) {
+    case C42_NOTIFY_RESERVED: return C42_OBSERVER_NOTIFY_RESERVED;
+    case C42_NOTIFY_READY: return C42_OBSERVER_NOTIFY_READY;
+    case C42_NOTIFY_ACQUIRED: return C42_OBSERVER_NOTIFY_ACQUIRED;
+    case C42_NOTIFY_CONSUMED: return C42_OBSERVER_NOTIFY_CONSUMED;
+    case C42_NOTIFY_SUPPRESSED: return C42_OBSERVER_NOTIFY_SUPPRESSED;
+    default: return C42_OBSERVER_NOTIFY_INVALID;
+    }
+}
+
 static void observer_slot_fill(
+    const struct c42_controller *controller,
     const struct c42_cq_slot *source,
     struct c42_observer_slot_v2 *target)
 {
+    uint16_t index;
+
     target->publication_uid = source->publication_uid;
     target->notification_uid = source->notification_uid;
     target->cq_ring_generation = source->cq_ring_generation;
@@ -277,10 +385,20 @@ static void observer_slot_fill(
     target->submission_queue_head = source->submission_queue_head;
     target->ordinal = source->ordinal;
     target->phase = source->phase;
-    target->state = source->state;
-    target->origin_present = (uint8_t)(
-        source->origin.word[0] != 0 && source->origin.word[1] != 0
-    );
+    target->state = observer_slot_state(source->state);
+    for (index = 0; index < controller->config.command_capacity; ++index) {
+        const struct c42_command_record *command =
+            &controller->commands[index];
+
+        if (source->publication_uid != 0 &&
+            command->publication_uid == source->publication_uid) {
+            target->owner_present = 1;
+            target->origin_matches_owner = (uint8_t)c42_origin_equal(
+                &source->origin, &command->origin
+            );
+            break;
+        }
+    }
     memcpy(target->wire, source->wire, sizeof(target->wire));
 }
 
@@ -305,6 +423,7 @@ static void observer_sq_fill(
 }
 
 static void observer_cq_fill(
+    const struct c42_controller *controller,
     const struct c42_cq_record *source,
     struct c42_observer_queue_v2 *target)
 {
@@ -330,7 +449,9 @@ static void observer_cq_fill(
     target->create_scrub_retired = source->create_scrub_retired;
     target->pending_ack_valid = source->pending_ack.valid;
     for (slot = 0; slot < C42_MAX_QUEUE_DEPTH; ++slot) {
-        observer_slot_fill(&source->slots[slot], &target->slots[slot]);
+        observer_slot_fill(
+            controller, &source->slots[slot], &target->slots[slot]
+        );
     }
 }
 
@@ -354,7 +475,7 @@ static void observer_command_fill(
     target->cq_index = source->cq_index;
     target->cq_slot = source->cq_slot;
     target->sqhd_snapshot = source->sqhd_snapshot;
-    target->state = source->state;
+    target->state = observer_command_state(source->state);
     target->queue_class = source->queue_class;
     target->prepared_origin_matches = (uint8_t)(
         fwlab_hif_prepared_token_valid(&source->prepared) &&
@@ -403,7 +524,7 @@ static void observer_reconcile_fill(
     target->consume_uid = source->consume.consume_uid;
     target->command_index = source->command_index;
     target->in_use = source->in_use;
-    target->state = source->state;
+    target->state = observer_reconcile_state(source->state);
     target->consume_known = source->consume_known;
     target->lease_matches_command = (uint8_t)(
         fwlab_hif_completion_lease_valid(&source->lease) &&
@@ -423,7 +544,7 @@ static void observer_notification_fill(
     target->completion_queue_id = source->completion_queue_id;
     target->slot_ordinal = source->slot_ordinal;
     target->in_use = source->in_use;
-    target->state = source->state;
+    target->state = observer_notification_state(source->state);
     target->current_epoch = (uint8_t)(
         source->in_use != 0 &&
         source->controller_epoch == controller->controller_epoch
@@ -485,11 +606,17 @@ static void observer_target_fill(
             const struct c42_command_record *candidate =
                 &controller->commands[index];
 
-            if (c42_handle_equal(
+            if (c42_command_record_active(candidate) &&
+                candidate->sq_index == source->sq_index &&
+                candidate->sq_ring_generation ==
+                    source->sq_ring_generation &&
+                c42_handle_equal(
                     &candidate->command.handle,
                     &source->value.handle) &&
                 c42_origin_equal(
-                    &candidate->origin, &source->value.origin)) {
+                    &candidate->origin, &source->value.origin) &&
+                observer_ticket_equal(
+                    &candidate->ticket, &source->value.ticket)) {
                 active = candidate;
                 break;
             }
@@ -502,13 +629,14 @@ enum c42_result c42_observer_read_v2(
     const struct c42_controller *controller,
     struct c42_observer_v2 *observer)
 {
-    struct c42_observer_v2 local = {0};
+    struct c42_observer_v2 local;
     uint16_t index;
 
     if (!c42_controller_valid(controller) || observer == NULL ||
         sizeof(local) > UINT16_MAX) {
         return C42_INVALID;
     }
+    memset(&local, 0, sizeof(local));
     local.version = C42_OBSERVER_VERSION;
     local.size = (uint16_t)sizeof(local);
     local.controller_epoch = controller->controller_epoch;
@@ -526,7 +654,9 @@ enum c42_result c42_observer_read_v2(
     local.ready_cursor = controller->ready_cursor;
     for (index = 0; index < C42_QUEUE_SLOTS; ++index) {
         observer_sq_fill(&controller->sq[index], &local.sq[index]);
-        observer_cq_fill(&controller->cq[index], &local.cq[index]);
+        observer_cq_fill(
+            controller, &controller->cq[index], &local.cq[index]
+        );
     }
     for (index = 0; index < C42_CANDIDATE_SLOTS; ++index) {
         observer_candidate_fill(
@@ -564,6 +694,6 @@ enum c42_result c42_observer_read_v2(
         &controller->teardown_control,
         &local.controls[C42_BUSINESS_CONTROL_SLOTS + 1u]
     );
-    *observer = local;
+    memcpy(observer, &local, sizeof(local));
     return C42_OK;
 }

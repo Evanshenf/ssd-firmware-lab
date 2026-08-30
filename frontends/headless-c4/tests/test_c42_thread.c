@@ -59,12 +59,14 @@ int main(void)
         struct worker_context right_context = {0};
         pthread_t left_thread;
         pthread_t right_thread;
+        static const uint16_t depths[4] = {2, 3, 4, 32};
+        uint16_t depth = depths[repeat % 4u];
 
         if (!c42_test_fixture_init_with_nonce(
-                &left, 4, 0,
+                &left, depth, 0,
                 UINT64_C(0x8100000000000000) + repeat * 2u + 1u) ||
             !c42_test_fixture_init_with_nonce(
-                &right, 4, 0,
+                &right, depth, 0,
                 UINT64_C(0x8200000000000000) + repeat * 2u + 1u)) {
             return 1;
         }
@@ -87,6 +89,7 @@ int main(void)
             return 1;
         }
     }
-    printf("C4.2 different-instance thread isolation: PASS repeats=64\n");
+    printf("C4.2 different-instance thread isolation: PASS "
+           "repeats=64 depths=2/3/4/32\n");
     return 0;
 }
