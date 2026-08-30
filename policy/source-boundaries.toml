@@ -465,6 +465,76 @@ allowed_unfrozen_names = []
 "docs/legal/c4-1-source-boundary-review.md" = "952b09bb63fbbad7d52ac2c87ac10d77ef9f441cf3ef55ebc4ec74d252dedcbf"
 "docs/results/2026-08-30-c4-1-source-profile-wire.md" = "976749d535542c110fc4138e9c120a1e431afeb53e6af4a5b1a3de2ba388db23"
 
+[freeze.c4_2]
+baseline_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
+closed_build_input_roots = [
+  "docs/legal/c4-2-source-boundary-review.md",
+  "docs/results/2026-08-30-c4-2-headless-queue-hif.md",
+  "include/fwlab/contracts/hif_command_port.h",
+  "frontends/headless-c4/hif/c42.h",
+  "frontends/headless-c4/hif/c42_internal.h",
+  "frontends/headless-c4/hif/c42_memory_port.h",
+  "frontends/headless-c4/hif/c42_identity.c",
+  "frontends/headless-c4/hif/c42_queue.c",
+  "frontends/headless-c4/hif/c42_publication.c",
+  "frontends/headless-c4/hif/c42_runtime.c",
+  "frontends/headless-c4/fakes/c42_command.c",
+  "frontends/headless-c4/fakes/c42_command.h",
+  "frontends/headless-c4/fakes/c42_memory.c",
+  "frontends/headless-c4/fakes/c42_memory.h",
+  "frontends/headless-c4/fakes/c42_fake_main.c",
+  "frontends/headless-c4/tests/c42_support.c",
+  "frontends/headless-c4/tests/c42_support.h",
+  "frontends/headless-c4/tests/test_c42_queue.c",
+  "frontends/headless-c4/tests/test_c42_publication.c",
+  "frontends/headless-c4/tests/test_c42_identity.c",
+  "frontends/headless-c4/tests/test_c42_reset_delete.c",
+  "frontends/headless-c4/tests/test_c42_thread.c",
+  "frontends/headless-c4/tests/c42_model.c",
+  "frontends/headless-c4/tests/c42_model.h",
+  "frontends/headless-c4/tests/model_c42.c",
+  "frontends/headless-c4/tests/broken_c42.c",
+  "frontends/headless-c4/tests/fuzz_c42.c",
+  "scripts/check_c42_architecture.py",
+  "scripts/check_c42_analysis.py",
+  "scripts/check_c42_determinism.py",
+  "scripts/check_c42_cross.py",
+]
+allowed_unfrozen_names = []
+
+[freeze.c4_2.files]
+"docs/legal/c4-2-source-boundary-review.md" = "a31b0df5e067abedce68b55d0f0d7fcf7a817bfaacfbcb21acdf94747fecf195"
+"docs/results/2026-08-30-c4-2-headless-queue-hif.md" = "74746a7caeb55c9d96199cc8c37b6261078c22ec252d28758fe13e3f0ee75e31"
+"include/fwlab/contracts/hif_command_port.h" = "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519"
+"frontends/headless-c4/hif/c42.h" = "0cb232dc8a16281a04e40cfc5db01fc96abb1f47faed3bc15e9bcf81e905dd77"
+"frontends/headless-c4/hif/c42_internal.h" = "2b4a00bdbba8f1efe40a80a845492e8a1183fc186ceea207febfd953089907da"
+"frontends/headless-c4/hif/c42_memory_port.h" = "0399355f7325b91b0f059bf92388328d0d168088e4df81d52ad57712af420a9f"
+"frontends/headless-c4/hif/c42_identity.c" = "34c6ff9c2aee48f09605610368759aa4c1a9f63e519f0db7112e7fa5620991b8"
+"frontends/headless-c4/hif/c42_queue.c" = "bb3053e03fa4a4b1f84d3452a3cdb330c48c2173346b139defa432355857fa7a"
+"frontends/headless-c4/hif/c42_publication.c" = "a8c9f13266af12bcc1aca37b36fe519c6e634365d09ccb717d9531e7bd2eab77"
+"frontends/headless-c4/hif/c42_runtime.c" = "429ad8c87bbffd376aa0e98f5791d117ca47d6ace633990f924703885d291990"
+"frontends/headless-c4/fakes/c42_command.c" = "165eed7a6bac5f08c5f34e37dccb5fa3d0fe365819bdf22d35380b48f807c79f"
+"frontends/headless-c4/fakes/c42_command.h" = "2e4d450da9ae274ae8986013cdde5a5db0f4218cb779d7e1af8ab31e24ba9cdd"
+"frontends/headless-c4/fakes/c42_memory.c" = "01e00a2e07b3a07944ed3466b6f12d0fa3d00dd48826bb274e0c391342ffe124"
+"frontends/headless-c4/fakes/c42_memory.h" = "e2e5f2a2056269c4e22f4da8bd65347637fb729d37e1c5192b67f3234b317179"
+"frontends/headless-c4/fakes/c42_fake_main.c" = "e0479faa676ac64e4083b637ef8b965ffcc2ad019d9382ab60db49c1771594a1"
+"frontends/headless-c4/tests/c42_support.c" = "d30daf39b5035abefe05465f55168c3bffd531cd09c1265d942c6a4393fed68f"
+"frontends/headless-c4/tests/c42_support.h" = "a81a807396b3a27f32198fd2666bdcbf9a9321300c585e22e6203239fa05dda5"
+"frontends/headless-c4/tests/test_c42_queue.c" = "426e53dbfd36c191fa146224baf86ad0f9ab7d1e4a7db8da13fe83884341802a"
+"frontends/headless-c4/tests/test_c42_publication.c" = "7d2ed3ea48e198dd066e404b3c78c41043bef8c3c72a9a7a0a8ca548a6bb3795"
+"frontends/headless-c4/tests/test_c42_identity.c" = "504d15ff5e03b23298f6709db916dc8fcdb6100d9103311a282559360cd099d2"
+"frontends/headless-c4/tests/test_c42_reset_delete.c" = "4ec8050b602e9df6d5287e86eef07eba06a6b4d424889fa75df74a2b80670b2e"
+"frontends/headless-c4/tests/test_c42_thread.c" = "6fc1d6ce28cbdb2cbb837d3665d93e05429548eede5374ef9d39d57020be7a94"
+"frontends/headless-c4/tests/c42_model.c" = "94a2c29bf95fefdf6e72a5f4dd3a6bee360a2fb43962f576936fe4311bd307af"
+"frontends/headless-c4/tests/c42_model.h" = "a401463e23a6d659f2464bd5a2d6b38b8d94ff36f8639588cd3f56aa210b0214"
+"frontends/headless-c4/tests/model_c42.c" = "e7ccd0067e5f4674c4e91560b10015d4c337fb8e0e23816aad42f76dc64cf64f"
+"frontends/headless-c4/tests/broken_c42.c" = "fbcef3fcacf6fcfd2ddeb2a4fb5a12e16c8aad4e3c3189f3dc315720658571b8"
+"frontends/headless-c4/tests/fuzz_c42.c" = "f6edbcffc331830f1359f786c5d30c597dfbaaaa98b8980a05c2033dcfa50884"
+"scripts/check_c42_architecture.py" = "37328141bdf485b9ec8a03477455c5622c01eae274624a0532f6dc901bd100d0"
+"scripts/check_c42_analysis.py" = "bdb9bfddf04383e3279685b9c48463f54cf97be8be55fd9190f66bfd5de44fb2"
+"scripts/check_c42_determinism.py" = "a64b41e8df69f18773d583ddcb986892a079af98c362e5317895aadba093f383"
+"scripts/check_c42_cross.py" = "24f8ed722b02eb0039d9b729844153f84dffacb34c1427a59b175eca5378e57b"
+
 [layer_fakes]
 roots = ["core", "nfc", "media", "frontends"]
 target = "fake-link"
