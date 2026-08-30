@@ -1,6 +1,14 @@
 <!-- SPDX-FileCopyrightText: 2026 Evanshenf -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
+> [!WARNING]
+> **SUPERSEDED / REVIEW HOLD.** This page remains the exact record of the
+> source/evidence suites that passed at commits `905a01e` and `5df035d`, but
+> its PASS disposition is no longer current. Immutable post-source review
+> found ownership and evidence counterexamples. See the
+> [C4.2 post-review hold](2026-08-30-c4-2-post-review-hold.md).
+> C4.2a remediation evidence is pending.
+
 # C4.2 headless queue/CQ/identity result
 
 - Date: 2026-08-30

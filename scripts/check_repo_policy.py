@@ -691,6 +691,7 @@ EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     "docs/legal/c4-2-source-boundary-review.md",
     "docs/results/2026-08-30-c4-2-headless-queue-hif.md",
+    "docs/results/2026-08-30-c4-2-post-review-hold.md",
     "include/fwlab/contracts/hif_command_port.h",
     "frontends/headless-c4/hif/c42.h",
     "frontends/headless-c4/hif/c42_internal.h",
@@ -726,7 +727,9 @@ EXPECTED_C4_2_FILES = {
     "docs/legal/c4-2-source-boundary-review.md":
         "a31b0df5e067abedce68b55d0f0d7fcf7a817bfaacfbcb21acdf94747fecf195",
     "docs/results/2026-08-30-c4-2-headless-queue-hif.md":
-        "74746a7caeb55c9d96199cc8c37b6261078c22ec252d28758fe13e3f0ee75e31",
+        "dfd89d593b026d2d8722d54d768cc484be6f3b83ba065980de9c1aa62477fd28",
+    "docs/results/2026-08-30-c4-2-post-review-hold.md":
+        "78228c749010e472f81b0ab32b403088ea5ff45b5b5e6145dbec0b5fc468898a",
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/hif/c42.h":
