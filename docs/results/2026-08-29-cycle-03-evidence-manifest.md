@@ -4,8 +4,8 @@
 # Cycle 03 portable firmware evidence manifest
 
 - Date: 2026-08-29
-- Cycle result: five narrow portable/headless sub-gates passed
-- Current disposition: **REVIEW_HOLD / C3.5a REQUIRED**
+- Cycle result: five narrow sub-gates plus C3.5a remediation passed
+- Current disposition: **REVIEW_HOLD / C3.5a PASS / REVIEW_PENDING**
 - Post-review erratum:
   [C3.5 review hold](2026-08-29-c3-5-review-hold.md)
 - Evidence profile: unprivileged behavioral/Host-native portable firmware and
@@ -28,6 +28,7 @@ must close them before the cycle can leave `REVIEW_HOLD`.
 | C3.3 | programmable NAND/NFC model | `1e3594ad3068ed3991e28589db14420ef59ca6c2` | `e487e09d7bb320e36d439ce4f4c507ed10789b27` |
 | C3.4 | crash-consistent mapping and ordinary-file media | `9cc2f9093585e1dc382b93570a8cff536225bb6e` | `9f22e6ddebfcc77a720a761e3b07b302716f9334` |
 | C3.5 | integrated fixed-profile headless graduation | `48567dae4f3246c2eddb83a28a30c526947dbc86` | this evidence transaction |
+| C3.5a | failure-atomic headless remediation | `f3e28d7e368efa312e4909c2a8167867b31757c5` | [remediation evidence](2026-08-30-c3-5a-failure-atomic-remediation.md) |
 
 Each gate consumed earlier source as frozen input. C3.5 added only a headless
 frontend, private bindings, test fixtures/models and checkers; it did not
@@ -94,6 +95,29 @@ semantic/raw  8676761e2f91a8617983629e57af0b7376179271d76d6f699664143ca704ebea
 container     d039a57e1adba3270ac8cc53a4376bca48218905a2bea0d72f0655b5b2a246b2
 ```
 
+### C3.5a remediation
+
+- value-only authoritative publications and an independent observer;
+- stable, budget-bounded operation and runtime-finalizer tokens;
+- binding v2 compensation/query/ACK ledgers and exact lifecycle port;
+- reset 15+1 preflight plus NFC cleanup epoch 17;
+- recoverable C31 fault teardown and explicit C34 phase-2 poison retention;
+- fixed-profile/provider-table/capacity validation and M/B/P two-atom rebuild;
+- 924 unique actor strings, 5,544 fresh live executions, 20,586 within-matrix
+  unique prefix labels and 72,072 live prefix observations;
+- 16 legacy plus 14 remediation invariants, with 14 new shortest mutations;
+- clean GCC/Clang/ASan+UBSan/TSan/static/architecture/determinism/cross run.
+
+Canonical C3.5a hashes:
+
+```text
+archive       b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f
+life          fa7e54ad77ab7e66bf89ce458c9ae83a105932ffe7285d772a8dca33d958d93a
+semantic/raw  a529682388062101969911900aa385adc491a28d6b498c7a5cae115bb1f2fde0
+container     b6e9125697ed85894aa4ac26c5167b3c05ccbf51f8c8d0f41fb6bbb1f77d1399
+two-atom      dc7e66f4a627939eddac9979ca3e46f5de7b4bc61eff7180ef3f48ad076b3b92
+```
+
 ## Two explicit limitations
 
 First, the scripted S lane proves only the C3.1/headless lifecycle envelope. It
@@ -123,15 +147,15 @@ debug/lab machine, physical SSD or raw device participated in Cycle 03.
 
 ## Review and next-step lock
 
-Cycle 03 has reached its five-gate review cadence. The next action is the
-scheduled file-based ChatGPT Pro architecture second opinion. The private raw
-review is not public evidence and cannot be described as independent
-reproduction, certification, endorsement or official recognition.
+Cycle 03 has reached its review cadence. The next action is the targeted
+file-based ChatGPT Pro review of the exact C3.5a source/evidence pair. The
+private raw review is not public evidence and cannot be described as
+independent reproduction, certification, endorsement or official recognition.
 
-A Critical review finding places the cycle in `REVIEW_HOLD` and requires a
-separate C3.5a correction. Without a Critical finding, Required and Advisory
-items become an explicit future backlog. This manifest does not authorize
-Cycle 04 or select its transport boundary.
+The existing `REVIEW_HOLD` remains until that review reports no Critical and a
+separate public closure commit is pushed and read back. Any Critical requires
+another correction; Required and Advisory items remain explicit backlog. This
+manifest does not authorize Cycle 04 or select its transport boundary.
 
 Still outside the graduated scope: NVMe protocol/queues, hardware DMA,
 IRQ/MSI-X, BAR/PCI, VFIO, QEMU device integration, Host-native binding, raw

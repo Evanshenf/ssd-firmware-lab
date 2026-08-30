@@ -3,8 +3,8 @@
 
 # C3.5a failure-atomic headless firmware remediation
 
-> **Review status:** `REVIEW_HOLD / C3.5a IN PROGRESS`. The remediation is
-> implemented locally and must still pass its clean source/evidence freeze and targeted
+> **Review status:** `REVIEW_HOLD / C3.5a PASS / REVIEW_PENDING`. The remediation
+> passed its clean source/evidence freeze and must still pass the targeted
 > second-opinion review before the hold can be closed. The original finding is
 > recorded in the [public hold record](../../docs/results/2026-08-29-c3-5-review-hold.md).
 

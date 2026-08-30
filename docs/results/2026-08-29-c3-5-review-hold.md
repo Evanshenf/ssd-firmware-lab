@@ -102,6 +102,11 @@ pthread evidence does not imply same-instance thread safety.
 Cycle 03 cannot be marked reviewed or graduated until a new C3.5a source and
 evidence pair closes the Critical findings. Cycle 04 is not open.
 
+The C3.5a source/evidence pair now reports `PASS / REVIEW_PENDING`; see the
+[2026-08-30 remediation result](2026-08-30-c3-5a-failure-atomic-remediation.md).
+This does not remove the hold. A targeted review and a separate closure commit
+are still required.
+
 NVMe protocol/queues, device DMA, IRQ/MSI-X, BAR/PCI, VFIO, QEMU-device,
 Host-native binding, raw media, physical NAND/FPGA, real PLP/power failure,
 same-instance concurrency, 32-bit/freestanding and production containment
