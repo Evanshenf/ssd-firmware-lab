@@ -762,13 +762,13 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/hif/c42_queue.c":
         "97510d09d250bc39b9b7e3e230e5378c5727d12c5b5865cfe9ab70e194d3fcd3",
     "frontends/headless-c4/hif/c42_publication.c":
-        "06b2ae8e034552de98bfe3a1bd595b5f5e1d36a110530ac8c11de70276739035",
+        "f29bf0221c504c37a7111ce3731c7251e927d4866b9d3870093635e11e31a726",
     "frontends/headless-c4/hif/c42_runtime.c":
         "350f5b897fd632fbb5ba8388b3c7b109dc30f797c8b996cc7c376aa003c34a29",
     "frontends/headless-c4/fakes/c42_command.c":
-        "6b873822f57c5669dbcc13ce01c5c6993a33c5f5b73997aca2a2c03de141095d",
+        "c6d79286398349f31be85dc3094382045d4191f4ced23fd10394afad2940db94",
     "frontends/headless-c4/fakes/c42_command.h":
-        "9755e0efa061c4ced147fbf8f1fe0a230e8f07546d6a55baa50605a6b4abe0cc",
+        "48ed1a6354f4407a15259253feb8a4de22791c2be4a9caec343b212691d1d55c",
     "frontends/headless-c4/fakes/c42_event.c":
         "02846749a362987939a3c4435cd679713df099cec93618b48f79f10099803a6d",
     "frontends/headless-c4/fakes/c42_event.h":
@@ -784,15 +784,15 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/c42_support.h":
         "6830ee74ad5e92d08a8fb8df09170239f855c800b8069e541e77b4d34f277e54",
     "frontends/headless-c4/tests/c42_reference.c":
-        "bb71a8fa5a2c38654c6f6faa4a28624115e6e2326908fc821d0d5e9c2558b573",
+        "35b1a0d7dde644920329e43e998bf508f2215490ef2a51d54213be95808c6c10",
     "frontends/headless-c4/tests/c42_reference.h":
-        "c77470483d0dd6558a0cf39b55ee4ec15dc20ac0afd15333350f2845f9489204",
+        "e4e447efa7544ec27dd912fc8c36ef8482d109054e6d289089740c2fbbe478aa",
     "frontends/headless-c4/tests/c42_dut_bfs.c":
-        "4328f37dc992d553528bfb1a7e17ffb85c654fb81ca49574f4c78e613ac3074e",
+        "45bbb7bda6a6e93a6bdbd3bea612e203fbc5dfe3c79dbf5c991051a48b7ca4f0",
     "frontends/headless-c4/tests/c42_dut_bfs.h":
         "847cea1418ae76827bf5b088be2e012a420a88b04fc031c53770a93f929c9381",
     "frontends/headless-c4/tests/test_c42_queue.c":
-        "40e7e7a141e3d78fc34a959446d7fcbb197e48635d277e3ed76402f06224de73",
+        "fed633eb19858f2f7c8bb72583e48c20e21c0ab3c8ee0a9056cf08ae554982b6",
     "frontends/headless-c4/tests/test_c42_publication.c":
         "1cd904553e73c7fbbe282f2c651f5b63927ebc43139fe71f672f558b0edb8922",
     "frontends/headless-c4/tests/test_c42_identity.c":
@@ -800,7 +800,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/test_c42_reset_delete.c":
         "f0e4bcfd2e7e3bc9f4ea88a60788eab104fdc0efcb3ed65d38e904146cd8744a",
     "frontends/headless-c4/tests/test_c42_remediation.c":
-        "6ac119cca556cd7824d66aa427b8fb823fe843001c13948a198e6c2bd5298f3e",
+        "69bc5f2dc61652a88729a697ce0cbe44d72833e72a9f3b876ef1c0eb4a6c2285",
     "frontends/headless-c4/tests/test_c42_dut_replay.c":
         "087637f4c81a9b5d159bc772582f54a1fe2dbdecb765f6c8e3a5f7ffead60a21",
     "frontends/headless-c4/tests/test_c42_public_abi.c":
@@ -818,7 +818,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/fuzz_c42.c":
         "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54",
     "scripts/check_c42_architecture.py":
-        "b5ae9a480e6870b7d9dea989a6d6b70a9609e3410e824d22d07de3555ec3da24",
+        "c56184abf2bc31413a406cce146360ef07a23af11c8f8336bdb48e162f4518a6",
     "scripts/check_c42_analysis.py":
         "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a",
     "scripts/check_c42_determinism.py":
@@ -826,7 +826,7 @@ EXPECTED_C4_2_FILES = {
     "scripts/check_c42_cross.py":
         "df599133d087607cba7ca9d34d7c12687ed307922f4fa8d69d0fe56da7d2a592",
     "scripts/check_c42_dynamic_mutations.py":
-        "e326f9f7aec7914f1117c08db9a6f50963a5f4ab755329ff681c9a21b40b22a5",
+        "c0fc058e292a23508d61f901ea03ee4d2240c5e1baae43383e0a4142fde54661",
 }
 
 EXPECTED_FREEZES = {
@@ -1403,14 +1403,17 @@ def check_c42_build_closure(failures: list[str]) -> None:
         if source not in source_list:
             failures.append(f"C4.2 frozen source list is incomplete: {source}")
     database = subprocess.run(
-        ["make", "-C", str(ROOT / "frontends/headless-c4"), "-qp"],
+        ["make", "-C", str(ROOT / "frontends/headless-c4"), "-prRn"],
         cwd=ROOT, check=False, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         timeout=30,
     )
     if database.returncode != 0:
         failures.append("C4.2 make database could not be resolved")
         return
+    if "overriding recipe for target" in database.stderr or \
+            "ignoring old recipe for target" in database.stderr:
+        failures.append("C4.2 protected Make target has an overriding recipe")
 
     def target_prerequisites(name: str) -> list[str] | None:
         prefix = f"{name}:"

@@ -52,7 +52,11 @@ struct c42_fake_command_script {
     uint8_t reverse_ready;
     uint8_t cleanup_pending;
     uint8_t inject_omit_outputs;
-    uint8_t reserved[5];
+    uint8_t completion_status_code;
+    uint8_t completion_status_type;
+    uint8_t completion_retry_delay;
+    uint8_t completion_more;
+    uint8_t completion_do_not_retry;
 };
 
 struct c42_fake_command_injection {

@@ -337,6 +337,18 @@ static int local_hif_commit_pending(
     return 0;
 }
 
+static int hif_committed_exists(const struct c42_controller *controller)
+{
+    uint32_t index;
+
+    for (index = 0; index < controller->config.command_capacity; ++index) {
+        if (controller->commands[index].state == C42_COMMAND_HIF_COMMITTED) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int c42_poll_ready(struct c42_controller *controller)
 {
     uint32_t offset;
@@ -350,7 +362,14 @@ int c42_poll_ready(struct c42_controller *controller)
     if (local_hif_commit_pending(controller)) {
         return 0;
     }
-    controller->ready_poll_pending = 0;
+    if (controller->ready_poll_pending != 0) {
+        if (!hif_committed_exists(controller)) {
+            controller->ready_poll_pending = 0;
+        } else {
+            controller->ready_poll_pending = 0;
+            return poll_ready_once(controller);
+        }
+    }
     for (offset = 0; offset < controller->config.command_capacity; ++offset) {
         uint16_t selected = (uint16_t)(
             (controller->ready_cursor + offset) %
@@ -364,6 +383,7 @@ int c42_poll_ready(struct c42_controller *controller)
         }
         if (command->state == C42_COMMAND_READY &&
             acquire_completion(controller, command) != 0) {
+            controller->ready_poll_pending = (uint8_t)(poll_needed != 0);
             controller->ready_cursor = (uint8_t)(
                 (selected + 1u) % controller->config.command_capacity
             );
@@ -371,6 +391,7 @@ int c42_poll_ready(struct c42_controller *controller)
         }
         if (command->state == C42_COMMAND_LEASED ||
             command->state == C42_COMMAND_CONSUME_PREPARE) {
+            controller->ready_poll_pending = (uint8_t)(poll_needed != 0);
             controller->ready_cursor = (uint8_t)(
                 (selected + 1u) % controller->config.command_capacity
             );

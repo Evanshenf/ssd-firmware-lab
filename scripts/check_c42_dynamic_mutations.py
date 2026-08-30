@@ -24,12 +24,24 @@ def mutations() -> list[dict[str, object]]:
     return [
         {"name": "BM_HEAD_ADVANCES_BEFORE_ADMISSION_RECONCILE",
          "target": "c42_remediation_unit",
-         "edits": [("frontends/headless-c4/hif/c42_queue.c",
-                    "    command->state = C42_COMMAND_ADMIT_POISON_HOLD;\n"
-                    "    c42_fault_sq(controller, command->sq_index,",
-                    "    controller->sq[command->sq_index].device_head++;\n"
-                    "    command->state = C42_COMMAND_ADMIT_POISON_HOLD;\n"
-                    "    c42_fault_sq(controller, command->sq_index,")]},
+         "edits": [
+             ("frontends/headless-c4/hif/c42_queue.c",
+              "        command->ticket = ticket;\n"
+              "        command->state = C42_COMMAND_PORT_COMMITTED;\n"
+              "        return 1;",
+              "        command->ticket = ticket;\n"
+              "        command->state = C42_COMMAND_PORT_COMMITTED;\n"
+              "        controller->sq[command->sq_index].device_head =\n"
+              "            (uint16_t)((controller->sq[command->sq_index].device_head + 1u) %\n"
+              "                       controller->sq[command->sq_index].depth);\n"
+              "        return 1;"),
+             ("frontends/headless-c4/hif/c42_queue.c",
+              "    command->state = C42_COMMAND_HIF_COMMITTED;\n"
+              "    sq->device_head = (uint16_t)((sq->device_head + 1u) % sq->depth);\n"
+              "    sq->pending--;",
+              "    command->state = C42_COMMAND_HIF_COMMITTED;\n"
+              "    sq->pending--;"),
+         ]},
         {"name": "BM_REREAD_SQE_ON_BACKPRESSURE",
          "target": "c42_identity_unit",
          "edits": [("frontends/headless-c4/hif/c42_queue.c",
@@ -171,9 +183,11 @@ def mutations() -> list[dict[str, object]]:
                     "    return controller->cq[queue_index].life == C42_QUEUE_LIVE;")]},
         {"name": "BM_CREATE_LIVE_BEFORE_SCRUB", "target": "c42_queue_unit",
          "edits": [("frontends/headless-c4/hif/c42_queue.c",
-                    "    candidate->state = descriptor->kind == C42_QUEUE_SQ ?\n"
-                    "                       C42_CANDIDATE_READY : C42_CANDIDATE_PREPARED;",
-                    "    candidate->state = C42_CANDIDATE_READY;")]},
+                    "    if (candidate->state != C42_CANDIDATE_READY ||\n"
+                    "        !c42_queue_index(candidate->descriptor.queue_id, &index)) {",
+                    "    if ((candidate->state != C42_CANDIDATE_READY &&\n"
+                    "         candidate->state != C42_CANDIDATE_PREPARED) ||\n"
+                    "        !c42_queue_index(candidate->descriptor.queue_id, &index)) {")]},
         {"name": "BM_RECREATE_BEFORE_TOMBSTONE_CLEAR", "target": "c42_reset_delete_unit",
          "edits": [("frontends/headless-c4/hif/c42_queue.c",
                     "         controller->sq[queue_index].life != C42_QUEUE_ABSENT)",
@@ -196,7 +210,7 @@ def mutations() -> list[dict[str, object]]:
 
 
 MUTANT_FAMILY = {
-    "BM_HEAD_ADVANCES_BEFORE_ADMISSION_RECONCILE": "F04-sq-invalid-cid",
+    "BM_HEAD_ADVANCES_BEFORE_ADMISSION_RECONCILE": "F03-capture-backpressure",
     "BM_REREAD_SQE_ON_BACKPRESSURE": "F03-capture-backpressure",
     "BM_DUPLICATE_CID_ALLOWED": "F04-sq-invalid-cid",
     "BM_MATCH_CID_WITHOUT_RING_GENERATION": "F08-cid-reuse-target",
@@ -284,8 +298,11 @@ def build_binary(
                 f"{run.stdout.decode(errors='replace')}"
             )
         path = paths[0].decode(errors="strict")
-        if path not in ("<bootstrap>", "<root>") and \
-                len(path.split(">")) > 20:
+        if path in ("<bootstrap>", "<root>"):
+            raise RuntimeError(
+                f"{compiler}/{target} used a bootstrap/root false kill: {path}"
+            )
+        if len(path.split(">")) > 20:
             raise RuntimeError(
                 f"{compiler}/{target} counterexample exceeds depth 20: {path}"
             )

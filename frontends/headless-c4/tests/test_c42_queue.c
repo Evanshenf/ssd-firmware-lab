@@ -302,6 +302,14 @@ static void test_candidate_contract_and_scrub_unknown(void)
               fixture.controller, &token, &status) == C42_OK &&
           status.state == C42_CANDIDATE_PREPARED,
           "CQ candidate remains private before scrub proof");
+    check(c42_candidate_commit(
+              fixture.controller, &token) == C42_WRONG_STATE &&
+          c42_candidate_query(
+              fixture.controller, &token, &status) == C42_OK &&
+          status.state == C42_CANDIDATE_PREPARED &&
+          c42_snapshot_read(fixture.controller, &after) == C42_OK &&
+          after.cq[1].life == C42_QUEUE_PREPARED,
+          "CQ commit before scrub proof is bitwise state preserving");
     check(c42_candidate_progress(fixture.controller, &token, 1) == C42_OK &&
           c42_candidate_query(
               fixture.controller, &token, &status) == C42_OK &&

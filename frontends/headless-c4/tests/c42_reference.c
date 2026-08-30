@@ -76,9 +76,11 @@ int c42_reference_bytes_equal(
 static const struct c42_reference_action ref_f01[] = {
     REF_ACTION("prepare-cq1", 0, 0, C42_REF_MAP_EVENT,
                C42_REF_CREATE_PREPARE),
+    REF_ACTION("commit-before-scrub", REF_BIT(0), REF_BIT(2),
+               C42_REF_QUEUE_CONTROL_STEP, C42_REF_CREATE_EARLY_COMMIT),
     REF_ACTION("scrub-cq1", REF_BIT(0), 0, C42_REF_MAP_EVENT,
                C42_REF_CREATE_PROGRESS),
-    REF_ACTION("commit-cq1", REF_BIT(1), 0, C42_REF_QUEUE_CONTROL_STEP,
+    REF_ACTION("commit-cq1", REF_BIT(2), 0, C42_REF_QUEUE_CONTROL_STEP,
                C42_REF_CREATE_COMMIT),
 };
 static const struct c42_reference_action ref_f02[] = {
@@ -98,7 +100,13 @@ static const struct c42_reference_action ref_f03[] = {
                C42_REF_CAPTURE_MUTATE),
     REF_ACTION("backpressure", REF_BIT(2), 0, C42_REF_PORT_STEP,
                C42_REF_CAPTURE_BACKPRESSURE),
-    REF_ACTION("publish-stable", REF_BIT(3), 0, C42_REF_PUBLICATION_STEP,
+    REF_ACTION("prepare-reserved", REF_BIT(3), 0, C42_REF_PORT_STEP,
+               C42_REF_CAPTURE_PORT_RESERVED),
+    REF_ACTION("admit-committed", REF_BIT(4), 0, C42_REF_PORT_STEP,
+               C42_REF_CAPTURE_PORT_COMMITTED),
+    REF_ACTION("hif-head-active", REF_BIT(5), 0, C42_REF_PORT_STEP,
+               C42_REF_CAPTURE_HIF_COMMITTED),
+    REF_ACTION("publish-stable", REF_BIT(6), 0, C42_REF_PUBLICATION_STEP,
                C42_REF_CAPTURE_PUBLISH),
 };
 static const struct c42_reference_action ref_f04[] = {
@@ -370,6 +378,9 @@ int c42_reference_transition(
         after->cq_life[1] = 1;
         after->candidate_state = 1;
         break;
+    case C42_REF_CREATE_EARLY_COMMIT:
+        after->last_result = 2;
+        break;
     case C42_REF_CREATE_PROGRESS:
         after->candidate_state = 3;
         break;
@@ -428,6 +439,23 @@ int c42_reference_transition(
         break;
     case C42_REF_CAPTURE_BACKPRESSURE:
         after->command_state[0] = 1;
+        break;
+    case C42_REF_CAPTURE_PORT_RESERVED:
+        after->command_state[0] = 3;
+        after->command_identity_ok[0] = 1;
+        after->port_records = 1;
+        break;
+    case C42_REF_CAPTURE_PORT_COMMITTED:
+        after->command_state[0] = 5;
+        after->command_identity_ok[0] = 1;
+        after->port_admitted = 1;
+        break;
+    case C42_REF_CAPTURE_HIF_COMMITTED:
+        after->sq_device_head[0] = 1;
+        after->sq_pending[0] = 0;
+        after->command_state[0] = 6;
+        after->active_identity_count = 1;
+        reference_raw(after, 0, 303);
         break;
     case C42_REF_CAPTURE_PUBLISH:
         after->sq_device_head[0] = 1;
@@ -690,12 +718,17 @@ int c42_reference_transition(
         after->port_ready = 1;
         after->port_leased = 1;
         after->port_consume_prepared = 1;
-        reference_cqe(after, 0, 312, 1, 1);
+        after->cqe_valid[0] = 1;
+        c42_reference_build_cqe(
+            UINT32_C(0x44332211), 1, 0, 312, 1,
+            0x5a, 3, 2, 1, 1, after->cqe[0]
+        );
         after->media_cqe_valid[0] = 1;
         memset(after->media_cqe[0], 0, sizeof(after->media_cqe[0]));
         break;
     case C42_REF_PUBLICATION_BODY_PREFIX:
         after->body_prefix[0] = 7;
+        memcpy(after->media_cqe[0], after->cqe[0], 7);
         break;
     case C42_REF_PUBLICATION_BODY_FULL:
         after->body_prefix[0] = 15;

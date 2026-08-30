@@ -123,6 +123,13 @@ static int dut_context_init(uint32_t family, struct dut_context *context)
     } else if (family == C42_REF_F09_PUBLICATION) {
         struct c42_fake_memory_outcome outcome = {0};
 
+        script.completion_result = UINT32_C(0x44332211);
+        script.completion_status_code = 0x5a;
+        script.completion_status_type = 3;
+        script.completion_retry_delay = 2;
+        script.completion_more = 1;
+        script.completion_do_not_retry = 1;
+        c42_fake_command_set_script(&context->fixture->command, &script);
         outcome.operation = C42_FAKE_MEMORY_BODY;
         outcome.effect = C42_MEMORY_EXACT_PREFIX;
         outcome.prefix = 7;
@@ -317,6 +324,11 @@ static int execute_action(struct dut_context *context, uint8_t action)
             fixture->controller, &context->descriptor, &context->candidate
         );
         break;
+    case C42_REF_CREATE_EARLY_COMMIT:
+        result = c42_candidate_commit(
+            fixture->controller, &context->candidate
+        );
+        break;
     case C42_REF_CREATE_PROGRESS:
         result = c42_candidate_progress(
             fixture->controller, &context->candidate, 1
@@ -357,9 +369,13 @@ static int execute_action(struct dut_context *context, uint8_t action)
     case C42_REF_CAPTURE_BACKPRESSURE:
         result = step_one(fixture);
         break;
+    case C42_REF_CAPTURE_PORT_RESERVED:
+    case C42_REF_CAPTURE_PORT_COMMITTED:
+    case C42_REF_CAPTURE_HIF_COMMITTED:
+        result = step_one(fixture);
+        break;
     case C42_REF_CAPTURE_PUBLISH:
-        if (!run_to_active(fixture, 1, 1) ||
-            !cache_active_commands(context) ||
+        if (!cache_active_commands(context) ||
             !c42_test_run(fixture, 256, 4)) return 0;
         break;
     case C42_REF_INVALID_TAIL:

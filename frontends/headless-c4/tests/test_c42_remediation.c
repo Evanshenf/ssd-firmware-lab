@@ -335,6 +335,23 @@ static uint32_t cleanup_query_total(
     return total;
 }
 
+static uint32_t command_event_total(
+    const struct c42_test_fixture *fixture,
+    uint32_t operation)
+{
+    uint32_t total = 0;
+    uint32_t index;
+
+    for (index = 0; index < fixture->event_log.count; ++index) {
+        if (fixture->event_log.events[index].provider ==
+                C42_FAKE_EVENT_COMMAND &&
+            fixture->event_log.events[index].operation == operation) {
+            total++;
+        }
+    }
+    return total;
+}
+
 static C42_TEST_NOINLINE void test_ultra_critical_regressions(void)
 {
     struct c42_test_fixture fixture;
@@ -721,6 +738,9 @@ static C42_TEST_NOINLINE void test_observer_reachable_state_coverage(void)
             break;
         }
     }
+    check(step < 32 && observer.commands[0].state ==
+              C42_OBSERVER_COMMAND_ABORT_RECONCILE,
+          "observer maps abort reconcile to its exact public state");
 
     executions++;
     check(c42_test_fixture_init_with_nonce(
@@ -745,6 +765,9 @@ static C42_TEST_NOINLINE void test_observer_reachable_state_coverage(void)
             break;
         }
     }
+    check(step < 32 && observer.commands[0].state ==
+              C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD,
+          "observer maps admission poison to its exact public state");
 
     executions++;
     check(c42_test_fixture_init_with_nonce(
@@ -769,6 +792,9 @@ static C42_TEST_NOINLINE void test_observer_reachable_state_coverage(void)
             break;
         }
     }
+    check(step < 64 && observer.commands[0].state ==
+              C42_OBSERVER_COMMAND_CONSUME_POISON_HOLD,
+          "observer maps consume poison to its exact public state");
 
     executions++;
     check(c42_test_fixture_init_with_nonce(
@@ -786,6 +812,9 @@ static C42_TEST_NOINLINE void test_observer_reachable_state_coverage(void)
                   &fixture, &coverage, &observer),
               "observer notification suppression transition");
     }
+    check(observer.notifications[0].in_use != 0 &&
+          observer.notifications[0].state == C42_OBSERVER_NOTIFY_SUPPRESSED,
+          "observer maps reset suppression to its exact public state");
 
     for (index = 0;
          index < sizeof(expected_command) / sizeof(expected_command[0]);
@@ -952,7 +981,7 @@ static C42_TEST_NOINLINE void test_literal_single_pass_ready_scan(void)
                   fixture.controller, &observer) == C42_OK &&
               fixture.command.acquire_count == acquire_before + 1u &&
               observer.commands[1].state == C42_OBSERVER_COMMAND_LEASED &&
-              observer.ready_poll_pending == 0 &&
+              observer.ready_poll_pending == 1 &&
               observer.commands[0].state ==
                   C42_OBSERVER_COMMAND_HIF_COMMITTED,
               "F18 same pass notes demand and leases later READY");
@@ -965,10 +994,177 @@ static C42_TEST_NOINLINE void test_literal_single_pass_ready_scan(void)
               c42_observer_read_v2(
                   fixture.controller, &observer) == C42_OK &&
               observer.ready_poll_pending == 0 &&
+              observer.commands[0].state == C42_OBSERVER_COMMAND_READY &&
+              observer.commands[1].state == C42_OBSERVER_COMMAND_LEASED,
+              "F18 deferred demand is next bounded poll action");
+    }
+    {
+        struct c42_step_result result = {0};
+        uint32_t polls = command_event_total(
+            &fixture, C42_FAKE_COMMAND_POLL
+        );
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              result.units_executed == 1 &&
+              command_event_total(
+                  &fixture, C42_FAKE_COMMAND_POLL) == polls,
+              "F18 poll credit cannot monopolize the next local action");
+    }
+}
+
+static C42_TEST_NOINLINE void test_hif_poll_credit_fairness(void)
+{
+    uint32_t variant;
+
+    for (variant = 0; variant < 2; ++variant) {
+        struct c42_test_fixture fixture;
+        struct c42_fake_command_script script = {0};
+        struct c42_observer_v2 observer;
+        uint16_t hif_index = UINT16_MAX;
+        uint16_t local_index = UINT16_MAX;
+        uint16_t second_queue = variant == 0 ? 0 : 1;
+        uint32_t step;
+        uint32_t polls;
+
+        executions++;
+        check(c42_test_fixture_init_with_nonce(
+                  &fixture, 4, variant != 0,
+                  UINT64_C(0xa139100000000000) + variant + 1u),
+              "F18 HIF credit fixture");
+        script.poll_delay = 100;
+        c42_fake_command_set_script(&fixture.command, &script);
+        check(c42_test_submit(&fixture, 0, 0, 1, 230) &&
+              c42_test_submit(
+                  &fixture, second_queue,
+                  second_queue == 0 ? 1 : 0,
+                  second_queue == 0 ? 2 : 1, 231),
+              "F18 HIF credit submit same/different CQ");
+        for (step = 0; step < 256; ++step) {
+            struct c42_step_result result = {0};
+            uint16_t index;
+            uint8_t hif_count = 0;
+
+            check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+                  c42_observer_read_v2(
+                      fixture.controller, &observer) == C42_OK,
+                  "F18 reach two HIF commands");
+            for (index = 0; index < observer.command_capacity; ++index) {
+                if (observer.commands[index].state ==
+                    C42_OBSERVER_COMMAND_HIF_COMMITTED) hif_count++;
+            }
+            if (hif_count == 2) break;
+        }
+        check(step < 256, "F18 both HIF commands reached");
+        memset(&script, 0, sizeof(script));
+        c42_fake_command_set_script(&fixture.command, &script);
+        for (step = 0; step < 64; ++step) {
+            struct c42_step_result result = {0};
+            uint16_t index;
+
+            check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+                  c42_observer_read_v2(
+                      fixture.controller, &observer) == C42_OK,
+                  "F18 establish HIF plus local lease");
+            hif_index = UINT16_MAX;
+            local_index = UINT16_MAX;
+            for (index = 0; index < observer.command_capacity; ++index) {
+                if (observer.commands[index].state ==
+                    C42_OBSERVER_COMMAND_HIF_COMMITTED) hif_index = index;
+                if (observer.commands[index].state ==
+                    C42_OBSERVER_COMMAND_LEASED) local_index = index;
+            }
+            if (hif_index != UINT16_MAX && local_index != UINT16_MAX) break;
+        }
+        check(step < 64, "F18 HIF plus leased local state reached");
+        script.inject_operation = C42_FAKE_COMMAND_CONSUME_PREPARE;
+        script.inject_result = FWLAB_HIF_PORT_IN_PROGRESS;
+        script.inject_count = 1000;
+        script.inject_omit_outputs = 1;
+        c42_fake_command_set_script(&fixture.command, &script);
+        polls = command_event_total(&fixture, C42_FAKE_COMMAND_POLL);
+        {
+            struct c42_step_result result = {0};
+
+            check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+                  c42_observer_read_v2(
+                      fixture.controller, &observer) == C42_OK &&
+                  observer.ready_poll_pending == 1 &&
+                  observer.commands[hif_index].state ==
+                      C42_OBSERVER_COMMAND_HIF_COMMITTED &&
+                  observer.commands[local_index].state ==
+                      C42_OBSERVER_COMMAND_CONSUME_PREPARE &&
+                  command_event_total(
+                      &fixture, C42_FAKE_COMMAND_POLL) == polls,
+                  "F18 local retry earns one HIF poll credit");
+        }
+        {
+            struct c42_step_result result = {0};
+
+            check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+                  c42_observer_read_v2(
+                      fixture.controller, &observer) == C42_OK &&
+                  observer.ready_poll_pending == 0 &&
+                  observer.commands[hif_index].state ==
+                      C42_OBSERVER_COMMAND_READY &&
+                  observer.commands[local_index].state ==
+                      C42_OBSERVER_COMMAND_CONSUME_PREPARE &&
+                  command_event_total(
+                      &fixture, C42_FAKE_COMMAND_POLL) == polls + 1u,
+                  "F18 poll credit bounds same/different-CQ HIF latency");
+        }
+        {
+            struct c42_step_result result = {0};
+
+            polls = command_event_total(&fixture, C42_FAKE_COMMAND_POLL);
+            check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+                  command_event_total(
+                      &fixture, C42_FAKE_COMMAND_POLL) == polls,
+                  "F18 local work resumes immediately after credited poll");
+        }
+    }
+}
+
+static C42_TEST_NOINLINE void test_admission_head_active_lp(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_observer_v2 observer;
+    struct c42_snapshot snapshot;
+    uint32_t step;
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa139200000000001)) &&
+          c42_test_submit(&fixture, 0, 0, 1, 232),
+          "F03 admission LP fixture");
+    for (step = 0; step < 64; ++step) {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              c42_observer_read_v2(
+                  fixture.controller, &observer) == C42_OK,
+              "F03 step to PORT_COMMITTED");
+        if (observer.commands[0].state ==
+            C42_OBSERVER_COMMAND_PORT_COMMITTED) break;
+    }
+    check(step < 64 &&
+          c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
+          snapshot.sq[0].device_index == 0 &&
+          snapshot.sq[0].pending_or_unacked == 1 &&
+          snapshot.active_commands == 0,
+          "F03 PORT_COMMITTED cannot expose head or active identity");
+    {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              c42_observer_read_v2(
+                  fixture.controller, &observer) == C42_OK &&
+              c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
               observer.commands[0].state ==
                   C42_OBSERVER_COMMAND_HIF_COMMITTED &&
-              observer.commands[1].state == C42_OBSERVER_COMMAND_PUB_RESERVED,
-              "F18 local consume remains ahead of provider poll");
+              snapshot.sq[0].device_index == 1 &&
+              snapshot.sq[0].pending_or_unacked == 0 &&
+              snapshot.active_commands == 1,
+              "F03 HIF commit atomically exposes head and active identity");
     }
 }
 
@@ -1841,6 +2037,8 @@ int main(void)
     test_observer_reachable_state_coverage();
     test_output_sentinels_and_poll();
     test_literal_single_pass_ready_scan();
+    test_hif_poll_credit_fairness();
+    test_admission_head_active_lp();
     test_ack_noncommitted_rejected();
     test_direct_memory_and_bool_outputs();
     test_reset_exported_api_cuts();

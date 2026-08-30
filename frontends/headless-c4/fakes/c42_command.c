@@ -641,6 +641,13 @@ static void intent_fill(
     record->intent.handle = record->ticket.handle;
     record->intent.origin = record->ticket.origin;
     record->intent.result_dword0 = command->script.completion_result;
+    record->intent.status_code = command->script.completion_status_code;
+    record->intent.status_code_type = command->script.completion_status_type;
+    record->intent.command_retry_delay =
+        command->script.completion_retry_delay;
+    record->intent.more = command->script.completion_more;
+    record->intent.do_not_retry =
+        command->script.completion_do_not_retry;
     record->intent.effect_class = FWLAB_NVME_EFFECT_NONE;
 }
 
