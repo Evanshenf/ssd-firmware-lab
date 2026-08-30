@@ -469,7 +469,7 @@ allowed_unfrozen_names = []
 status = "transitional_review_hold"
 baseline_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
 historical_source_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
-candidate_implementation_commit = "505162956728b3b67e845c9232b388955b1b6051"
+candidate_implementation_commit = "0cfcf1f92d8c07ee7683cad390240fcdb62d2d92"
 closed_build_input_roots = [
   "docs/legal/c4-2-source-boundary-review.md",
   "docs/legal/c4-2a-source-boundary-review.md",
