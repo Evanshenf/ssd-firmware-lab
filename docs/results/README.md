@@ -25,3 +25,4 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 - [2026-08-30: C3.5a failure-atomic headless remediation](2026-08-30-c3-5a-failure-atomic-remediation.md)
 - [2026-08-30: C3.5b wrapper recovery and trace coherence](2026-08-30-c3-5b-wrapper-recovery.md)
 - [2026-08-30: C3.5c protected teardown admission](2026-08-30-c3-5c-teardown-reserve.md)
+- [2026-08-30: Cycle 03 reviewed fixed-profile closure](2026-08-30-cycle-03-reviewed-closure.md)

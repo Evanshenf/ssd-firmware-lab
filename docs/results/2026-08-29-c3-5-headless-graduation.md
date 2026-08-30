@@ -4,7 +4,7 @@
 # C3.5 integrated headless firmware graduation result
 
 - Date: 2026-08-29
-- Current disposition: **REVIEW_HOLD / C3.5c PASS / REVIEW_PENDING**
+- Current disposition: **GRADUATED_FIXED_PROFILE / REVIEWED**
 - Post-review erratum:
   [C3.5 review hold](2026-08-29-c3-5-review-hold.md)
 - Immutable source commit: `48567dae4f3246c2eddb83a28a30c526947dbc86`
@@ -15,7 +15,9 @@
 
 > The test results below remain the recorded outcomes for their exact successful
 > workloads. A post-review source audit found three Critical failure-path defects,
-> so the graduation claim remains withdrawn pending reviewed C3.5c closure.
+> The historical C3.5 source was held after review. The remediated C3.5c pair
+> later received a no-Critical reviewed closure; the result is restored only
+> for that exact fixed-profile boundary.
 
 ## What graduated
 
@@ -265,5 +267,7 @@ Targeted review of the
 [C3.5b source/evidence pair](2026-08-30-c3-5b-wrapper-recovery.md) found that
 reset could still consume shared teardown-token capacity. C3.5c remediation
 now reports [PASS / REVIEW_PENDING](2026-08-30-c3-5c-teardown-reserve.md).
-Targeted review is still required and is not certification, recognition,
-endorsement or an independent test reproduction.
+The exact pair subsequently received a
+[no-Critical reviewed closure](2026-08-30-cycle-03-reviewed-closure.md).
+That review is not certification, recognition, endorsement or an independent
+test reproduction.

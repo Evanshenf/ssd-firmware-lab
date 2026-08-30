@@ -21,6 +21,10 @@ does not close the review hold. Closure requires targeted review of this exact
 source/evidence pair and a separate public closure commit if no Critical
 finding remains.
 
+Follow-up status: targeted review of the exact pair found no live Critical.
+The separate [Cycle 03 reviewed closure](2026-08-30-cycle-03-reviewed-closure.md)
+removes REVIEW_HOLD without changing production source or the evidence pair.
+
 ## Protected teardown identity
 
 Data operations, reset and teardown now use distinct UID domains. Reset retains

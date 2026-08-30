@@ -3,13 +3,13 @@
 
 # C3.5c teardown-reserved headless firmware remediation
 
-> **Review status:** `REVIEW_HOLD / C3.5c REVIEW_PENDING`. C3.5b made wrapper
+> **Review status:** `GRADUATED_FIXED_PROFILE / REVIEWED`. C3.5b made wrapper
 > tokens and retirement failure resumable, but targeted review found that reset
 > and teardown still shared one finite control-token counter. C3.5c gives
 > teardown an independent cleanup reserve and makes takeover admission
-> failure-atomic. The hold remains until a new evidence pair and targeted review
-> are complete. The original finding is recorded in the
-> [public hold record](../../docs/results/2026-08-29-c3-5-review-hold.md).
+> failure-atomic. Targeted review of the exact C3.5c source/evidence pair found
+> no live Critical; see the
+> [reviewed closure](../../docs/results/2026-08-30-cycle-03-reviewed-closure.md).
 
 This directory composes the frozen C3.1 lifecycle, C3.2 persistence policy,
 C3.3 programmable NAND controller and C3.4 mapping/file media behind a

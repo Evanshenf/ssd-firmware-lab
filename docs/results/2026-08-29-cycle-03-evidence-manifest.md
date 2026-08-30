@@ -5,7 +5,7 @@
 
 - Date: 2026-08-29
 - Cycle result: five narrow sub-gates plus C3.5a/C3.5b/C3.5c remediation passed
-- Current disposition: **REVIEW_HOLD / C3.5c PASS / REVIEW_PENDING**
+- Current disposition: **GRADUATED_FIXED_PROFILE / REVIEWED**
 - Post-review erratum:
   [C3.5 review hold](2026-08-29-c3-5-review-hold.md)
 - Evidence profile: unprivileged behavioral/Host-native portable firmware and
@@ -22,8 +22,10 @@ found a tokenless-wrapper blocker and a trace-metadata coherence requirement.
 C3.5b addressed that follow-up, but its targeted review found that reset could
 still exhaust a shared teardown-token counter and that active-reset takeover
 mutated state before proving teardown admission. C3.5c adds an independent
-teardown reserve and failure-atomic takeover; the cycle remains in
-`REVIEW_HOLD` pending review of that pair.
+teardown reserve and failure-atomic takeover; the cycle remained in
+`REVIEW_HOLD` pending review of that pair. Targeted review of the exact C3.5c
+pair subsequently found no live Critical, and the separate
+[closure record](2026-08-30-cycle-03-reviewed-closure.md) removes the hold.
 
 ## Immutable gate identities
 
@@ -188,8 +190,8 @@ dual-geometry test proves NFC provider/media isolation only. A versioned
 multi-geometry FTL profile is future work.
 
 Before post-review this was labeled `GRADUATED_FIXED_PROFILE / REVIEW_PENDING`.
-That label remains withdrawn; the current disposition is
-`REVIEW_HOLD / C3.5c PASS / REVIEW_PENDING` until a separate reviewed closure.
+The historical C3.5 label was withdrawn while C3.5a/b/c remediations ran. The
+current exact C3.5c pair is now `GRADUATED_FIXED_PROFILE / REVIEWED`.
 
 ## Architecture and safety closure
 
@@ -204,17 +206,17 @@ regular files. Successful test transactions close exact fds and remove build
 artifacts through component clean targets. No privileged operation, KVM,
 debug/lab machine, physical SSD or raw device participated in Cycle 03.
 
-## Review and next-step lock
+## Reviewed closure and next-step lock
 
-Cycle 03 has reached its review cadence. The next action is targeted file-based
-ChatGPT Pro review of the exact C3.5c source/evidence pair. The
-private raw review is not public evidence and cannot be described as
-independent reproduction, certification, endorsement or official recognition.
+The exact C3.5c source/evidence pair received a targeted no-Critical review and
+is bound by the separate [closure record](2026-08-30-cycle-03-reviewed-closure.md).
+The private raw review is not public evidence and is not independent
+reproduction, certification, endorsement or official recognition.
 
-The existing `REVIEW_HOLD` remains until that review reports no Critical and a
-separate public closure commit is pushed and read back. Any Critical requires
-another correction; Required and Advisory items remain explicit backlog. This
-manifest does not authorize Cycle 04 or select its transport boundary.
+The closure retains two Advisory guardrails: the architecture checker is a
+syntactic regression gate, and project-recorded build/cross results were not
+independently rerun by the reviewer. This manifest and closure do not authorize
+Cycle 04 or select its transport boundary.
 
 Still outside the graduated scope: NVMe protocol/queues, hardware DMA,
 IRQ/MSI-X, BAR/PCI, VFIO, QEMU device integration, Host-native binding, raw

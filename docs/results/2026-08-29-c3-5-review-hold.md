@@ -6,7 +6,7 @@
 - Date: 2026-08-29
 - Reviewed source: `48567dae4f3246c2eddb83a28a30c526947dbc86`
 - Reviewed evidence: `4d3641aa62c6cb27babb15b2dc13fbfac3324acb`
-- Current disposition: **REVIEW_HOLD / C3.5c PASS / REVIEW_PENDING**
+- Current disposition: **CLOSED / GRADUATED_FIXED_PROFILE / REVIEWED**
 
 The scheduled Cycle 03 second-opinion review found three source-level defects.
 They were then checked directly against the immutable public source and
@@ -119,8 +119,9 @@ separate closure commit can be considered.
 
 The C3.5c source/evidence pair now reports `PASS / REVIEW_PENDING`; see the
 [protected teardown-admission result](2026-08-30-c3-5c-teardown-reserve.md).
-This still does not remove the hold. Targeted review of the exact C3.5c pair
-and a separate closure commit remain mandatory.
+Targeted review of the exact C3.5c pair found no live Critical. The separate
+[Cycle 03 closure](2026-08-30-cycle-03-reviewed-closure.md) removes this hold
+for source `9c91538b...` and evidence `54f7fc9d...` only.
 
 NVMe protocol/queues, device DMA, IRQ/MSI-X, BAR/PCI, VFIO, QEMU-device,
 Host-native binding, raw media, physical NAND/FPGA, real PLP/power failure,
