@@ -23,3 +23,4 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 - [2026-08-29: C3.5 post-review hold and C3.5a requirement](2026-08-29-c3-5-review-hold.md)
 - [2026-08-29: Cycle 03 portable firmware evidence manifest](2026-08-29-cycle-03-evidence-manifest.md)
 - [2026-08-30: C3.5a failure-atomic headless remediation](2026-08-30-c3-5a-failure-atomic-remediation.md)
+- [2026-08-30: C3.5b wrapper recovery and trace coherence](2026-08-30-c3-5b-wrapper-recovery.md)

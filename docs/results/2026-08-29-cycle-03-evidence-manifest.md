@@ -4,8 +4,8 @@
 # Cycle 03 portable firmware evidence manifest
 
 - Date: 2026-08-29
-- Cycle result: five narrow sub-gates plus C3.5a remediation passed
-- Current disposition: **REVIEW_HOLD / C3.5a PASS / REVIEW_PENDING**
+- Cycle result: five narrow sub-gates plus C3.5a/C3.5b remediation passed
+- Current disposition: **REVIEW_HOLD / C3.5b PASS / REVIEW_PENDING**
 - Post-review erratum:
   [C3.5 review hold](2026-08-29-c3-5-review-hold.md)
 - Evidence profile: unprivileged behavioral/Host-native portable firmware and
@@ -16,8 +16,11 @@ result into an NVMe transport, hardware DMA/interrupt, PCI endpoint, physical
 power-loss or raw-media claim.
 
 The five recorded sub-gate runs completed, but Cycle 03 is not graduated. A
-post-review source audit found three Critical C3.5 failure-path defects; C3.5a
-must close them before the cycle can leave `REVIEW_HOLD`.
+post-review source audit found three Critical C3.5 failure-path defects. C3.5a
+closed the trace-arithmetic and reset-exhaustion defects, but targeted review
+found a tokenless-wrapper blocker and a trace-metadata coherence requirement.
+C3.5b addresses that follow-up; the cycle remains in `REVIEW_HOLD` pending
+narrow review of the new pair.
 
 ## Immutable gate identities
 
@@ -29,6 +32,7 @@ must close them before the cycle can leave `REVIEW_HOLD`.
 | C3.4 | crash-consistent mapping and ordinary-file media | `9cc2f9093585e1dc382b93570a8cff536225bb6e` | `9f22e6ddebfcc77a720a761e3b07b302716f9334` |
 | C3.5 | integrated fixed-profile headless graduation | `48567dae4f3246c2eddb83a28a30c526947dbc86` | this evidence transaction |
 | C3.5a | failure-atomic headless remediation | `f3e28d7e368efa312e4909c2a8167867b31757c5` | [remediation evidence](2026-08-30-c3-5a-failure-atomic-remediation.md) |
+| C3.5b | wrapper recovery and trace coherence | `10b66debcd1a59a91504e709e57b81833ae2330a` | [follow-up evidence](2026-08-30-c3-5b-wrapper-recovery.md) |
 
 Each gate consumed earlier source as frozen input. C3.5 added only a headless
 frontend, private bindings, test fixtures/models and checkers; it did not
@@ -118,6 +122,32 @@ container     b6e9125697ed85894aa4ac26c5167b3c05ccbf51f8c8d0f41fb6bbb1f77d1399
 two-atom      dc7e66f4a627939eddac9979ca3e46f5de7b4bc61eff7180ef3f48ad076b3b92
 ```
 
+### C3.5b wrapper recovery and trace coherence
+
+- one caller-serialized compatibility ownership slot keeps zero/short-budget
+  tokens queryable and resumes only the same wrapper/input;
+- binding retirement failure remains explicit as cleanup pending with the
+  authoritative outcome/publication unchanged;
+- runtime finalization adopts submit/completion/reset/active-teardown work and
+  a completed-teardown tombstone before bundle release;
+- trace schema v3 binds cached UID/generation/offset to the encoded record and
+  rejects forged trace/reservation metadata without mutation;
+- 16 directed wrapper cases cover invalid contracts, budget cuts, four-kind
+  takeover, completed teardown, before/after and permanent retirement errors;
+- two new abstract invariants/mutations bring the remediation model to 16
+  invariants, 60 states and 47 transitions;
+- clean GCC/Clang/ASan+UBSan/TSan/static/architecture/determinism/cross run.
+
+Canonical C3.5b hashes:
+
+```text
+archive       b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f
+life          3b38adcdaa0f3a6b8c2ab5ea54d4a134826a49a456f3e32672126ae811ce5842
+semantic/raw  68d49de982b70406c3c1e1baf39549502c384afe5827eb3acc7f155026040508
+container     b6e9125697ed85894aa4ac26c5167b3c05ccbf51f8c8d0f41fb6bbb1f77d1399
+two-atom      dc7e66f4a627939eddac9979ca3e46f5de7b4bc61eff7180ef3f48ad076b3b92
+```
+
 ## Two explicit limitations
 
 First, the scripted S lane proves only the C3.1/headless lifecycle envelope. It
@@ -129,8 +159,8 @@ dual-geometry test proves NFC provider/media isolation only. A versioned
 multi-geometry FTL profile is future work.
 
 Before post-review this was labeled `GRADUATED_FIXED_PROFILE / REVIEW_PENDING`.
-That label is withdrawn; the current disposition remains
-`REVIEW_HOLD / C3.5a REQUIRED` until a separate remediation closure.
+That label remains withdrawn; the current disposition is
+`REVIEW_HOLD / C3.5b PASS / REVIEW_PENDING` until a separate reviewed closure.
 
 ## Architecture and safety closure
 
@@ -148,7 +178,7 @@ debug/lab machine, physical SSD or raw device participated in Cycle 03.
 ## Review and next-step lock
 
 Cycle 03 has reached its review cadence. The next action is the targeted
-file-based ChatGPT Pro review of the exact C3.5a source/evidence pair. The
+file-based ChatGPT Pro review of the exact C3.5b source/evidence pair. The
 private raw review is not public evidence and cannot be described as
 independent reproduction, certification, endorsement or official recognition.
 

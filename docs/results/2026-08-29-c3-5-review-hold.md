@@ -6,7 +6,7 @@
 - Date: 2026-08-29
 - Reviewed source: `48567dae4f3246c2eddb83a28a30c526947dbc86`
 - Reviewed evidence: `4d3641aa62c6cb27babb15b2dc13fbfac3324acb`
-- Current disposition: **REVIEW_HOLD / C3.5a REQUIRED**
+- Current disposition: **REVIEW_HOLD / C3.5b PASS / REVIEW_PENDING**
 
 The scheduled Cycle 03 second-opinion review found three source-level defects.
 They were then checked directly against the immutable public source and
@@ -104,8 +104,15 @@ evidence pair closes the Critical findings. Cycle 04 is not open.
 
 The C3.5a source/evidence pair now reports `PASS / REVIEW_PENDING`; see the
 [2026-08-30 remediation result](2026-08-30-c3-5a-failure-atomic-remediation.md).
-This does not remove the hold. A targeted review and a separate closure commit
-are still required.
+Its targeted review closed the trace-arithmetic and reset-exhaustion Criticals
+but found that exported convenience wrappers could still lose their resumable
+token or suppress transaction-retirement failure. It also required stronger
+trace cache/record coherence.
+
+The follow-up C3.5b source/evidence pair reports `PASS / REVIEW_PENDING`; see
+the [wrapper-recovery result](2026-08-30-c3-5b-wrapper-recovery.md). This does
+not remove the hold. A targeted review of the exact C3.5b pair and a separate
+closure commit are still required.
 
 NVMe protocol/queues, device DMA, IRQ/MSI-X, BAR/PCI, VFIO, QEMU-device,
 Host-native binding, raw media, physical NAND/FPGA, real PLP/power failure,

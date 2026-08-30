@@ -18,6 +18,11 @@ hold. Closure requires a targeted second-opinion review of this exact source
 and evidence, followed by a separate public closure commit if no Critical
 finding remains.
 
+Follow-up status: that targeted review closed C-01 and C-03 but found a
+tokenless compatibility-wrapper blocker and a trace-metadata coherence
+requirement. The subsequent [C3.5b result](2026-08-30-c3-5b-wrapper-recovery.md)
+reports `PASS / REVIEW_PENDING`; REVIEW_HOLD still remains active.
+
 ## Critical closure implemented
 
 ### C-01: checked observer bounds
