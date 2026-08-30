@@ -53,6 +53,27 @@ ARCHIVE_SOURCES = [
     ROOT / "core" / "c34" / "c34_provider.c",
 ]
 
+EXPECTED_ARCHIVE_HEADERS = {
+    "core/c31_internal.h",
+    "core/c34/c34.h",
+    "core/c34/c34_internal.h",
+    "include/fwlab/contracts/c31_provider.h",
+    "include/fwlab/contracts/nand_media.h",
+    "include/fwlab/contracts/nfc_provider.h",
+    "include/fwlab/contracts/persistence_facts.h",
+    "include/fwlab/portable/c31.h",
+    "include/fwlab/portable/c31_codec.h",
+    "include/fwlab/portable/c31_types.h",
+    "include/fwlab/portable/nfc_types.h",
+    "include/fwlab/portable/persistence_policy.h",
+    "include/fwlab/private/c34_physical_txn.h",
+}
+
+FORBIDDEN_PORTABILITY_WORDS = re.compile(
+    r"\b(vfio|qemu|nvme|pcie?|bar|irq|iova|linux|errno)\b|a-prime",
+    re.IGNORECASE,
+)
+
 POSIX_SYMBOLS = {
     "__errno_location",
     "fdatasync",
@@ -87,6 +108,57 @@ def symbols(path: Path, undefined: bool) -> set[str]:
     return found
 
 
+def dependency_headers(dep: Path, component: Path, root: Path) -> set[Path]:
+    text = dep.read_text(encoding="utf-8").replace("\\\n", " ")
+    try:
+        dependencies = text.split(":", 1)[1].split()
+    except IndexError as error:
+        raise RuntimeError(f"malformed dependency file: {dep}") from error
+    headers: set[Path] = set()
+    resolved_root = root.resolve()
+    for token in dependencies:
+        if not token.endswith(".h"):
+            continue
+        path = (component / token).resolve()
+        try:
+            path.relative_to(resolved_root)
+        except ValueError as error:
+            raise RuntimeError(
+                f"archive dependency escapes repository: {token!r} in {dep}"
+            ) from error
+        if not path.is_file() or path.is_symlink():
+            fail(f"archive dependency is unavailable or indirect: {path}")
+        headers.add(path)
+    return headers
+
+
+def portability_token(path: Path) -> re.Match[str] | None:
+    return FORBIDDEN_PORTABILITY_WORDS.search(
+        path.read_text(encoding="utf-8")
+    )
+
+
+def audit_dependency_scanner() -> None:
+    with tempfile.TemporaryDirectory(prefix="c35-dependency-mutation-") as directory:
+        root = Path(directory) / "repo"
+        component = root / "frontends" / "headless-c35"
+        header = root / "include" / "fwlab" / "portable" / "mutation.h"
+        dep = component / "build" / "fw" / "mutation.d"
+        header.parent.mkdir(parents=True)
+        dep.parent.mkdir(parents=True)
+        header.write_text("/* nvme transport mutation */\n", encoding="utf-8")
+        dep.write_text(
+            "build/fw/mutation.o: ../../core/mutation.c "
+            "../../include/fwlab/portable/mutation.h\n",
+            encoding="utf-8",
+        )
+        parsed = dependency_headers(dep, component, root)
+        if parsed != {header.resolve()}:
+            fail("dependency scanner did not resolve the injected header")
+        if portability_token(header) is None:
+            fail("dependency scanner mutation did not detect transport content")
+
+
 def audit_archive() -> str:
     if not ARCHIVE.is_file():
         fail(f"missing archive: {ARCHIVE}")
@@ -99,11 +171,19 @@ def audit_archive() -> str:
                                 for name in ARCHIVE_MEMBERS)
     if dep_names != expected_dep_names:
         fail(f"dependency file mismatch: {dep_names!r}")
+    archive_headers: set[Path] = set()
     for member, source in zip(ARCHIVE_MEMBERS, ARCHIVE_SOURCES):
         dep = BUILD / "fw" / member.replace(".o", ".d")
         text = dep.read_text(encoding="utf-8").replace("\\\n", " ")
         if member not in text.split(":", 1)[0] or source.name not in text:
             fail(f"dependency provenance mismatch: {dep}")
+        archive_headers.update(dependency_headers(dep, COMPONENT, ROOT))
+    actual_headers = {
+        path.relative_to(ROOT.resolve()).as_posix()
+        for path in archive_headers
+    }
+    if actual_headers != EXPECTED_ARCHIVE_HEADERS:
+        fail(f"archive header dependency mismatch: {sorted(actual_headers)!r}")
 
     nm_output = run("nm", "-A", "--defined-only", str(ARCHIVE)).decode()
     writable = []
@@ -134,18 +214,15 @@ def audit_archive() -> str:
     if (defined | external) & forbidden_symbols:
         fail("forbidden runtime symbol entered firmware archive")
 
-    scan_paths = ARCHIVE_SOURCES + sorted((ROOT / "include" / "fwlab").rglob("*.h"))
-    forbidden_words = re.compile(
-        r"\b(vfio|qemu|nvme|pcie?|bar|irq|iova|linux|errno)\b|a-prime",
-        re.IGNORECASE,
-    )
+    audit_dependency_scanner()
+    scan_paths = ARCHIVE_SOURCES + sorted(archive_headers)
     for path in scan_paths:
-        match = forbidden_words.search(path.read_text(encoding="utf-8"))
+        match = portability_token(path)
         if match:
             fail(f"host/transport token {match.group(0)!r} in {path}")
     archive_strings = run("strings", "-a", str(ARCHIVE)).decode(
         "utf-8", "replace")
-    match = forbidden_words.search(archive_strings)
+    match = FORBIDDEN_PORTABILITY_WORDS.search(archive_strings)
     if match:
         fail(f"host/transport string {match.group(0)!r} in archive")
 

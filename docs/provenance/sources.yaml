@@ -57,6 +57,33 @@ sources:
     code_copied: false
     allowed_paths: [docs]
 
+  - id: linux-v7.0-nvme-host-behavior
+    title: Linux v7.0 NVMe host source
+    url: https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/+/refs/tags/v7.0/drivers/nvme/host/
+    revision: "v7.0 peeled commit 028ef9c96e96197026887c0f092424679298aae8"
+    license: GPL-2.0-only
+    purpose: host initialization, queue, reset and completion behavior research; no source or table copied
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: spdk-v26.05-nvme-behavior
+    title: SPDK v26.05
+    url: https://github.com/spdk/spdk/tree/v26.05
+    revision: "v26.05 commit 6e7a52b1e7ee0dc3e436c670f43890b96ba29653"
+    license: BSD-3-Clause
+    purpose: independent queue and completion behavior cross-reference; no source or structure copied
+    code_copied: false
+    allowed_paths: [docs]
+
+  - id: nvm-express-specification-set-2026-08
+    title: NVM Express specification set public index
+    url: https://nvmexpress.org/specifications/
+    revision: "site listed Base 2.4 and NVM Command Set 1.3; accessed 2026-08-30"
+    license: third-party-terms
+    purpose: terminology, current-version and source-boundary review only; not an implementation authorization
+    code_copied: false
+    allowed_paths: [docs]
+
   - id: nvm-express-trademark-guidelines-2021
     title: NVM Express Trademark and Logo Usage Guidelines
     url: https://nvmexpress.org/wp-content/uploads/NVM-Express-Logo-and-Trademark-Guidelines_Updated-2.2.2021_Final.pdf

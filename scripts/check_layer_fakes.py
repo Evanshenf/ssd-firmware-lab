@@ -40,6 +40,13 @@ EXPECTED_COMPONENTS = {
         "require_elf": True,
         "run_output": True,
     },
+    "c4_protocol": {
+        "directory": "core/c4-nvme",
+        "target": "fake-link",
+        "output_variable": "FWLAB_FAKE_OUTPUT",
+        "require_elf": True,
+        "run_output": True,
+    },
 }
 
 

@@ -16,3 +16,6 @@ Open-source or non-commercial status does not, by itself, replace the license te
 - interoperability behavior and public operating-system interfaces may be tested without presenting a third-party implementation as project source.
 
 This boundary is not a blanket ban on implementing an interoperable device. It is a review rule that keeps original code, third-party material and marketing claims distinguishable. The absence of an official-recognition requirement does not itself decide the document-license, implementation-rights or patent basis of a particular contribution; that scoped question remains review-required.
+
+The first protocol-code boundary review is recorded in
+[the C4.1 source-boundary review](c4-1-source-boundary-review.md).

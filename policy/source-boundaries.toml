@@ -446,6 +446,13 @@ output_variable = "FWLAB_FAKE_OUTPUT"
 require_elf = true
 run_output = true
 
+[portable_components.c4_protocol]
+directory = "core/c4-nvme"
+target = "fake-link"
+output_variable = "FWLAB_FAKE_OUTPUT"
+require_elf = true
+run_output = true
+
 [provenance]
 manifest = "docs/provenance/sources.yaml"
 moving_revisions_for_code = false

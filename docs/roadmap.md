@@ -25,6 +25,13 @@ ADR-0006 and ADR-0007 freeze the lifecycle and durability prerequisites. They
 do not themselves open an implementation gate. IRQ, BAR, PCI, QEMU, native
 NVMe binding and raw media remain later independent work.
 
+Cycle 04 adds a fixed-profile software semantic oracle in five independent
+gates: source/profile/wire, queue/CQ identity, portable protocol/control plus a
+generalized multi-action graph, bounded transfer/capability data movement, and
+headless integration. Only the portable policy is transport-neutral; the
+headless memory-queue HIF is a replaceable reference. This sequence does not
+open PCI, vfio-user, native-driver or persistent-NAND claims.
+
 ## M2 — `vfio-user` guest (6–8 weeks)
 
 Pin a `libvfio-user` revision behind a thin adapter. Exercise an unmodified Linux guest with file media and a minimal raw-block adapter. Raw initialization is a separate identity-checked command; discard remains off. Exit on data verification, repeated enable/reset/queue cycles and fail-closed unmap/runtime restart.

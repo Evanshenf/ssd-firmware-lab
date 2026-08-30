@@ -58,6 +58,8 @@ This independent project is not affiliated with, endorsed by, recognized by, or 
 - [Executable persistence model](core/c32/README.md)
 - [Programmable NAND/NFC model](nfc/README.md)
 - [Integrated headless firmware graduation](frontends/headless-c35/README.md)
+- [Portable NVMe policy boundary](core/c4-nvme/README.md)
+- [Headless memory-transport reference](frontends/headless-c4/README.md)
 - [Milestone-0 risk plan](docs/m0-plan.md)
 - [Roadmap](docs/roadmap.md)
 - [Architecture decisions](docs/adr/README.md)

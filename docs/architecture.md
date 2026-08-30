@@ -40,6 +40,13 @@ The expanded owner/queue identity is HIF-private. Per ADR-0006, HIF binds it
 into an opaque origin token; portable firmware interprets only its own instance,
 controller epoch and command UID and never parses QID, CID or ring layout.
 
+Cycle 04 further distinguishes the address-free policy from its headless
+memory-transport reference. Doorbells, memory queues, data-pointer graphs and
+physical completion placement are not transport-neutral. The generalized
+`c4_command_graph_v1` will own multi-action protocol commands; frozen C31/C35
+remain unchanged regression references and are not a Cycle 04 runtime
+dependency. See [ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md).
+
 ## Command identity and lifecycle
 
 ```text
