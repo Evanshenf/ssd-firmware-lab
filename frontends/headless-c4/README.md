@@ -25,3 +25,40 @@ make check-all
 
 C4.1 has no queue walker, doorbell, PRP graph, DMA engine, interrupt, PCI
 register, QEMU adapter or storage backend.
+
+## C4.2 headless queue HIF
+
+C4.2 adds a caller-serialized, fixed-arena queue HIF around the frozen C4.1
+codec. The fixed profile has one Admin queue pair and one I/O queue pair,
+physical depths from 2 through 32, and usable SQ/CQ capacity `depth - 1`.
+Queue memory and the future command graph remain separate providers:
+
+```text
+fake 64-byte SQ / 16-byte CQ memory
+                 |
+                 v
+capture-once queue HIF -- opaque origin / CID generation map
+                 |
+                 v
+address-free command port -- graph-owned handle / ticket / lease
+```
+
+The HIF advances an SQ head only after the command port proves admission
+committed. A CQ entry stages bytes 0..13 and byte 15 first, publishes byte 14
+(status/phase) last, and releases the active CID only after the command port
+also proves consume committed. Host CQ-head events that arrive in the physical
+marker/reconcile window are latched and applied only after that cross-layer
+proof. Queue reset ends at `COLD_NO_QUEUES`; the caller must create, scrub and
+enable fresh Admin queues explicitly.
+
+```sh
+make check-c42
+make fake-link-c42
+make check-all
+```
+
+The C4.2 gate covers exact depths 2/3/4/32, 12 bounded-model families, 20
+dynamic broken variants, eight architecture mutations, 33 reset cut points,
+64 deterministic fuzz executions and 64 different-instance thread repeats.
+It does not implement NVMe command legality, Admin commands, PRP/data DMA,
+storage, BAR/MMIO, interrupts, PCI, QEMU or vfio-user.

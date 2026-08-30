@@ -8,7 +8,7 @@ FWLAB_C35_FAKE_OUTPUT := $(abspath $(FWLAB_FAKE_OUTPUT)).c35
 
 check:
 	$(MAKE) -C headless-c35 check
-	$(MAKE) -C headless-c4 check-c41
+	$(MAKE) -C headless-c4 check
 
 fake-link:
 	$(MAKE) -C headless-c35 fake-link \
