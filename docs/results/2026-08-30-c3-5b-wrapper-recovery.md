@@ -26,7 +26,8 @@ Follow-up status: that targeted review closed the trace-coherence item but
 found a remaining cleanup-admission Critical. Reset and teardown shared one
 finite control-token counter, and active-reset takeover modified control state
 before proving teardown allocation. C3.5c remediation is required;
-REVIEW_HOLD remains active.
+the subsequent [C3.5c result](2026-08-30-c3-5c-teardown-reserve.md) reports
+`PASS / REVIEW_PENDING`. REVIEW_HOLD remains active.
 
 ## Exported wrapper recovery
 

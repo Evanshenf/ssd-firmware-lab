@@ -4,8 +4,8 @@
 # Cycle 03 portable firmware evidence manifest
 
 - Date: 2026-08-29
-- Cycle result: five narrow sub-gates plus C3.5a/C3.5b remediation passed
-- Current disposition: **REVIEW_HOLD / C3.5c REQUIRED**
+- Cycle result: five narrow sub-gates plus C3.5a/C3.5b/C3.5c remediation passed
+- Current disposition: **REVIEW_HOLD / C3.5c PASS / REVIEW_PENDING**
 - Post-review erratum:
   [C3.5 review hold](2026-08-29-c3-5-review-hold.md)
 - Evidence profile: unprivileged behavioral/Host-native portable firmware and
@@ -21,8 +21,9 @@ closed the trace-arithmetic and reset-exhaustion defects, but targeted review
 found a tokenless-wrapper blocker and a trace-metadata coherence requirement.
 C3.5b addressed that follow-up, but its targeted review found that reset could
 still exhaust a shared teardown-token counter and that active-reset takeover
-mutated state before proving teardown admission. C3.5c must close that blocker;
-the cycle remains in `REVIEW_HOLD`.
+mutated state before proving teardown admission. C3.5c adds an independent
+teardown reserve and failure-atomic takeover; the cycle remains in
+`REVIEW_HOLD` pending review of that pair.
 
 ## Immutable gate identities
 
@@ -35,6 +36,7 @@ the cycle remains in `REVIEW_HOLD`.
 | C3.5 | integrated fixed-profile headless graduation | `48567dae4f3246c2eddb83a28a30c526947dbc86` | this evidence transaction |
 | C3.5a | failure-atomic headless remediation | `f3e28d7e368efa312e4909c2a8167867b31757c5` | [remediation evidence](2026-08-30-c3-5a-failure-atomic-remediation.md) |
 | C3.5b | wrapper recovery and trace coherence | `10b66debcd1a59a91504e709e57b81833ae2330a` | [follow-up evidence](2026-08-30-c3-5b-wrapper-recovery.md) |
+| C3.5c | protected teardown admission | `9c91538b78d88af88dc6a63da4fd10f1209fe14f` | [reserve evidence](2026-08-30-c3-5c-teardown-reserve.md) |
 
 Each gate consumed earlier source as frozen input. C3.5 added only a headless
 frontend, private bindings, test fixtures/models and checkers; it did not
@@ -150,6 +152,31 @@ container     b6e9125697ed85894aa4ac26c5167b3c05ccbf51f8c8d0f41fb6bbb1f77d1399
 two-atom      dc7e66f4a627939eddac9979ca3e46f5de7b4bc61eff7180ef3f48ad076b3b92
 ```
 
+### C3.5c protected teardown admission
+
+- reset and teardown use independent finite token domains;
+- the single instance-lifetime teardown token is inaccessible to reset and
+  epoch-denial wrappers;
+- teardown proves capacity before moving or clearing active control state;
+- S/M/B/P execute 15 successful resets, 497 queryable epoch denials, one
+  reset-identity admission rejection and successful independent teardown;
+- low-limit failure injection proves mutate-before-admit bitwise nonmutation;
+- permanent retirement failure remains resumable after finalizer takeover and
+  delays P-lane bundle/fd release until the provider recovers;
+- two new invariants/mutations bring the remediation model to 18 invariants,
+  65 states and 50 transitions;
+- clean compiler/sanitizer/analyzer/architecture/determinism/cross matrix.
+
+Canonical C3.5c hashes remain:
+
+```text
+archive       b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f
+life          3b38adcdaa0f3a6b8c2ab5ea54d4a134826a49a456f3e32672126ae811ce5842
+semantic/raw  68d49de982b70406c3c1e1baf39549502c384afe5827eb3acc7f155026040508
+container     b6e9125697ed85894aa4ac26c5167b3c05ccbf51f8c8d0f41fb6bbb1f77d1399
+two-atom      dc7e66f4a627939eddac9979ca3e46f5de7b4bc61eff7180ef3f48ad076b3b92
+```
+
 ## Two explicit limitations
 
 First, the scripted S lane proves only the C3.1/headless lifecycle envelope. It
@@ -162,7 +189,7 @@ multi-geometry FTL profile is future work.
 
 Before post-review this was labeled `GRADUATED_FIXED_PROFILE / REVIEW_PENDING`.
 That label remains withdrawn; the current disposition is
-`REVIEW_HOLD / C3.5c REQUIRED` until a separate reviewed closure.
+`REVIEW_HOLD / C3.5c PASS / REVIEW_PENDING` until a separate reviewed closure.
 
 ## Architecture and safety closure
 
@@ -179,8 +206,8 @@ debug/lab machine, physical SSD or raw device participated in Cycle 03.
 
 ## Review and next-step lock
 
-Cycle 03 has reached its review cadence. The next action is C3.5c source and
-evidence followed by targeted file-based ChatGPT Pro review. The
+Cycle 03 has reached its review cadence. The next action is targeted file-based
+ChatGPT Pro review of the exact C3.5c source/evidence pair. The
 private raw review is not public evidence and cannot be described as
 independent reproduction, certification, endorsement or official recognition.
 
