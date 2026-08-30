@@ -3,6 +3,8 @@
 
 #include "c42_internal.h"
 
+#include "fwlab/portable/nvme_codec.h"
+
 #include <string.h>
 
 #define C42_FAULT_READY_CONTRACT 20u
@@ -37,7 +39,8 @@ static enum c42_memory_result publication_effect(
         return call_result;
     }
     if (!memory_token_equal(&status->token, token) ||
-        status->result > C42_MEMORY_IN_PROGRESS ||
+        status->result > C42_MEMORY_RETIRED || status->committed > 1 ||
+        status->quiescent > 1 ||
         !c42_bytes_zero(status->reserved, sizeof(status->reserved))) {
         *valid = 0;
         return C42_MEMORY_POISONED;
@@ -75,22 +78,27 @@ static int consume_matches(
            consume->publication_uid == command->publication_uid;
 }
 
-static int cq_publication_busy(
-    const struct c42_controller *controller,
-    uint16_t cq_index)
+static int consume_equal(
+    const struct fwlab_hif_consume_token *left,
+    const struct fwlab_hif_consume_token *right)
 {
-    uint32_t index;
+    return fwlab_hif_consume_token_valid(left) &&
+           fwlab_hif_consume_token_valid(right) &&
+           ticket_equal(&left->lease.ticket, &right->lease.ticket) &&
+           left->lease.lease_uid == right->lease.lease_uid &&
+           left->lease.generation == right->lease.generation &&
+           left->publication_uid == right->publication_uid &&
+           left->consume_uid == right->consume_uid &&
+           left->generation == right->generation;
+}
 
-    for (index = 0; index < controller->config.command_capacity; ++index) {
-        const struct c42_command_record *command = &controller->commands[index];
-
-        if (command->cq_index == cq_index &&
-            command->state >= C42_COMMAND_LEASED &&
-            command->state <= C42_COMMAND_MARKER_RECONCILE) {
-            return 1;
-        }
-    }
-    return 0;
+static int intent_matches(
+    const struct fwlab_nvme_completion_intent *intent,
+    const struct c42_command_record *command)
+{
+    return fwlab_nvme_completion_valid(intent) &&
+           c42_handle_equal(&intent->handle, &command->command.handle) &&
+           c42_origin_equal(&intent->origin, &command->origin);
 }
 
 static int acquire_completion(
@@ -98,15 +106,12 @@ static int acquire_completion(
     struct c42_command_record *command)
 {
     struct c42_cq_record *cq = &controller->cq[command->cq_index];
-    struct c42_sq_record *sq = &controller->sq[command->sq_index];
     struct fwlab_nvme_completion_intent intent = {0};
     struct fwlab_hif_completion_lease lease = {0};
-    struct c41_publication_context context = {0};
     enum fwlab_hif_command_port_result result;
 
     if (cq->life != C42_QUEUE_LIVE ||
-        cq->unacked_count + cq->reserved_count >= cq->depth - 1u ||
-        cq_publication_busy(controller, command->cq_index)) {
+        cq->unacked_count + cq->reserved_count >= cq->depth - 1u) {
         return 0;
     }
     if (cq->next_slot_generation == 0 ||
@@ -118,29 +123,13 @@ static int acquire_completion(
         controller->providers.command.context, &command->ticket,
         &intent, &lease
     );
-    if (result == FWLAB_HIF_PORT_NO_CAPACITY) {
-        return 1;
-    }
-    if (result != FWLAB_HIF_PORT_OK || !lease_matches(&lease, command)) {
+    if (result != FWLAB_HIF_PORT_OK || !lease_matches(&lease, command) ||
+        !intent_matches(&intent, command)) {
         c42_fault_controller(controller, C42_FAULT_COMPLETION_CONTRACT);
         return 1;
     }
     command->intent = intent;
     command->lease = lease;
-    command->sqhd_snapshot = sq->device_head;
-    context.handle = command->command.handle;
-    context.origin = command->origin;
-    context.submission_queue_head = command->sqhd_snapshot;
-    context.submission_queue_id = sq->queue_id;
-    context.command_id = command->command_id;
-    context.phase = cq->device_phase;
-    if (c41_completion_publish(
-            &command->intent, &context, command->cqe_bytes,
-            sizeof(command->cqe_bytes)) != C41_WIRE_OK) {
-        command->state = C42_COMMAND_RELEASE_RECONCILE;
-        c42_fault_controller(controller, C42_FAULT_COMPLETION_CONTRACT);
-        return 1;
-    }
     command->state = C42_COMMAND_LEASED;
     return 1;
 }
@@ -152,6 +141,7 @@ static int reserve_cq_slot(
 {
     struct c42_command_record *command = &controller->commands[command_index];
     struct c42_cq_record *cq = &controller->cq[command->cq_index];
+    struct c42_sq_record *sq = &controller->sq[command->sq_index];
     struct c42_cq_slot *slot;
     struct c42_publication_record *publication =
         &controller->publications[command_index];
@@ -159,16 +149,41 @@ static int reserve_cq_slot(
         &controller->reconciles[command_index];
     struct c42_notification_record *notification =
         &controller->notifications[command_index];
+    struct c41_publication_context context = {0};
+    uint8_t wire[C42_CQE_BYTES] = {0};
     uint32_t slot_generation;
 
     if (cq->life != C42_QUEUE_LIVE ||
-        cq->unacked_count + cq->reserved_count >= cq->depth - 1u ||
+        (sq->life != C42_QUEUE_LIVE &&
+         sq->life != C42_QUEUE_PREQUIESCE &&
+         sq->life != C42_QUEUE_QUIESCING) ||
+        sq->ring_generation != command->sq_ring_generation ||
+        sq->associated_cq_id != cq->queue_id ||
         cq->device_tail >= cq->depth ||
-        cq->slots[cq->device_tail].state != C42_SLOT_FREE ||
-        cq->next_slot_generation == 0 ||
-        cq->next_slot_generation == UINT32_MAX ||
         publication->in_use == 0 || reconcile->in_use == 0 ||
         notification->in_use == 0) {
+        c42_fault_controller(controller, C42_FAULT_COMPLETION_CONTRACT);
+        return 1;
+    }
+    if (cq->unacked_count + cq->reserved_count >= cq->depth - 1u ||
+        cq->slots[cq->device_tail].state != C42_SLOT_FREE) {
+        command->state = C42_COMMAND_CONSUME_PREPARE;
+        return 1;
+    }
+    if (cq->next_slot_generation == 0 ||
+        cq->next_slot_generation == UINT32_MAX) {
+        c42_fault_controller(controller, C42_FAULT_COUNTER_EXHAUSTED);
+        return 1;
+    }
+    command->sqhd_snapshot = sq->device_head;
+    context.handle = command->command.handle;
+    context.origin = command->origin;
+    context.submission_queue_head = command->sqhd_snapshot;
+    context.submission_queue_id = sq->queue_id;
+    context.command_id = command->command_id;
+    context.phase = cq->device_phase;
+    if (c41_completion_publish(
+            &command->intent, &context, wire, sizeof(wire)) != C41_WIRE_OK) {
         c42_fault_controller(controller, C42_FAULT_COMPLETION_CONTRACT);
         return 1;
     }
@@ -188,7 +203,8 @@ static int reserve_cq_slot(
     slot->ordinal = cq->device_tail;
     slot->phase = cq->device_phase;
     slot->state = C42_SLOT_RESERVED;
-    memcpy(slot->wire, command->cqe_bytes, sizeof(slot->wire));
+    memcpy(command->cqe_bytes, wire, sizeof(command->cqe_bytes));
+    memcpy(slot->wire, wire, sizeof(slot->wire));
     command->cq_slot = cq->device_tail;
     cq->reserved_count++;
     publication->body_token.instance_nonce = controller->config.instance_nonce;
@@ -214,6 +230,8 @@ static int prepare_consume(
     uint16_t command_index)
 {
     struct c42_command_record *command = &controller->commands[command_index];
+    struct c42_reconcile_record *reconcile =
+        &controller->reconciles[command_index];
     struct fwlab_hif_consume_token consume = {0};
     enum fwlab_hif_consume_state state = FWLAB_HIF_CONSUME_NOT_STARTED;
     enum fwlab_hif_command_port_result result;
@@ -232,11 +250,28 @@ static int prepare_consume(
     if (result != FWLAB_HIF_PORT_OK ||
         state != FWLAB_HIF_CONSUME_PREPARED ||
         !consume_matches(&consume, command)) {
-        command->state = C42_COMMAND_RELEASE_RECONCILE;
+        if (consume_matches(&consume, command)) {
+            reconcile->lease = command->lease;
+            reconcile->consume = consume;
+            reconcile->consume_known = 1;
+        }
+        command->state = C42_COMMAND_CONSUME_POISON_HOLD;
         c42_fault_controller(controller, C42_FAULT_CONSUME_CONTRACT);
         return 1;
     }
-    return reserve_cq_slot(controller, command_index, &consume);
+    if (reconcile->consume_known != 0 &&
+        !consume_equal(&reconcile->consume, &consume)) {
+        command->state = C42_COMMAND_CONSUME_POISON_HOLD;
+        c42_fault_controller(controller, C42_FAULT_CONSUME_CONTRACT);
+        return 1;
+    }
+    reconcile->lease = command->lease;
+    reconcile->consume = consume;
+    reconcile->consume_known = 1;
+    command->state = C42_COMMAND_CONSUME_PREPARE;
+    return reserve_cq_slot(
+        controller, command_index, &reconcile->consume
+    );
 }
 
 static int ready_event_valid(const struct fwlab_hif_ready_event *event)
@@ -286,21 +321,13 @@ int c42_poll_ready(struct c42_controller *controller)
         );
         struct c42_command_record *command = &controller->commands[selected];
 
-        if (command->state == C42_COMMAND_LEASED ||
-            command->state == C42_COMMAND_CONSUME_PREPARE) {
+        if (command->state == C42_COMMAND_HIF_COMMITTED) {
             controller->ready_cursor = (uint8_t)(
                 (selected + 1u) % controller->config.command_capacity
             );
-            return prepare_consume(controller, selected);
+            has_waiting = 1;
+            break;
         }
-    }
-    for (offset = 0; offset < controller->config.command_capacity; ++offset) {
-        uint16_t selected = (uint16_t)(
-            (controller->ready_cursor + offset) %
-            controller->config.command_capacity
-        );
-        struct c42_command_record *command = &controller->commands[selected];
-
         if (command->state == C42_COMMAND_READY &&
             acquire_completion(controller, command) != 0) {
             controller->ready_cursor = (uint8_t)(
@@ -308,8 +335,12 @@ int c42_poll_ready(struct c42_controller *controller)
             );
             return 1;
         }
-        if (command->state == C42_COMMAND_HIF_COMMITTED) {
-            has_waiting = 1;
+        if (command->state == C42_COMMAND_LEASED ||
+            command->state == C42_COMMAND_CONSUME_PREPARE) {
+            controller->ready_cursor = (uint8_t)(
+                (selected + 1u) % controller->config.command_capacity
+            );
+            return prepare_consume(controller, selected);
         }
     }
     if (has_waiting == 0) {
@@ -328,7 +359,9 @@ int c42_poll_ready(struct c42_controller *controller)
         return 1;
     }
     if (count == 1) {
-        (void)latch_ready_event(controller, &event);
+        if (latch_ready_event(controller, &event) == 0) {
+            c42_fault_controller(controller, C42_FAULT_READY_CONTRACT);
+        }
         return 1;
     }
     return 0;
@@ -355,8 +388,8 @@ static int progress_release(
     }
     if (result == FWLAB_HIF_PORT_OK && released) {
         command->state = C42_COMMAND_HIF_COMMITTED;
-    } else if (result == FWLAB_HIF_PORT_POISONED ||
-               result == FWLAB_HIF_PORT_INVALID) {
+    } else if (result != FWLAB_HIF_PORT_IN_PROGRESS &&
+               result != FWLAB_HIF_PORT_OK) {
         c42_fault_controller(controller, C42_FAULT_CONSUME_CONTRACT);
     }
     return 1;
@@ -703,9 +736,8 @@ int c42_progress_reconcile(struct c42_controller *controller)
             if (result == FWLAB_HIF_PORT_OK &&
                 state == FWLAB_HIF_CONSUME_COMMITTED) {
                 record->state = C42_RECONCILE_RETIRE_READY;
-            } else if (result == FWLAB_HIF_PORT_POISONED ||
-                       result == FWLAB_HIF_PORT_INVALID ||
-                       (result == FWLAB_HIF_PORT_OK &&
+            } else if (result != FWLAB_HIF_PORT_IN_PROGRESS &&
+                       (result != FWLAB_HIF_PORT_OK ||
                         state != FWLAB_HIF_CONSUME_CLEANUP_PENDING)) {
                 c42_fault_controller(controller, C42_FAULT_CONSUME_CONTRACT);
             }
@@ -721,8 +753,7 @@ int c42_progress_reconcile(struct c42_controller *controller)
             if (result == FWLAB_HIF_PORT_OK &&
                 state == FWLAB_HIF_CONSUME_RETIRED) {
                 memset(record, 0, sizeof(*record));
-            } else if (result == FWLAB_HIF_PORT_POISONED ||
-                       result == FWLAB_HIF_PORT_INVALID) {
+            } else if (result != FWLAB_HIF_PORT_IN_PROGRESS) {
                 c42_fault_controller(controller, C42_FAULT_CONSUME_CONTRACT);
             }
             return 1;
@@ -834,11 +865,18 @@ enum c42_result c42_notification_acquire(
     if (!c42_controller_valid(controller) || notification == NULL) {
         return C42_INVALID;
     }
+    if (controller->phase != C42_CONTROLLER_READY) {
+        return C42_SUPERSEDED;
+    }
     for (index = 0; index < controller->config.command_capacity; ++index) {
         struct c42_notification_record *record =
             &controller->notifications[index];
 
         if (record->in_use != 0 && record->state == C42_NOTIFY_READY) {
+            if (record->controller_epoch != controller->controller_epoch) {
+                record->state = C42_NOTIFY_SUPPRESSED;
+                continue;
+            }
             record->state = C42_NOTIFY_ACQUIRED;
             notification_copy(record, notification);
             return C42_OK;
@@ -895,6 +933,10 @@ enum c42_result c42_notification_consume(
     record = find_notification(controller, token);
     if (record == NULL) {
         return C42_STALE;
+    }
+    if (record->controller_epoch != controller->controller_epoch ||
+        record->state == C42_NOTIFY_SUPPRESSED) {
+        return C42_SUPERSEDED;
     }
     if (record->state != C42_NOTIFY_ACQUIRED) {
         return C42_WRONG_STATE;

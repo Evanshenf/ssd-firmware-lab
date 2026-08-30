@@ -23,6 +23,11 @@ static int generation_available(uint32_t generation)
     return generation != 0 && generation != UINT32_MAX;
 }
 
+static int memory_result_known(enum c42_memory_result result)
+{
+    return (unsigned int)result <= (unsigned int)C42_MEMORY_RETIRED;
+}
+
 static int memory_token_equal(
     const struct c42_memory_token *left,
     const struct c42_memory_token *right)
@@ -49,7 +54,8 @@ static enum c42_memory_result memory_effect(
         return call_result;
     }
     if (!memory_token_equal(&status->token, token) ||
-        status->result > C42_MEMORY_IN_PROGRESS ||
+        status->result > C42_MEMORY_RETIRED || status->committed > 1 ||
+        status->quiescent > 1 ||
         !c42_bytes_zero(status->reserved, sizeof(status->reserved))) {
         *valid = 0;
         return C42_MEMORY_POISONED;
@@ -133,12 +139,91 @@ static const struct c42_candidate_record *find_candidate_const(
     return NULL;
 }
 
+static uint16_t candidate_tombstone_index(uint8_t kind, uint16_t queue_id)
+{
+    return (uint16_t)(((uint16_t)kind - 1u) * C42_QUEUE_SLOTS + queue_id);
+}
+
+static struct c42_candidate_tombstone *find_candidate_tombstone(
+    struct c42_controller *controller,
+    const struct c42_operation_token *token)
+{
+    uint16_t index;
+
+    for (index = 0; index < C42_CANDIDATE_SLOTS; ++index) {
+        struct c42_candidate_tombstone *tombstone =
+            &controller->candidate_tombstones[index];
+
+        if (tombstone->valid != 0 &&
+            c42_operation_token_equal(&tombstone->token, token)) {
+            return tombstone;
+        }
+    }
+    return NULL;
+}
+
+static const struct c42_candidate_tombstone *find_candidate_tombstone_const(
+    const struct c42_controller *controller,
+    const struct c42_operation_token *token)
+{
+    uint16_t index;
+
+    for (index = 0; index < C42_CANDIDATE_SLOTS; ++index) {
+        const struct c42_candidate_tombstone *tombstone =
+            &controller->candidate_tombstones[index];
+
+        if (tombstone->valid != 0 &&
+            c42_operation_token_equal(&tombstone->token, token)) {
+            return tombstone;
+        }
+    }
+    return NULL;
+}
+
+static void retire_candidate_record(
+    struct c42_controller *controller,
+    struct c42_candidate_record *candidate)
+{
+    uint16_t index = candidate_tombstone_index(
+        candidate->descriptor.kind, candidate->descriptor.queue_id
+    );
+    struct c42_candidate_tombstone *tombstone =
+        &controller->candidate_tombstones[index];
+
+    memset(tombstone, 0, sizeof(*tombstone));
+    tombstone->token = candidate->token;
+    tombstone->queue_id = candidate->descriptor.queue_id;
+    tombstone->kind = candidate->descriptor.kind;
+    tombstone->valid = 1;
+    memset(candidate, 0, sizeof(*candidate));
+}
+
+static enum c42_result candidate_access_result(
+    const struct c42_controller *controller,
+    const struct c42_candidate_record *candidate)
+{
+    if (candidate->controller_epoch != controller->controller_epoch ||
+        candidate->state == C42_CANDIDATE_SUPERSEDED) {
+        return C42_SUPERSEDED;
+    }
+    if (controller->phase == C42_CONTROLLER_COLD_NO_QUEUES ||
+        controller->phase == C42_CONTROLLER_READY) {
+        return C42_OK;
+    }
+    return controller->phase == C42_CONTROLLER_FAULTED_RESET_REQUIRED ?
+           C42_FAULTED : C42_WRONG_STATE;
+}
+
 static void queue_prepare_life(
     struct c42_controller *controller,
     const struct c42_queue_descriptor *descriptor,
     uint16_t index)
 {
     if (descriptor->kind == C42_QUEUE_SQ) {
+        controller->sq[index].associated_cq_id =
+            descriptor->associated_cq_id;
+        controller->sq[index].queue_class = descriptor->queue_class;
+        controller->sq[index].depth = descriptor->depth;
         controller->sq[index].life = C42_QUEUE_PREPARED;
     } else {
         controller->cq[index].life = C42_QUEUE_PREPARED;
@@ -209,6 +294,10 @@ enum c42_result c42_candidate_prepare(
         descriptor->memory.role,
         descriptor->memory.exact_bytes
     );
+    if (!memory_result_known(memory_result)) {
+        c42_fault_controller(controller, C42_FAULT_PROVIDER_POISON);
+        return C42_POISONED;
+    }
     if (memory_result != C42_MEMORY_OK) {
         return memory_result == C42_MEMORY_STALE ? C42_STALE : C42_INVALID;
     }
@@ -223,6 +312,13 @@ enum c42_result c42_candidate_prepare(
     memset(candidate, 0, sizeof(*candidate));
     candidate->in_use = 1;
     candidate->descriptor = *descriptor;
+    candidate->controller_epoch = controller->controller_epoch;
+    if (descriptor->kind == C42_QUEUE_SQ) {
+        candidate->associated_cq_ring_generation =
+            controller->cq[queue_index].ring_generation;
+        candidate->associated_cq_mapping_generation =
+            controller->cq[queue_index].mapping_generation;
+    }
     candidate->token.instance_nonce = controller->config.instance_nonce;
     candidate->token.uid = uid;
     candidate->token.generation = generation;
@@ -233,6 +329,12 @@ enum c42_result c42_candidate_prepare(
     candidate->scrub_token.uid = uid;
     candidate->scrub_token.generation = generation;
     candidate->scrub_token.kind = C42_QUEUE_CQ;
+    memset(
+        &controller->candidate_tombstones[candidate_tombstone_index(
+            descriptor->kind, descriptor->queue_id)],
+        0,
+        sizeof(controller->candidate_tombstones[0])
+    );
     queue_prepare_life(controller, descriptor, queue_index);
     *token = candidate->token;
     return C42_OK;
@@ -249,8 +351,12 @@ static int progress_candidate_once(
 
     if (candidate->state == C42_CANDIDATE_READY ||
         candidate->state == C42_CANDIDATE_COMMITTED ||
+        candidate->state == C42_CANDIDATE_COMMITTED_AWAIT_RETIRE ||
+        candidate->state == C42_CANDIDATE_RETIRE_UNKNOWN ||
+        candidate->state == C42_CANDIDATE_RETIRE_READY ||
         candidate->state == C42_CANDIDATE_ABORTED ||
-        candidate->state == C42_CANDIDATE_POISONED) {
+        candidate->state == C42_CANDIDATE_POISONED ||
+        candidate->state == C42_CANDIDATE_SUPERSEDED) {
         return 0;
     }
     if (candidate->state == C42_CANDIDATE_ABORTING) {
@@ -265,9 +371,9 @@ static int progress_candidate_once(
         effect = memory_effect(
             call_result, &status, &candidate->scrub_token, &valid
         );
-        if (valid != 0 &&
-            ((effect == C42_MEMORY_NO_EFFECT && status.quiescent != 0) ||
-             effect == C42_MEMORY_FULL)) {
+        if (valid != 0 && effect == C42_MEMORY_RETIRED &&
+            status.quiescent == 1) {
+            candidate->provider_retired = 1;
             candidate->state = C42_CANDIDATE_ABORTED;
         } else if (valid == 0 || effect == C42_MEMORY_POISONED ||
                    effect == C42_MEMORY_INVALID) {
@@ -303,9 +409,11 @@ static int progress_candidate_once(
         effect == C42_MEMORY_INVALID || effect == C42_MEMORY_STALE) {
         candidate->state = C42_CANDIDATE_POISONED;
         c42_fault_controller(controller, C42_FAULT_PROVIDER_POISON);
-    } else if (effect == C42_MEMORY_FULL && status.committed != 0) {
+    } else if (effect == C42_MEMORY_FULL && status.committed == 1 &&
+               status.quiescent == 1) {
         candidate->state = C42_CANDIDATE_READY;
-    } else if (effect == C42_MEMORY_UNKNOWN ||
+    } else if (effect == C42_MEMORY_FULL ||
+               effect == C42_MEMORY_UNKNOWN ||
                effect == C42_MEMORY_IN_PROGRESS ||
                effect == C42_MEMORY_NO_EFFECT ||
                effect == C42_MEMORY_EXACT_PREFIX) {
@@ -323,6 +431,7 @@ enum c42_result c42_candidate_progress(
     uint32_t budget)
 {
     struct c42_candidate_record *candidate;
+    enum c42_result access;
     uint32_t unit;
 
     if (!c42_controller_valid(controller) || token == NULL) {
@@ -330,7 +439,12 @@ enum c42_result c42_candidate_progress(
     }
     candidate = find_candidate(controller, token);
     if (candidate == NULL) {
-        return C42_STALE;
+        return find_candidate_tombstone(controller, token) != NULL ?
+               C42_NO_EFFECT : C42_STALE;
+    }
+    access = candidate_access_result(controller, candidate);
+    if (access != C42_OK) {
+        return access;
     }
     for (unit = 0; unit < budget; ++unit) {
         if (progress_candidate_once(controller, candidate) == 0) {
@@ -354,7 +468,16 @@ enum c42_result c42_candidate_query(
     }
     candidate = find_candidate_const(controller, token);
     if (candidate == NULL) {
-        return C42_STALE;
+        const struct c42_candidate_tombstone *tombstone =
+            find_candidate_tombstone_const(controller, token);
+
+        if (tombstone == NULL) {
+            return C42_STALE;
+        }
+        local.token = tombstone->token;
+        local.state = C42_CANDIDATE_RETIRED;
+        *status = local;
+        return C42_OK;
     }
     local.token = candidate->token;
     local.state = candidate->state;
@@ -421,6 +544,7 @@ enum c42_result c42_candidate_commit(
     const struct c42_operation_token *token)
 {
     struct c42_candidate_record *candidate;
+    enum c42_result access;
     uint16_t index;
 
     if (!c42_controller_valid(controller) || token == NULL) {
@@ -428,18 +552,40 @@ enum c42_result c42_candidate_commit(
     }
     candidate = find_candidate(controller, token);
     if (candidate == NULL) {
-        return C42_STALE;
+        return find_candidate_tombstone(controller, token) != NULL ?
+               C42_NO_EFFECT : C42_STALE;
+    }
+    access = candidate_access_result(controller, candidate);
+    if (access != C42_OK) {
+        return access;
     }
     if (candidate->state != C42_CANDIDATE_READY ||
         !c42_queue_index(candidate->descriptor.queue_id, &index)) {
         return C42_WRONG_STATE;
     }
     if (candidate->descriptor.kind == C42_QUEUE_SQ) {
+        const struct c42_cq_record *cq = &controller->cq[index];
+
+        if (controller->sq[index].life != C42_QUEUE_PREPARED ||
+            controller->sq[index].associated_cq_id != cq->queue_id ||
+            cq->life != C42_QUEUE_LIVE ||
+            cq->queue_class != candidate->descriptor.queue_class ||
+            cq->ring_generation !=
+                candidate->associated_cq_ring_generation ||
+            cq->mapping_generation !=
+                candidate->associated_cq_mapping_generation) {
+            return C42_WRONG_STATE;
+        }
         commit_sq(controller, &candidate->descriptor, index);
     } else {
+        if (controller->cq[index].life != C42_QUEUE_PREPARED) {
+            return C42_WRONG_STATE;
+        }
         commit_cq(controller, &candidate->descriptor, index);
     }
-    candidate->state = C42_CANDIDATE_COMMITTED;
+    candidate->state = candidate->descriptor.kind == C42_QUEUE_CQ ?
+                       C42_CANDIDATE_COMMITTED_AWAIT_RETIRE :
+                       C42_CANDIDATE_RETIRE_READY;
     return C42_OK;
 }
 
@@ -466,15 +612,24 @@ enum c42_result c42_candidate_abort(
     const struct c42_operation_token *token)
 {
     struct c42_candidate_record *candidate;
+    enum c42_result access;
 
     if (!c42_controller_valid(controller) || token == NULL) {
         return C42_INVALID;
     }
     candidate = find_candidate(controller, token);
     if (candidate == NULL) {
-        return C42_STALE;
+        return find_candidate_tombstone(controller, token) != NULL ?
+               C42_NO_EFFECT : C42_STALE;
     }
-    if (candidate->state == C42_CANDIDATE_COMMITTED) {
+    access = candidate_access_result(controller, candidate);
+    if (access != C42_OK) {
+        return access;
+    }
+    if (candidate->state == C42_CANDIDATE_COMMITTED ||
+        candidate->state == C42_CANDIDATE_COMMITTED_AWAIT_RETIRE ||
+        candidate->state == C42_CANDIDATE_RETIRE_UNKNOWN ||
+        candidate->state == C42_CANDIDATE_RETIRE_READY) {
         return C42_TOO_LATE;
     }
     if (candidate->state == C42_CANDIDATE_ABORTED) {
@@ -482,8 +637,8 @@ enum c42_result c42_candidate_abort(
     }
     abort_prepared_queue(controller, &candidate->descriptor);
     if (candidate->descriptor.kind == C42_QUEUE_SQ ||
-        candidate->scrub_started == 0 ||
-        candidate->state == C42_CANDIDATE_READY) {
+        candidate->scrub_started == 0) {
+        candidate->provider_retired = 1;
         candidate->state = C42_CANDIDATE_ABORTED;
     } else {
         candidate->state = C42_CANDIDATE_ABORTING;
@@ -496,20 +651,92 @@ enum c42_result c42_candidate_retire(
     const struct c42_operation_token *token)
 {
     struct c42_candidate_record *candidate;
+    struct c42_memory_status status = {0};
+    enum c42_memory_result call_result;
+    enum c42_memory_result effect;
+    enum c42_result access;
+    uint16_t queue_index;
+    int valid;
 
     if (!c42_controller_valid(controller) || token == NULL) {
         return C42_INVALID;
     }
     candidate = find_candidate(controller, token);
     if (candidate == NULL) {
-        return C42_STALE;
+        return find_candidate_tombstone(controller, token) != NULL ?
+               C42_NO_EFFECT : C42_STALE;
     }
-    if (candidate->state != C42_CANDIDATE_COMMITTED &&
-        candidate->state != C42_CANDIDATE_ABORTED) {
+    access = candidate_access_result(controller, candidate);
+    if (access != C42_OK) {
+        return access;
+    }
+    if (candidate->state == C42_CANDIDATE_ABORTED) {
+        if (candidate->provider_retired == 0) {
+            return C42_WRONG_STATE;
+        }
+        retire_candidate_record(controller, candidate);
+        return C42_OK;
+    }
+    if (candidate->state == C42_CANDIDATE_RETIRE_READY) {
+        if (candidate->descriptor.kind == C42_QUEUE_CQ) {
+            if (!c42_queue_index(
+                    candidate->descriptor.queue_id, &queue_index) ||
+                controller->cq[queue_index].life != C42_QUEUE_LIVE ||
+                controller->cq[queue_index].ring_generation !=
+                    candidate->descriptor.memory.ring_generation ||
+                controller->cq[queue_index].mapping_generation !=
+                    candidate->descriptor.memory.mapping_generation ||
+                candidate->provider_retired == 0) {
+                return C42_WRONG_STATE;
+            }
+            controller->cq[queue_index].create_scrub_retired = 1;
+        }
+        retire_candidate_record(controller, candidate);
+        return C42_OK;
+    }
+    if (candidate->state != C42_CANDIDATE_COMMITTED_AWAIT_RETIRE &&
+        candidate->state != C42_CANDIDATE_RETIRE_UNKNOWN) {
         return C42_WRONG_STATE;
     }
-    memset(candidate, 0, sizeof(*candidate));
-    return C42_OK;
+    if (candidate->descriptor.kind != C42_QUEUE_CQ) {
+        return C42_WRONG_STATE;
+    }
+    if (candidate->retire_started == 0) {
+        call_result = controller->providers.memory.ops->scrub_retire_start(
+            controller->providers.memory.context,
+            &candidate->descriptor.memory,
+            candidate->descriptor.depth,
+            0,
+            &candidate->scrub_token,
+            &status
+        );
+        candidate->retire_started = 1;
+    } else {
+        call_result = controller->providers.memory.ops->scrub_retire_query(
+            controller->providers.memory.context,
+            &candidate->descriptor.memory,
+            candidate->descriptor.depth,
+            0,
+            &candidate->scrub_token,
+            &status
+        );
+    }
+    effect = memory_effect(
+        call_result, &status, &candidate->scrub_token, &valid
+    );
+    if (effect == C42_MEMORY_IN_PROGRESS || effect == C42_MEMORY_UNKNOWN) {
+        candidate->state = C42_CANDIDATE_RETIRE_UNKNOWN;
+        return C42_IN_PROGRESS;
+    }
+    if (valid != 0 && effect == C42_MEMORY_RETIRED &&
+        status.quiescent == 1) {
+        candidate->provider_retired = 1;
+        candidate->state = C42_CANDIDATE_RETIRE_READY;
+        return C42_IN_PROGRESS;
+    }
+    candidate->state = C42_CANDIDATE_POISONED;
+    c42_fault_controller(controller, C42_FAULT_PROVIDER_POISON);
+    return C42_POISONED;
 }
 
 enum c42_result c42_enable(struct c42_controller *controller)
@@ -771,6 +998,7 @@ static int capture_one(
     notification = &controller->notifications[record_index];
     notification->in_use = 1;
     notification->state = C42_NOTIFY_RESERVED;
+    notification->controller_epoch = controller->controller_epoch;
     notification->publication_uid = command->publication_uid;
     notification->completion_queue_id =
         controller->cq[cq_index].queue_id;
@@ -856,6 +1084,25 @@ static int ticket_matches(
            c42_origin_equal(&ticket->origin, &command->origin);
 }
 
+static void admission_key_fill(
+    const struct c42_command_record *command,
+    struct fwlab_hif_admission_key *key)
+{
+    memset(key, 0, sizeof(*key));
+    key->prepared = command->prepared;
+    key->client_uid = command->client_uid;
+    key->generation = command->active_generation;
+}
+
+static int hold_poisoned_admission(
+    struct c42_controller *controller,
+    struct c42_command_record *command)
+{
+    command->state = C42_COMMAND_ADMIT_POISON_HOLD;
+    c42_fault_sq(controller, command->sq_index, C42_FAULT_PORT_CONTRACT);
+    return 1;
+}
+
 static int progress_admit(
     struct c42_controller *controller,
     struct c42_command_record *command)
@@ -866,9 +1113,7 @@ static int progress_admit(
         FWLAB_HIF_ADMISSION_NOT_STARTED;
     enum fwlab_hif_command_port_result result;
 
-    key.prepared = command->prepared;
-    key.client_uid = command->client_uid;
-    key.generation = command->active_generation;
+    admission_key_fill(command, &key);
     if (command->state == C42_COMMAND_PORT_RESERVED) {
         result = controller->providers.command.ops->admit_start(
             controller->providers.command.context, &key, &command->command,
@@ -881,27 +1126,55 @@ static int progress_admit(
             &state, &ticket
         );
     }
-    if (result == FWLAB_HIF_PORT_IN_PROGRESS ||
-        (result == FWLAB_HIF_PORT_OK &&
-         state == FWLAB_HIF_ADMISSION_NOT_STARTED)) {
+    if (result == FWLAB_HIF_PORT_IN_PROGRESS) {
         command->state = C42_COMMAND_ADMIT_QUERY;
         return 1;
     }
-    if (result != FWLAB_HIF_PORT_OK ||
-        state == FWLAB_HIF_ADMISSION_POISONED ||
-        (state == FWLAB_HIF_ADMISSION_COMMITTED &&
-         !ticket_matches(command, &ticket))) {
+    if (result != FWLAB_HIF_PORT_OK) {
+        return hold_poisoned_admission(controller, command);
+    }
+
+    switch (state) {
+    case FWLAB_HIF_ADMISSION_NOT_STARTED:
+        command->state = C42_COMMAND_ADMIT_QUERY;
+        return 1;
+    case FWLAB_HIF_ADMISSION_COMMITTED:
+        if (!ticket_matches(command, &ticket)) {
+            return hold_poisoned_admission(controller, command);
+        }
+        command->ticket = ticket;
+        command->state = C42_COMMAND_PORT_COMMITTED;
+        return 1;
+    case FWLAB_HIF_ADMISSION_ABORTED:
+    case FWLAB_HIF_ADMISSION_POISONED:
         command->state = C42_COMMAND_ABORT_RECONCILE;
         c42_fault_sq(controller, command->sq_index, C42_FAULT_PORT_CONTRACT);
         return 1;
+    default:
+        return hold_poisoned_admission(controller, command);
     }
-    if (state == FWLAB_HIF_ADMISSION_ABORTED) {
+}
+
+static int progress_admit_poison(
+    struct c42_controller *controller,
+    struct c42_command_record *command)
+{
+    struct fwlab_hif_admission_key key;
+    struct fwlab_hif_command_ticket ticket = {0};
+    enum fwlab_hif_admission_state state =
+        FWLAB_HIF_ADMISSION_NOT_STARTED;
+    enum fwlab_hif_command_port_result result;
+
+    admission_key_fill(command, &key);
+    result = controller->providers.command.ops->admit_query(
+        controller->providers.command.context, &key, &command->command,
+        &state, &ticket
+    );
+    if (result == FWLAB_HIF_PORT_OK &&
+        (state == FWLAB_HIF_ADMISSION_NOT_STARTED ||
+         state == FWLAB_HIF_ADMISSION_ABORTED)) {
         command->state = C42_COMMAND_ABORT_RECONCILE;
-        c42_fault_sq(controller, command->sq_index, C42_FAULT_PORT_CONTRACT);
-        return 1;
     }
-    command->ticket = ticket;
-    command->state = C42_COMMAND_PORT_COMMITTED;
     return 1;
 }
 
@@ -954,8 +1227,8 @@ static int progress_abort_reconcile(
     }
     if (result == FWLAB_HIF_PORT_OK && aborted) {
         clear_command_all(controller, index);
-    } else if (result == FWLAB_HIF_PORT_POISONED ||
-               result == FWLAB_HIF_PORT_INVALID) {
+    } else if (result != FWLAB_HIF_PORT_IN_PROGRESS &&
+               result != FWLAB_HIF_PORT_OK) {
         c42_fault_controller(controller, C42_FAULT_PROVIDER_POISON);
     }
     return 1;
@@ -977,6 +1250,12 @@ int c42_progress_admission(struct c42_controller *controller)
         );
         struct c42_command_record *command = &controller->commands[index];
 
+        if (command->state == C42_COMMAND_ADMIT_POISON_HOLD) {
+            controller->admission_cursor = (uint8_t)(
+                (index + 1u) % controller->config.command_capacity
+            );
+            return progress_admit_poison(controller, command);
+        }
         if (command->state == C42_COMMAND_ABORT_RECONCILE) {
             controller->admission_cursor = (uint8_t)(
                 (index + 1u) % controller->config.command_capacity
@@ -1079,15 +1358,16 @@ static const struct c42_control_record *find_control_const(
     return NULL;
 }
 
-static int cq_delete_allowed(
+static int cq_delete_dependencies_clear(
     const struct c42_controller *controller,
     uint16_t queue_index)
 {
     uint16_t index;
     const struct c42_cq_record *cq = &controller->cq[queue_index];
 
-    if (cq->life != C42_QUEUE_LIVE || cq->unacked_count != 0 ||
-        cq->reserved_count != 0 || cq->pending_ack.valid != 0) {
+    if (cq->unacked_count != 0 || cq->reserved_count != 0 ||
+        cq->pending_ack.valid != 0 ||
+        cq->create_scrub_retired == 0) {
         return 0;
     }
     for (index = 0; index < C42_QUEUE_SLOTS; ++index) {
@@ -1096,7 +1376,28 @@ static int cq_delete_allowed(
             return 0;
         }
     }
+    for (index = 0; index < C42_CANDIDATE_SLOTS; ++index) {
+        const struct c42_candidate_record *candidate =
+            &controller->candidates[index];
+
+        if (candidate->in_use != 0 &&
+            candidate->descriptor.kind == C42_QUEUE_SQ &&
+            candidate->descriptor.associated_cq_id == cq->queue_id &&
+            candidate->state != C42_CANDIDATE_ABORTED &&
+            candidate->state != C42_CANDIDATE_POISONED &&
+            candidate->state != C42_CANDIDATE_SUPERSEDED) {
+            return 0;
+        }
+    }
     return 1;
+}
+
+static int cq_delete_allowed(
+    const struct c42_controller *controller,
+    uint16_t queue_index)
+{
+    return controller->cq[queue_index].life == C42_QUEUE_LIVE &&
+           cq_delete_dependencies_clear(controller, queue_index);
 }
 
 enum c42_result c42_delete_start(
@@ -1144,6 +1445,7 @@ enum c42_result c42_delete_start(
     record->in_use = 1;
     record->kind = kind == C42_QUEUE_SQ ?
                    C42_CONTROL_DELETE_SQ : C42_CONTROL_DELETE_CQ;
+    record->controller_epoch = controller->controller_epoch;
     record->queue_id = queue_id;
     record->state = C42_CONTROL_STARTED;
     record->token.instance_nonce = controller->config.instance_nonce;
@@ -1181,6 +1483,7 @@ static int protected_control_start(
     memset(record, 0, sizeof(*record));
     record->in_use = 1;
     record->kind = kind;
+    record->controller_epoch = controller->controller_epoch;
     record->state = C42_CONTROL_STARTED;
     record->token.instance_nonce = controller->config.instance_nonce;
     record->token.uid = uid;
@@ -1188,6 +1491,37 @@ static int protected_control_start(
     record->token.kind = kind;
     *token = record->token;
     return 1;
+}
+
+static void supersede_exported_records(struct c42_controller *controller)
+{
+    uint16_t index;
+
+    for (index = 0; index < C42_CANDIDATE_SLOTS; ++index) {
+        if (controller->candidates[index].in_use != 0) {
+            controller->candidates[index].state = C42_CANDIDATE_SUPERSEDED;
+        }
+    }
+    for (index = 0; index < C42_BUSINESS_CONTROL_SLOTS; ++index) {
+        struct c42_control_record *record =
+            &controller->business_controls[index];
+
+        if (record->in_use != 0 &&
+            record->state != C42_CONTROL_COMMITTED) {
+            record->state = C42_CONTROL_SUPERSEDED;
+        }
+    }
+    for (index = 0; index < controller->config.command_capacity; ++index) {
+        struct c42_notification_record *notification =
+            &controller->notifications[index];
+
+        if (notification->in_use != 0 &&
+            (notification->state == C42_NOTIFY_RESERVED ||
+             notification->state == C42_NOTIFY_READY ||
+             notification->state == C42_NOTIFY_ACQUIRED)) {
+            notification->state = C42_NOTIFY_SUPPRESSED;
+        }
+    }
 }
 
 enum c42_result c42_reset_start(
@@ -1216,6 +1550,7 @@ enum c42_result c42_reset_start(
     controller->controller_epoch++;
     controller->phase = C42_CONTROLLER_RESETTING;
     controller->admission_paused = 1;
+    supersede_exported_records(controller);
     memset(controller->targets, 0, sizeof(controller->targets));
     return C42_OK;
 }
@@ -1246,6 +1581,11 @@ enum c42_result c42_teardown_start(
     }
     controller->phase = C42_CONTROLLER_TEARING_DOWN;
     controller->admission_paused = 1;
+    supersede_exported_records(controller);
+    if (controller->reset_control.in_use != 0 &&
+        controller->reset_control.state != C42_CONTROL_COMMITTED) {
+        controller->reset_control.state = C42_CONTROL_SUPERSEDED;
+    }
     memset(controller->targets, 0, sizeof(controller->targets));
     return C42_OK;
 }
@@ -1345,6 +1685,10 @@ static int progress_delete(
         return 1;
     }
     if (record->kind == C42_CONTROL_DELETE_CQ) {
+        if (controller->cq[index].life != C42_QUEUE_QUIESCING ||
+            !cq_delete_dependencies_clear(controller, index)) {
+            return 0;
+        }
         clear_cq_to_absent(&controller->cq[index]);
         record->state = C42_CONTROL_COMMITTED;
         return 1;
@@ -1385,6 +1729,8 @@ static void clear_runtime_tables(struct c42_controller *controller)
     memset(controller->sq, 0, sizeof(controller->sq));
     memset(controller->cq, 0, sizeof(controller->cq));
     memset(controller->candidates, 0, sizeof(controller->candidates));
+    memset(controller->candidate_tombstones, 0,
+           sizeof(controller->candidate_tombstones));
     memset(controller->commands, 0, sizeof(controller->commands));
     memset(controller->publications, 0, sizeof(controller->publications));
     memset(controller->reconciles, 0, sizeof(controller->reconciles));
@@ -1420,10 +1766,10 @@ static int progress_epoch_control(
                 controller->providers.command.context,
                 controller->config.instance_nonce, reset->old_epoch
             );
-            reset->port_started = 1;
-            if (port_result == FWLAB_HIF_PORT_POISONED ||
-                port_result == FWLAB_HIF_PORT_INVALID) {
-                reset->state = C42_CONTROL_POISONED;
+            if (port_result == FWLAB_HIF_PORT_OK) {
+                reset->port_started = 1;
+            } else if (port_result != FWLAB_HIF_PORT_IN_PROGRESS) {
+                record->state = C42_CONTROL_POISONED;
             }
             return 1;
         }
@@ -1432,10 +1778,10 @@ static int progress_epoch_control(
                 controller->providers.memory.context,
                 controller->config.instance_nonce, reset->old_epoch
             );
-            reset->memory_started = 1;
-            if (memory_result == C42_MEMORY_POISONED ||
-                memory_result == C42_MEMORY_INVALID) {
-                reset->state = C42_CONTROL_POISONED;
+            if (memory_result == C42_MEMORY_OK) {
+                reset->memory_started = 1;
+            } else if (memory_result != C42_MEMORY_IN_PROGRESS) {
+                record->state = C42_CONTROL_POISONED;
             }
             return 1;
         }
@@ -1449,9 +1795,11 @@ static int progress_epoch_control(
             controller->providers.command.ops->reset_begin(
                 controller->providers.command.context,
                 controller->config.instance_nonce, record->old_epoch);
-        record->port_started = 1;
-        if (port_result == FWLAB_HIF_PORT_POISONED ||
-            port_result == FWLAB_HIF_PORT_INVALID) {
+        if (port_result == FWLAB_HIF_PORT_OK) {
+            record->port_started = 1;
+        } else if (port_result == FWLAB_HIF_PORT_IN_PROGRESS) {
+            record->state = C42_CONTROL_WAITING;
+        } else {
             record->state = C42_CONTROL_POISONED;
         }
         return 1;
@@ -1464,9 +1812,11 @@ static int progress_epoch_control(
             controller->providers.memory.ops->reset_begin(
                 controller->providers.memory.context,
                 controller->config.instance_nonce, record->old_epoch);
-        record->memory_started = 1;
-        if (memory_result == C42_MEMORY_POISONED ||
-            memory_result == C42_MEMORY_INVALID) {
+        if (memory_result == C42_MEMORY_OK) {
+            record->memory_started = 1;
+        } else if (memory_result == C42_MEMORY_IN_PROGRESS) {
+            record->state = C42_CONTROL_WAITING;
+        } else {
             record->state = C42_CONTROL_POISONED;
         }
         return 1;
@@ -1508,13 +1858,13 @@ static int progress_epoch_control(
             memset(&controller->reset_control, 0,
                    sizeof(controller->reset_control));
         }
-    } else if (port_result == FWLAB_HIF_PORT_POISONED ||
-               port_result == FWLAB_HIF_PORT_INVALID ||
-               memory_result == C42_MEMORY_POISONED ||
-               memory_result == C42_MEMORY_INVALID) {
-        record->state = C42_CONTROL_POISONED;
-    } else {
+    } else if ((port_result == FWLAB_HIF_PORT_OK ||
+                port_result == FWLAB_HIF_PORT_IN_PROGRESS) &&
+               (memory_result == C42_MEMORY_OK ||
+                memory_result == C42_MEMORY_IN_PROGRESS)) {
         record->state = C42_CONTROL_WAITING;
+    } else {
+        record->state = C42_CONTROL_POISONED;
     }
     return 1;
 }
@@ -1526,7 +1876,8 @@ static int progress_control_once(
     if (record->in_use == 0 ||
         record->state == C42_CONTROL_COMMITTED ||
         record->state == C42_CONTROL_RETIRED ||
-        record->state == C42_CONTROL_POISONED) {
+        record->state == C42_CONTROL_POISONED ||
+        record->state == C42_CONTROL_SUPERSEDED) {
         return 0;
     }
     if (record->kind == C42_CONTROL_DELETE_SQ ||
@@ -1578,6 +1929,12 @@ enum c42_result c42_control_progress(
     if (record == NULL) {
         return C42_STALE;
     }
+    if (record->state == C42_CONTROL_SUPERSEDED ||
+        (record->kind != C42_CONTROL_RESET &&
+         record->kind != C42_CONTROL_TEARDOWN &&
+         record->controller_epoch != controller->controller_epoch)) {
+        return C42_SUPERSEDED;
+    }
     for (unit = 0; unit < budget; ++unit) {
         if (progress_control_once(controller, record) == 0) {
             break;
@@ -1621,6 +1978,12 @@ enum c42_result c42_control_retire(
     record = find_control(controller, token);
     if (record == NULL) {
         return C42_STALE;
+    }
+    if (record->state == C42_CONTROL_SUPERSEDED &&
+        (record->kind == C42_CONTROL_DELETE_SQ ||
+         record->kind == C42_CONTROL_DELETE_CQ)) {
+        memset(record, 0, sizeof(*record));
+        return C42_OK;
     }
     if (record->state != C42_CONTROL_COMMITTED) {
         return C42_WRONG_STATE;

@@ -258,10 +258,10 @@ static void test_candidate_contract_and_scrub_unknown(void)
     struct c42_snapshot before = {0};
     struct c42_snapshot after = {0};
     const struct c42_fake_memory_outcome unknown = {
-        C42_FAKE_MEMORY_SCRUB, C42_MEMORY_UNKNOWN, 0, 1
+        C42_FAKE_MEMORY_SCRUB, C42_MEMORY_UNKNOWN, 0, 1, 0, 0, 0, 0
     };
     const struct c42_fake_memory_outcome full = {
-        C42_FAKE_MEMORY_SCRUB, C42_MEMORY_FULL, 4, 1
+        C42_FAKE_MEMORY_SCRUB, C42_MEMORY_FULL, 4, 1, 0, 0, 0, 0
     };
 
     check(c42_test_fixture_init(&fixture, 4, 0), "candidate fixture");
@@ -311,7 +311,7 @@ static void test_candidate_contract_and_scrub_unknown(void)
               fixture.controller, &token, &status) == C42_OK &&
           status.state == C42_CANDIDATE_READY &&
           c42_candidate_commit(fixture.controller, &token) == C42_OK &&
-          c42_candidate_retire(fixture.controller, &token) == C42_OK,
+          c42_test_candidate_retire(fixture.controller, &token),
           "scrub query proof permits CQ commit");
     sq_cap = cq_cap;
     sq_cap.memory_uid++;
@@ -328,7 +328,7 @@ static void test_candidate_contract_and_scrub_unknown(void)
     check(c42_candidate_prepare(
               fixture.controller, &descriptor, &token) == C42_OK &&
           c42_candidate_commit(fixture.controller, &token) == C42_OK &&
-          c42_candidate_retire(fixture.controller, &token) == C42_OK,
+          c42_test_candidate_retire(fixture.controller, &token),
           "one-to-one IO SQ commit");
 }
 
@@ -341,7 +341,7 @@ static void test_candidate_abort_after_unknown_scrub(void)
     struct c42_candidate_status status = {0};
     struct c42_snapshot snapshot = {0};
     const struct c42_fake_memory_outcome unknown = {
-        C42_FAKE_MEMORY_SCRUB, C42_MEMORY_UNKNOWN, 0, 1
+        C42_FAKE_MEMORY_SCRUB, C42_MEMORY_UNKNOWN, 0, 1, 0, 0, 0, 0
     };
 
     check(c42_test_fixture_init(&fixture, 4, 0), "abort candidate fixture");

@@ -10,13 +10,14 @@
 #include "c42_memory_port.h"
 #include "fwlab/contracts/hif_command_port.h"
 
-#define C42_COMPONENT_VERSION 1u
+#define C42_COMPONENT_VERSION 2u
 #define C42_MAX_QUEUE_PAIRS 2u
 #define C42_MAX_QUEUE_DEPTH 32u
 #define C42_MAX_COMMANDS 64u
 #define C42_MAX_TARGET_REFS 64u
 #define C42_SQE_BYTES 64u
 #define C42_CQE_BYTES 16u
+#define C42_OBSERVER_VERSION 2u
 
 struct c42_controller;
 
@@ -33,7 +34,8 @@ enum c42_result {
     C42_FAULTED = 9,
     C42_COUNTER_EXHAUSTED = 10,
     C42_NOT_FOUND = 11,
-    C42_POISONED = 12
+    C42_POISONED = 12,
+    C42_SUPERSEDED = 13
 };
 
 enum c42_controller_phase {
@@ -67,7 +69,12 @@ enum c42_candidate_state {
     C42_CANDIDATE_ABORTING = 4,
     C42_CANDIDATE_COMMITTED = 5,
     C42_CANDIDATE_ABORTED = 6,
-    C42_CANDIDATE_POISONED = 7
+    C42_CANDIDATE_POISONED = 7,
+    C42_CANDIDATE_SUPERSEDED = 8,
+    C42_CANDIDATE_COMMITTED_AWAIT_RETIRE = 9,
+    C42_CANDIDATE_RETIRE_UNKNOWN = 10,
+    C42_CANDIDATE_RETIRE_READY = 11,
+    C42_CANDIDATE_RETIRED = 12
 };
 
 enum c42_control_kind {
@@ -83,7 +90,8 @@ enum c42_control_state {
     C42_CONTROL_COMMITTED = 3,
     C42_CONTROL_CLEANUP_PENDING = 4,
     C42_CONTROL_RETIRED = 5,
-    C42_CONTROL_POISONED = 6
+    C42_CONTROL_POISONED = 6,
+    C42_CONTROL_SUPERSEDED = 7
 };
 
 enum c42_public_slot_state {
@@ -246,6 +254,184 @@ struct c42_snapshot {
     uint32_t reserved[8];
 };
 
+struct c42_observer_slot_v2 {
+    uint64_t publication_uid;
+    uint64_t notification_uid;
+    uint32_t cq_ring_generation;
+    uint32_t source_sq_generation;
+    uint32_t slot_generation;
+    uint16_t source_sq_id;
+    uint16_t command_id;
+    uint16_t submission_queue_head;
+    uint16_t ordinal;
+    uint8_t phase;
+    uint8_t state;
+    uint8_t origin_present;
+    uint8_t reserved0;
+    uint8_t wire[C42_CQE_BYTES];
+    uint32_t reserved[2];
+};
+
+struct c42_observer_queue_v2 {
+    uint32_t ring_generation;
+    uint32_t mapping_generation;
+    uint32_t last_ring_generation;
+    uint32_t last_mapping_generation;
+    uint32_t next_slot_generation;
+    uint16_t queue_id;
+    uint16_t associated_cq_id;
+    uint16_t depth;
+    uint16_t host_index;
+    uint16_t device_index;
+    uint16_t pending;
+    uint16_t frozen_tail;
+    uint16_t unacked_count;
+    uint16_t reserved_count;
+    uint16_t pending_ack_head;
+    uint16_t pending_ack_delta;
+    uint8_t kind;
+    uint8_t queue_class;
+    uint8_t life;
+    uint8_t phase;
+    uint8_t create_scrub_retired;
+    uint8_t pending_ack_valid;
+    uint8_t reserved0[2];
+    struct c42_observer_slot_v2 slots[C42_MAX_QUEUE_DEPTH];
+};
+
+struct c42_observer_command_v2 {
+    struct fwlab_nvme_command_handle handle;
+    uint64_t client_uid;
+    uint64_t publication_uid;
+    uint64_t notification_uid;
+    uint32_t sq_ring_generation;
+    uint32_t active_generation;
+    uint16_t command_id;
+    uint16_t sq_index;
+    uint16_t cq_index;
+    uint16_t cq_slot;
+    uint16_t sqhd_snapshot;
+    uint8_t state;
+    uint8_t queue_class;
+    uint8_t prepared_origin_matches;
+    uint8_t ticket_identity_matches;
+    uint8_t ready_ticket_matches;
+    uint8_t lease_ticket_matches;
+    uint8_t consume_known;
+    uint8_t reserved0;
+    uint32_t reserved[2];
+};
+
+struct c42_observer_publication_v2 {
+    uint64_t publication_uid;
+    uint64_t body_token_uid;
+    uint64_t marker_token_uid;
+    uint16_t command_index;
+    uint16_t body_prefix;
+    uint8_t in_use;
+    uint8_t body_started;
+    uint8_t marker_started;
+    uint8_t marker_visible;
+    uint32_t reserved[2];
+};
+
+struct c42_observer_reconcile_v2 {
+    uint64_t publication_uid;
+    uint64_t consume_uid;
+    uint16_t command_index;
+    uint8_t in_use;
+    uint8_t state;
+    uint8_t consume_known;
+    uint8_t lease_matches_command;
+    uint8_t reserved0[2];
+    uint32_t reserved[2];
+};
+
+struct c42_observer_notification_v2 {
+    struct c42_operation_token token;
+    uint64_t publication_uid;
+    uint32_t cq_ring_generation;
+    uint32_t controller_epoch;
+    uint16_t completion_queue_id;
+    uint16_t slot_ordinal;
+    uint8_t in_use;
+    uint8_t state;
+    uint8_t current_epoch;
+    uint8_t reserved0;
+    uint32_t reserved[2];
+};
+
+struct c42_observer_candidate_v2 {
+    struct c42_operation_token token;
+    uint32_t controller_epoch;
+    uint32_t state;
+    uint32_t associated_cq_ring_generation;
+    uint32_t associated_cq_mapping_generation;
+    uint16_t queue_id;
+    uint16_t associated_cq_id;
+    uint8_t in_use;
+    uint8_t kind;
+    uint8_t scrub_started;
+    uint8_t retire_started;
+    uint8_t provider_retired;
+    uint8_t reserved0[3];
+    uint32_t reserved[2];
+};
+
+struct c42_observer_control_v2 {
+    struct c42_operation_token token;
+    uint32_t controller_epoch;
+    uint32_t old_epoch;
+    uint32_t state;
+    uint16_t queue_id;
+    uint8_t in_use;
+    uint8_t kind;
+    uint8_t port_started;
+    uint8_t memory_started;
+    uint8_t reserved0[2];
+    uint32_t reserved[2];
+};
+
+struct c42_observer_target_v2 {
+    struct c42_operation_token token;
+    struct fwlab_nvme_command_handle handle;
+    uint32_t sq_ring_generation;
+    uint16_t sq_index;
+    uint8_t in_use;
+    uint8_t identity_matches_active;
+    uint32_t reserved[2];
+};
+
+struct c42_observer_v2 {
+    uint16_t version;
+    uint16_t size;
+    uint32_t controller_epoch;
+    uint64_t instance_nonce;
+    uint32_t phase;
+    uint32_t fault_cause;
+    uint16_t command_capacity;
+    uint16_t target_capacity;
+    uint8_t admission_paused;
+    uint8_t scheduler_cursor;
+    uint8_t admission_cursor;
+    uint8_t publication_cursor;
+    uint8_t reconcile_cursor;
+    uint8_t sq_cursor;
+    uint8_t ready_cursor;
+    uint8_t reserved0;
+    struct c42_observer_queue_v2 sq[C42_MAX_QUEUE_PAIRS];
+    struct c42_observer_queue_v2 cq[C42_MAX_QUEUE_PAIRS];
+    struct c42_observer_candidate_v2
+        candidates[C42_MAX_QUEUE_PAIRS * 2u];
+    struct c42_observer_command_v2 commands[C42_MAX_COMMANDS];
+    struct c42_observer_publication_v2 publications[C42_MAX_COMMANDS];
+    struct c42_observer_reconcile_v2 reconciles[C42_MAX_COMMANDS];
+    struct c42_observer_notification_v2 notifications[C42_MAX_COMMANDS];
+    struct c42_observer_target_v2 targets[C42_MAX_TARGET_REFS];
+    struct c42_observer_control_v2 controls[4];
+    uint32_t reserved[8];
+};
+
 size_t c42_arena_size(const struct c42_config *config);
 enum c42_result c42_init(
     void *arena,
@@ -366,6 +552,10 @@ enum c42_result c42_raw_snapshot_copy(
 enum c42_result c42_snapshot_read(
     const struct c42_controller *controller,
     struct c42_snapshot *snapshot
+);
+enum c42_result c42_observer_read_v2(
+    const struct c42_controller *controller,
+    struct c42_observer_v2 *observer
 );
 
 #endif

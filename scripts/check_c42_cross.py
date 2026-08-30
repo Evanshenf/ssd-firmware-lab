@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Compare all eight C4.2 program outputs across four architectures."""
+"""Compare all C4.2 program outputs across four architectures."""
 
 from __future__ import annotations
 
@@ -34,6 +34,9 @@ PROGRAMS = {
     "c42_identity_unit": ([*COMMON], HIF / "tests/test_c42_identity.c"),
     "c42_reset_delete_unit": (
         [*COMMON], HIF / "tests/test_c42_reset_delete.c"
+    ),
+    "c42_remediation_unit": (
+        [*COMMON], HIF / "tests/test_c42_remediation.c"
     ),
     "c42_model": ([*MODEL], HIF / "tests/model_c42.c"),
     "c42_broken": ([*MODEL], HIF / "tests/broken_c42.c"),
@@ -114,7 +117,8 @@ def main() -> int:
             print(f"  - {failure}", file=sys.stderr)
         return 1
     print("C4.2 cross deterministic output: PASS "
-          "(native/aarch64/riscv64/s390x; s390x big-endian proven; 8 programs)")
+          "(native/aarch64/riscv64/s390x; s390x big-endian proven; "
+          f"{len(PROGRAMS)} programs)")
     return 0
 
 

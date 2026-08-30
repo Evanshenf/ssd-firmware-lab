@@ -30,7 +30,9 @@ enum c42_command_state {
     C42_COMMAND_PUB_RESERVED = 10,
     C42_COMMAND_MARKER_RECONCILE = 11,
     C42_COMMAND_RELEASE_RECONCILE = 12,
-    C42_COMMAND_ABORT_RECONCILE = 13
+    C42_COMMAND_ABORT_RECONCILE = 13,
+    C42_COMMAND_ADMIT_POISON_HOLD = 14,
+    C42_COMMAND_CONSUME_POISON_HOLD = 15
 };
 
 enum c42_slot_state {
@@ -120,7 +122,7 @@ struct c42_cq_record {
     uint8_t queue_class;
     uint8_t life;
     uint8_t device_phase;
-    uint8_t reserved;
+    uint8_t create_scrub_retired;
     struct c42_pending_ack pending_ack;
     struct c42_cq_slot slots[C42_MAX_QUEUE_DEPTH];
 };
@@ -132,10 +134,22 @@ struct c42_candidate_record {
     uint32_t state;
     uint32_t cause;
     uint32_t retry;
+    uint32_t controller_epoch;
+    uint32_t associated_cq_ring_generation;
+    uint32_t associated_cq_mapping_generation;
     uint8_t in_use;
     uint8_t scrub_started;
     uint8_t scrub_abort_started;
-    uint8_t reserved;
+    uint8_t retire_started;
+    uint8_t provider_retired;
+    uint8_t reserved[3];
+};
+
+struct c42_candidate_tombstone {
+    struct c42_operation_token token;
+    uint16_t queue_id;
+    uint8_t kind;
+    uint8_t valid;
 };
 
 struct c42_command_record {
@@ -197,6 +211,7 @@ struct c42_notification_record {
     struct c42_operation_token token;
     uint64_t publication_uid;
     uint32_t cq_ring_generation;
+    uint32_t controller_epoch;
     uint16_t completion_queue_id;
     uint16_t slot_ordinal;
     uint8_t in_use;
@@ -218,6 +233,7 @@ struct c42_control_record {
     uint32_t cause;
     uint32_t retry;
     uint32_t old_epoch;
+    uint32_t controller_epoch;
     uint16_t queue_id;
     uint8_t kind;
     uint8_t in_use;
@@ -261,6 +277,7 @@ struct c42_controller {
     struct c42_sq_record sq[C42_QUEUE_SLOTS];
     struct c42_cq_record cq[C42_QUEUE_SLOTS];
     struct c42_candidate_record candidates[C42_CANDIDATE_SLOTS];
+    struct c42_candidate_tombstone candidate_tombstones[C42_CANDIDATE_SLOTS];
     struct c42_command_record commands[C42_MAX_COMMANDS];
     struct c42_publication_record publications[C42_MAX_COMMANDS];
     struct c42_reconcile_record reconciles[C42_MAX_COMMANDS];

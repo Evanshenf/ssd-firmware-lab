@@ -14,7 +14,14 @@
 enum c42_fake_memory_operation {
     C42_FAKE_MEMORY_SCRUB = 1,
     C42_FAKE_MEMORY_BODY = 2,
-    C42_FAKE_MEMORY_MARKER = 3
+    C42_FAKE_MEMORY_MARKER = 3,
+    C42_FAKE_MEMORY_SCRUB_RETIRE = 4,
+    C42_FAKE_MEMORY_VALIDATE = 5,
+    C42_FAKE_MEMORY_CAPTURE = 6,
+    C42_FAKE_MEMORY_RESET_BEGIN = 7,
+    C42_FAKE_MEMORY_RESET_QUIESCENT = 8,
+    C42_FAKE_MEMORY_TEARDOWN_BEGIN = 9,
+    C42_FAKE_MEMORY_TEARDOWN_QUIESCENT = 10
 };
 
 struct c42_fake_memory_outcome {
@@ -22,6 +29,10 @@ struct c42_fake_memory_outcome {
     uint8_t effect;
     uint8_t prefix;
     uint8_t committed;
+    uint8_t status_committed;
+    uint8_t status_quiescent;
+    uint8_t status_override;
+    uint8_t reserved;
 };
 
 struct c42_fake_memory_mapping {
@@ -39,7 +50,7 @@ struct c42_fake_memory_operation_record {
     uint8_t kind;
     uint8_t active;
     uint8_t committed;
-    uint8_t reserved;
+    uint8_t retired;
     uint8_t expected[C42_CQE_BYTES];
 };
 

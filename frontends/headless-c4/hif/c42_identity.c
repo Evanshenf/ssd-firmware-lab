@@ -152,7 +152,8 @@ int c42_memory_port_valid(const struct c42_memory_port *port)
            ops->size == sizeof(*ops) && ops->reserved == 0 &&
            ops->validate != NULL && ops->capture != NULL &&
            ops->scrub_start != NULL && ops->scrub_query != NULL &&
-           ops->scrub_abort != NULL && ops->body_start != NULL &&
+           ops->scrub_abort != NULL && ops->scrub_retire_start != NULL &&
+           ops->scrub_retire_query != NULL && ops->body_start != NULL &&
            ops->body_query != NULL && ops->marker_start != NULL &&
            ops->marker_query != NULL && ops->reset_begin != NULL &&
            ops->reset_quiescent != NULL && ops->teardown_begin != NULL &&
@@ -227,8 +228,9 @@ void c42_fault_sq(
 
 static int command_is_active(const struct c42_command_record *command)
 {
-    return command->state >= C42_COMMAND_HIF_COMMITTED &&
-           command->state <= C42_COMMAND_RELEASE_RECONCILE;
+    return (command->state >= C42_COMMAND_HIF_COMMITTED &&
+            command->state <= C42_COMMAND_RELEASE_RECONCILE) ||
+           command->state == C42_COMMAND_CONSUME_POISON_HOLD;
 }
 
 struct c42_command_record *c42_find_active(

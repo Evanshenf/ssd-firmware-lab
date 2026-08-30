@@ -690,6 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     "docs/legal/c4-2-source-boundary-review.md",
+    "docs/legal/c4-2a-source-boundary-review.md",
     "docs/results/2026-08-30-c4-2-headless-queue-hif.md",
     "docs/results/2026-08-30-c4-2-post-review-hold.md",
     "include/fwlab/contracts/hif_command_port.h",
@@ -711,6 +712,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "frontends/headless-c4/tests/test_c42_publication.c",
     "frontends/headless-c4/tests/test_c42_identity.c",
     "frontends/headless-c4/tests/test_c42_reset_delete.c",
+    "frontends/headless-c4/tests/test_c42_remediation.c",
     "frontends/headless-c4/tests/test_c42_thread.c",
     "frontends/headless-c4/tests/c42_model.c",
     "frontends/headless-c4/tests/c42_model.h",
@@ -726,6 +728,8 @@ EXPECTED_C4_2_UNFROZEN_NAMES: list[str] = []
 EXPECTED_C4_2_FILES = {
     "docs/legal/c4-2-source-boundary-review.md":
         "a31b0df5e067abedce68b55d0f0d7fcf7a817bfaacfbcb21acdf94747fecf195",
+    "docs/legal/c4-2a-source-boundary-review.md":
+        "5b134cebf5bb28805b8766d7a7e2736059290cb927e31e9f3888f3dbd5d07c66",
     "docs/results/2026-08-30-c4-2-headless-queue-hif.md":
         "dfd89d593b026d2d8722d54d768cc484be6f3b83ba065980de9c1aa62477fd28",
     "docs/results/2026-08-30-c4-2-post-review-hold.md":
@@ -733,41 +737,43 @@ EXPECTED_C4_2_FILES = {
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/hif/c42.h":
-        "0cb232dc8a16281a04e40cfc5db01fc96abb1f47faed3bc15e9bcf81e905dd77",
+        "50645f90aae082c4534d0c22cb7a63069d6d4499a1626914ad3ca7a23595ed31",
     "frontends/headless-c4/hif/c42_internal.h":
-        "2b4a00bdbba8f1efe40a80a845492e8a1183fc186ceea207febfd953089907da",
+        "908efcbbfe937ef7d0b469427b92d44484022db4e23970b6d203f1d3dc60f5ae",
     "frontends/headless-c4/hif/c42_memory_port.h":
-        "0399355f7325b91b0f059bf92388328d0d168088e4df81d52ad57712af420a9f",
+        "e419f02bcf9c761ae23b9c447723f4d9b9fc5ce9027a573903a0cebac0ee64bd",
     "frontends/headless-c4/hif/c42_identity.c":
-        "34c6ff9c2aee48f09605610368759aa4c1a9f63e519f0db7112e7fa5620991b8",
+        "3f70f795b49232e10e72e844cffde464b2b27a8981bac260071fd7712c4daa01",
     "frontends/headless-c4/hif/c42_queue.c":
-        "bb3053e03fa4a4b1f84d3452a3cdb330c48c2173346b139defa432355857fa7a",
+        "5ba0d99aa1bf716c97619221bbb26630b497c1179dd26020d47a4ec2d77e25bd",
     "frontends/headless-c4/hif/c42_publication.c":
-        "a8c9f13266af12bcc1aca37b36fe519c6e634365d09ccb717d9531e7bd2eab77",
+        "17a2970ce4dd262e1e06f63f8c8253c0b8cee2e75702dba1e93e9e263615f7d3",
     "frontends/headless-c4/hif/c42_runtime.c":
-        "429ad8c87bbffd376aa0e98f5791d117ca47d6ace633990f924703885d291990",
+        "d213c3121d2045bb0def007532de7c3f5bd0f91d9aa9cfb4cd5b60bc557e4781",
     "frontends/headless-c4/fakes/c42_command.c":
-        "165eed7a6bac5f08c5f34e37dccb5fa3d0fe365819bdf22d35380b48f807c79f",
+        "121596d4e215df85a0f82127df5af74cf6c845dc02aa33252d40a838fcd3f0ac",
     "frontends/headless-c4/fakes/c42_command.h":
-        "2e4d450da9ae274ae8986013cdde5a5db0f4218cb779d7e1af8ab31e24ba9cdd",
+        "11cc5bde2dcfa924aa18ae3e41477ab89c729545eeaa5b0fac9031f649ee98e6",
     "frontends/headless-c4/fakes/c42_memory.c":
-        "01e00a2e07b3a07944ed3466b6f12d0fa3d00dd48826bb274e0c391342ffe124",
+        "4c4c64e90038a796d41a248428d84c69224d5e49dc5d3f5cd1d8f0346bdcd841",
     "frontends/headless-c4/fakes/c42_memory.h":
-        "e2e5f2a2056269c4e22f4da8bd65347637fb729d37e1c5192b67f3234b317179",
+        "68177bba874493fbc3ad55e41821f52cf9f6ee0e0dd01029147c2979a1935e07",
     "frontends/headless-c4/fakes/c42_fake_main.c":
         "e0479faa676ac64e4083b637ef8b965ffcc2ad019d9382ab60db49c1771594a1",
     "frontends/headless-c4/tests/c42_support.c":
-        "d30daf39b5035abefe05465f55168c3bffd531cd09c1265d942c6a4393fed68f",
+        "936d7a94c107836f3f9d92f5ad5c7e31318b7cfa13a88130bc3472ba4be7fbc2",
     "frontends/headless-c4/tests/c42_support.h":
-        "a81a807396b3a27f32198fd2666bdcbf9a9321300c585e22e6203239fa05dda5",
+        "ff79efe196cf7b29f5f42148e57ba9bfe8c6845eb45d6aabfdae38c73ec65135",
     "frontends/headless-c4/tests/test_c42_queue.c":
-        "426e53dbfd36c191fa146224baf86ad0f9ab7d1e4a7db8da13fe83884341802a",
+        "01ea3dfdb29b5379ced448eb8697055fae95eba582352b8f64e2eb348e9e9fdf",
     "frontends/headless-c4/tests/test_c42_publication.c":
-        "7d2ed3ea48e198dd066e404b3c78c41043bef8c3c72a9a7a0a8ca548a6bb3795",
+        "4994c663df0be95708033141446d8e1772ed9a30f6c8c91ce6b9fe421a9420d8",
     "frontends/headless-c4/tests/test_c42_identity.c":
         "504d15ff5e03b23298f6709db916dc8fcdb6100d9103311a282559360cd099d2",
     "frontends/headless-c4/tests/test_c42_reset_delete.c":
-        "4ec8050b602e9df6d5287e86eef07eba06a6b4d424889fa75df74a2b80670b2e",
+        "f0e4bcfd2e7e3bc9f4ea88a60788eab104fdc0efcb3ed65d38e904146cd8744a",
+    "frontends/headless-c4/tests/test_c42_remediation.c":
+        "bf40a19e70f256ef24ae91b6a1ffd7cc39d969c0d55c9aa2639ac54ece6d7161",
     "frontends/headless-c4/tests/test_c42_thread.c":
         "6fc1d6ce28cbdb2cbb837d3665d93e05429548eede5374ef9d39d57020be7a94",
     "frontends/headless-c4/tests/c42_model.c":
@@ -785,9 +791,9 @@ EXPECTED_C4_2_FILES = {
     "scripts/check_c42_analysis.py":
         "bdb9bfddf04383e3279685b9c48463f54cf97be8be55fd9190f66bfd5de44fb2",
     "scripts/check_c42_determinism.py":
-        "a64b41e8df69f18773d583ddcb986892a079af98c362e5317895aadba093f383",
+        "579e0e9652d59bd87df760193f5fe89441a5bfdcb0f101a7f7e495d1231596fb",
     "scripts/check_c42_cross.py":
-        "24f8ed722b02eb0039d9b729844153f84dffacb34c1427a59b175eca5378e57b",
+        "a16a768a3b0d00da44e35fe4c9a2ca48567216c03b5f3656b308d3d325885575",
 }
 
 EXPECTED_FREEZES = {

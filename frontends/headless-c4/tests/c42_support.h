@@ -61,6 +61,10 @@ int c42_test_create_pair(
     uint32_t ring_generation,
     uint32_t mapping_generation
 );
+int c42_test_candidate_retire(
+    struct c42_controller *controller,
+    const struct c42_operation_token *token
+);
 void c42_test_sqe(
     uint8_t bytes[C42_SQE_BYTES],
     uint8_t opcode,

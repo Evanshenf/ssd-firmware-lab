@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define C42_MEMORY_PORT_VERSION 1u
+#define C42_MEMORY_PORT_VERSION 2u
 
 enum c42_memory_role {
     C42_MEMORY_SQ_READ = 1,
@@ -24,7 +24,8 @@ enum c42_memory_result {
     C42_MEMORY_FULL = 5,
     C42_MEMORY_UNKNOWN = 6,
     C42_MEMORY_POISONED = 7,
-    C42_MEMORY_IN_PROGRESS = 8
+    C42_MEMORY_IN_PROGRESS = 8,
+    C42_MEMORY_RETIRED = 9
 };
 
 struct c42_queue_memory_cap {
@@ -123,6 +124,8 @@ struct c42_memory_ops {
     c42_memory_scrub_fn scrub_start;
     c42_memory_scrub_fn scrub_query;
     c42_memory_scrub_fn scrub_abort;
+    c42_memory_scrub_fn scrub_retire_start;
+    c42_memory_scrub_fn scrub_retire_query;
     c42_memory_body_fn body_start;
     c42_memory_body_fn body_query;
     c42_memory_marker_fn marker_start;

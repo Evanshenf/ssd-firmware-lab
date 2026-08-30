@@ -60,7 +60,7 @@ static int create_one(
             fixture->controller, &token, &status) != C42_OK ||
         status.state != C42_CANDIDATE_READY ||
         c42_candidate_commit(fixture->controller, &token) != C42_OK ||
-        c42_candidate_retire(fixture->controller, &token) != C42_OK) {
+        !c42_test_candidate_retire(fixture->controller, &token)) {
         return 0;
     }
     return 1;

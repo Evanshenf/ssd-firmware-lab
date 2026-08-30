@@ -10,6 +10,24 @@
 
 #define C42_FAKE_COMMAND_RECORDS 64u
 
+enum c42_fake_command_operation {
+    C42_FAKE_COMMAND_PREPARE = 1,
+    C42_FAKE_COMMAND_PREPARE_ABORT = 2,
+    C42_FAKE_COMMAND_ADMIT = 3,
+    C42_FAKE_COMMAND_POLL = 4,
+    C42_FAKE_COMMAND_COMPLETION_ACQUIRE = 5,
+    C42_FAKE_COMMAND_COMPLETION_RELEASE = 6,
+    C42_FAKE_COMMAND_CONSUME_PREPARE = 7,
+    C42_FAKE_COMMAND_CONSUME_ABORT = 8,
+    C42_FAKE_COMMAND_CONSUME_COMMIT = 9,
+    C42_FAKE_COMMAND_CONSUME_QUERY = 10,
+    C42_FAKE_COMMAND_CONSUME_RETIRE = 11,
+    C42_FAKE_COMMAND_RESET_BEGIN = 12,
+    C42_FAKE_COMMAND_RESET_QUIESCENT = 13,
+    C42_FAKE_COMMAND_TEARDOWN_BEGIN = 14,
+    C42_FAKE_COMMAND_TEARDOWN_QUIESCENT = 15
+};
+
 struct c42_fake_command_script {
     uint32_t completion_result;
     uint32_t acquire_in_progress;
@@ -19,9 +37,14 @@ struct c42_fake_command_script {
     uint32_t poll_delay;
     uint32_t consume_commit_delay;
     uint32_t cleanup_delay;
+    uint32_t inject_operation;
+    uint32_t inject_result;
+    uint32_t inject_value;
+    uint32_t inject_count;
     uint8_t reverse_ready;
     uint8_t cleanup_pending;
-    uint8_t reserved[6];
+    uint8_t inject_omit_outputs;
+    uint8_t reserved[5];
 };
 
 struct c42_fake_command_record {
@@ -37,6 +60,7 @@ struct c42_fake_command_record {
     uint32_t admit_queries;
     uint32_t poll_queries;
     uint32_t consume_queries;
+    uint32_t consume_prepare_queries;
     uint32_t cleanup_queries;
     uint8_t in_use;
     uint8_t admitted;

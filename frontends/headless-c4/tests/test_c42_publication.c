@@ -37,10 +37,10 @@ static void test_marker_reconcile_ack_and_cid_reuse(void)
     struct c42_test_fixture fixture;
     struct c42_fake_command_script command_script = {0};
     const struct c42_fake_memory_outcome outcomes[] = {
-        {C42_FAKE_MEMORY_BODY, C42_MEMORY_EXACT_PREFIX, 7, 0},
-        {C42_FAKE_MEMORY_BODY, C42_MEMORY_FULL, 15, 1},
-        {C42_FAKE_MEMORY_MARKER, C42_MEMORY_UNKNOWN, 0, 1},
-        {C42_FAKE_MEMORY_MARKER, C42_MEMORY_FULL, 1, 1},
+        {C42_FAKE_MEMORY_BODY, C42_MEMORY_EXACT_PREFIX, 7, 0, 0, 0, 0, 0},
+        {C42_FAKE_MEMORY_BODY, C42_MEMORY_FULL, 15, 1, 0, 0, 0, 0},
+        {C42_FAKE_MEMORY_MARKER, C42_MEMORY_UNKNOWN, 0, 1, 0, 0, 0, 0},
+        {C42_FAKE_MEMORY_MARKER, C42_MEMORY_FULL, 1, 1, 0, 0, 0, 0},
     };
     struct c42_snapshot snapshot = {0};
     struct c42_cq_head_event ack;
@@ -226,10 +226,10 @@ static void test_cumulative_ack_coalesces_during_marker_reconcile(void)
     struct c42_test_fixture fixture;
     struct c42_fake_command_script script = {0};
     const struct c42_fake_memory_outcome marker_unknown = {
-        C42_FAKE_MEMORY_MARKER, C42_MEMORY_UNKNOWN, 0, 1
+        C42_FAKE_MEMORY_MARKER, C42_MEMORY_UNKNOWN, 0, 1, 0, 0, 0, 0
     };
     const struct c42_fake_memory_outcome marker_full = {
-        C42_FAKE_MEMORY_MARKER, C42_MEMORY_FULL, 1, 1
+        C42_FAKE_MEMORY_MARKER, C42_MEMORY_FULL, 1, 1, 0, 0, 0, 0
     };
     struct c42_cq_head_event ack_one;
     struct c42_cq_head_event ack_two;
@@ -274,7 +274,7 @@ static void test_marker_partial_poison_and_cleanup_independence(void)
 {
     struct c42_test_fixture fixture;
     const struct c42_fake_memory_outcome partial_marker = {
-        C42_FAKE_MEMORY_MARKER, C42_MEMORY_EXACT_PREFIX, 1, 0
+        C42_FAKE_MEMORY_MARKER, C42_MEMORY_EXACT_PREFIX, 1, 0, 0, 0, 0, 0
     };
     struct c42_fake_command_script script = {0};
     struct c42_snapshot snapshot = {0};

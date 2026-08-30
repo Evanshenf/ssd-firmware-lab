@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Build the eight C4.2 programs with GCC/Clang and compare all output."""
+"""Build all C4.2 programs with GCC/Clang and compare complete output."""
 
 from __future__ import annotations
 
@@ -34,6 +34,9 @@ PROGRAMS = {
     "c42_identity_unit": ([*COMMON], HIF / "tests/test_c42_identity.c"),
     "c42_reset_delete_unit": (
         [*COMMON], HIF / "tests/test_c42_reset_delete.c"
+    ),
+    "c42_remediation_unit": (
+        [*COMMON], HIF / "tests/test_c42_remediation.c"
     ),
     "c42_model": ([*MODEL], HIF / "tests/model_c42.c"),
     "c42_broken": ([*MODEL], HIF / "tests/broken_c42.c"),
@@ -75,7 +78,8 @@ def main() -> int:
             subprocess.TimeoutExpired) as error:
         print(f"C4.2 determinism: FAIL: {error}", file=sys.stderr)
         return 1
-    print("C4.2 determinism: PASS (GCC == Clang complete output; 8 programs)")
+    print("C4.2 determinism: PASS (GCC == Clang complete output; "
+          f"{len(PROGRAMS)} programs)")
     return 0
 
 

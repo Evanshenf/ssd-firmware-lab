@@ -38,6 +38,25 @@ static struct c42_queue_memory_cap capability(
     return value;
 }
 
+int c42_test_candidate_retire(
+    struct c42_controller *controller,
+    const struct c42_operation_token *token)
+{
+    uint32_t attempt;
+
+    for (attempt = 0; attempt < 8; ++attempt) {
+        enum c42_result result = c42_candidate_retire(controller, token);
+
+        if (result == C42_OK) {
+            return 1;
+        }
+        if (result != C42_IN_PROGRESS) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
 static int create_queue(
     struct c42_test_fixture *fixture,
     const struct c42_queue_memory_cap *cap,
@@ -70,7 +89,7 @@ static int create_queue(
         return 0;
     }
     if (c42_candidate_commit(fixture->controller, &token) != C42_OK ||
-        c42_candidate_retire(fixture->controller, &token) != C42_OK) {
+        !c42_test_candidate_retire(fixture->controller, &token)) {
         return 0;
     }
     return 1;
