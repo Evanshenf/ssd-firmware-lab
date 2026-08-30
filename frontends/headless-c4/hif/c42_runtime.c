@@ -11,24 +11,94 @@ _Static_assert(sizeof(struct c42_observer_queue_v2) == 2104,
                "observer queue v2 ABI");
 _Static_assert(sizeof(struct c42_observer_command_v2) == 88,
                "observer command v2 ABI");
+_Static_assert(sizeof(struct c42_observer_publication_v2) == 40,
+               "observer publication v2 ABI");
+_Static_assert(sizeof(struct c42_observer_reconcile_v2) == 32,
+               "observer reconcile v2 ABI");
+_Static_assert(sizeof(struct c42_observer_notification_v2) == 56,
+               "observer notification v2 ABI");
 _Static_assert(sizeof(struct c42_observer_candidate_v2) == 64,
                "observer candidate v2 ABI");
 _Static_assert(sizeof(struct c42_observer_control_v2) == 56,
                "observer control v2 ABI");
+_Static_assert(sizeof(struct c42_observer_target_v2) == 64,
+               "observer target v2 ABI");
 _Static_assert(sizeof(struct c42_observer_v2) == 26888,
                "observer v2 ABI");
 _Static_assert(offsetof(struct c42_observer_v2, sq) == 40,
                "observer v2 header ABI");
-_Static_assert(C42_OK == 0 && C42_POISONED == 12 &&
-               C42_SUPERSEDED == 13,
+_Static_assert(C42_OK == 0 && C42_INVALID == 1 &&
+               C42_WRONG_STATE == 2 && C42_STALE == 3 &&
+               C42_NO_EFFECT == 4 && C42_BACKPRESSURE == 5 &&
+               C42_NO_CAPACITY == 6 && C42_IN_PROGRESS == 7 &&
+               C42_TOO_LATE == 8 && C42_FAULTED == 9 &&
+               C42_COUNTER_EXHAUSTED == 10 && C42_NOT_FOUND == 11 &&
+               C42_POISONED == 12 && C42_SUPERSEDED == 13,
                "component result numeric ABI");
 _Static_assert(C42_CANDIDATE_PREPARED == 1 &&
+               C42_CANDIDATE_SCRUB_UNKNOWN == 2 &&
+               C42_CANDIDATE_READY == 3 &&
+               C42_CANDIDATE_ABORTING == 4 &&
+               C42_CANDIDATE_COMMITTED == 5 &&
+               C42_CANDIDATE_ABORTED == 6 &&
                C42_CANDIDATE_POISONED == 7 &&
+               C42_CANDIDATE_SUPERSEDED == 8 &&
+               C42_CANDIDATE_COMMITTED_AWAIT_RETIRE == 9 &&
+               C42_CANDIDATE_RETIRE_UNKNOWN == 10 &&
+               C42_CANDIDATE_RETIRE_READY == 11 &&
                C42_CANDIDATE_RETIRED == 12,
                "candidate state numeric ABI");
-_Static_assert(C42_MEMORY_OK == 0 && C42_MEMORY_IN_PROGRESS == 8 &&
-               C42_MEMORY_RETIRED == 9,
+_Static_assert(C42_CONTROL_STARTED == 1 && C42_CONTROL_WAITING == 2 &&
+               C42_CONTROL_COMMITTED == 3 &&
+               C42_CONTROL_CLEANUP_PENDING == 4 &&
+               C42_CONTROL_RETIRED == 5 && C42_CONTROL_POISONED == 6 &&
+               C42_CONTROL_SUPERSEDED == 7,
+               "control state numeric ABI");
+_Static_assert(C42_MEMORY_OK == 0 && C42_MEMORY_INVALID == 1 &&
+               C42_MEMORY_STALE == 2 && C42_MEMORY_NO_EFFECT == 3 &&
+               C42_MEMORY_EXACT_PREFIX == 4 && C42_MEMORY_FULL == 5 &&
+               C42_MEMORY_UNKNOWN == 6 && C42_MEMORY_POISONED == 7 &&
+               C42_MEMORY_IN_PROGRESS == 8 && C42_MEMORY_RETIRED == 9,
                "memory result numeric ABI");
+_Static_assert(C42_OBSERVER_SLOT_FREE == 0 &&
+               C42_OBSERVER_SLOT_RESERVED == 1 &&
+               C42_OBSERVER_SLOT_CQE_COMMITTED == 2 &&
+               C42_OBSERVER_SLOT_BODY_STAGED == 10 &&
+               C42_OBSERVER_SLOT_MARKER_RECONCILE == 11 &&
+               C42_OBSERVER_SLOT_INVALID == 255,
+               "observer slot numeric ABI");
+_Static_assert(C42_OBSERVER_COMMAND_FREE == 0 &&
+               C42_OBSERVER_COMMAND_CAPTURED == 1 &&
+               C42_OBSERVER_COMMAND_PREPARE_QUERY == 2 &&
+               C42_OBSERVER_COMMAND_PORT_RESERVED == 3 &&
+               C42_OBSERVER_COMMAND_ADMIT_QUERY == 4 &&
+               C42_OBSERVER_COMMAND_PORT_COMMITTED == 5 &&
+               C42_OBSERVER_COMMAND_HIF_COMMITTED == 6 &&
+               C42_OBSERVER_COMMAND_READY == 7 &&
+               C42_OBSERVER_COMMAND_LEASED == 8 &&
+               C42_OBSERVER_COMMAND_CONSUME_PREPARE == 9 &&
+               C42_OBSERVER_COMMAND_PUB_RESERVED == 10 &&
+               C42_OBSERVER_COMMAND_MARKER_RECONCILE == 11 &&
+               C42_OBSERVER_COMMAND_RELEASE_RECONCILE == 12 &&
+               C42_OBSERVER_COMMAND_ABORT_RECONCILE == 13 &&
+               C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD == 14 &&
+               C42_OBSERVER_COMMAND_CONSUME_POISON_HOLD == 15 &&
+               C42_OBSERVER_COMMAND_INVALID == 255,
+               "observer command numeric ABI");
+_Static_assert(C42_OBSERVER_RECONCILE_RESERVED == 0 &&
+               C42_OBSERVER_RECONCILE_PREPARED == 1 &&
+               C42_OBSERVER_RECONCILE_COMMIT_UNKNOWN == 2 &&
+               C42_OBSERVER_RECONCILE_CLEANUP_PENDING == 3 &&
+               C42_OBSERVER_RECONCILE_RETIRE_READY == 4 &&
+               C42_OBSERVER_RECONCILE_INVALID == 255,
+               "observer reconcile numeric ABI");
+_Static_assert(C42_OBSERVER_NOTIFY_RESERVED == 0 &&
+               C42_OBSERVER_NOTIFY_READY == 1 &&
+               C42_OBSERVER_NOTIFY_ACQUIRED == 2 &&
+               C42_OBSERVER_NOTIFY_CONSUMED == 3 &&
+               C42_OBSERVER_NOTIFY_SUPPRESSED == 4 &&
+               C42_OBSERVER_NOTIFY_INVALID == 255,
+               "observer notification numeric ABI");
 
 static int seed_valid(const struct c42_counter_seed *seed)
 {
@@ -652,6 +722,7 @@ enum c42_result c42_observer_read_v2(
     local.reconcile_cursor = controller->reconcile_cursor;
     local.sq_cursor = controller->sq_cursor;
     local.ready_cursor = controller->ready_cursor;
+    local.ready_poll_pending = controller->ready_poll_pending;
     for (index = 0; index < C42_QUEUE_SLOTS; ++index) {
         observer_sq_fill(&controller->sq[index], &local.sq[index]);
         observer_cq_fill(

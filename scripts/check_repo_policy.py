@@ -697,6 +697,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "docs/results/2026-08-30-c4-2-headless-queue-hif.md",
     "docs/results/2026-08-30-c4-2-post-review-hold.md",
     "include/fwlab/contracts/hif_command_port.h",
+    "frontends/headless-c4/c42_sources.mk",
     "frontends/headless-c4/hif/c42.h",
     "frontends/headless-c4/hif/c42_internal.h",
     "frontends/headless-c4/hif/c42_memory_port.h",
@@ -706,16 +707,21 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "frontends/headless-c4/hif/c42_runtime.c",
     "frontends/headless-c4/fakes/c42_command.c",
     "frontends/headless-c4/fakes/c42_command.h",
+    "frontends/headless-c4/fakes/c42_event.c",
+    "frontends/headless-c4/fakes/c42_event.h",
     "frontends/headless-c4/fakes/c42_memory.c",
     "frontends/headless-c4/fakes/c42_memory.h",
     "frontends/headless-c4/fakes/c42_fake_main.c",
     "frontends/headless-c4/tests/c42_support.c",
     "frontends/headless-c4/tests/c42_support.h",
+    "frontends/headless-c4/tests/c42_reference.c",
+    "frontends/headless-c4/tests/c42_reference.h",
     "frontends/headless-c4/tests/test_c42_queue.c",
     "frontends/headless-c4/tests/test_c42_publication.c",
     "frontends/headless-c4/tests/test_c42_identity.c",
     "frontends/headless-c4/tests/test_c42_reset_delete.c",
     "frontends/headless-c4/tests/test_c42_remediation.c",
+    "frontends/headless-c4/tests/test_c42_dut_replay.c",
     "frontends/headless-c4/tests/test_c42_thread.c",
     "frontends/headless-c4/tests/c42_model.c",
     "frontends/headless-c4/tests/c42_model.h",
@@ -726,6 +732,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "scripts/check_c42_analysis.py",
     "scripts/check_c42_determinism.py",
     "scripts/check_c42_cross.py",
+    "scripts/check_c42_dynamic_mutations.py",
 ]
 EXPECTED_C4_2_UNFROZEN_NAMES: list[str] = []
 EXPECTED_C4_2_FILES = {
@@ -739,44 +746,56 @@ EXPECTED_C4_2_FILES = {
         "78228c749010e472f81b0ab32b403088ea5ff45b5b5e6145dbec0b5fc468898a",
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
+    "frontends/headless-c4/c42_sources.mk":
+        "25ab7eab0a53346256af9de14ffafa8956fb51a03ad7351cfe928e9d3150c9a6",
     "frontends/headless-c4/hif/c42.h":
-        "85121e61d92d75d51343fe341b95ec295b5899fc32f4ad32dfba62c37fa4f88e",
+        "619fa57028d0b7c1817fa5101fc6aa9269c643df583895d5431599afc6ad1be3",
     "frontends/headless-c4/hif/c42_internal.h":
-        "2ba9713fd816a2ba9686aa7a4092e616653cc5a58aecdf4ab81537f92eee7f02",
+        "4c6bb8158a4adf0ae3eb8d90e9cbe1cd9fb70d9b197bdff517ab976b9c26e73c",
     "frontends/headless-c4/hif/c42_memory_port.h":
         "e419f02bcf9c761ae23b9c447723f4d9b9fc5ce9027a573903a0cebac0ee64bd",
     "frontends/headless-c4/hif/c42_identity.c":
         "f0e263a30a6568e9b0433332117e69414360926c83c5b53fafda81c1e66cd2aa",
     "frontends/headless-c4/hif/c42_queue.c":
-        "80ee91b601e20b463899388f254bc26ccc0839ebd25f8d4dd61a0579f9eae217",
+        "97510d09d250bc39b9b7e3e230e5378c5727d12c5b5865cfe9ab70e194d3fcd3",
     "frontends/headless-c4/hif/c42_publication.c":
-        "96762083774a887a36f04967b72f262a882d6ba6cee46a66bc275a885c094e19",
+        "9be52e8e0e4a73f75edff2cfb31cd278ca60e12783b3033079fa3defa9eb8048",
     "frontends/headless-c4/hif/c42_runtime.c":
-        "9947caaaf73a4d2135c6e3013064293171f40804d6efde321ad93fb56402c0f6",
+        "350f5b897fd632fbb5ba8388b3c7b109dc30f797c8b996cc7c376aa003c34a29",
     "frontends/headless-c4/fakes/c42_command.c":
-        "5e3c70e4a67892efbc34463e264b5d50bed5adaf5ca9109f4e665af9bd8c4fb8",
+        "6b873822f57c5669dbcc13ce01c5c6993a33c5f5b73997aca2a2c03de141095d",
     "frontends/headless-c4/fakes/c42_command.h":
-        "f80697e22143089816150dbb822b86b2f1767e6b70fa8921b5e6df48877ee52c",
+        "9755e0efa061c4ced147fbf8f1fe0a230e8f07546d6a55baa50605a6b4abe0cc",
+    "frontends/headless-c4/fakes/c42_event.c":
+        "02846749a362987939a3c4435cd679713df099cec93618b48f79f10099803a6d",
+    "frontends/headless-c4/fakes/c42_event.h":
+        "ccb4c34b94e1a3b6ff46c8687b6af29a42df2a39ae5c5e99be766c59715a9ff4",
     "frontends/headless-c4/fakes/c42_memory.c":
-        "2dd56618932c20a254ffe2e93b13cbf0df9edd25e23cf308829bd46246726954",
+        "c1efb689a4f21379c1b49c07fcbb61a1fba0ceb5d1edaf1b7c3fd4c9c7fdce3d",
     "frontends/headless-c4/fakes/c42_memory.h":
-        "836a3282504ec8c079aa3b75d14d98ba9defa4ee6ac1946c4d25417cd53152ce",
+        "6826cc9945e3ec2ac9387e33a8827b40afe94a656eb3bf3050f434dc09cba91c",
     "frontends/headless-c4/fakes/c42_fake_main.c":
         "e0479faa676ac64e4083b637ef8b965ffcc2ad019d9382ab60db49c1771594a1",
     "frontends/headless-c4/tests/c42_support.c":
-        "936d7a94c107836f3f9d92f5ad5c7e31318b7cfa13a88130bc3472ba4be7fbc2",
+        "67b91dfd83224fb46e823dd813e888e315ac4d184f55fad26f8f62acc9dcbfd6",
     "frontends/headless-c4/tests/c42_support.h":
-        "ff79efe196cf7b29f5f42148e57ba9bfe8c6845eb45d6aabfdae38c73ec65135",
+        "6830ee74ad5e92d08a8fb8df09170239f855c800b8069e541e77b4d34f277e54",
+    "frontends/headless-c4/tests/c42_reference.c":
+        "bd15e73856807447cab171b0869d222fb8f549555fef50f263e9a99ab58689b1",
+    "frontends/headless-c4/tests/c42_reference.h":
+        "0c6c792317f3ac9565dafa638de609afe9b4d760b0df57d53dfab92654657df3",
     "frontends/headless-c4/tests/test_c42_queue.c":
-        "01ea3dfdb29b5379ced448eb8697055fae95eba582352b8f64e2eb348e9e9fdf",
+        "40e7e7a141e3d78fc34a959446d7fcbb197e48635d277e3ed76402f06224de73",
     "frontends/headless-c4/tests/test_c42_publication.c":
-        "33f1a542f23d52a1139a9a011fca43f7215ced27846deed1b7147a72f584d32b",
+        "1cd904553e73c7fbbe282f2c651f5b63927ebc43139fe71f672f558b0edb8922",
     "frontends/headless-c4/tests/test_c42_identity.c":
-        "dc06bcc53bfb11319d34323756c50f8b8934d129b29ca8c6ea728bbb86a68543",
+        "561026ee816c65aca17a7b6ffe41a6baa6a1baf70c2451a7366f3a3955bc601f",
     "frontends/headless-c4/tests/test_c42_reset_delete.c":
         "f0e4bcfd2e7e3bc9f4ea88a60788eab104fdc0efcb3ed65d38e904146cd8744a",
     "frontends/headless-c4/tests/test_c42_remediation.c":
-        "af49884662401d8837abe58f19a82859bd019abfdb0815319bdb474e9d8f6fb0",
+        "d54358782a4e5cf712ac9a71e0ea53c00cfa3bf7b62380da2baddbc121568707",
+    "frontends/headless-c4/tests/test_c42_dut_replay.c":
+        "467228fa345faf953de00804d0f51ce37206f8b369aabe66e82f166fc36d6107",
     "frontends/headless-c4/tests/test_c42_thread.c":
         "e61d683dcccce3416cc381f38060266985154baad88fb2764b6c217aa249a1e3",
     "frontends/headless-c4/tests/c42_model.c":
@@ -788,15 +807,17 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/broken_c42.c":
         "fbcef3fcacf6fcfd2ddeb2a4fb5a12e16c8aad4e3c3189f3dc315720658571b8",
     "frontends/headless-c4/tests/fuzz_c42.c":
-        "f6edbcffc331830f1359f786c5d30c597dfbaaaa98b8980a05c2033dcfa50884",
+        "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54",
     "scripts/check_c42_architecture.py":
-        "37328141bdf485b9ec8a03477455c5622c01eae274624a0532f6dc901bd100d0",
+        "d7aac7f76b0319a14762f95cde425d25635d8cccd2dcf1e63717ccbaf9039317",
     "scripts/check_c42_analysis.py":
-        "bdb9bfddf04383e3279685b9c48463f54cf97be8be55fd9190f66bfd5de44fb2",
+        "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a",
     "scripts/check_c42_determinism.py":
-        "579e0e9652d59bd87df760193f5fe89441a5bfdcb0f101a7f7e495d1231596fb",
+        "ce04e8fe48566df7b43bf5a88c37de1be4177ea5f3a4cddece0d1386e629f4ed",
     "scripts/check_c42_cross.py":
-        "a16a768a3b0d00da44e35fe4c9a2ca48567216c03b5f3656b308d3d325885575",
+        "c7998c68772fc33f64e248252bb9da2e06d1c359aee763dec081cf95b55663c3",
+    "scripts/check_c42_dynamic_mutations.py":
+        "b9f8827d29284c331921fe0d876a725cbf5ec9e622ba43ae961758c54e532ab6",
 }
 
 EXPECTED_FREEZES = {
@@ -1314,6 +1335,40 @@ def check_freezes(
         check_freeze(name, expected, files, boundaries, failures)
 
 
+def check_c42_build_closure(failures: list[str]) -> None:
+    makefile = (ROOT / "frontends/headless-c4/Makefile").read_text(
+        encoding="utf-8"
+    )
+    source_list = (ROOT / "frontends/headless-c4/c42_sources.mk").read_text(
+        encoding="utf-8"
+    )
+    required_make_tokens = (
+        "include c42_sources.mk", "$(C42_SOURCES)",
+        "$(C42_FAKE_SOURCES)", "$(C42_SUPPORT)", "$(C42_REFERENCE)",
+        "check-c42-remediation", "check-c42-replay",
+        "check-c42-dynamic-mutations", "check-c42-architecture",
+    )
+    for token in required_make_tokens:
+        if token not in makefile:
+            failures.append(f"C4.2 build closure is missing Makefile token: {token}")
+    if re.search(
+            r"^C42_(?:SOURCES|FAKE_SOURCES|SUPPORT|REFERENCE)\s*[:+?]?=",
+            makefile, re.MULTILINE):
+        failures.append("C4.2 frozen source list is overridden in shared Makefile")
+    required_sources = (
+        "hif/c42_identity.c", "hif/c42_queue.c",
+        "hif/c42_publication.c", "hif/c42_runtime.c",
+        "fakes/c42_event.c", "fakes/c42_memory.c", "fakes/c42_command.c",
+        "tests/c42_support.c", "tests/c42_reference.c",
+        "tests/test_c42_remediation.c", "tests/test_c42_dut_replay.c",
+        "tests/c42_model.c", "tests/model_c42.c", "tests/broken_c42.c",
+        "tests/fuzz_c42.c", "tests/test_c42_thread.c",
+    )
+    for source in required_sources:
+        if source not in source_list:
+            failures.append(f"C4.2 frozen source list is incomplete: {source}")
+
+
 def main() -> int:
     failures: list[str] = []
     boundaries = load_policy("policy/source-boundaries.toml", failures)
@@ -1326,6 +1381,7 @@ def main() -> int:
     if boundaries.get("portable_components") != EXPECTED_PORTABLE_COMPONENTS:
         failures.append("portable-component policy changed or is incomplete")
     check_freezes(project_entries, boundaries, failures)
+    check_c42_build_closure(failures)
 
     for forbidden in FORBIDDEN_ROOTS:
         if (ROOT / forbidden).exists():

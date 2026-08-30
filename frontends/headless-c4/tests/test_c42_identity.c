@@ -100,6 +100,11 @@ static void test_snapshot_backpressure_and_target(void)
     check(run_until_active(&fixture, 1, 1), "admit after backpressure");
     check(fixture.memory.capture_count == 1, "no reread on backpressure");
     check(c42_target_prepare(
+              fixture.controller, 0,
+              fixture.sq_cap[0].ring_generation + 1u, 21,
+              &target_b) == C42_NOT_FOUND,
+          "target rejects mismatched SQ generation");
+    check(c42_target_prepare(
               fixture.controller, 0, fixture.sq_cap[0].ring_generation, 21,
               &target) == C42_OK,
           "target exact active CID");

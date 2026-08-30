@@ -263,6 +263,8 @@ struct c42_controller {
     uint8_t reconcile_cursor;
     uint8_t sq_cursor;
     uint8_t ready_cursor;
+    uint8_t ready_poll_pending;
+    uint8_t reserved0[7];
     struct c42_counter origin_uid;
     struct c42_counter client_uid;
     struct c42_counter release_uid;

@@ -269,6 +269,54 @@ static void test_completion_consume_closed_matrix(void)
     }
 }
 
+static void test_exact_object_malformed_states(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_fake_command_injection injection = {0};
+    struct c42_snapshot snapshot = {0};
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa134100000000001)),
+          "F13 exact admission object fixture");
+    injection.operation = C42_FAKE_COMMAND_ADMIT;
+    injection.result = FWLAB_HIF_PORT_OK;
+    injection.value = FWLAB_HIF_ADMISSION_POISONED + 1u;
+    injection.write_mask = C42_FAKE_WRITE_VALUE | C42_FAKE_WRITE_OBJECT;
+    injection.object_variant = C42_FAKE_OBJECT_EXACT;
+    check(c42_fake_command_injection_push(
+              &fixture.command, &injection) == C42_OK &&
+          c42_test_submit(&fixture, 0, 0, 1, 175) &&
+          c42_test_run(&fixture, 32, 4) &&
+          c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
+          snapshot.phase == C42_CONTROLLER_FAULTED_RESET_REQUIRED &&
+          snapshot.sq[0].device_index == 0,
+          "F13 unknown admission state poisons despite exact ticket");
+    check(reset_to_cold(&fixture), "F13 exact admission reset drain");
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa134100000000002)),
+          "F13 exact consume object fixture");
+    memset(&injection, 0, sizeof(injection));
+    injection.operation = C42_FAKE_COMMAND_CONSUME_PREPARE;
+    injection.result = FWLAB_HIF_PORT_OK;
+    injection.value = FWLAB_HIF_CONSUME_POISONED + 1u;
+    injection.write_mask = C42_FAKE_WRITE_VALUE | C42_FAKE_WRITE_OBJECT;
+    injection.flags = C42_FAKE_APPLY_EFFECT;
+    injection.object_variant = C42_FAKE_OBJECT_EXACT;
+    check(c42_fake_command_injection_push(
+              &fixture.command, &injection) == C42_OK &&
+          c42_test_submit(&fixture, 0, 0, 1, 176) &&
+          c42_test_run(&fixture, 32, 4) &&
+          c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
+          snapshot.phase == C42_CONTROLLER_FAULTED_RESET_REQUIRED &&
+          snapshot.active_commands == 1 &&
+          fixture.command.records[0].consume_prepared == 1,
+          "F13 unknown consume state retains exact applied token for reset");
+    check(reset_to_cold(&fixture), "F13 exact consume reset drain");
+}
+
 static uint32_t cleanup_query_total(
     const struct c42_fake_command *command)
 {
@@ -316,6 +364,7 @@ static void test_ultra_critical_regressions(void)
         struct c42_operation_token teardown = {0};
         struct c42_control_status status = {0};
         uint32_t before;
+        uint32_t event_count;
 
         executions++;
         check(c42_test_fixture_init_with_nonce(
@@ -338,8 +387,11 @@ static void test_ultra_critical_regressions(void)
                   fixture.controller, &reset, 1) == C42_POISONED,
               "C02 poison reset control after LP");
         before = cleanup_query_total(&fixture.command);
+        event_count = fixture.event_log.count;
         check(c42_test_run(&fixture, 8, 1) &&
               cleanup_query_total(&fixture.command) == before &&
+              fixture.event_log.count == event_count &&
+              fixture.event_log.overflow == 0 &&
               c42_control_query(
                   fixture.controller, &reset, &status) == C42_OK &&
               status.state == C42_CONTROL_POISONED,
@@ -440,6 +492,226 @@ static void test_observer_state_mapping(void)
           "C04 observer never aliases staged/marker with committed");
 }
 
+struct observer_coverage {
+    uint8_t command[256];
+    uint8_t reconcile[256];
+    uint8_t notification[256];
+};
+
+static int collect_observer_coverage(
+    struct c42_test_fixture *fixture,
+    struct observer_coverage *coverage,
+    struct c42_observer_v2 *observer)
+{
+    uint16_t index;
+
+    if (c42_observer_read_v2(fixture->controller, observer) != C42_OK) {
+        return 0;
+    }
+    for (index = 0; index < observer->command_capacity; ++index) {
+        coverage->command[observer->commands[index].state] = 1;
+        if (observer->reconciles[index].in_use != 0) {
+            coverage->reconcile[observer->reconciles[index].state] = 1;
+        }
+        if (observer->notifications[index].in_use != 0) {
+            coverage->notification[observer->notifications[index].state] = 1;
+        }
+    }
+    return 1;
+}
+
+static void test_observer_reachable_state_coverage(void)
+{
+    static const uint8_t expected_command[] = {
+        C42_OBSERVER_COMMAND_FREE,
+        C42_OBSERVER_COMMAND_CAPTURED,
+        C42_OBSERVER_COMMAND_PREPARE_QUERY,
+        C42_OBSERVER_COMMAND_PORT_RESERVED,
+        C42_OBSERVER_COMMAND_ADMIT_QUERY,
+        C42_OBSERVER_COMMAND_PORT_COMMITTED,
+        C42_OBSERVER_COMMAND_HIF_COMMITTED,
+        C42_OBSERVER_COMMAND_READY,
+        C42_OBSERVER_COMMAND_LEASED,
+        C42_OBSERVER_COMMAND_CONSUME_PREPARE,
+        C42_OBSERVER_COMMAND_PUB_RESERVED,
+        C42_OBSERVER_COMMAND_MARKER_RECONCILE,
+        C42_OBSERVER_COMMAND_ABORT_RECONCILE,
+        C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD,
+        C42_OBSERVER_COMMAND_CONSUME_POISON_HOLD,
+    };
+    static const uint8_t expected_reconcile[] = {
+        C42_OBSERVER_RECONCILE_RESERVED,
+        C42_OBSERVER_RECONCILE_PREPARED,
+        C42_OBSERVER_RECONCILE_COMMIT_UNKNOWN,
+        C42_OBSERVER_RECONCILE_CLEANUP_PENDING,
+        C42_OBSERVER_RECONCILE_RETIRE_READY,
+    };
+    static const uint8_t expected_notification[] = {
+        C42_OBSERVER_NOTIFY_RESERVED,
+        C42_OBSERVER_NOTIFY_READY,
+        C42_OBSERVER_NOTIFY_ACQUIRED,
+        C42_OBSERVER_NOTIFY_CONSUMED,
+        C42_OBSERVER_NOTIFY_SUPPRESSED,
+    };
+    struct observer_coverage coverage = {{0}, {0}, {0}};
+    struct c42_test_fixture fixture;
+    struct c42_fake_command_script script = {0};
+    struct c42_fake_command_injection injection = {0};
+    struct c42_observer_v2 observer;
+    struct c42_notification notification = {0};
+    struct c42_operation_token reset = {0};
+    uint32_t step;
+    size_t index;
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa137000000000010)),
+          "observer lifecycle fixture");
+    script.prepare_delay = 2;
+    script.admit_delay = 2;
+    script.consume_commit_delay = 2;
+    script.cleanup_pending = 1;
+    script.cleanup_delay = 2;
+    c42_fake_command_set_script(&fixture.command, &script);
+    injection.operation = C42_FAKE_COMMAND_CONSUME_PREPARE;
+    injection.result = FWLAB_HIF_PORT_IN_PROGRESS;
+    injection.omit_outputs = 1;
+    check(c42_fake_command_injection_push(
+              &fixture.command, &injection) == C42_OK &&
+          collect_observer_coverage(&fixture, &coverage, &observer) &&
+          c42_test_submit(&fixture, 0, 0, 1, 193),
+          "observer lifecycle setup");
+    for (step = 0; step < 256; ++step) {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              collect_observer_coverage(
+                  &fixture, &coverage, &observer),
+              "observer lifecycle transition");
+        if (observer.notifications[0].state == C42_OBSERVER_NOTIFY_READY &&
+            observer.reconciles[0].in_use == 0) {
+            break;
+        }
+    }
+    check(step < 256, "observer lifecycle reaches ready notification");
+    check(c42_notification_acquire(
+              fixture.controller, &notification) == C42_OK &&
+          collect_observer_coverage(&fixture, &coverage, &observer) &&
+          c42_notification_consume(
+              fixture.controller, &notification.token) == C42_OK &&
+          collect_observer_coverage(&fixture, &coverage, &observer),
+          "observer notification acquired/consumed states");
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa137000000000011)) &&
+          c42_test_submit(&fixture, 0, 0, 1, 194),
+          "observer abort fixture");
+    memset(&injection, 0, sizeof(injection));
+    injection.operation = C42_FAKE_COMMAND_ADMIT;
+    injection.result = FWLAB_HIF_PORT_OK;
+    injection.value = FWLAB_HIF_ADMISSION_ABORTED;
+    check(c42_fake_command_injection_push(
+              &fixture.command, &injection) == C42_OK,
+          "observer abort injection");
+    for (step = 0; step < 32; ++step) {
+        struct c42_step_result result = {0};
+
+        (void)c42_step(fixture.controller, 1, &result);
+        check(collect_observer_coverage(
+                  &fixture, &coverage, &observer),
+              "observer abort transition");
+        if (coverage.command[C42_OBSERVER_COMMAND_ABORT_RECONCILE] != 0) {
+            break;
+        }
+    }
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa137000000000012)) &&
+          c42_test_submit(&fixture, 0, 0, 1, 195),
+          "observer admission poison fixture");
+    memset(&injection, 0, sizeof(injection));
+    injection.operation = C42_FAKE_COMMAND_ADMIT;
+    injection.result = FWLAB_HIF_PORT_COUNTER_EXHAUSTED + 1u;
+    injection.omit_outputs = 1;
+    check(c42_fake_command_injection_push(
+              &fixture.command, &injection) == C42_OK,
+          "observer admission poison injection");
+    for (step = 0; step < 32; ++step) {
+        struct c42_step_result result = {0};
+
+        (void)c42_step(fixture.controller, 1, &result);
+        check(collect_observer_coverage(
+                  &fixture, &coverage, &observer),
+              "observer admission poison transition");
+        if (coverage.command[C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD] != 0) {
+            break;
+        }
+    }
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa137000000000013)) &&
+          c42_test_submit(&fixture, 0, 0, 1, 196),
+          "observer consume poison fixture");
+    memset(&injection, 0, sizeof(injection));
+    injection.operation = C42_FAKE_COMMAND_CONSUME_PREPARE;
+    injection.result = FWLAB_HIF_PORT_OK;
+    injection.omit_outputs = 1;
+    check(c42_fake_command_injection_push(
+              &fixture.command, &injection) == C42_OK,
+          "observer consume poison injection");
+    for (step = 0; step < 64; ++step) {
+        struct c42_step_result result = {0};
+
+        (void)c42_step(fixture.controller, 1, &result);
+        check(collect_observer_coverage(
+                  &fixture, &coverage, &observer),
+              "observer consume poison transition");
+        if (coverage.command[C42_OBSERVER_COMMAND_CONSUME_POISON_HOLD] != 0) {
+            break;
+        }
+    }
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa137000000000014)) &&
+          c42_test_submit(&fixture, 0, 0, 1, 197),
+          "observer notification suppression fixture");
+    {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              collect_observer_coverage(
+                  &fixture, &coverage, &observer) &&
+              c42_reset_start(fixture.controller, &reset) == C42_OK &&
+              collect_observer_coverage(
+                  &fixture, &coverage, &observer),
+              "observer notification suppression transition");
+    }
+
+    for (index = 0;
+         index < sizeof(expected_command) / sizeof(expected_command[0]);
+         ++index) {
+        check(coverage.command[expected_command[index]] != 0,
+              "observer covers each reachable command state");
+    }
+    for (index = 0;
+         index < sizeof(expected_reconcile) / sizeof(expected_reconcile[0]);
+         ++index) {
+        check(coverage.reconcile[expected_reconcile[index]] != 0,
+              "observer covers each reconcile state");
+    }
+    for (index = 0;
+         index < sizeof(expected_notification) /
+                     sizeof(expected_notification[0]);
+         ++index) {
+        check(coverage.notification[expected_notification[index]] != 0,
+              "observer covers each notification state");
+    }
+}
+
 static void test_output_sentinels_and_poll(void)
 {
     struct c42_test_fixture fixture;
@@ -522,6 +794,123 @@ static void test_output_sentinels_and_poll(void)
               "F13 OK with omitted enum fails closed");
         check(reset_to_cold(&fixture), "F13 omitted enum reset drain");
     }
+}
+
+static void test_literal_single_pass_ready_scan(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_fake_command_script script = {0};
+    struct c42_observer_v2 observer;
+    uint32_t step;
+    uint32_t acquire_before;
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa139000000000001)),
+          "F18 literal scan fixture");
+    script.poll_delay = 100;
+    script.reverse_ready = 1;
+    c42_fake_command_set_script(&fixture.command, &script);
+    check(c42_test_submit(&fixture, 0, 0, 1, 220) &&
+          c42_test_submit(&fixture, 0, 1, 2, 221),
+          "F18 literal scan submit");
+    for (step = 0; step < 128; ++step) {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              c42_observer_read_v2(
+                  fixture.controller, &observer) == C42_OK,
+              "F18 reach two HIF records");
+        if (observer.commands[0].state ==
+                C42_OBSERVER_COMMAND_HIF_COMMITTED &&
+            observer.commands[1].state ==
+                C42_OBSERVER_COMMAND_HIF_COMMITTED) {
+            break;
+        }
+    }
+    check(step < 128, "F18 both records HIF committed");
+    script.poll_delay = 0;
+    c42_fake_command_set_script(&fixture.command, &script);
+    for (step = 0; step < 32; ++step) {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              c42_observer_read_v2(
+                  fixture.controller, &observer) == C42_OK,
+              "F18 make later record READY");
+        if (observer.commands[0].state ==
+                C42_OBSERVER_COMMAND_HIF_COMMITTED &&
+            observer.commands[1].state == C42_OBSERVER_COMMAND_READY) {
+            break;
+        }
+    }
+    check(step < 32 && observer.ready_poll_pending == 0,
+          "F18 HIF before later READY setup");
+    acquire_before = fixture.command.acquire_count;
+    {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              result.units_executed == 1 &&
+              c42_observer_read_v2(
+                  fixture.controller, &observer) == C42_OK &&
+              fixture.command.acquire_count == acquire_before + 1u &&
+              observer.commands[1].state == C42_OBSERVER_COMMAND_LEASED &&
+              observer.ready_poll_pending == 1,
+              "F18 same pass notes poll and leases later READY");
+    }
+    {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              result.units_executed == 1 &&
+              c42_observer_read_v2(
+                  fixture.controller, &observer) == C42_OK &&
+              observer.ready_poll_pending == 0 &&
+              observer.commands[0].state == C42_OBSERVER_COMMAND_READY,
+              "F18 pending poll is next bounded action");
+    }
+}
+
+static void test_ack_noncommitted_rejected(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_observer_v2 observer;
+    struct c42_cq_head_event ack = {0};
+    struct c42_snapshot snapshot = {0};
+    uint32_t step;
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa139000000000002)) &&
+          c42_test_submit(&fixture, 0, 0, 1, 222),
+          "F13 noncommitted ACK fixture");
+    for (step = 0; step < 64; ++step) {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              c42_observer_read_v2(
+                  fixture.controller, &observer) == C42_OK,
+              "F13 reach noncommitted slot");
+        if (observer.cq[0].slots[0].state ==
+                C42_OBSERVER_SLOT_RESERVED ||
+            observer.cq[0].slots[0].state ==
+                C42_OBSERVER_SLOT_BODY_STAGED) {
+            break;
+        }
+    }
+    ack.instance_nonce = fixture.config.instance_nonce;
+    ack.controller_epoch = fixture.config.initial_controller_epoch;
+    ack.ring_generation = fixture.cq_cap[0].ring_generation;
+    ack.queue_id = 0;
+    ack.new_head = 1;
+    check(step < 64 &&
+          c42_cq_head_event_apply(
+              fixture.controller, &ack) == C42_INVALID &&
+          c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
+          snapshot.cq[0].host_index == 0 &&
+          snapshot.cq[0].pending_or_unacked == 0,
+          "F13 ACK cannot consume RESERVED/BODY slot");
 }
 
 static void test_direct_memory_and_bool_outputs(void)
@@ -625,6 +1014,7 @@ static void test_reset_exported_api_cuts(void)
     struct c42_operation_token reset = {0};
     struct c42_candidate_status candidate_status = {0};
     struct c42_control_status control_status = {0};
+    struct c42_snapshot snapshot = {0};
     struct c42_fake_memory_outcome unknown = {0};
     uint32_t scrub_calls;
 
@@ -651,6 +1041,11 @@ static void test_reset_exported_api_cuts(void)
     scrub_calls = fixture.memory.scrub_call_count;
     check(c42_reset_start(fixture.controller, &reset) == C42_OK,
           "F14 reset linearization point");
+    check(c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
+          snapshot.phase == C42_CONTROLLER_RESETTING &&
+          snapshot.controller_epoch ==
+              fixture.config.initial_controller_epoch + 1u,
+          "F14 reset stays closed until provider quiescence");
     check(c42_candidate_query(
               fixture.controller, &candidate, &candidate_status) == C42_OK &&
           candidate_status.state == C42_CANDIDATE_SUPERSEDED &&
@@ -1020,6 +1415,96 @@ static void test_scrub_abort_paths(void)
               "F16 direct UNKNOWN abort is provider poison");
         check(reset_to_cold(&fixture), "F16 malformed abort reset drain");
     }
+
+    {
+        struct c42_fake_memory_direct_injection direct = {0};
+
+        executions++;
+        check(c42_test_fixture_init_with_nonce(
+                  &fixture, 4, 0, UINT64_C(0xa161000000000003)),
+              "F16 abort response-loss fixture");
+        cap = fresh_cap(
+            &fixture, 1, C42_MEMORY_CQ_PUBLISH, 1,
+            UINT64_C(0xa1611003)
+        );
+        descriptor = descriptor_for(&fixture, &cap, C42_QUEUE_CQ);
+        direct.operation = C42_FAKE_MEMORY_SCRUB_ABORT;
+        direct.result = C42_MEMORY_IN_PROGRESS;
+        direct.omit_status = 1;
+        direct.apply_effect = 1;
+        direct.logical_effect = C42_MEMORY_RETIRED;
+        direct.committed = 1;
+        direct.quiescent = 1;
+        check(c42_fake_memory_map(
+                  &fixture.memory, &cap, fixture.depth) == C42_OK &&
+              c42_candidate_prepare(
+                  fixture.controller, &descriptor, &candidate) == C42_OK &&
+              c42_candidate_progress(
+                  fixture.controller, &candidate, 4) == C42_OK &&
+              c42_candidate_abort(
+                  fixture.controller, &candidate) == C42_OK &&
+              c42_fake_memory_direct_push(
+                  &fixture.memory, &direct) == C42_OK &&
+              c42_candidate_progress(
+                  fixture.controller, &candidate, 1) == C42_OK &&
+              c42_candidate_query(
+                  fixture.controller, &candidate, &status) == C42_OK &&
+              status.state == C42_CANDIDATE_ABORTING &&
+              c42_candidate_progress(
+                  fixture.controller, &candidate, 1) == C42_OK &&
+              c42_candidate_query(
+                  fixture.controller, &candidate, &status) == C42_OK &&
+              status.state == C42_CANDIDATE_ABORTED,
+              "F16 abort response loss keeps same-token ownership");
+    }
+}
+
+static void test_scrub_retire_response_loss(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_queue_memory_cap cap;
+    struct c42_queue_descriptor descriptor;
+    struct c42_operation_token candidate = {0};
+    struct c42_candidate_status status = {0};
+    struct c42_fake_memory_direct_injection direct = {0};
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0xa162000000000001)),
+          "F16 retire response-loss fixture");
+    cap = fresh_cap(
+        &fixture, 1, C42_MEMORY_CQ_PUBLISH, 1, UINT64_C(0xa1621001)
+    );
+    descriptor = descriptor_for(&fixture, &cap, C42_QUEUE_CQ);
+    direct.operation = C42_FAKE_MEMORY_SCRUB_RETIRE;
+    direct.result = C42_MEMORY_IN_PROGRESS;
+    direct.omit_status = 1;
+    direct.apply_effect = 1;
+    direct.logical_effect = C42_MEMORY_RETIRED;
+    direct.committed = 1;
+    direct.quiescent = 1;
+    check(c42_fake_memory_map(&fixture.memory, &cap, fixture.depth) == C42_OK &&
+          c42_candidate_prepare(
+              fixture.controller, &descriptor, &candidate) == C42_OK &&
+          c42_candidate_progress(
+              fixture.controller, &candidate, 4) == C42_OK &&
+          c42_candidate_commit(
+              fixture.controller, &candidate) == C42_OK &&
+          c42_fake_memory_direct_push(
+              &fixture.memory, &direct) == C42_OK &&
+          c42_candidate_retire(
+              fixture.controller, &candidate) == C42_IN_PROGRESS &&
+          c42_candidate_query(
+              fixture.controller, &candidate, &status) == C42_OK &&
+          status.state == C42_CANDIDATE_RETIRE_UNKNOWN &&
+          c42_candidate_retire(
+              fixture.controller, &candidate) == C42_IN_PROGRESS &&
+          c42_candidate_query(
+              fixture.controller, &candidate, &status) == C42_OK &&
+          status.state == C42_CANDIDATE_RETIRE_READY &&
+          c42_candidate_retire(
+              fixture.controller, &candidate) == C42_OK,
+          "F16 retire response loss resolves through provider tombstone");
 }
 
 static uint16_t get_u16(const uint8_t *bytes)
@@ -1093,7 +1578,7 @@ static void test_v2_abi_and_observer_representation(void)
           c42_observer_read_v2(fixture.controller, &second) == C42_OK &&
           memcmp(&first, &second, sizeof(first)) == 0 &&
           bytes_are_zero(first.reserved, sizeof(first.reserved)) &&
-          bytes_are_zero(first.reserved1, sizeof(first.reserved1)),
+          bytes_are_zero(first.reserved0, sizeof(first.reserved0)),
           "ABI observer object representation is deterministic and reserved-zero");
 }
 
@@ -1177,15 +1662,20 @@ int main(void)
     test_admission_closed_matrix();
     test_memory_status_matrix();
     test_completion_consume_closed_matrix();
+    test_exact_object_malformed_states();
     test_ultra_critical_regressions();
     test_observer_state_mapping();
+    test_observer_reachable_state_coverage();
     test_output_sentinels_and_poll();
+    test_literal_single_pass_ready_scan();
+    test_ack_noncommitted_rejected();
     test_direct_memory_and_bool_outputs();
     test_reset_exported_api_cuts();
     test_notification_and_raw_reset_cut();
     test_sq_candidate_cq_delete();
     test_scrub_retire_and_recreate();
     test_scrub_abort_paths();
+    test_scrub_retire_response_loss();
     test_v2_abi_and_observer_representation();
     test_reserve_sqhd_and_ready_fairness();
     if (failures != 0) {

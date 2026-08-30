@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "c42_event.h"
 #include "hif/c42.h"
 
 #define C42_FAKE_MEMORY_SCRIPT_MAX 128u
@@ -41,7 +42,13 @@ struct c42_fake_memory_direct_injection {
     uint8_t operation;
     uint8_t result;
     uint8_t omit_status;
-    uint8_t reserved;
+    uint8_t write_status;
+    uint8_t apply_effect;
+    uint8_t logical_effect;
+    uint8_t prefix;
+    uint8_t committed;
+    uint8_t quiescent;
+    uint8_t reserved[2];
 };
 
 struct c42_fake_memory_mapping {
@@ -64,6 +71,7 @@ struct c42_fake_memory_operation_record {
 };
 
 struct c42_fake_memory {
+    struct c42_fake_event_log *event_log;
     uint64_t instance_nonce;
     uint64_t owner_epoch;
     uint32_t controller_epoch;
@@ -97,6 +105,10 @@ void c42_fake_memory_init(
 );
 struct c42_memory_port c42_fake_memory_port(
     struct c42_fake_memory *memory
+);
+void c42_fake_memory_bind_event_log(
+    struct c42_fake_memory *memory,
+    struct c42_fake_event_log *log
 );
 enum c42_result c42_fake_memory_map(
     struct c42_fake_memory *memory,

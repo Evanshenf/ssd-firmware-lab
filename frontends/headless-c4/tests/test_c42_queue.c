@@ -298,6 +298,10 @@ static void test_candidate_contract_and_scrub_unknown(void)
     check(c42_candidate_prepare(
               fixture.controller, &descriptor, &token) == C42_OK,
           "candidate prepare IO CQ");
+    check(c42_candidate_query(
+              fixture.controller, &token, &status) == C42_OK &&
+          status.state == C42_CANDIDATE_PREPARED,
+          "CQ candidate remains private before scrub proof");
     check(c42_candidate_progress(fixture.controller, &token, 1) == C42_OK &&
           c42_candidate_query(
               fixture.controller, &token, &status) == C42_OK &&

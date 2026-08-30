@@ -21,6 +21,7 @@ struct c42_test_fixture {
     union c42_test_arena arena;
     struct c42_fake_memory memory;
     struct c42_fake_command command;
+    struct c42_fake_event_log event_log;
     struct c42_config config;
     struct c42_providers providers;
     struct c42_controller *controller;

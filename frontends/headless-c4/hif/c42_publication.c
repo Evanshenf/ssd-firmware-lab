@@ -303,18 +303,55 @@ static int latch_ready_event(
     return 0;
 }
 
-int c42_poll_ready(struct c42_controller *controller)
+static int poll_ready_once(struct c42_controller *controller)
 {
     struct fwlab_hif_ready_event event = {0};
     enum fwlab_hif_command_port_result result;
     uint32_t count = UINT32_MAX;
+
+    result = controller->providers.command.ops->poll(
+        controller->providers.command.context, 1, &event, 1, &count
+    );
+    if (result != FWLAB_HIF_PORT_OK || count > 1 ||
+        (count == 1 && !ready_event_valid(&event))) {
+        c42_fault_controller(controller, C42_FAULT_READY_CONTRACT);
+        return 1;
+    }
+    if (count == 1 && latch_ready_event(controller, &event) == 0) {
+        c42_fault_controller(controller, C42_FAULT_READY_CONTRACT);
+    }
+    return 1;
+}
+
+static int local_hif_commit_pending(
+    const struct c42_controller *controller)
+{
+    uint32_t index;
+
+    for (index = 0; index < controller->config.command_capacity; ++index) {
+        if (controller->commands[index].state ==
+            C42_COMMAND_PORT_COMMITTED) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int c42_poll_ready(struct c42_controller *controller)
+{
     uint32_t offset;
-    int has_waiting = 0;
 
     if (!c42_controller_valid(controller) ||
         controller->phase != C42_CONTROLLER_READY ||
         controller->admission_paused != 0) {
         return 0;
+    }
+    if (local_hif_commit_pending(controller)) {
+        return 0;
+    }
+    if (controller->ready_poll_pending != 0) {
+        controller->ready_poll_pending = 0;
+        return poll_ready_once(controller);
     }
     for (offset = 0; offset < controller->config.command_capacity; ++offset) {
         uint16_t selected = (uint16_t)(
@@ -324,11 +361,8 @@ int c42_poll_ready(struct c42_controller *controller)
         struct c42_command_record *command = &controller->commands[selected];
 
         if (command->state == C42_COMMAND_HIF_COMMITTED) {
-            controller->ready_cursor = (uint8_t)(
-                (selected + 1u) % controller->config.command_capacity
-            );
-            has_waiting = 1;
-            break;
+            controller->ready_poll_pending = 1;
+            continue;
         }
         if (command->state == C42_COMMAND_READY &&
             acquire_completion(controller, command) != 0) {
@@ -345,24 +379,11 @@ int c42_poll_ready(struct c42_controller *controller)
             return prepare_consume(controller, selected);
         }
     }
-    if (has_waiting == 0) {
-        return 0;
+    if (controller->ready_poll_pending != 0) {
+        controller->ready_poll_pending = 0;
+        return poll_ready_once(controller);
     }
-    result = controller->providers.command.ops->poll(
-        controller->providers.command.context, 1, &event, 1, &count
-    );
-    if (result != FWLAB_HIF_PORT_OK || count > 1 ||
-        (count == 1 && !ready_event_valid(&event))) {
-        c42_fault_controller(controller, C42_FAULT_READY_CONTRACT);
-        return 1;
-    }
-    if (count == 1) {
-        if (latch_ready_event(controller, &event) == 0) {
-            c42_fault_controller(controller, C42_FAULT_READY_CONTRACT);
-        }
-        return 1;
-    }
-    return 1;
+    return 0;
 }
 
 static int progress_release(

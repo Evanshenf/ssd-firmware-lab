@@ -21,6 +21,7 @@ SOURCES = [
     HIF / "hif/c42_queue.c",
     HIF / "hif/c42_publication.c",
     HIF / "hif/c42_runtime.c",
+    HIF / "fakes/c42_event.c",
     HIF / "fakes/c42_memory.c",
     HIF / "fakes/c42_command.c",
 ]

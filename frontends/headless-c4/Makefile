@@ -19,15 +19,13 @@ CORE_SOURCES := ../../core/c4-nvme/c41_codec.c \
 HIF_SOURCES := c41_wire.c
 UNIT_BIN := $(BUILD_DIR)/c41_wire_tests
 FUZZ_BIN := $(BUILD_DIR)/c41_wire_fuzz
-C42_SOURCES := hif/c42_identity.c hif/c42_queue.c \
-	hif/c42_publication.c hif/c42_runtime.c
-C42_FAKE_SOURCES := fakes/c42_memory.c fakes/c42_command.c
-C42_SUPPORT := tests/c42_support.c
+include c42_sources.mk
 C42_QUEUE_BIN := $(BUILD_DIR)/c42_queue_unit
 C42_PUBLICATION_BIN := $(BUILD_DIR)/c42_publication_unit
 C42_IDENTITY_BIN := $(BUILD_DIR)/c42_identity_unit
 C42_RESET_DELETE_BIN := $(BUILD_DIR)/c42_reset_delete_unit
 C42_REMEDIATION_BIN := $(BUILD_DIR)/c42_remediation_unit
+C42_REPLAY_BIN := $(BUILD_DIR)/c42_dut_replay
 C42_MODEL_BIN := $(BUILD_DIR)/c42_model
 C42_BROKEN_BIN := $(BUILD_DIR)/c42_broken
 C42_FUZZ_BIN := $(BUILD_DIR)/c42_fuzz
@@ -40,6 +38,8 @@ C42_THREAD_BIN := $(BUILD_DIR)/c42_thread
 	check-c42-model check-c42-negative check-c42-fuzz check-c42-thread \
 	check-c42-architecture \
 	check-c42-remediation \
+	check-c42-dynamic-mutations \
+	check-c42-replay \
 	fake-link clean
 
 all: $(UNIT_BIN) $(FUZZ_BIN)
@@ -112,6 +112,17 @@ $(C42_REMEDIATION_BIN): $(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
 check-c42-remediation: $(C42_REMEDIATION_BIN)
 	$(C42_REMEDIATION_BIN)
 
+$(C42_REPLAY_BIN): $(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
+		$(C42_FAKE_SOURCES) $(C42_SUPPORT) $(C42_REFERENCE) \
+		tests/test_c42_dut_replay.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ \
+		$(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
+		$(C42_FAKE_SOURCES) $(C42_SUPPORT) $(C42_REFERENCE) \
+		tests/test_c42_dut_replay.c
+
+check-c42-replay: $(C42_REPLAY_BIN)
+	$(C42_REPLAY_BIN)
+
 check-c42-unit: $(C42_QUEUE_BIN) $(C42_PUBLICATION_BIN) \
 		$(C42_IDENTITY_BIN) $(C42_RESET_DELETE_BIN) $(C42_REMEDIATION_BIN)
 	$(C42_QUEUE_BIN)
@@ -153,12 +164,12 @@ check-c42-thread: $(C42_THREAD_BIN)
 	$(C42_THREAD_BIN)
 
 check-c42-local-determinism: check-c42-unit check-c42-model \
-		check-c42-negative check-c42-fuzz $(C42_FAKE_OUTPUT)
+		check-c42-negative check-c42-fuzz $(C42_REPLAY_BIN) $(C42_FAKE_OUTPUT)
 	@set -eu; left=$$(mktemp); right=$$(mktemp); \
 	trap 'rm -f "$$left" "$$right"' EXIT; \
 	for binary in $(C42_QUEUE_BIN) $(C42_PUBLICATION_BIN) \
 		$(C42_IDENTITY_BIN) $(C42_RESET_DELETE_BIN) \
-		$(C42_REMEDIATION_BIN) $(C42_MODEL_BIN) \
+		$(C42_REMEDIATION_BIN) $(C42_REPLAY_BIN) $(C42_MODEL_BIN) \
 		$(C42_BROKEN_BIN) $(C42_FUZZ_BIN) $(C42_FAKE_OUTPUT); do \
 		$$binary >"$$left"; $$binary >"$$right"; \
 		diff -u "$$left" "$$right"; \
@@ -168,8 +179,12 @@ check-c42-local-determinism: check-c42-unit check-c42-model \
 check-c42-architecture:
 	python3 ../../scripts/check_c42_architecture.py --cc $(CC)
 
+check-c42-dynamic-mutations:
+	python3 ../../scripts/check_c42_dynamic_mutations.py
+
 check-c42: check-c42-unit check-c42-model check-c42-negative \
-	check-c42-fuzz check-c42-local-determinism check-c42-architecture
+	check-c42-fuzz check-c42-local-determinism check-c42-architecture \
+	check-c42-dynamic-mutations check-c42-replay
 
 check-clang:
 	$(MAKE) CC=$(CLANG) BUILD_DIR=build/clang check
@@ -229,6 +244,7 @@ clean:
 		build/c42_queue_unit build/c42_publication_unit \
 		build/c42_identity_unit build/c42_reset_delete_unit \
 		build/c42_remediation_unit \
+		build/c42_dut_replay \
 		build/c42_model build/c42_broken build/c42_fuzz build/c42_thread \
 		build/c42_headless_fake_link \
 		build/core/c41_portable_tests build/core/c41_portable_model \
@@ -238,6 +254,7 @@ clean:
 		build/clang/c42_queue_unit build/clang/c42_publication_unit \
 		build/clang/c42_identity_unit build/clang/c42_reset_delete_unit \
 		build/clang/c42_remediation_unit \
+		build/clang/c42_dut_replay \
 		build/clang/c42_model build/clang/c42_broken \
 		build/clang/c42_fuzz build/clang/c42_thread \
 		build/clang/c42_headless_fake_link \
@@ -248,6 +265,7 @@ clean:
 		build/sanitize/c42_identity_unit \
 		build/sanitize/c42_reset_delete_unit \
 		build/sanitize/c42_remediation_unit \
+		build/sanitize/c42_dut_replay \
 		build/sanitize/c42_model build/sanitize/c42_broken \
 		build/sanitize/c42_fuzz build/sanitize/c42_thread \
 		build/sanitize/c42_headless_fake_link \
@@ -261,6 +279,7 @@ clean:
 		build/strict/c42_queue_unit build/strict/c42_publication_unit \
 		build/strict/c42_identity_unit build/strict/c42_reset_delete_unit \
 		build/strict/c42_remediation_unit \
+		build/strict/c42_dut_replay \
 		build/strict/c42_model build/strict/c42_broken \
 		build/strict/c42_fuzz build/strict/c42_thread \
 		build/strict/c42_headless_fake_link

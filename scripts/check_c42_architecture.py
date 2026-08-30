@@ -10,6 +10,7 @@ import argparse
 import hashlib
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -101,7 +102,14 @@ def missing_stable_query(text: str) -> bool:
         "completion_release_query", "consume_query",
         "reset_quiescent", "teardown_quiescent",
     )
-    return any(token not in text for token in required)
+    required_calls = (
+        "prepare_query", "admit_query", "prepare_abort_query",
+        "completion_release_query", "consume_query",
+    )
+    return any(token not in text for token in required) or any(
+        re.search(rf"ops->{token}\s*\(", text) is None
+        for token in required_calls
+    )
 
 
 def queue_cap_as_action(text: str) -> bool:
@@ -109,6 +117,11 @@ def queue_cap_as_action(text: str) -> bool:
         r"c42_queue_memory_cap[^;\n]*(?:fwlab_hif_action_token)|"
         r"fwlab_hif_action_token[^;\n]*(?:c42_queue_memory_cap)",
         text,
+    ) is not None or re.search(
+        r"union\s*\{[^}]*c42_queue_memory_cap[^}]*"
+        r"fwlab_hif_action_token[^}]*\}",
+        text,
+        re.DOTALL,
     ) is not None
 
 
@@ -148,52 +161,174 @@ def raw_in_trace(text: str) -> bool:
     ) is not None
 
 
-def check_mutations() -> list[str]:
-    mutations = {
-        "AM_ORIGIN_ENCODES_RAW_ID": (
-            origin_encodes_raw,
-            "origin.word[1] = command_id;",
-        ),
-        "AM_HIF_MINTS_GRAPH_HANDLE": (
-            hif_mints_handle,
-            "candidate.handle.command_uid = 7;",
-        ),
-        "AM_PORT_ADMISSION_WITHOUT_STABLE_QUERY": (
-            missing_stable_query,
-            "prepare_start admit_start consume_commit",
-        ),
-        "AM_QUEUE_CAP_AS_HIF_ACTION_TOKEN": (
-            queue_cap_as_action,
-            "c42_queue_memory_cap *cap = (fwlab_hif_action_token *)token;",
-        ),
-        "AM_SHARED_GENERATION_COUNTER": (
-            shared_generation,
-            "ring_generation = active_generation;",
-        ),
-        "AM_GLOBAL_QUEUE_OR_ORIGIN_STATE": (
-            writable_global_identity,
-            "static struct queue_state global_queue;",
-        ),
-        "AM_CONTEXT_DERIVED_FROM_INTENT": (
-            context_from_intent,
-            "context.handle = intent.handle;",
-        ),
-        "AM_RAW_SNAPSHOT_IN_DEFAULT_TRACE": (
-            raw_in_trace,
-            "printf(\"%s\", raw_bytes);",
-        ),
-    }
+def replace_unique(path: Path, before: str, after: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    count = text.count(before)
+    if count != 1:
+        raise RuntimeError(
+            f"mutation anchor count is {count}, expected 1: {path}: {before!r}"
+        )
+    changed = text.replace(before, after, 1)
+    if changed == text:
+        raise RuntimeError(f"mutation did not change bytes: {path}")
+    path.write_text(changed, encoding="utf-8")
+
+
+def source_mutations() -> list[dict[str, object]]:
+    return [
+        {
+            "name": "AM_ORIGIN_ENCODES_RAW_ID",
+            "needle": "HIF origin encodes a raw queue identity",
+            "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                       "command->origin.word[1] = origin_uid;",
+                       "command->origin.word[1] = command->command_id;")],
+        },
+        {
+            "name": "AM_HIF_MINTS_GRAPH_HANDLE",
+            "needle": "HIF mints a graph-owned handle field",
+            "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                       "    *command = local;\n    command->sq_index = sq_index;",
+                       "    *command = local;\n"
+                       "    command->command.handle.command_uid = 7;\n"
+                       "    command->sq_index = sq_index;")],
+        },
+        {
+            "name": "AM_PORT_ADMISSION_WITHOUT_STABLE_QUERY",
+            "needle": "command port lacks a stable query/reconcile path",
+            "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                       "controller->providers.command.ops->prepare_query(",
+                       "controller->providers.command.ops->prepare_start(")],
+        },
+        {
+            "name": "AM_QUEUE_CAP_AS_HIF_ACTION_TOKEN",
+            "needle": "queue-memory cap is interchangeable with action token",
+            "edits": [
+                ("frontends/headless-c4/hif/c42.h",
+                 "#include \"fwlab/contracts/hif_command_port.h\"",
+                 "#include \"fwlab/contracts/hif_command_port.h\"\n"
+                 "#include \"fwlab/contracts/hif_action.h\""),
+                ("frontends/headless-c4/hif/c42.h",
+                 "    struct c42_queue_memory_cap memory;",
+                 "    union {\n"
+                 "        struct c42_queue_memory_cap memory;\n"
+                 "        struct fwlab_hif_action_token action;\n"
+                 "    };")
+            ],
+        },
+        {
+            "name": "AM_SHARED_GENERATION_COUNTER",
+            "needle": "generation domains are shared",
+            "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                       "command->sq_ring_generation = sq->ring_generation;",
+                       "command->sq_ring_generation = command->active_generation;")],
+        },
+        {
+            "name": "AM_GLOBAL_QUEUE_OR_ORIGIN_STATE",
+            "needle": "writable global queue/origin/controller state",
+            "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                       "static int generation_available(uint32_t generation)\n"
+                       "{\n"
+                       "    return generation != 0 && generation != UINT32_MAX;\n"
+                       "}",
+                       "static uint32_t global_queue_state;\n\n"
+                       "static int generation_available(uint32_t generation)\n"
+                       "{\n"
+                       "    return generation != 0 && generation != UINT32_MAX &&\n"
+                       "           global_queue_state == 0;\n"
+                       "}")],
+        },
+        {
+            "name": "AM_CONTEXT_DERIVED_FROM_INTENT",
+            "needle": "CQ publication context is derived from completion intent",
+            "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                       "context.handle = command->command.handle;",
+                       "context.handle = command->intent.handle;")],
+        },
+        {
+            "name": "AM_RAW_SNAPSHOT_IN_DEFAULT_TRACE",
+            "needle": "raw SQ snapshot entered a default trace/output path",
+            "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                       "    uint32_t index;\n\n"
+                       "    if (!c42_controller_valid(controller) || handle == NULL ||",
+                       "    uint32_t index;\n"
+                       "    extern int puts(const char *);\n\n"
+                       "    (void)puts((const char *)controller->commands[0].raw_bytes);\n"
+                       "    if (!c42_controller_valid(controller) || handle == NULL ||")],
+        },
+    ]
+
+
+def check_source_mutations() -> list[str]:
     failures: list[str] = []
-    for name, (detector, mutation) in mutations.items():
-        if not detector(mutation):
-            failures.append(f"architecture mutation escaped: {name}")
+    compilers = [name for name in ("gcc", "clang") if shutil.which(name)]
+
+    if len(compilers) != 2:
+        return ["architecture source mutations require gcc and clang"]
+    for mutation in source_mutations():
+        name = str(mutation["name"])
+        try:
+            with tempfile.TemporaryDirectory(
+                    prefix=f"c42-architecture-{name.lower()}-") as directory:
+                mutated_root = Path(directory) / "repo"
+                shutil.copytree(
+                    ROOT, mutated_root,
+                    ignore=shutil.ignore_patterns(
+                        ".git", "build", "__pycache__", "*.pyc", "*.o"
+                    ),
+                )
+                for relative, before, after in mutation["edits"]:
+                    replace_unique(mutated_root / relative, before, after)
+                for compiler in compilers:
+                    build = subprocess.run(
+                        ["make", "-C", str(mutated_root / "frontends/headless-c4"),
+                         f"CC={compiler}",
+                         f"BUILD_DIR={Path(directory) / ('build-' + compiler)}",
+                         "fake-link-c42"],
+                        cwd=mutated_root, check=False, text=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        timeout=300,
+                    )
+                    if build.returncode != 0:
+                        raise RuntimeError(
+                            f"{name}/{compiler} did not compile:\n{build.stdout}"
+                        )
+                    child = subprocess.run(
+                        ["python3",
+                         str(mutated_root / "scripts/check_c42_architecture.py"),
+                         "--root", str(mutated_root), "--cc", compiler,
+                         "--no-mutation-selftests"],
+                        cwd=mutated_root, check=False, text=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        timeout=600,
+                    )
+                    if child.returncode == 0 or str(mutation["needle"]) not in child.stdout:
+                        raise RuntimeError(
+                            f"{name}/{compiler} escaped expected audit:\n{child.stdout}"
+                        )
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            failures.append(str(error))
     return failures
 
 
 def main() -> int:
+    global ROOT, HIF, INCLUDE, PRODUCTION, PUBLIC
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--cc", default="cc")
+    parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--no-mutation-selftests", action="store_true")
     arguments = parser.parse_args()
+    ROOT = arguments.root.resolve()
+    HIF = ROOT / "frontends/headless-c4/hif"
+    INCLUDE = ROOT / "include"
+    PRODUCTION = [
+        HIF / "c42_identity.c", HIF / "c42_queue.c",
+        HIF / "c42_publication.c", HIF / "c42_runtime.c",
+    ]
+    PUBLIC = [
+        HIF / "c42.h", HIF / "c42_memory_port.h",
+        INCLUDE / "fwlab/contracts/hif_command_port.h",
+    ]
     failures: list[str] = []
 
     for name, expected in FROZEN_C41.items():
@@ -230,7 +365,8 @@ def main() -> int:
         failures.append("CQ publication context is derived from completion intent")
     if raw_in_trace(production_text):
         failures.append("raw SQ snapshot entered a default trace/output path")
-    failures.extend(check_mutations())
+    if not arguments.no_mutation_selftests:
+        failures.extend(check_source_mutations())
 
     forbidden_include = re.compile(
         r'^\s*#\s*include\s*[<"](?:linux/|sys/|asm/|qemu|hw/|sysemu/|'
@@ -299,8 +435,11 @@ def main() -> int:
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         return 1
-    print("C4.2 architecture isolation: PASS (C4.1 freeze; 8 negative "
-          "mutations; distinct queue/graph/action identities; C3 coexistence)")
+    mutation_text = "source mutations skipped" if arguments.no_mutation_selftests \
+                    else "8 compile-valid full-source mutations killed"
+    print("C4.2 architecture isolation: PASS (C4.1 freeze; "
+          f"{mutation_text}; distinct queue/graph/action identities; "
+          "C3 coexistence)")
     return 0
 
 

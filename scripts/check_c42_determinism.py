@@ -22,7 +22,8 @@ COMMON = [
     HIF / "c41_wire.c",
     HIF / "hif/c42_identity.c", HIF / "hif/c42_queue.c",
     HIF / "hif/c42_publication.c", HIF / "hif/c42_runtime.c",
-    HIF / "fakes/c42_memory.c", HIF / "fakes/c42_command.c",
+    HIF / "fakes/c42_event.c", HIF / "fakes/c42_memory.c",
+    HIF / "fakes/c42_command.c",
     HIF / "tests/c42_support.c",
 ]
 MODEL = [HIF / "tests/c42_model.c"]
@@ -37,6 +38,10 @@ PROGRAMS = {
     ),
     "c42_remediation_unit": (
         [*COMMON], HIF / "tests/test_c42_remediation.c"
+    ),
+    "c42_dut_replay": (
+        [*COMMON, HIF / "tests/c42_reference.c"],
+        HIF / "tests/test_c42_dut_replay.c"
     ),
     "c42_model": ([*MODEL], HIF / "tests/model_c42.c"),
     "c42_broken": ([*MODEL], HIF / "tests/broken_c42.c"),

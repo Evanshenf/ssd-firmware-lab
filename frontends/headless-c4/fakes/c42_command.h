@@ -6,10 +6,17 @@
 
 #include <stdint.h>
 
+#include "c42_event.h"
 #include "hif/c42.h"
 
 #define C42_FAKE_COMMAND_RECORDS 64u
 #define C42_FAKE_COMMAND_INJECTIONS 128u
+#define C42_FAKE_WRITE_VALUE 1u
+#define C42_FAKE_WRITE_OBJECT 2u
+#define C42_FAKE_APPLY_EFFECT 1u
+#define C42_FAKE_OBJECT_ZERO 0u
+#define C42_FAKE_OBJECT_EXACT 1u
+#define C42_FAKE_OBJECT_MISMATCH 2u
 
 enum c42_fake_command_operation {
     C42_FAKE_COMMAND_PREPARE = 1,
@@ -53,7 +60,9 @@ struct c42_fake_command_injection {
     uint32_t result;
     uint32_t value;
     uint8_t omit_outputs;
-    uint8_t reserved[3];
+    uint8_t write_mask;
+    uint8_t flags;
+    uint8_t object_variant;
 };
 
 struct c42_fake_command_record {
@@ -82,6 +91,7 @@ struct c42_fake_command_record {
 };
 
 struct c42_fake_command {
+    struct c42_fake_event_log *event_log;
     uint64_t instance_nonce;
     uint64_t next_command_uid;
     uint64_t next_reservation_uid;
@@ -102,6 +112,10 @@ struct c42_fake_command {
     uint8_t reserved[6];
     uint32_t injection_count;
     uint32_t injection_index;
+    uint8_t injection_active;
+    uint8_t injection_write_mask;
+    uint8_t injection_flags;
+    uint8_t injection_object_variant;
     struct c42_fake_command_script script;
     struct c42_fake_command_injection
         injections[C42_FAKE_COMMAND_INJECTIONS];
@@ -120,6 +134,10 @@ struct fwlab_hif_command_port c42_fake_command_port(
 void c42_fake_command_set_script(
     struct c42_fake_command *command,
     const struct c42_fake_command_script *script
+);
+void c42_fake_command_bind_event_log(
+    struct c42_fake_command *command,
+    struct c42_fake_event_log *log
 );
 enum c42_result c42_fake_command_injection_push(
     struct c42_fake_command *command,

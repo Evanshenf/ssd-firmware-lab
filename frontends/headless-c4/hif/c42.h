@@ -129,6 +129,7 @@ enum c42_observer_command_state_v2 {
     C42_OBSERVER_COMMAND_CONSUME_PREPARE = 9,
     C42_OBSERVER_COMMAND_PUB_RESERVED = 10,
     C42_OBSERVER_COMMAND_MARKER_RECONCILE = 11,
+    /* Numeric compatibility only; v2 has no transition into this state. */
     C42_OBSERVER_COMMAND_RELEASE_RECONCILE = 12,
     C42_OBSERVER_COMMAND_ABORT_RECONCILE = 13,
     C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD = 14,
@@ -466,8 +467,8 @@ struct c42_observer_v2 {
     uint8_t reconcile_cursor;
     uint8_t sq_cursor;
     uint8_t ready_cursor;
-    uint8_t reserved0;
-    uint8_t reserved1[4];
+    uint8_t ready_poll_pending;
+    uint8_t reserved0[4];
     struct c42_observer_queue_v2 sq[C42_MAX_QUEUE_PAIRS];
     struct c42_observer_queue_v2 cq[C42_MAX_QUEUE_PAIRS];
     struct c42_observer_candidate_v2

@@ -177,6 +177,9 @@ int c42_test_fixture_init_profile(
         &fixture->command, fixture->config.instance_nonce,
         fixture->config.initial_controller_epoch, 4
     );
+    c42_fake_event_log_init(&fixture->event_log);
+    c42_fake_memory_bind_event_log(&fixture->memory, &fixture->event_log);
+    c42_fake_command_bind_event_log(&fixture->command, &fixture->event_log);
     fixture->providers.memory = c42_fake_memory_port(&fixture->memory);
     fixture->providers.command = c42_fake_command_port(&fixture->command);
     required = c42_arena_size(&fixture->config);

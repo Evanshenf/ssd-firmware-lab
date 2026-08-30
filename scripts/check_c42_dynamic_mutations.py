@@ -1,0 +1,292 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+"""Kill C4.2 mutants by compiling fresh production-source copies."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+ROOT = Path(__file__).resolve().parents[1]
+HIF = ROOT / "frontends/headless-c4"
+
+
+def mutations() -> list[dict[str, object]]:
+    return [
+        {"name": "BM_HEAD_ADVANCES_BEFORE_ADMISSION_RECONCILE",
+         "target": "c42_remediation_unit",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    command->state = C42_COMMAND_ADMIT_POISON_HOLD;\n"
+                    "    c42_fault_sq(controller, command->sq_index,",
+                    "    controller->sq[command->sq_index].device_head++;\n"
+                    "    command->state = C42_COMMAND_ADMIT_POISON_HOLD;\n"
+                    "    c42_fault_sq(controller, command->sq_index,")]},
+        {"name": "BM_REREAD_SQE_ON_BACKPRESSURE",
+         "target": "c42_identity_unit",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        command->state = C42_COMMAND_CAPTURED;\n"
+                    "        command->prepare_started = 0;\n"
+                    "        return 1;",
+                    "        clear_command_all(controller, index);\n"
+                    "        return 1;")]},
+        {"name": "BM_DUPLICATE_CID_ALLOWED", "target": "c42_queue_unit",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    if (duplicate_cid(\n"
+                    "            controller, sq_index, sq->ring_generation, local.raw.command_id)) {",
+                    "    if (duplicate_cid(\n"
+                    "            controller, sq_index, sq->ring_generation, local.raw.command_id) &&\n"
+                    "        controller->fault_cause == UINT32_MAX) {"),
+                   ("frontends/headless-c4/hif/c42_queue.c",
+                    "    if (c42_find_active(\n"
+                    "            controller, command->sq_index, command->sq_ring_generation,\n"
+                    "            command->command_id) != NULL) {",
+                    "    if (c42_find_active(\n"
+                    "            controller, command->sq_index, command->sq_ring_generation,\n"
+                    "            command->command_id) != NULL &&\n"
+                    "        controller->fault_cause == UINT32_MAX) {")]},
+        {"name": "BM_MATCH_CID_WITHOUT_RING_GENERATION",
+         "target": "c42_identity_unit",
+         "edits": [("frontends/headless-c4/hif/c42_identity.c",
+                    "        struct c42_command_record *command = &controller->commands[index];\n\n"
+                    "        if (c42_command_record_active(command) &&\n"
+                    "            command->sq_index == sq_index &&\n"
+                    "            command->sq_ring_generation == sq_generation &&\n"
+                    "            command->command_id == command_id) {",
+                    "        struct c42_command_record *command = &controller->commands[index];\n\n"
+                    "        if (c42_command_record_active(command) &&\n"
+                    "            command->sq_index == sq_index &&\n"
+                    "            sq_generation != 0 &&\n"
+                    "            command->command_id == command_id) {")]},
+        {"name": "BM_INVALID_TAIL_REMAINS_LIVE", "target": "c42_queue_unit",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    if (event->new_tail >= sq->depth) {\n"
+                    "        c42_fault_sq(controller, index, C42_FAULT_INVALID_DOORBELL);\n"
+                    "        return C42_FAULTED;\n"
+                    "    }",
+                    "    if (event->new_tail >= sq->depth) {\n"
+                    "        return C42_INVALID;\n"
+                    "    }")]},
+        {"name": "BM_SQHD_AT_CAPTURE", "target": "c42_remediation_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    command->sqhd_snapshot = sq->device_head;",
+                    "    command->sqhd_snapshot = 0;")]},
+        {"name": "BM_CQ_OVERWRITE_FULL", "target": "c42_publication_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    if (cq->life != C42_QUEUE_LIVE ||\n"
+                    "        cq->unacked_count + cq->reserved_count >= cq->depth - 1u) {",
+                    "    if (cq->life != C42_QUEUE_LIVE ||\n"
+                    "        (0 != 0 &&\n"
+                    "         cq->unacked_count + cq->reserved_count >= cq->depth - 1u)) {"),
+                   ("frontends/headless-c4/hif/c42_publication.c",
+                    "    if (cq->unacked_count + cq->reserved_count >= cq->depth - 1u ||\n"
+                    "        cq->slots[cq->device_tail].state != C42_SLOT_FREE) {",
+                    "    if (0 != 0 &&\n"
+                    "        (cq->unacked_count + cq->reserved_count >= cq->depth - 1u ||\n"
+                    "         cq->slots[cq->device_tail].state != C42_SLOT_FREE)) {")]},
+        {"name": "BM_PHASE_TOGGLE_ON_ACK", "target": "c42_publication_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    cq->unacked_count = (uint16_t)(cq->unacked_count - delta);\n"
+                    "    c42_try_finish_tombstones(controller);",
+                    "    cq->unacked_count = (uint16_t)(cq->unacked_count - delta);\n"
+                    "    cq->device_phase ^= 1u;\n"
+                    "    c42_try_finish_tombstones(controller);")]},
+        {"name": "BM_MARKER_VISIBLE_BEFORE_BODY", "target": "c42_publication_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "                return progress_body(controller, index);",
+                    "                if (controller->fault_cause == UINT32_MAX) {\n"
+                    "                    return progress_body(controller, index);\n"
+                    "                }\n"
+                    "                return progress_marker(controller, index);")]},
+        {"name": "BM_CONSUME_COMMIT_BEFORE_MARKER", "target": "c42_publication_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    if (publication->marker_visible == 0) {\n"
+                    "        return progress_marker(controller, command_index);\n"
+                    "    }",
+                    "    if (0 != 0 && publication->marker_visible == 0) {\n"
+                    "        return progress_marker(controller, command_index);\n"
+                    "    }")]},
+        {"name": "BM_CID_RELEASE_BEFORE_CROSS_COMMIT", "target": "c42_publication_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    command->state = C42_COMMAND_MARKER_RECONCILE;\n"
+                    "    slot->state = C42_SLOT_MARKER_VISIBLE_RECONCILE;",
+                    "    c42_release_command_record(controller,\n"
+                    "        (uint16_t)(command - controller->commands));\n"
+                    "    command->state = C42_COMMAND_MARKER_RECONCILE;\n"
+                    "    slot->state = C42_SLOT_MARKER_VISIBLE_RECONCILE;")]},
+        {"name": "BM_CID_HELD_UNTIL_HOST_ACK", "target": "c42_identity_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    c42_release_command_record(controller, command_index);",
+                    "    (void)command_index;")]},
+        {"name": "BM_ACK_NONCOMMITTED_SLOT", "target": "c42_remediation_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    if (delta > cq->unacked_count) {",
+                    "    if (delta > cq->unacked_count + cq->reserved_count) {"),
+                   ("frontends/headless-c4/hif/c42_publication.c",
+                    "        if (cq->slots[slot].state != C42_SLOT_CQE_COMMITTED) {",
+                    "        if (cq->slots[slot].state == C42_SLOT_FREE) {")]},
+        {"name": "BM_BLIND_REWRITE_UNKNOWN_MARKER", "target": "c42_publication_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    if (publication->marker_started == 0) {",
+                    "    if (publication->marker_started <= 1) {")]},
+        {"name": "BM_NOTIFY_BEFORE_CROSS_COMMIT", "target": "c42_publication_unit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    } else if (effect == C42_MEMORY_UNKNOWN) {\n"
+                    "        publication->marker_visible = 0;",
+                    "    } else if (effect == C42_MEMORY_UNKNOWN) {\n"
+                    "        controller->notifications[command_index].state = C42_NOTIFY_READY;\n"
+                    "        publication->marker_visible = 0;")]},
+        {"name": "BM_DELETE_CQ_WITH_UNACKED", "target": "c42_remediation_unit",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    return controller->cq[queue_index].life == C42_QUEUE_LIVE &&\n"
+                    "           cq_delete_dependencies_clear(controller, queue_index);",
+                    "    return controller->cq[queue_index].life == C42_QUEUE_LIVE;")]},
+        {"name": "BM_CREATE_LIVE_BEFORE_SCRUB", "target": "c42_queue_unit",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    candidate->state = descriptor->kind == C42_QUEUE_SQ ?\n"
+                    "                       C42_CANDIDATE_READY : C42_CANDIDATE_PREPARED;",
+                    "    candidate->state = C42_CANDIDATE_READY;")]},
+        {"name": "BM_RECREATE_BEFORE_TOMBSTONE_CLEAR", "target": "c42_reset_delete_unit",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "         controller->sq[queue_index].life != C42_QUEUE_ABSENT)",
+                    "         controller->sq[queue_index].life != C42_QUEUE_ABSENT &&\n"
+                    "         controller->sq[queue_index].life != C42_QUEUE_TOMBSTONED)")]},
+        {"name": "BM_RESET_REOPEN_BEFORE_REVOKE", "target": "c42_remediation_unit",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    controller->phase = C42_CONTROLLER_RESETTING;",
+                    "    controller->phase = C42_CONTROLLER_COLD_NO_QUEUES;")]},
+        {"name": "BM_DELETE_DROPS_DOORBELLED_SQE", "target": "c42_reset_delete_unit",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        if (controller->sq[index].device_head !=\n"
+                    "                controller->sq[index].frozen_tail ||\n"
+                    "            controller->sq[index].pending != 0) {",
+                    "        if (0 != 0 &&\n"
+                    "            (controller->sq[index].device_head !=\n"
+                    "                 controller->sq[index].frozen_tail ||\n"
+                    "             controller->sq[index].pending != 0)) {")]},
+    ]
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def tracked_files() -> list[str]:
+    output = subprocess.check_output(
+        ["git", "ls-files"], cwd=ROOT, text=True
+    )
+    return [line for line in output.splitlines() if line]
+
+
+def replace_unique(path: Path, before: str, after: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if text.count(before) != 1:
+        raise RuntimeError(f"non-unique mutation anchor: {path}: {before!r}")
+    changed = text.replace(before, after, 1)
+    if changed == text:
+        raise RuntimeError(f"mutation did not change bytes: {path}")
+    path.write_text(changed, encoding="utf-8")
+
+
+def build_binary(root: Path, compiler: str, target: str, output: Path) -> bytes:
+    make_target = output / target
+    build = subprocess.run(
+        ["make", "-C", str(root / "frontends/headless-c4"),
+         f"CC={compiler}", f"BUILD_DIR={output}", str(make_target)],
+        cwd=root, check=False, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300,
+    )
+    if build.returncode != 0 or not make_target.is_file():
+        raise RuntimeError(f"{compiler}/{target} compile failed:\n{build.stdout}")
+    run = subprocess.run(
+        [str(make_target)], cwd=root, check=False,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120,
+    )
+    if run.returncode == 0:
+        raise RuntimeError(f"mutant escaped: {compiler}/{target}")
+    if run.returncode != 1 or b"FAIL:" not in run.stdout:
+        raise RuntimeError(
+            f"mutant died without an oracle mismatch: {compiler}/{target}: "
+            f"return={run.returncode}\n{run.stdout.decode(errors='replace')}"
+        )
+    return run.stdout
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--only")
+    args = parser.parse_args()
+    root = args.root.resolve()
+    if root != ROOT:
+        print("C4.2 dynamic mutation root must be the live source root", file=sys.stderr)
+        return 1
+    compilers = [name for name in ("gcc", "clang") if shutil.which(name)]
+    if len(compilers) != 2:
+        print("C4.2 mutations require gcc and clang", file=sys.stderr)
+        return 1
+    tracked = tracked_files()
+    baseline_hashes = {name: sha256(ROOT / name) for name in tracked}
+    total = 0
+    try:
+        selected = [
+            mutation for mutation in mutations()
+            if args.only is None or mutation["name"] == args.only
+        ]
+        if not selected:
+            raise RuntimeError(f"unknown mutation selection: {args.only}")
+        for mutation in selected:
+            name = str(mutation["name"])
+            allowed = {str(edit[0]) for edit in mutation["edits"]}
+            with tempfile.TemporaryDirectory(
+                    prefix=f"c42-mutant-{name.lower()}-") as directory:
+                mutant_root = Path(directory) / "repo"
+                shutil.copytree(
+                    ROOT, mutant_root,
+                    ignore=shutil.ignore_patterns(
+                        ".git", "build", "__pycache__", "*.pyc", "*.o"
+                    ),
+                )
+                for relative, before, after in mutation["edits"]:
+                    replace_unique(mutant_root / relative, before, after)
+                changed = {
+                    relative for relative in tracked
+                    if sha256(mutant_root / relative) != baseline_hashes[relative]
+                }
+                if changed != allowed:
+                    raise RuntimeError(
+                        f"{name} changed unexpected files: {sorted(changed ^ allowed)}"
+                    )
+                outputs = []
+                for compiler in compilers:
+                    selected_output = build_binary(
+                        mutant_root, compiler, str(mutation["target"]),
+                        Path(directory) / f"build-{compiler}"
+                    )
+                    replay_output = build_binary(
+                        mutant_root, compiler, "c42_dut_replay",
+                        Path(directory) / f"build-{compiler}"
+                    )
+                    outputs.append(selected_output + replay_output)
+                if outputs[0] != outputs[1]:
+                    raise RuntimeError(f"{name} GCC/Clang mismatch differs")
+                total += 1
+                print(f"C4.2 production mutant {name}: PASS")
+    except (OSError, RuntimeError, subprocess.CalledProcessError,
+            subprocess.TimeoutExpired) as error:
+        print(f"C4.2 dynamic mutations: FAIL: {error}", file=sys.stderr)
+        return 1
+    print(f"C4.2 dynamic mutations: PASS mutants={total} compilers=2 "
+          f"oracles=unit+replay aggregate-binaries={total * 4}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

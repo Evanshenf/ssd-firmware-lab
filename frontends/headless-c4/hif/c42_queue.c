@@ -1860,6 +1860,7 @@ static int progress_epoch_control(
         controller->reconcile_cursor = 0;
         controller->sq_cursor = 0;
         controller->ready_cursor = 0;
+        controller->ready_poll_pending = 0;
         controller->phase = teardown != 0 ?
                             C42_CONTROLLER_DEAD :
                             C42_CONTROLLER_COLD_NO_QUEUES;

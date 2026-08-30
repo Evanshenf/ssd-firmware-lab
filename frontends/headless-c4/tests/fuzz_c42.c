@@ -145,10 +145,29 @@ int main(void)
         for (action = 0; action < 256; ++action) {
             struct c42_snapshot snapshot = {0};
 
-            if (!c42_test_run(&fixture, 1, 4) ||
-                c42_snapshot_read(fixture.controller, &snapshot) != C42_OK ||
-                !snapshot_valid(&snapshot, depth) ||
-                !drain_notification(&fixture)) {
+            if (!c42_test_run(&fixture, 1, 4)) {
+                return fuzz_fail(execution, action, __LINE__);
+            }
+            if (c42_snapshot_read(
+                    fixture.controller, &snapshot) != C42_OK) {
+                return fuzz_fail(execution, action, __LINE__);
+            }
+            if (!snapshot_valid(&snapshot, depth)) {
+                fprintf(stderr,
+                        "snapshot phase=%u cause=%u sq=%u/%u/%u cq=%u/%u/%u "
+                        "p=%u active=%u events=%u overflow=%u\n",
+                        snapshot.phase, snapshot.fault_cause,
+                        snapshot.sq[0].host_index,
+                        snapshot.sq[0].device_index,
+                        snapshot.sq[0].pending_or_unacked,
+                        snapshot.cq[0].host_index,
+                        snapshot.cq[0].device_index,
+                        snapshot.cq[0].pending_or_unacked,
+                        snapshot.cq[0].phase, snapshot.active_commands,
+                        fixture.event_log.count, fixture.event_log.overflow);
+                return fuzz_fail(execution, action, __LINE__);
+            }
+            if (!drain_notification(&fixture)) {
                 return fuzz_fail(execution, action, __LINE__);
             }
             if (snapshot.cq[0].pending_or_unacked != 0) {

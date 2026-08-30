@@ -74,7 +74,8 @@ static void test_marker_reconcile_ack_and_cid_reuse(void)
           (cqe[14] & 1u) == 1u, "physical marker visible");
     check(c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
           snapshot.active_commands == 1 &&
-          snapshot.cq[0].pending_or_unacked == 0,
+          snapshot.cq[0].pending_or_unacked == 0 &&
+          snapshot.pending_notifications == 0,
           "marker visible is not cross committed");
     check(c42_target_prepare(
               fixture.controller, 0, fixture.sq_cap[0].ring_generation, 9,
