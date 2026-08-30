@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "9da58db3e122cccd5cdcada9f78a0eb789c0bcae"
+EXPECTED_C4_2_CANDIDATE = "505162956728b3b67e845c9232b388955b1b6051"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     "docs/legal/c4-2-source-boundary-review.md",
     "docs/legal/c4-2a-source-boundary-review.md",
