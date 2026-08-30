@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Audit the C3.5a portable-core archive, final links, and projections."""
+"""Audit the C3.5b portable-core archive, final links, and projections."""
 
 from __future__ import annotations
 
@@ -167,6 +167,9 @@ def audit_archive() -> str:
 
 def audit_headless_boundary() -> None:
     source = (COMPONENT / "c35_headless.c").read_text(encoding="utf-8")
+    header = (COMPONENT / "c35_headless.h").read_text(encoding="utf-8")
+    finalizer = (COMPONENT / "c35_finalizer.c").read_text(encoding="utf-8")
+    makefile = (COMPONENT / "Makefile").read_text(encoding="utf-8")
     includes = re.findall(r'^#include\s+"([^"]+)"', source, re.MULTILINE)
     if includes != ["c35_headless.h"]:
         fail(f"generic headless private include leak: {includes!r}")
@@ -175,6 +178,19 @@ def audit_headless_boundary() -> None:
     match = forbidden.search(source)
     if match:
         fail(f"provider branch token in generic headless: {match.group(0)}")
+    for token in (
+            "c35_headless_compat_query", "c35_headless_compat_transfer",
+            "c35_headless_submit_status", "c35_headless_complete_status",
+            "c35_headless_reset_status", "c35_headless_teardown_status"):
+        if token not in header or token not in source:
+            fail(f"missing wrapper recovery API: {token}")
+    if "C35_FINALIZER_PENDING_RETIRE" not in finalizer or \
+            "c35_headless_compat_query" not in finalizer or \
+            "c35_headless_compat_transfer" not in finalizer:
+        fail("runtime finalizer lacks wrapper-token adoption")
+    if "test_wrapper_recovery.c" not in makefile or \
+            "$(WRAPPER_BIN)" not in makefile:
+        fail("wrapper recovery test is outside the standard check gate")
 
     with tempfile.TemporaryDirectory(prefix="c35a-headless-") as directory:
         for name in ("c35_headless", "c35_finalizer"):
@@ -195,6 +211,8 @@ def audit_headless_boundary() -> None:
 
     for path in COMPONENT.rglob("*.c"):
         text = path.read_text(encoding="utf-8")
+        if "(void)c35_operation_retire" in text:
+            fail(f"suppressed C35 retirement result: {path}")
         if "pthread_" in text and \
                 path.name != "test_threads.c":
             fail(f"pthread outside dedicated isolation driver: {path}")
@@ -302,9 +320,9 @@ def main() -> int:
         audit_headless_boundary()
         hashes = audit_lane_links(archive_hash)
     except (RuntimeError, subprocess.CalledProcessError) as error:
-        print(f"C3.5a architecture: FAIL: {error}", file=sys.stderr)
+        print(f"C3.5b architecture: FAIL: {error}", file=sys.stderr)
         return 1
-    print("C3.5a architecture: PASS " + " ".join(
+    print("C3.5b architecture: PASS " + " ".join(
         f"{name}={value}" for name, value in hashes.items()))
     return 0
 

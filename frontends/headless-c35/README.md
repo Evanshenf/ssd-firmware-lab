@@ -1,11 +1,13 @@
 <!-- SPDX-FileCopyrightText: 2026 Evanshenf -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
-# C3.5a failure-atomic headless firmware remediation
+# C3.5b wrapper-recoverable headless firmware remediation
 
-> **Review status:** `REVIEW_HOLD / C3.5a PASS / REVIEW_PENDING`. The remediation
-> passed its clean source/evidence freeze and must still pass the targeted
-> second-opinion review before the hold can be closed. The original finding is
+> **Review status:** `REVIEW_HOLD / C3.5b REVIEW_PENDING`. C3.5a closed the
+> original trace-arithmetic and finite-reset defects, but targeted review found
+> that exported convenience wrappers could still hide their recovery token or
+> retirement failure. C3.5b addresses that follow-up; the hold remains until a
+> new evidence pair and targeted review are complete. The original finding is
 > recorded in the [public hold record](../../docs/results/2026-08-29-c3-5-review-hold.md).
 
 This directory composes the frozen C3.1 lifecycle, C3.2 persistence policy,
@@ -43,6 +45,19 @@ publication remain queryable until explicit retirement. Data-operation and
 control-operation UID domains are separate, so business UID exhaustion cannot
 consume the teardown path.
 
+The bounded compatibility wrappers use that same API and keep one explicit,
+caller-serialized recovery slot. `c35_headless_compat_query()` returns the
+stable token and complete status. A zero/short budget or a failed transaction
+retirement therefore remains resumable with the same token; a different
+wrapper/input is rejected without mutation. Business outcome and immutable
+publication remain visible while cleanup reports `PENDING`.
+
+The runtime finalizer can adopt wrapper-started submit, completion, reset or
+teardown work. It retires the headless teardown and any superseded wrapper
+token before bundle release. A completed headless teardown leaves a small
+adoption tombstone, so reaching C31 `DEAD` cannot strand a still-claimed
+storage bundle.
+
 Binding v2 uses stable transaction IDs and explicit prepare/commit/query/abort
 or prepare/query/ACK ledgers. The permanent ordering is:
 
@@ -64,6 +79,12 @@ Observer full/corrupt/IO-style failure cannot change command, DMA, reset or
 teardown authority and cannot block bundle/fd release. Before/after-effect
 fault decorators exist only in test links; architecture checks reject them
 from S/M/B/P final links.
+
+The observer trace is schema v3. Its 96-byte publication record encodes the
+reservation generation, and the full validator ties cached UID, generation and
+offset metadata to the actual last encoded publication record. Forged empty,
+mismatched-cache, mismatched-generation and active/recorded ordering states are
+rejected before reserve/query/append/hash/equality work.
 
 The fixed profile begins at C31 epoch 1. Resets 1 through 15 reach epoch 16;
 the next business reset returns `COUNTER_EXHAUSTED / NOT_STARTED` without
@@ -135,6 +156,9 @@ b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f
 The remediation gates include:
 
 - checked/canary trace bounds and publication-UID idempotence;
+- forged trace-metadata rejection and encoded-generation coherence;
+- zero/short-budget recovery for all four wrapper families, explicit
+  before/after retirement errors and runtime-finalizer takeover;
 - 80 before/after-effect, zero-budget and repeated-finalize transaction cuts;
 - teardown takeover from six C31 command states, consume before/after and five
   reset phases;
@@ -145,7 +169,7 @@ The remediation gates include:
 - exact provider/profile/malformed-table and observer non-authority cases;
 - M/B/P two-atom write/trim with two rebuilds and exact semantic/raw/container
   comparison;
-- 16 legacy composition invariants plus 14 remediation invariants, with one
+- 16 legacy composition invariants plus 16 remediation invariants, with one
   shortest counterexample per named mutation;
 - all 924 unique 6+6 actor-choice strings across two families and three
   provider pairs: 5,544 fresh live executions, 20,586 within-matrix unique

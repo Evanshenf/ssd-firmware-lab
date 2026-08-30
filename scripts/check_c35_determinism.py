@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Compare GCC and Clang C3.5a canonical lane bytes without hashing first."""
+"""Compare GCC and Clang C3.5b canonical lane bytes without hashing first."""
 
 from __future__ import annotations
 
@@ -39,12 +39,12 @@ def main() -> int:
                 if mode not in reference:
                     reference[mode] = gcc
     except (OSError, subprocess.CalledProcessError, RuntimeError) as error:
-        print(f"C3.5a determinism: FAIL: {error}", file=sys.stderr)
+        print(f"C3.5b determinism: FAIL: {error}", file=sys.stderr)
         return 1
     hashes = " ".join(
         f"{mode}={hashlib.sha256(data).hexdigest()}"
         for mode, data in reference.items())
-    print(f"C3.5a determinism: PASS (GCC == Clang exact bytes) {hashes}")
+    print(f"C3.5b determinism: PASS (GCC == Clang exact bytes) {hashes}")
     return 0
 
 

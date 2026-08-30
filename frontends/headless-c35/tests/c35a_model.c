@@ -45,6 +45,8 @@ static const char *const invariant_names[C35A_MODEL_FAMILIES] = {
     "A-BUNDLE-TABLE",
     "A-PROFILE-COMPAT",
     "A-FINALIZE-IDEMPOTENT",
+    "A-WRAPPER-TOKEN-RETAINED",
+    "A-RETIRE-ERROR-VISIBLE",
 };
 
 static const char *const mutation_names[C35A_MODEL_FAMILIES] = {
@@ -62,6 +64,8 @@ static const char *const mutation_names[C35A_MODEL_FAMILIES] = {
     "BM_BUNDLE_NULL_QUIESCENT",
     "BM_CONTEXT_EQUALS_PROFILE",
     "BM_RELEASE_AFTER_MUTATION_RETRIES_RAW",
+    "BM_WRAPPER_DROPS_TOKEN",
+    "BM_RETIRE_ERROR_RETURNS_SUCCESS",
 };
 
 const char *c35a_invariant_name(unsigned int family)
@@ -267,6 +271,32 @@ static unsigned int successors(
             add_successor(out, &count, &next, "finalize-repeat");
         }
         break;
+    case 14: /* wrapper retains its recovery token */
+        if (source->stage == 0) {
+            next.stage = 1; next.x = 1;
+            add_successor(out, &count, &next, "wrapper-start");
+        } else if (source->stage == 1) {
+            next.stage = 2; next.y = 1;
+            if (mutant) next.x = 0;
+            add_successor(out, &count, &next, "return-in-progress");
+        } else {
+            next.stage = 3; next.z = 1; next.terminal = 1;
+            add_successor(out, &count, &next, "resume-same-token");
+        }
+        break;
+    case 15: /* retirement error is visible until reconciled */
+        if (source->stage == 0) {
+            next.stage = 1; next.x = 1;
+            add_successor(out, &count, &next, "business-commit");
+        } else if (source->stage == 1) {
+            next.stage = 2; next.y = 1;
+            next.z = mutant ? 1 : 0;
+            add_successor(out, &count, &next, "retire-error");
+        } else {
+            next.stage = 3; next.y = 0; next.w = 1; next.terminal = 1;
+            add_successor(out, &count, &next, "retire-reconcile");
+        }
+        break;
     default:
         break;
     }
@@ -295,6 +325,8 @@ static int invariant_holds(
         return !(state->y && !state->x);
     case 12: return !(state->z && !state->y);
     case 13: return state->x <= 1;
+    case 14: return !(state->y && !state->x);
+    case 15: return !(state->y && state->z);
     default: return 0;
     }
 }

@@ -17,7 +17,7 @@ int main(void)
 
         if (!c35a_model_explore(family, 0, &result) || result.violation ||
             result.cap_reached || !result.terminal_reached) {
-            fprintf(stderr, "C3.5a model: FAIL: %s\n",
+            fprintf(stderr, "C3.5b model: FAIL: %s\n",
                     c35a_invariant_name(family));
             return 1;
         }
@@ -29,7 +29,7 @@ int main(void)
                c35a_invariant_name(family), result.states,
                result.transitions, result.max_depth);
     }
-    printf("C3.5a remediation model: PASS (14 invariants / %u states / "
+    printf("C3.5b remediation model: PASS (16 invariants / %u states / "
            "%u transitions / depth<=%u / cap=%u / successors<=%u)\n",
            states, transitions, depth, C35A_MODEL_STATE_CAP,
            C35A_MODEL_SUCCESSOR_CAP);

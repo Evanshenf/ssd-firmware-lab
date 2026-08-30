@@ -90,21 +90,36 @@ static void child_nonquiescent(void)
     struct c35_storage *storage;
     struct c35_runtime *runtime;
     struct c35_publication publication;
+    struct c35_operation_token token;
+    struct c35_operation_status status;
     struct c35_binding_ops binding_ops;
+    c35_binding_quiescent_fn native_quiescent;
 
     if (!child_fixture(
             &storage, &runtime, C35_LANE_MEMORY,
             UINT64_C(0x35a6000000000002))) _exit(21);
     binding_ops = *runtime->headless.binding.ops;
+    native_quiescent = binding_ops.quiescent;
     binding_ops.quiescent = always_nonquiescent;
     runtime->headless.binding.ops = &binding_ops;
-    if (c35_headless_teardown_observed(
-            &runtime->headless, 64, &publication) != C35_IN_PROGRESS)
+    if (c35_headless_teardown_status(
+            &runtime->headless, 64, &publication, &status) !=
+        C35_IN_PROGRESS)
         _exit(22);
     if (runtime->headless.service_phase != C35_SERVICE_TEARING_DOWN)
         _exit(23);
     if (!runtime->claimed || !storage->bundle.claimed) _exit(24);
+    if (c35_headless_compat_query(
+            &runtime->headless, &token, &status) != C35_IN_PROGRESS ||
+        token.kind != C35_OPERATION_TEARDOWN) _exit(25);
     /* false is retryable: no timeout-based force release or fake poison. */
+    binding_ops.quiescent = native_quiescent;
+    if (!c35_runtime_teardown(runtime)) _exit(26);
+    if (runtime->claimed || storage->bundle.claimed ||
+        runtime->headless.service_phase != C35_SERVICE_DEAD ||
+        c35_headless_compat_query(
+            &runtime->headless, &token, &status) != C35_NOT_FOUND)
+        _exit(27);
     _exit(0);
 }
 
@@ -124,7 +139,7 @@ int main(void)
 {
     CHECK(run_child(child_phase2));
     CHECK(run_child(child_nonquiescent));
-    puts("C3.5a poison cleanup: PASS (phase2 explicit POISONED; "
-         "quiescent=false remains claimed/IN_PROGRESS in reaped children)");
+    puts("C3.5b poison cleanup: PASS (phase2 explicit POISONED; "
+         "quiescent=false retains same-token IN_PROGRESS then resumes)");
     return 0;
 }

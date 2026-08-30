@@ -137,12 +137,17 @@ struct c35_operation_record {
     uint8_t ack_attempted;
     uint8_t release_attempted;
     uint8_t retry_class;
+    uint8_t retire_pending;
+    uint8_t retire_saved_cleanup;
+    uint8_t retire_saved_cause_domain;
+    uint8_t retire_saved_retry;
     uint32_t phase;
     uint32_t outcome;
     uint32_t commit_state;
     uint32_t cleanup_state;
     uint32_t cause_domain;
     uint32_t cause_code;
+    uint32_t retire_saved_cause_code;
     uint32_t units_used;
     uint32_t old_epoch;
     uint32_t new_epoch;
@@ -178,7 +183,12 @@ struct c35_headless {
     uint8_t active_slot;
     uint8_t control_active;
     uint8_t previous_control_used;
-    uint8_t reserved[3];
+    uint8_t compat_active;
+    uint8_t compat_tombstone_valid;
+    uint8_t reserved;
+    struct c35_operation_token compat_token;
+    struct c35_operation_token compat_tombstone_token;
+    struct c35_operation_status compat_tombstone_status;
     struct c35_operation_record operation[C35_OPERATION_SLOTS];
     struct c35_operation_record control;
     struct c35_operation_record previous_control;
@@ -239,6 +249,44 @@ enum c35_result c35_operation_finalize(
 enum c35_result c35_operation_retire(
     struct c35_headless *headless,
     const struct c35_operation_token *token
+);
+enum c35_result c35_headless_compat_query(
+    const struct c35_headless *headless,
+    struct c35_operation_token *token,
+    struct c35_operation_status *status
+);
+enum c35_result c35_headless_compat_transfer(
+    struct c35_headless *headless,
+    const struct c35_operation_token *token
+);
+
+enum c35_result c35_headless_submit_status(
+    struct c35_headless *headless,
+    const struct c35_request *request,
+    uint32_t budget,
+    struct c35_submission *submission,
+    struct c35_operation_status *status
+);
+enum c35_result c35_headless_complete_status(
+    struct c35_headless *headless,
+    const struct fwlab_c31_command_handle *command,
+    uint32_t budget,
+    struct c35_semantic_result *semantic,
+    struct fwlab_c31_completion_intent *intent,
+    struct c35_publication *publication,
+    struct c35_operation_status *status
+);
+enum c35_result c35_headless_reset_status(
+    struct c35_headless *headless,
+    uint32_t budget,
+    struct c35_publication *publication,
+    struct c35_operation_status *status
+);
+enum c35_result c35_headless_teardown_status(
+    struct c35_headless *headless,
+    uint32_t budget,
+    struct c35_publication *publication,
+    struct c35_operation_status *status
 );
 
 enum c35_result c35_headless_submit(

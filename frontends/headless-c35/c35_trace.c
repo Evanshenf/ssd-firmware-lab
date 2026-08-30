@@ -39,10 +39,31 @@ static uint32_t get_u32(const uint8_t *bytes)
            ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
 }
 
-static int records_valid(const struct c35_trace *trace)
+static uint64_t get_u64(const uint8_t *bytes)
+{
+    uint64_t value = 0;
+    unsigned int index;
+
+    for (index = 0; index < 8; ++index) {
+        value |= (uint64_t)bytes[index] << (index * 8u);
+    }
+    return value;
+}
+
+static int records_valid(
+    const struct c35_trace *trace,
+    uint64_t *last_uid,
+    uint32_t *last_generation,
+    uint32_t *last_offset
+)
 {
     uint32_t offset = C35_TRACE_HEADER_BYTES;
     uint32_t events = 0;
+    uint32_t previous_generation = 0;
+
+    *last_uid = 0;
+    *last_generation = 0;
+    *last_offset = 0;
 
     while (offset < trace->length) {
         uint8_t kind = trace->bytes[offset];
@@ -53,6 +74,20 @@ static int records_valid(const struct c35_trace *trace)
             if (remaining < C35_TRACE_EVENT_BYTES) {
                 return 0;
             }
+            if (get_u32(&trace->bytes[offset + 16u]) != events ||
+                get_u64(&trace->bytes[offset + 72u]) == 0 ||
+                get_u32(&trace->bytes[offset + 80u]) != 2u ||
+                get_u32(&trace->bytes[offset + 84u]) == 0 ||
+                get_u32(&trace->bytes[offset + 84u]) <=
+                    previous_generation ||
+                get_u32(&trace->bytes[offset + 88u]) != 0 ||
+                get_u32(&trace->bytes[offset + 92u]) != 0) {
+                return 0;
+            }
+            *last_uid = get_u64(&trace->bytes[offset + 72u]);
+            *last_generation = get_u32(&trace->bytes[offset + 84u]);
+            *last_offset = offset;
+            previous_generation = *last_generation;
             offset += C35_TRACE_EVENT_BYTES;
             ++events;
         } else if (kind >= 0x80u) {
@@ -93,23 +128,44 @@ void c35_trace_init(struct c35_trace *trace, uint32_t scenario)
 
 int c35_trace_valid(const struct c35_trace *trace)
 {
-    return trace != NULL && trace->bytes[0] == 'C' &&
-           trace->bytes[1] == '3' && trace->bytes[2] == '5' &&
-           trace->bytes[3] == 'T' &&
-           get_u16(&trace->bytes[4]) == C35_TRACE_VERSION &&
-           get_u16(&trace->bytes[6]) == C35_TRACE_HEADER_BYTES &&
-           trace->length >= C35_TRACE_HEADER_BYTES &&
-           trace->length <= C35_TRACE_BYTES &&
-           get_u32(&trace->bytes[12]) == trace->events &&
-           trace->next_generation != 0 &&
-           ((trace->active_generation == 0 && trace->active_uid == 0) ||
-            (trace->active_generation != 0 && trace->active_uid != 0)) &&
-           ((trace->last_recorded_generation == 0 &&
-             trace->last_recorded_uid == 0) ||
-            (trace->last_recorded_generation != 0 &&
-             trace->last_recorded_uid != 0)) &&
-           trace->reserved == 0 &&
-           records_valid(trace);
+    uint64_t last_uid;
+    uint32_t last_generation;
+    uint32_t last_offset;
+
+    if (trace == NULL || trace->bytes[0] != 'C' ||
+        trace->bytes[1] != '3' || trace->bytes[2] != '5' ||
+        trace->bytes[3] != 'T' ||
+        get_u16(&trace->bytes[4]) != C35_TRACE_VERSION ||
+        get_u16(&trace->bytes[6]) != C35_TRACE_HEADER_BYTES ||
+        trace->length < C35_TRACE_HEADER_BYTES ||
+        trace->length > C35_TRACE_BYTES ||
+        get_u32(&trace->bytes[12]) != trace->events ||
+        trace->next_generation == 0 || trace->reserved != 0 ||
+        ((trace->active_generation == 0) != (trace->active_uid == 0))) {
+        return 0;
+    }
+    if (!records_valid(
+            trace, &last_uid, &last_generation, &last_offset)) return 0;
+    if (trace->events == 0) {
+        if (trace->last_recorded_uid != 0 ||
+            trace->last_recorded_generation != 0 ||
+            trace->last_recorded_offset != 0) return 0;
+    } else if (trace->last_recorded_uid != last_uid ||
+               trace->last_recorded_generation != last_generation ||
+               trace->last_recorded_offset != last_offset) {
+        return 0;
+    }
+    if ((trace->active_generation != 0 &&
+         trace->active_generation >= trace->next_generation) ||
+        (trace->last_recorded_generation != 0 &&
+         trace->last_recorded_generation >= trace->next_generation) ||
+        (trace->active_generation != 0 &&
+         trace->last_recorded_generation != 0 &&
+         (trace->active_generation <= trace->last_recorded_generation ||
+          trace->active_uid == trace->last_recorded_uid))) {
+        return 0;
+    }
+    return 1;
 }
 
 enum c35_result c35_trace_reserve(
@@ -141,7 +197,7 @@ enum c35_result c35_trace_reserve(
     if (trace->last_recorded_uid == publication_uid) {
         memset(reservation, 0, sizeof(*reservation));
         reservation->publication_uid = publication_uid;
-        reservation->offset = trace->length - C35_TRACE_EVENT_BYTES;
+        reservation->offset = trace->last_recorded_offset;
         reservation->generation = trace->last_recorded_generation;
         reservation->length = C35_TRACE_EVENT_BYTES;
         reservation->state = C35_OBSERVATION_RECORDED;
@@ -173,13 +229,15 @@ static int publication_valid(const struct c35_publication *publication)
            publication->kind >= C35_PUBLICATION_DMA &&
            publication->kind <= C35_PUBLICATION_CLEANUP &&
            publication->publication_uid != 0 &&
+           publication->commit_state == 2u &&
            publication->reserved[0] == 0 && publication->reserved[1] == 0;
 }
 
 static void encode_publication(
     uint8_t bytes[C35_TRACE_EVENT_BYTES],
     const struct c35_publication *publication,
-    uint32_t ordinal
+    uint32_t ordinal,
+    uint32_t generation
 )
 {
     unsigned int atom;
@@ -210,6 +268,7 @@ static void encode_publication(
     }
     put_u64(&bytes[72], publication->publication_uid);
     put_u32(&bytes[80], publication->commit_state);
+    put_u32(&bytes[84], generation);
 }
 
 enum c35_result c35_trace_commit(
@@ -221,14 +280,20 @@ enum c35_result c35_trace_commit(
     if (c35_trace_valid(trace) && reservation != NULL &&
         publication_valid(publication) &&
         reservation->state == C35_OBSERVATION_RECORDED &&
+        reservation->length == C35_TRACE_EVENT_BYTES &&
+        reservation->reserved == 0 &&
         reservation->publication_uid == publication->publication_uid &&
         reservation->publication_uid == trace->last_recorded_uid &&
         reservation->generation == trace->last_recorded_generation &&
-        reservation->offset + C35_TRACE_EVENT_BYTES == trace->length &&
+        reservation->offset == trace->last_recorded_offset &&
+        reservation->offset <= trace->length &&
+        trace->length - reservation->offset >= C35_TRACE_EVENT_BYTES &&
         trace->events != 0) {
         uint8_t encoded[C35_TRACE_EVENT_BYTES];
 
-        encode_publication(encoded, publication, trace->events - 1u);
+        encode_publication(
+            encoded, publication, trace->events - 1u,
+            reservation->generation);
         return memcmp(&trace->bytes[reservation->offset], encoded,
                       C35_TRACE_EVENT_BYTES) == 0 ? C35_OK : C35_CORRUPT;
     }
@@ -236,6 +301,7 @@ enum c35_result c35_trace_commit(
         !publication_valid(publication) ||
         reservation->state != C35_OBSERVATION_RESERVED ||
         reservation->length != C35_TRACE_EVENT_BYTES ||
+        reservation->reserved != 0 ||
         reservation->offset != trace->length ||
         reservation->generation != trace->active_generation ||
         reservation->publication_uid != trace->active_uid ||
@@ -243,8 +309,10 @@ enum c35_result c35_trace_commit(
         C35_TRACE_BYTES - trace->length < C35_TRACE_EVENT_BYTES) {
         return C35_INVALID;
     }
-    encode_publication(&trace->bytes[trace->length], publication,
-                       trace->events);
+    encode_publication(
+        &trace->bytes[trace->length], publication, trace->events,
+        reservation->generation);
+    trace->last_recorded_offset = trace->length;
     trace->length += C35_TRACE_EVENT_BYTES;
     ++trace->events;
     put_u32(&trace->bytes[12], trace->events);
@@ -267,17 +335,26 @@ enum c35_result c35_trace_query(
     }
     if (reservation->state == C35_OBSERVATION_RECORDED &&
         reservation->publication_uid == trace->last_recorded_uid &&
-        reservation->generation == trace->last_recorded_generation) {
+        reservation->generation == trace->last_recorded_generation &&
+        reservation->offset == trace->last_recorded_offset &&
+        reservation->length == C35_TRACE_EVENT_BYTES &&
+        reservation->reserved == 0) {
         *state = C35_OBSERVATION_RECORDED;
         return C35_OK;
     }
     if (reservation->state == C35_OBSERVATION_RESERVED &&
         reservation->generation == trace->active_generation &&
-        reservation->publication_uid == trace->active_uid) {
+        reservation->publication_uid == trace->active_uid &&
+        reservation->offset == trace->length &&
+        reservation->length == C35_TRACE_EVENT_BYTES &&
+        reservation->reserved == 0) {
         *state = C35_OBSERVATION_RESERVED;
         return C35_OK;
     }
-    if (reservation->state == C35_OBSERVATION_NONE) {
+    if (reservation->state == C35_OBSERVATION_NONE &&
+        reservation->publication_uid == 0 && reservation->offset == 0 &&
+        reservation->generation == 0 && reservation->length == 0 &&
+        reservation->reserved == 0) {
         *state = C35_OBSERVATION_NONE;
         return C35_OK;
     }
@@ -291,6 +368,9 @@ enum c35_result c35_trace_cancel(
 {
     if (!c35_trace_valid(trace) || reservation == NULL ||
         reservation->state != C35_OBSERVATION_RESERVED ||
+        reservation->offset != trace->length ||
+        reservation->length != C35_TRACE_EVENT_BYTES ||
+        reservation->reserved != 0 ||
         reservation->generation != trace->active_generation ||
         reservation->publication_uid != trace->active_uid) {
         return C35_STALE;

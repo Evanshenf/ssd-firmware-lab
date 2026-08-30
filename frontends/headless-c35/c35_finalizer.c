@@ -71,16 +71,35 @@ enum c35_result c35_finalizer_start(
     struct c35_operation_token *token
 )
 {
+    struct c35_operation_token compat_token;
+    struct c35_operation_status compat_status;
+    enum c35_result compat_result;
     enum c35_result result;
+    int compat_present;
+    int adopted_teardown;
 
     if (finalizer == NULL || headless == NULL || token == NULL ||
         claimant == 0 ||
         (bundle != NULL && (!bundle->claimed || bundle->claimant != claimant)))
         return C35_INVALID;
     if (finalizer->used) return C35_WRONG_STATE;
+    memset(&compat_token, 0, sizeof(compat_token));
+    memset(&compat_status, 0, sizeof(compat_status));
+    compat_result = c35_headless_compat_query(
+        headless, &compat_token, &compat_status);
+    compat_present = compat_result == C35_OK ||
+                     compat_result == C35_IN_PROGRESS;
+    if (!compat_present && compat_result != C35_NOT_FOUND)
+        return compat_result;
+    adopted_teardown = compat_present &&
+                       compat_token.kind == C35_OPERATION_TEARDOWN;
+    if (adopted_teardown) {
+        *token = compat_token;
+    } else {
+        result = c35_teardown_start(headless, token);
+        if (result != C35_OK) return result;
+    }
     memset(finalizer, 0, sizeof(*finalizer));
-    result = c35_teardown_start(headless, token);
-    if (result != C35_OK) return result;
     finalizer->headless = headless;
     finalizer->bundle = bundle;
     finalizer->claimant = claimant;
@@ -91,7 +110,46 @@ enum c35_result c35_finalizer_start(
     finalizer->cleanup_state = C35_CLEANUP_PENDING;
     finalizer->retry_class = C35_RETRY_SAME_TOKEN;
     finalizer->used = 1;
+    if (compat_present) {
+        result = c35_headless_compat_transfer(headless, &compat_token);
+        if (result != C35_OK) {
+            memset(finalizer, 0, sizeof(*finalizer));
+            return result;
+        }
+        if (adopted_teardown) {
+            if (compat_result == C35_OK) {
+                finalizer->authoritative = compat_status;
+                finalizer->outcome = compat_status.outcome;
+                finalizer->commit_state = compat_status.commit_state;
+                finalizer->cause_domain = compat_status.cause_domain;
+                finalizer->cause_code = compat_status.cause_code;
+                finalizer->retry_class = compat_status.retry_class;
+                finalizer->phase = C35_FINALIZER_HEADLESS_RETIRE;
+            }
+        } else {
+            finalizer->pending_token = compat_token;
+            finalizer->pending_retire = 1;
+        }
+    }
     return C35_OK;
+}
+
+static void after_all_retired(struct c35_finalizer *finalizer)
+{
+    if (finalizer->outcome == C35_OK &&
+        finalizer->commit_state == C35_COMMIT_COMMITTED) {
+        if (finalizer->bundle == NULL) {
+            finalizer->bundle_released = 1;
+            finish(finalizer, C35_OK, C35_CLEANUP_COMPLETE);
+        } else {
+            finalizer->phase = C35_FINALIZER_BUNDLE_RELEASE;
+            finalizer->cleanup_state = C35_CLEANUP_PENDING;
+            finalizer->retry_class = C35_RETRY_SAME_TOKEN;
+        }
+    } else {
+        finish(finalizer, (enum c35_result)finalizer->outcome,
+               C35_CLEANUP_POISONED);
+    }
 }
 
 static void progress_one(struct c35_finalizer *finalizer)
@@ -121,26 +179,54 @@ static void progress_one(struct c35_finalizer *finalizer)
             finalizer->headless, &finalizer->token);
         if (result == C35_OK || result == C35_STALE) {
             finalizer->headless_retired = 1;
-            if (finalizer->outcome == C35_OK &&
-                finalizer->commit_state == C35_COMMIT_COMMITTED) {
-                if (finalizer->bundle == NULL) {
-                    finalizer->bundle_released = 1;
-                    finish(finalizer, C35_OK, C35_CLEANUP_COMPLETE);
-                } else {
-                    finalizer->phase = C35_FINALIZER_BUNDLE_RELEASE;
-                    finalizer->cleanup_state = C35_CLEANUP_PENDING;
-                    finalizer->retry_class = C35_RETRY_SAME_TOKEN;
-                }
-            } else {
-                finish(finalizer, (enum c35_result)finalizer->outcome,
-                       C35_CLEANUP_POISONED);
-            }
+            if (finalizer->pending_retire)
+                finalizer->phase = C35_FINALIZER_PENDING_RETIRE;
+            else
+                after_all_retired(finalizer);
         } else {
+            (void)c35_operation_query(
+                finalizer->headless, &finalizer->token,
+                &finalizer->authoritative);
             finalizer->cause_domain = C35_CAUSE_BINDING;
             finalizer->cause_code = result;
             finalizer->retry_class = C35_RETRY_SAME_TOKEN;
         }
         break;
+    case C35_FINALIZER_PENDING_RETIRE: {
+        struct c35_operation_status pending_status;
+
+        result = c35_operation_query(
+            finalizer->headless, &finalizer->pending_token,
+            &pending_status);
+        if (result == C35_STALE) {
+            finalizer->pending_retire = 0;
+            memset(&finalizer->pending_token, 0,
+                   sizeof(finalizer->pending_token));
+            after_all_retired(finalizer);
+        } else if (result == C35_OK) {
+            result = c35_operation_retire(
+                finalizer->headless, &finalizer->pending_token);
+            if (result == C35_OK || result == C35_STALE) {
+                finalizer->pending_retire = 0;
+                memset(&finalizer->pending_token, 0,
+                       sizeof(finalizer->pending_token));
+                after_all_retired(finalizer);
+            } else {
+                finalizer->cause_domain = C35_CAUSE_BINDING;
+                finalizer->cause_code = result;
+                finalizer->retry_class = C35_RETRY_SAME_TOKEN;
+            }
+        } else if (result == C35_IN_PROGRESS) {
+            finalizer->cause_domain = C35_CAUSE_C35;
+            finalizer->cause_code = C35_INVARIANT;
+            finish(finalizer, C35_INVARIANT, C35_CLEANUP_POISONED);
+        } else {
+            finalizer->cause_domain = C35_CAUSE_C35;
+            finalizer->cause_code = result;
+            finish(finalizer, result, C35_CLEANUP_POISONED);
+        }
+        break;
+    }
     case C35_FINALIZER_BUNDLE_RELEASE:
         result = c35_bundle_release(
             finalizer->bundle, finalizer->claimant);

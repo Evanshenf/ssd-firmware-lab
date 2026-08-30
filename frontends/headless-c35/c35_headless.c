@@ -50,6 +50,15 @@ static int request_valid(const struct c35_request *request)
     return 1;
 }
 
+static int request_equal(
+    const struct c35_request *left,
+    const struct c35_request *right
+)
+{
+    return request_valid(left) && request_valid(right) &&
+           memcmp(left, right, sizeof(*left)) == 0;
+}
+
 static int token_equal(
     const struct c35_operation_token *left,
     const struct c35_operation_token *right
@@ -71,6 +80,19 @@ static int command_value_valid(
     return command->instance_nonce == headless->instance_nonce &&
            command->command_uid != 0 && command->controller_epoch != 0 &&
            command->slot_generation != 0;
+}
+
+static int command_equal(
+    const struct fwlab_c31_command_handle *left,
+    const struct fwlab_c31_command_handle *right
+)
+{
+    return left != NULL && right != NULL &&
+           left->instance_nonce == right->instance_nonce &&
+           left->command_uid == right->command_uid &&
+           left->controller_epoch == right->controller_epoch &&
+           left->slot == right->slot &&
+           left->slot_generation == right->slot_generation;
 }
 
 static int lease_value_valid(
@@ -1603,7 +1625,33 @@ enum c35_result c35_operation_retire(
             &record->result_txid : &record->registration_txid;
         result = headless->binding.ops->transaction_retire(
             headless->binding.context, txid);
-        if (result != C35_OK && result != C35_STALE) return result;
+        if (result != C35_OK && result != C35_STALE) {
+            if (!record->retire_pending) {
+                record->retire_saved_cleanup =
+                    (uint8_t)record->cleanup_state;
+                record->retire_saved_cause_domain =
+                    (uint8_t)record->cause_domain;
+                record->retire_saved_retry = record->retry_class !=
+                    C35_RETRY_NONE ? record->retry_class :
+                    (record->cleanup_state == C35_CLEANUP_PENDING ||
+                     record->cleanup_state == C35_CLEANUP_POISONED) ?
+                        C35_RETRY_REPAIR_REQUIRED : C35_RETRY_NONE;
+                record->retire_saved_cause_code = record->cause_code;
+            }
+            record->retire_pending = 1;
+            record->cleanup_state = C35_CLEANUP_PENDING;
+            record->cause_domain = C35_CAUSE_BINDING;
+            record->cause_code = (uint32_t)result;
+            record->retry_class = C35_RETRY_SAME_TOKEN;
+            return result;
+        }
+        if (record->retire_pending) {
+            record->cleanup_state = record->retire_saved_cleanup;
+            record->cause_domain = record->retire_saved_cause_domain;
+            record->cause_code = record->retire_saved_cause_code;
+            record->retry_class = record->retire_saved_retry;
+            record->retire_pending = 0;
+        }
     }
     if (record == &headless->control) {
         memset(record, 0, sizeof(*record));
@@ -1632,15 +1680,188 @@ static enum c35_result drive_to_done(
 )
 {
     uint32_t used;
+    enum c35_result result;
 
     for (used = 0; used < limit; ++used) {
-        enum c35_result result = c35_operation_progress(
-            headless, token, 1, status);
+        result = c35_operation_progress(headless, token, 1, status);
         if (result == C35_OK) return (enum c35_result)status->outcome;
         if (result != C35_IN_PROGRESS) return result;
     }
-    (void)c35_operation_query(headless, token, status);
-    return C35_IN_PROGRESS;
+    result = c35_operation_query(headless, token, status);
+    return result == C35_OK ? (enum c35_result)status->outcome : result;
+}
+
+static void compat_clear(
+    struct c35_headless *headless,
+    const struct c35_operation_token *token
+)
+{
+    if (headless->compat_active &&
+        token_equal(&headless->compat_token, token)) {
+        memset(&headless->compat_token, 0, sizeof(headless->compat_token));
+        headless->compat_active = 0;
+    }
+}
+
+static enum c35_result compat_operation(
+    struct c35_headless *headless,
+    uint8_t kind,
+    const struct c35_request *request,
+    const struct fwlab_c31_command_handle *command,
+    struct c35_operation_token *token
+)
+{
+    struct c35_operation_record *record;
+    enum c35_result result;
+
+    if (headless == NULL || token == NULL ||
+        kind < C35_OPERATION_SUBMIT || kind > C35_OPERATION_TEARDOWN)
+        return C35_INVALID;
+    if (headless->compat_active) {
+        if (headless->compat_token.kind != kind) return C35_WRONG_STATE;
+        record = record_find(headless, &headless->compat_token);
+        if (record == NULL) return C35_INVARIANT;
+        if (kind == C35_OPERATION_SUBMIT &&
+            !request_equal(request, &record->request)) return C35_INVALID;
+        if (kind == C35_OPERATION_COMPLETION &&
+            !command_equal(command, &record->command)) return C35_INVALID;
+        *token = headless->compat_token;
+        return C35_OK;
+    }
+    if (kind == C35_OPERATION_SUBMIT)
+        result = c35_submit_start(headless, request, token);
+    else if (kind == C35_OPERATION_COMPLETION)
+        result = c35_completion_start(headless, command, token);
+    else if (kind == C35_OPERATION_RESET)
+        result = c35_reset_start(headless, token);
+    else
+        result = c35_teardown_start(headless, token);
+    if (result == C35_OK) {
+        headless->compat_token = *token;
+        headless->compat_active = 1;
+    }
+    return result;
+}
+
+static enum c35_result compat_retire_finished(
+    struct c35_headless *headless,
+    const struct c35_operation_token *token,
+    enum c35_result operation,
+    struct c35_operation_status *status
+)
+{
+    struct c35_operation_record *record;
+    enum c35_result result;
+    uint8_t saved_cleanup = 0;
+    uint8_t saved_cause_domain = 0;
+    uint8_t saved_retry = 0;
+    uint32_t saved_cause_code = 0;
+    int retrying_retire;
+
+    if (status->call_state != C35_CALL_DONE) return operation;
+    record = record_find(headless, token);
+    if (record == NULL) return C35_INVARIANT;
+    retrying_retire = record->retire_pending;
+    if (retrying_retire) {
+        saved_cleanup = record->retire_saved_cleanup;
+        saved_cause_domain = record->retire_saved_cause_domain;
+        saved_retry = record->retire_saved_retry;
+        saved_cause_code = record->retire_saved_cause_code;
+    }
+    result = c35_operation_retire(headless, token);
+    if (result != C35_OK) {
+        enum c35_result query = c35_operation_query(headless, token, status);
+
+        return query == C35_OK ? result : query;
+    }
+    if (retrying_retire) {
+        status->cleanup_state = saved_cleanup;
+        status->cause_domain = saved_cause_domain;
+        status->cause_code = saved_cause_code;
+        status->retry_class = saved_retry;
+    }
+    if (token->kind == C35_OPERATION_TEARDOWN) {
+        headless->compat_tombstone_token = *token;
+        headless->compat_tombstone_status = *status;
+        headless->compat_tombstone_valid = 1;
+    }
+    compat_clear(headless, token);
+    return operation;
+}
+
+enum c35_result c35_headless_compat_query(
+    const struct c35_headless *headless,
+    struct c35_operation_token *token,
+    struct c35_operation_status *status
+)
+{
+    if (headless == NULL || token == NULL || status == NULL)
+        return C35_INVALID;
+    if (headless->compat_active) {
+        *token = headless->compat_token;
+        return c35_operation_query(headless, token, status);
+    }
+    if (headless->compat_tombstone_valid) {
+        *token = headless->compat_tombstone_token;
+        *status = headless->compat_tombstone_status;
+        status->units_used = 0;
+        return C35_OK;
+    }
+    return C35_NOT_FOUND;
+}
+
+enum c35_result c35_headless_compat_transfer(
+    struct c35_headless *headless,
+    const struct c35_operation_token *token
+)
+{
+    if (headless == NULL || token == NULL) return C35_INVALID;
+    if (headless->compat_active) {
+        if (!token_equal(&headless->compat_token, token)) return C35_STALE;
+        compat_clear(headless, token);
+        return C35_OK;
+    }
+    if (headless->compat_tombstone_valid) {
+        if (!token_equal(&headless->compat_tombstone_token, token))
+            return C35_STALE;
+        memset(&headless->compat_tombstone_token, 0,
+               sizeof(headless->compat_tombstone_token));
+        memset(&headless->compat_tombstone_status, 0,
+               sizeof(headless->compat_tombstone_status));
+        headless->compat_tombstone_valid = 0;
+        return C35_OK;
+    }
+    return C35_NOT_FOUND;
+}
+
+enum c35_result c35_headless_submit_status(
+    struct c35_headless *headless,
+    const struct c35_request *request,
+    uint32_t budget,
+    struct c35_submission *submission,
+    struct c35_operation_status *status
+)
+{
+    struct c35_operation_token token;
+    struct c35_operation_record *record;
+    enum c35_result result;
+
+    if (submission == NULL || status == NULL)
+        return C35_INVALID;
+    memset(submission, 0, sizeof(*submission));
+    memset(status, 0, sizeof(*status));
+    result = compat_operation(
+        headless, C35_OPERATION_SUBMIT, request, NULL, &token);
+    if (result != C35_OK) return result;
+    result = drive_to_done(headless, &token, budget, status);
+    record = record_find(headless, &token);
+    if (record != NULL && status->call_state == C35_CALL_DONE &&
+        status->outcome == C35_OK && record->command_valid) {
+        submission->request = record->request_token;
+        submission->command = record->command;
+        submission->owner_epoch = record->registration_txid.owner_epoch;
+    }
+    return compat_retire_finished(headless, &token, result, status);
 }
 
 enum c35_result c35_headless_submit_observed(
@@ -1649,25 +1870,10 @@ enum c35_result c35_headless_submit_observed(
     struct c35_submission *submission
 )
 {
-    struct c35_operation_token token;
     struct c35_operation_status status;
-    struct c35_operation_record *record;
-    enum c35_result result;
 
-    if (submission == NULL) return C35_INVALID;
-    result = c35_submit_start(headless, request, &token);
-    memset(&status, 0, sizeof(status));
-    if (result != C35_OK) return result;
-    result = drive_to_done(headless, &token, 128, &status);
-    record = record_find(headless, &token);
-    if (result == C35_OK && record != NULL) {
-        submission->request = record->request_token;
-        submission->command = record->command;
-        submission->owner_epoch = record->registration_txid.owner_epoch;
-    }
-    if (status.call_state == C35_CALL_DONE)
-        (void)c35_operation_retire(headless, &token);
-    return result;
+    return c35_headless_submit_status(
+        headless, request, 128, submission, &status);
 }
 
 enum c35_result c35_headless_submit(
@@ -1685,6 +1891,39 @@ enum c35_result c35_headless_submit(
     return result;
 }
 
+enum c35_result c35_headless_complete_status(
+    struct c35_headless *headless,
+    const struct fwlab_c31_command_handle *command,
+    uint32_t budget,
+    struct c35_semantic_result *semantic,
+    struct fwlab_c31_completion_intent *intent,
+    struct c35_publication *publication,
+    struct c35_operation_status *status
+)
+{
+    struct c35_operation_token token;
+    struct c35_operation_record *record;
+    enum c35_result result;
+
+    if (semantic == NULL || intent == NULL || publication == NULL ||
+        status == NULL) return C35_INVALID;
+    memset(semantic, 0, sizeof(*semantic));
+    memset(intent, 0, sizeof(*intent));
+    memset(publication, 0, sizeof(*publication));
+    memset(status, 0, sizeof(*status));
+    result = compat_operation(
+        headless, C35_OPERATION_COMPLETION, NULL, command, &token);
+    if (result != C35_OK) return result;
+    result = drive_to_done(headless, &token, budget, status);
+    record = record_find(headless, &token);
+    if (record != NULL && record->commit_state == C35_COMMIT_COMMITTED) {
+        *semantic = record->semantic;
+        *intent = record->intent;
+        *publication = record->publication;
+    }
+    return compat_retire_finished(headless, &token, result, status);
+}
+
 enum c35_result c35_headless_complete_observed(
     struct c35_headless *headless,
     const struct fwlab_c31_command_handle *command,
@@ -1693,25 +1932,10 @@ enum c35_result c35_headless_complete_observed(
     struct c35_publication *publication
 )
 {
-    struct c35_operation_token token;
     struct c35_operation_status status;
-    struct c35_operation_record *record;
-    enum c35_result result;
 
-    if (semantic == NULL || intent == NULL || publication == NULL)
-        return C35_INVALID;
-    result = c35_completion_start(headless, command, &token);
-    if (result != C35_OK) return result;
-    result = drive_to_done(headless, &token, 8192, &status);
-    record = record_find(headless, &token);
-    if (record != NULL && record->commit_state == C35_COMMIT_COMMITTED) {
-        *semantic = record->semantic;
-        *intent = record->intent;
-        *publication = record->publication;
-    }
-    if (status.call_state == C35_CALL_DONE)
-        (void)c35_operation_retire(headless, &token);
-    return result;
+    return c35_headless_complete_status(
+        headless, command, 8192, semantic, intent, publication, &status);
 }
 
 enum c35_result c35_headless_complete(
@@ -1750,26 +1974,56 @@ enum c35_result c35_headless_pump_quiescent(
     return C35_IN_PROGRESS;
 }
 
-static enum c35_result control_observed(
+static enum c35_result control_status(
     struct c35_headless *headless,
     uint8_t kind,
-    uint32_t limit,
-    struct c35_publication *publication
+    uint32_t budget,
+    struct c35_publication *publication,
+    struct c35_operation_status *status
 )
 {
     struct c35_operation_token token;
-    struct c35_operation_status status;
-    enum c35_result result = kind == C35_OPERATION_RESET ?
-        c35_reset_start(headless, &token) : c35_teardown_start(headless, &token);
+    enum c35_result result;
 
-    memset(&status, 0, sizeof(status));
+    if (headless == NULL || status == NULL) return C35_INVALID;
+    memset(status, 0, sizeof(*status));
+    if (publication != NULL) memset(publication, 0, sizeof(*publication));
+    if (kind == C35_OPERATION_TEARDOWN && !headless->compat_active &&
+        headless->compat_tombstone_valid) {
+        *status = headless->compat_tombstone_status;
+        status->units_used = 0;
+        if (status->publication_valid && publication != NULL)
+            *publication = status->publication;
+        return (enum c35_result)status->outcome;
+    }
+    result = compat_operation(headless, kind, NULL, NULL, &token);
     if (result != C35_OK) return result;
-    result = drive_to_done(headless, &token, limit, &status);
-    if (status.publication_valid && publication != NULL)
-        *publication = status.publication;
-    if (status.call_state == C35_CALL_DONE)
-        (void)c35_operation_retire(headless, &token);
-    return result;
+    result = drive_to_done(headless, &token, budget, status);
+    if (status->publication_valid && publication != NULL)
+        *publication = status->publication;
+    return compat_retire_finished(headless, &token, result, status);
+}
+
+enum c35_result c35_headless_reset_status(
+    struct c35_headless *headless,
+    uint32_t budget,
+    struct c35_publication *publication,
+    struct c35_operation_status *status
+)
+{
+    return control_status(
+        headless, C35_OPERATION_RESET, budget, publication, status);
+}
+
+enum c35_result c35_headless_teardown_status(
+    struct c35_headless *headless,
+    uint32_t budget,
+    struct c35_publication *publication,
+    struct c35_operation_status *status
+)
+{
+    return control_status(
+        headless, C35_OPERATION_TEARDOWN, budget, publication, status);
 }
 
 enum c35_result c35_headless_reset_observed(
@@ -1778,8 +2032,9 @@ enum c35_result c35_headless_reset_observed(
     struct c35_publication *publication
 )
 {
-    return control_observed(
-        headless, C35_OPERATION_RESET, limit, publication);
+    struct c35_operation_status status;
+
+    return c35_headless_reset_status(headless, limit, publication, &status);
 }
 
 enum c35_result c35_headless_reset(
@@ -1797,8 +2052,10 @@ enum c35_result c35_headless_teardown_observed(
     struct c35_publication *publication
 )
 {
-    return control_observed(
-        headless, C35_OPERATION_TEARDOWN, limit, publication);
+    struct c35_operation_status status;
+
+    return c35_headless_teardown_status(
+        headless, limit, publication, &status);
 }
 
 enum c35_result c35_headless_teardown(

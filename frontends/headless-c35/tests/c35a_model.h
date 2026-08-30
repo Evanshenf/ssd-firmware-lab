@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 
-#define C35A_MODEL_FAMILIES 14u
+#define C35A_MODEL_FAMILIES 16u
 #define C35A_MODEL_STATE_CAP 8192u
 #define C35A_MODEL_DEPTH_CAP 20u
 #define C35A_MODEL_SUCCESSOR_CAP 6u

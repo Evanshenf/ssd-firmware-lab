@@ -58,6 +58,7 @@ MODEL_A_BIN := $(BUILD_DIR)/c35a_model
 BROKEN_A_BIN := $(BUILD_DIR)/c35a_broken
 POISON_BIN := $(BUILD_DIR)/c35_poison_cleanup_tests
 TAKEOVER_BIN := $(BUILD_DIR)/c35_phase_takeover_tests
+WRAPPER_BIN := $(BUILD_DIR)/c35_wrapper_recovery_tests
 LANE_S_BIN := $(BUILD_DIR)/c35_lane_s
 LANE_M_BIN := $(BUILD_DIR)/c35_lane_m
 LANE_B_BIN := $(BUILD_DIR)/c35_lane_b
@@ -237,6 +238,14 @@ $(TAKEOVER_BIN): $(FW_ARCHIVE) $(HEADLESS_SOURCES) $(NFC_SOURCES) \
 		$(FILE_SOURCES) $(TEST_SUPPORT) tests/test_phase_takeover.c \
 		$(FW_ARCHIVE)
 
+$(WRAPPER_BIN): $(FW_ARCHIVE) $(HEADLESS_SOURCES) $(NFC_SOURCES) \
+		$(FIXTURE_SOURCES) $(FILE_SOURCES) $(TEST_SUPPORT) \
+		tests/c35_fault_binding.c tests/test_wrapper_recovery.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ \
+		$(HEADLESS_SOURCES) $(NFC_SOURCES) $(FIXTURE_SOURCES) \
+		$(FILE_SOURCES) $(TEST_SUPPORT) tests/c35_fault_binding.c \
+		tests/test_wrapper_recovery.c $(FW_ARCHIVE)
+
 $(OWNERSHIP_BIN): $(FW_ARCHIVE) $(HEADLESS_SOURCES) $(NFC_SOURCES) \
 		$(FIXTURE_SOURCES) $(FILE_SOURCES) $(TEST_SUPPORT) \
 		tests/test_ownership.c | $(BUILD_DIR)
@@ -282,7 +291,7 @@ check-gcc: $(GRAD_BIN) $(RESET_BIN) $(ISOLATION_BIN) $(GEOMETRY_BIN) \
 	$(POSIX_BIN) $(MODEL_BIN) $(BROKEN_BIN) $(THREAD_BIN) $(OWNERSHIP_BIN) \
 	$(TRACE_BIN) $(TRANSACTION_BIN) $(LIMITS_BIN) $(TWO_ATOM_BIN) \
 	$(PROFILE_BIN) $(MODEL_A_BIN) $(BROKEN_A_BIN) $(POISON_BIN) \
-	$(TAKEOVER_BIN) \
+	$(TAKEOVER_BIN) $(WRAPPER_BIN) \
 	$(LANE_BINS)
 	$(GRAD_BIN)
 	$(RESET_BIN)
@@ -302,6 +311,7 @@ check-gcc: $(GRAD_BIN) $(RESET_BIN) $(ISOLATION_BIN) $(GEOMETRY_BIN) \
 	$(BROKEN_A_BIN)
 	$(POISON_BIN)
 	$(TAKEOVER_BIN)
+	$(WRAPPER_BIN)
 	$(LANE_S_BIN) life >/dev/null
 	$(LANE_M_BIN) life >/dev/null
 	$(LANE_B_BIN) life >/dev/null

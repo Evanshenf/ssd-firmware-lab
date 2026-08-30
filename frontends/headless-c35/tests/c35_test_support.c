@@ -1062,29 +1062,22 @@ enum c35_result c35_run_command_status(
 )
 {
     struct fwlab_c31_command_handle command;
-    struct c35_operation_token token;
+    struct fwlab_c31_completion_intent intent;
+    struct c35_publication publication;
     enum c35_result operation;
-    unsigned int iteration;
 
     if (runtime == NULL || request == NULL || result == NULL || status == NULL)
         return C35_INVALID;
     operation = c35_headless_submit(&runtime->headless, request, &command);
     if (operation != C35_OK) return operation;
-    operation = c35_completion_start(&runtime->headless, &command, &token);
-    if (operation != C35_OK) return operation;
-    memset(status, 0, sizeof(*status));
-    for (iteration = 0; iteration < 8192; ++iteration) {
-        operation = c35_operation_progress(
-            &runtime->headless, &token, 1, status);
-        if (operation == C35_OK || operation != C35_IN_PROGRESS) break;
-    }
+    operation = c35_headless_complete_status(
+        &runtime->headless, &command, 8192, result, &intent, &publication,
+        status);
     if (status->publication_valid) {
         *result = status->publication.semantic;
         (void)observe_publication(runtime, &status->publication);
     }
-    if (status->call_state == C35_CALL_DONE)
-        (void)c35_operation_retire(&runtime->headless, &token);
-    return operation == C35_OK ? (enum c35_result)status->outcome : operation;
+    return operation;
 }
 
 int c35_run_command(

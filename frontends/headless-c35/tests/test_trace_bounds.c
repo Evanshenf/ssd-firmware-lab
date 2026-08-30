@@ -163,6 +163,134 @@ static int test_reservation_and_capacity(void)
     return 1;
 }
 
+static int invalid_trace_rejected(
+    struct c35_trace *trace,
+    const struct c35_publication *publication
+)
+{
+    struct c35_trace before = *trace;
+    struct c35_trace_reservation reservation;
+    enum c35_observation_state state = C35_OBSERVATION_NONE;
+
+    memset(&reservation, 0, sizeof(reservation));
+    CHECK(!c35_trace_valid(trace));
+    CHECK(c35_trace_hash(trace) == 0);
+    CHECK(c35_trace_reserve(
+        trace, publication->publication_uid, C35_TRACE_EVENT_BYTES,
+        &reservation) == C35_INVALID);
+    CHECK(c35_trace_query(trace, &reservation, &state) == C35_INVALID);
+    CHECK(c35_trace_append(trace, publication) == C35_INVALID);
+    CHECK(memcmp(&before, trace, sizeof(before)) == 0);
+    return 1;
+}
+
+static int test_metadata_coherence(void)
+{
+    struct c35_publication publication = publication_make(0x3501);
+    struct c35_publication invalid_publication;
+    struct c35_trace empty;
+    struct c35_trace recorded;
+    struct c35_trace corrupt;
+    struct c35_trace_reservation reservation;
+    uint8_t projection[3] = {1, 2, 3};
+
+    c35_trace_init(&empty, 5);
+    invalid_publication = publication;
+    invalid_publication.commit_state = 0;
+    corrupt = empty;
+    CHECK(c35_trace_append(&corrupt, &invalid_publication) == C35_INVALID);
+    CHECK(memcmp(&corrupt, &empty, sizeof(empty)) == 0);
+    corrupt = empty;
+    corrupt.last_recorded_uid = publication.publication_uid;
+    corrupt.last_recorded_generation = 1;
+    corrupt.last_recorded_offset = C35_TRACE_HEADER_BYTES;
+    CHECK(invalid_trace_rejected(&corrupt, &publication));
+
+    recorded = empty;
+    CHECK(c35_trace_append(&recorded, &publication) == C35_OK);
+    CHECK(recorded.events == 1 && c35_trace_valid(&recorded));
+    CHECK(c35_trace_reserve(
+        &recorded, publication.publication_uid, C35_TRACE_EVENT_BYTES,
+        &reservation) == C35_OK);
+    {
+        struct c35_trace before = recorded;
+        struct c35_trace_reservation forged = reservation;
+        enum c35_observation_state state;
+
+        ++forged.offset;
+        CHECK(c35_trace_query(&recorded, &forged, &state) == C35_STALE);
+        CHECK(c35_trace_commit(&recorded, &forged, &publication) ==
+              C35_INVALID);
+        CHECK(memcmp(&before, &recorded, sizeof(before)) == 0);
+        forged = reservation;
+        forged.reserved = 1;
+        CHECK(c35_trace_query(&recorded, &forged, &state) == C35_STALE);
+        CHECK(c35_trace_commit(&recorded, &forged, &publication) ==
+              C35_INVALID);
+        CHECK(memcmp(&before, &recorded, sizeof(before)) == 0);
+    }
+
+    corrupt = recorded;
+    corrupt.last_recorded_uid ^= UINT64_C(0x10);
+    CHECK(invalid_trace_rejected(&corrupt, &publication));
+
+    corrupt = recorded;
+    ++corrupt.last_recorded_generation;
+    CHECK(invalid_trace_rejected(&corrupt, &publication));
+
+    corrupt = recorded;
+    ++corrupt.last_recorded_offset;
+    CHECK(invalid_trace_rejected(&corrupt, &publication));
+
+    corrupt = recorded;
+    corrupt.bytes[C35_TRACE_HEADER_BYTES + 84u] ^= 1u;
+    CHECK(invalid_trace_rejected(&corrupt, &publication));
+
+    corrupt = recorded;
+    corrupt.bytes[C35_TRACE_HEADER_BYTES + 72u] ^= 1u;
+    CHECK(invalid_trace_rejected(&corrupt, &publication));
+
+    corrupt = recorded;
+    corrupt.bytes[C35_TRACE_HEADER_BYTES + 16u] = 1;
+    CHECK(invalid_trace_rejected(&corrupt, &publication));
+
+    CHECK(c35_trace_append_projection(
+        &recorded, 0x80, projection, sizeof(projection)) == C35_OK);
+    CHECK(c35_trace_valid(&recorded));
+    corrupt = recorded;
+    CHECK(c35_trace_reserve(
+        &corrupt, publication.publication_uid, C35_TRACE_EVENT_BYTES,
+        &reservation) == C35_OK);
+    CHECK(reservation.state == C35_OBSERVATION_RECORDED &&
+          reservation.offset == C35_TRACE_HEADER_BYTES);
+    CHECK(c35_trace_commit(
+        &corrupt, &reservation, &publication) == C35_OK);
+    CHECK(memcmp(&corrupt, &recorded, sizeof(recorded)) == 0);
+
+    CHECK(c35_trace_reserve(
+        &recorded, 0x3502, C35_TRACE_EVENT_BYTES, &reservation) == C35_OK);
+    CHECK(c35_trace_valid(&recorded));
+    {
+        struct c35_trace before = recorded;
+        struct c35_trace_reservation forged = reservation;
+        enum c35_observation_state state;
+
+        --forged.length;
+        CHECK(c35_trace_query(&recorded, &forged, &state) == C35_STALE);
+        CHECK(c35_trace_cancel(&recorded, &forged) == C35_STALE);
+        CHECK(memcmp(&before, &recorded, sizeof(before)) == 0);
+    }
+    corrupt = recorded;
+    corrupt.active_generation = corrupt.last_recorded_generation;
+    CHECK(invalid_trace_rejected(&corrupt, &publication));
+    corrupt = recorded;
+    corrupt.active_uid = corrupt.last_recorded_uid;
+    CHECK(invalid_trace_rejected(&corrupt, &publication));
+    CHECK(c35_trace_cancel(&recorded, &reservation) == C35_OK);
+    CHECK(c35_trace_valid(&recorded));
+    return 1;
+}
+
 static int test_rejected_property(void)
 {
     struct c35_trace trace;
@@ -198,7 +326,8 @@ int main(void)
     CHECK(test_projection_boundaries());
     CHECK(test_corrupt_lengths());
     CHECK(test_reservation_and_capacity());
+    CHECK(test_metadata_coherence());
     CHECK(test_rejected_property());
-    puts("C3.5a trace/observer bounds: PASS");
+    puts("C3.5b trace/observer bounds+metadata: PASS");
     return 0;
 }

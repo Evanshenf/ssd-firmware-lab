@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Build and byte-compare C3.5a S/M/B/P projections on three 64-bit ABIs."""
+"""Build and byte-compare C3.5b S/M/B/P projections on three 64-bit ABIs."""
 
 from __future__ import annotations
 
@@ -112,9 +112,9 @@ def main() -> int:
                 reference[("two-atom", "m")]).hexdigest(),
         }
     except (RuntimeError, subprocess.CalledProcessError, OSError) as error:
-        print(f"C3.5a cross ABI: FAIL: {error}", file=sys.stderr)
+        print(f"C3.5b cross ABI: FAIL: {error}", file=sys.stderr)
         return 1
-    print("C3.5a cross ABI: PASS (native/aarch64/riscv64/s390x; "
+    print("C3.5b cross ABI: PASS (native/aarch64/riscv64/s390x; "
           "s390x big-endian proven) " + " ".join(
               f"{key}={value}" for key, value in hashes.items()))
     return 0

@@ -9,7 +9,7 @@
 
 #include "c35_publication.h"
 
-#define C35_TRACE_VERSION 2u
+#define C35_TRACE_VERSION 3u
 #define C35_TRACE_BYTES 65536u
 #define C35_TRACE_HEADER_BYTES 16u
 #define C35_TRACE_EVENT_BYTES 96u
@@ -41,6 +41,7 @@ struct c35_trace {
     uint64_t active_uid;
     uint64_t last_recorded_uid;
     uint32_t last_recorded_generation;
+    uint32_t last_recorded_offset;
     uint32_t reserved;
 };
 
