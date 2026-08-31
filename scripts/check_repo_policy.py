@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "54279e935362fbfc0fc4199b84a06c4260ef43f4"
+EXPECTED_C4_2_CANDIDATE = "0b78a2cba0b6759f66f4a3aacbf935f8378e8ba9"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -816,7 +816,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/hif/c42_runtime.c":
         "350f5b897fd632fbb5ba8388b3c7b109dc30f797c8b996cc7c376aa003c34a29",
     "frontends/headless-c4/fakes/c42_command.c":
-        "34003416e9b344a1a41e779f6d5b06befe89e9c1a85933a87a1a8ec9ffebb7da",
+        "b268046dac07a2ce51182a1b87c03bd21cc81107c412dc4320092afd71075359",
     "frontends/headless-c4/fakes/c42_command.h":
         "536060ab7db30230342d4c211eddac89fc6e7a13e81cb073f0fd4b4ecafa9c7e",
     "frontends/headless-c4/fakes/c42_event.c":

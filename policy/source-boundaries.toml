@@ -469,7 +469,7 @@ allowed_unfrozen_names = []
 status = "transitional_review_hold"
 baseline_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
 historical_source_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
-candidate_implementation_commit = "54279e935362fbfc0fc4199b84a06c4260ef43f4"
+candidate_implementation_commit = "0b78a2cba0b6759f66f4a3aacbf935f8378e8ba9"
 closed_build_input_roots = [
   ".github/workflows/c4-portable.yml",
   "docs/legal/c4-2-source-boundary-review.md",
@@ -567,7 +567,7 @@ allowed_unfrozen_names = []
 "frontends/headless-c4/hif/c42_queue.c" = "97510d09d250bc39b9b7e3e230e5378c5727d12c5b5865cfe9ab70e194d3fcd3"
 "frontends/headless-c4/hif/c42_publication.c" = "f29bf0221c504c37a7111ce3731c7251e927d4866b9d3870093635e11e31a726"
 "frontends/headless-c4/hif/c42_runtime.c" = "350f5b897fd632fbb5ba8388b3c7b109dc30f797c8b996cc7c376aa003c34a29"
-"frontends/headless-c4/fakes/c42_command.c" = "34003416e9b344a1a41e779f6d5b06befe89e9c1a85933a87a1a8ec9ffebb7da"
+"frontends/headless-c4/fakes/c42_command.c" = "b268046dac07a2ce51182a1b87c03bd21cc81107c412dc4320092afd71075359"
 "frontends/headless-c4/fakes/c42_command.h" = "536060ab7db30230342d4c211eddac89fc6e7a13e81cb073f0fd4b4ecafa9c7e"
 "frontends/headless-c4/fakes/c42_event.c" = "e9db0d359161c5da4aff0c078542e706c57e97eea19771331e9c783765ec64b8"
 "frontends/headless-c4/fakes/c42_event.h" = "9bce30b60adbd484d820bb8a1c89ea53db9ed3dc4b4a798766677b00a6a26e3e"
