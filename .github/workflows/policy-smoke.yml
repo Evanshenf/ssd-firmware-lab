@@ -19,7 +19,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          fetch-depth: 2
+          # The policy proves ancestry back to immutable historical sources.
+          fetch-depth: 0
           persist-credentials: false
       - name: Run unprivileged repository checks
         run: make check
