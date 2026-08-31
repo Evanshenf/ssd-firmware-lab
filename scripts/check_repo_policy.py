@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "52fdf07a38cde61e5098d0c81dc5c14c48449475"
+EXPECTED_C4_2_CANDIDATE = "415a294d502a1fa37be6c77a40e243d41c8d3e37"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -749,7 +749,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
 EXPECTED_C4_2_UNFROZEN_NAMES: list[str] = []
 EXPECTED_C4_2_FILES = {
     ".github/workflows/c4-portable.yml":
-        "c440f7e4b23ec4e2f60ce9ba0477d7074f561a73bb0a73cffb3eadfbfac1b1ca",
+        "e51fd9c9ce0c2c0c12a09c633cb97cf0eb1a9f4cf9ab85d38c276f183c3efca6",
     "docs/legal/c4-2-source-boundary-review.md":
         "a31b0df5e067abedce68b55d0f0d7fcf7a817bfaacfbcb21acdf94747fecf195",
     "docs/legal/c4-2a-source-boundary-review.md":
