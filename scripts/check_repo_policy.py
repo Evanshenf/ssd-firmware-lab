@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "0b78a2cba0b6759f66f4a3aacbf935f8378e8ba9"
+EXPECTED_C4_2_CANDIDATE = "bda2ecc0b54c5c17f7a4920ade5a40d4a398727b"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -760,7 +760,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
 EXPECTED_C4_2_UNFROZEN_NAMES: list[str] = []
 EXPECTED_C4_2_FILES = {
     ".github/workflows/c4-portable.yml":
-        "e51fd9c9ce0c2c0c12a09c633cb97cf0eb1a9f4cf9ab85d38c276f183c3efca6",
+        "1bd9790c1958f395dc2cecae81f932e4e33cb2cb92f42041ee2b4bd27193b3fa",
     "docs/legal/c4-2-source-boundary-review.md":
         "a31b0df5e067abedce68b55d0f0d7fcf7a817bfaacfbcb21acdf94747fecf195",
     "docs/legal/c4-2a-source-boundary-review.md":
@@ -778,7 +778,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/c42_sources.mk":
         "c1f4846884e7ca25244346f9c5c0b2e1eb805bd2ff1db0566d1b37db45b2b037",
     "frontends/headless-c4/evidence/c42a-p1/authority.lock.toml":
-        "79086c6724de1821239d607745177db8444373508370e5c6e5b74d23dcc0bad8",
+        "85b1c85bbddfd70803278f8e170ebd3ba0e6c973ea50fa0a56f30b51c18bbd77",
     "frontends/headless-c4/evidence/c42a-p1/build-trust.toml":
         "a653f91c681aac574514515dab261f1a37f9639e0e798ea93c2e7dd5b594ef89",
     "frontends/headless-c4/evidence/c42a-p1/c35-reference.toml":
