@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "e3cc589716dd061fcd7a7a6ab31ef5ee6e5d90e0"
+EXPECTED_C4_2_CANDIDATE = "98c3a72dd40f2d545caafc79293e37c92ba5d586"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -775,17 +775,17 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/hif/c42_runtime.c":
         "350f5b897fd632fbb5ba8388b3c7b109dc30f797c8b996cc7c376aa003c34a29",
     "frontends/headless-c4/fakes/c42_command.c":
-        "7d78540900bc21f484585e98a15c3530f6810ded23f2623cec2bf829ee826476",
+        "d8b702445259ae2820bd697d981ce843d3c6ae96a9a2fab91ab36a57af7c93bd",
     "frontends/headless-c4/fakes/c42_command.h":
-        "84daddbd6aa2b7a2434e717ad9c1dcc102983c8b0b549926cc489c5ecd44a896",
+        "8314fe7ac54d6167a5ef5db8cb55e2364a914966f698e4a41b55d9499ddfe2c4",
     "frontends/headless-c4/fakes/c42_event.c":
         "e9db0d359161c5da4aff0c078542e706c57e97eea19771331e9c783765ec64b8",
     "frontends/headless-c4/fakes/c42_event.h":
         "9bce30b60adbd484d820bb8a1c89ea53db9ed3dc4b4a798766677b00a6a26e3e",
     "frontends/headless-c4/fakes/c42_memory.c":
-        "bca2953bcb4c8ddc58467c3179a5dfe096142536e8008ad74c78b65038b6fc62",
+        "deabc7b5c79f835f395b76bb9263ab7eb3a900063de295494d25f18fb764fe34",
     "frontends/headless-c4/fakes/c42_memory.h":
-        "53d8c35c149db20e89f75c6bab743ecd9450c81210f09bece937526b2210f406",
+        "9847f3543e4435adc4fdcf51cdc74a82acaf1c889681d5174925c209a20e5c58",
     "frontends/headless-c4/fakes/c42_fake_main.c":
         "e0479faa676ac64e4083b637ef8b965ffcc2ad019d9382ab60db49c1771594a1",
     "frontends/headless-c4/tests/c42_support.c":
@@ -811,9 +811,9 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/test_c42_remediation.c":
         "b580298d4909d440251a601377a2a9201bf359948ea652665e881d4ba17a51a9",
     "frontends/headless-c4/tests/test_c42_provider_matrix.c":
-        "5d729367789304ac00a89a94e84e635f8b575b96e8fc0eab1dc0858ae3994ba4",
+        "821aca526b3e5c8cfc2bb3a7c983bedb11e3b4198a86ee81d07cd90dce464095",
     "frontends/headless-c4/tests/test_c42_phase_cuts.c":
-        "18f162116ef70add163896ec65fbb5f523c1f0b56c61118f47f9616487f602ba",
+        "b32a195e6c060ae218776d2dbe486221f3c495557ae4fc5f9a416d5d31aa7844",
     "frontends/headless-c4/tests/test_c42_dut_replay.c":
         "ba22cf5ccef5839adbf9ea7643df8a93e81894e2f7b3ca1c0219274f9f5899fe",
     "frontends/headless-c4/tests/test_c42_public_abi.c":
@@ -839,15 +839,15 @@ EXPECTED_C4_2_FILES = {
     "scripts/check_c42_cross.py":
         "af3b932ab6588d91f4ea5841671c241c26c73ed64be0d920ea79e69e48be57ff",
     "scripts/check_c42_dynamic_mutations.py":
-        "95e25c90660d7b8bfb2094aafa814e78688439c9296120140f68c2b66496c62c",
+        "73678399c121ac1703d60100af7065a51307cdd84cec8a4aebfb0e1218a2fa2c",
     "scripts/check_c42_make_integrity.py":
         "be08f2e4742ced60cbe1553f0138a827f49dc37b004bd7f8ae0a45830893352d",
     "scripts/check_c42_provider_mutations.py":
-        "efbecbe07e657af4403cbe124c3beaf11c424e69188a88a722f5e33ab6458f30",
+        "89fb0c4b519792b4c9ca13dbf765c8de82e784acd2c53e03fb41ba180bebae6a",
     "scripts/check_c42_runner_integrity.py":
-        "579ebedbd3a667f371349e0cfa8c2c30ead64bb6fd97d231178c46d78023ea51",
+        "dc3f3694f3153d43ec357e5f52d773225f0a6350a8515e1614dd6891ceed45bb",
     "scripts/run_c42_gate.py":
-        "05449388b5dfff71aa04785349ef48db9a39a716e2bcc754d8371a738c7353cb",
+        "dc54decd65fc7ba1f57db2197dde41a56f8abede64e3de0890e9d2451afaa47e",
 }
 
 EXPECTED_FREEZES = {
