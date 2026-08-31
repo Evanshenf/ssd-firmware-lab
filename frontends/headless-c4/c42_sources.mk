@@ -51,6 +51,7 @@ override C42_CHECK_TARGETS := check-c42-build-closure \
 	check-c42-local-determinism check-c42-architecture \
 	check-c42-dynamic-mutations check-c42-replay \
 	check-c42-provider-mutations check-c42-make-integrity \
+	check-c42-authority \
 	check-c42-runner-integrity \
 	check-c42-artifact-receipt
 override C42_BUILD_TEST_TARGETS := check-c42-build-closure \

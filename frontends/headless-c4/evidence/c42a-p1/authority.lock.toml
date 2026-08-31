@@ -69,7 +69,7 @@ node_id = "c42_make"
 node_type = "recipe"
 execution_mode = "bound_recipe"
 path = "frontends/headless-c4/Makefile"
-sha256 = "dd4da0aef5fa9235d5dacc9e4d2ee3cf87c23847fde6ae6478cb939498d6bcba"
+sha256 = "bed72e86586beb4f13a85d2b74e6afce75b75b602cbde4804b49816828c564e5"
 mode = 420
 
 [[identities]]
@@ -77,7 +77,7 @@ node_id = "c42_sources"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/c42_sources.mk"
-sha256 = "f9fcc9715f08c6d9163f143473c1fa0cd4d1eae57f15b1a7c8f51655d171c6cd"
+sha256 = "3454ae17226f2468ea17f0bc689fa8aefa2d068741fd0ce5a886392740e4d5f7"
 mode = 420
 
 [[identities]]

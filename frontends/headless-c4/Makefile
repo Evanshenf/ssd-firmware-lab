@@ -149,6 +149,7 @@ C42_RECEIPT := $(BUILD_DIR)/c42_execution.receipt
 	check-c42-architecture check-c42-remediation check-c42-build-closure \
 	check-c42-dynamic-mutations check-c42-replay \
 	check-c42-provider-mutations check-c42-make-integrity \
+	check-c42-authority \
 	check-c42-runner-integrity \
 	check-c42-claim-models \
 	check-c42-build-tests \
@@ -302,6 +303,9 @@ check-c42-make-integrity:
 
 check-c42-runner-integrity:
 	python3 ../../scripts/check_c42_runner_integrity.py
+
+check-c42-authority:
+	PYTHONDONTWRITEBYTECODE=1 python3 ../../scripts/check_c42_authority.py
 
 check-c42-claim-models:
 	PYTHONDONTWRITEBYTECODE=1 python3 \
