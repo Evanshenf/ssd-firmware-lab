@@ -466,16 +466,17 @@ allowed_unfrozen_names = []
 "docs/results/2026-08-30-c4-1-source-profile-wire.md" = "976749d535542c110fc4138e9c120a1e431afeb53e6af4a5b1a3de2ba388db23"
 
 [freeze.c4_2]
-status = "transitional_review_hold"
+status = "fixed_profile_reviewed"
 baseline_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
 historical_source_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
-candidate_implementation_commit = "7f0c5a73a64e8e3ed89e9dcd829ef0a2a3820283"
+candidate_implementation_commit = "4bb4e567250ffb9e76831c6094e3f97cdf7bc56d"
 closed_build_input_roots = [
   ".github/workflows/c4-portable.yml",
   "docs/legal/c4-2-source-boundary-review.md",
   "docs/legal/c4-2a-source-boundary-review.md",
   "docs/results/2026-08-30-c4-2-headless-queue-hif.md",
   "docs/results/2026-08-30-c4-2-post-review-hold.md",
+  "docs/results/2026-08-31-c4-2a-reviewed-evidence-closure.md",
   "include/fwlab/contracts/hif_command_port.h",
   "frontends/headless-c35/Makefile",
   "frontends/headless-c4/Makefile",
@@ -540,7 +541,8 @@ allowed_unfrozen_names = []
 "docs/legal/c4-2-source-boundary-review.md" = "a31b0df5e067abedce68b55d0f0d7fcf7a817bfaacfbcb21acdf94747fecf195"
 "docs/legal/c4-2a-source-boundary-review.md" = "5b134cebf5bb28805b8766d7a7e2736059290cb927e31e9f3888f3dbd5d07c66"
 "docs/results/2026-08-30-c4-2-headless-queue-hif.md" = "dfd89d593b026d2d8722d54d768cc484be6f3b83ba065980de9c1aa62477fd28"
-"docs/results/2026-08-30-c4-2-post-review-hold.md" = "78228c749010e472f81b0ab32b403088ea5ff45b5b5e6145dbec0b5fc468898a"
+"docs/results/2026-08-30-c4-2-post-review-hold.md" = "997eefaaca699daed14f07a73b9ecd6a007557d7f607db9ff8ba3246fd3cded3"
+"docs/results/2026-08-31-c4-2a-reviewed-evidence-closure.md" = "3d5db76bba1744d2dd3b6319f5607cce7021b2e698240b67de6bea0373e9bad9"
 "include/fwlab/contracts/hif_command_port.h" = "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519"
 "frontends/headless-c35/Makefile" = "7af3bbf41d0de37c41e1e0a20c1002109bfaceab435df576f97ccf54be0d0e62"
 "frontends/headless-c4/Makefile" = "84fad64fba504f890a7e1912dc639b9ee5e19fb5666e3fb028803c587807565a"

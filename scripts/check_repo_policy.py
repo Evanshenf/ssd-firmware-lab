@@ -688,15 +688,16 @@ EXPECTED_C4_1_FILES = {
         "976749d535542c110fc4138e9c120a1e431afeb53e6af4a5b1a3de2ba388db23",
 }
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_STATUS = "transitional_review_hold"
+EXPECTED_C4_2_STATUS = "fixed_profile_reviewed"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "7f0c5a73a64e8e3ed89e9dcd829ef0a2a3820283"
+EXPECTED_C4_2_CANDIDATE = "4bb4e567250ffb9e76831c6094e3f97cdf7bc56d"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
     "docs/legal/c4-2a-source-boundary-review.md",
     "docs/results/2026-08-30-c4-2-headless-queue-hif.md",
     "docs/results/2026-08-30-c4-2-post-review-hold.md",
+    "docs/results/2026-08-31-c4-2a-reviewed-evidence-closure.md",
     "include/fwlab/contracts/hif_command_port.h",
     "frontends/headless-c35/Makefile",
     "frontends/headless-c4/Makefile",
@@ -765,7 +766,9 @@ EXPECTED_C4_2_FILES = {
     "docs/results/2026-08-30-c4-2-headless-queue-hif.md":
         "dfd89d593b026d2d8722d54d768cc484be6f3b83ba065980de9c1aa62477fd28",
     "docs/results/2026-08-30-c4-2-post-review-hold.md":
-        "78228c749010e472f81b0ab32b403088ea5ff45b5b5e6145dbec0b5fc468898a",
+        "997eefaaca699daed14f07a73b9ecd6a007557d7f607db9ff8ba3246fd3cded3",
+    "docs/results/2026-08-31-c4-2a-reviewed-evidence-closure.md":
+        "3d5db76bba1744d2dd3b6319f5607cce7021b2e698240b67de6bea0373e9bad9",
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c35/Makefile":

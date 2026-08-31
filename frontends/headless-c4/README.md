@@ -69,9 +69,16 @@ private temporary directory and is part of the C4.2 input closure. Direct Make
 targets remain useful defense-in-depth and developer workflows, but
 dry-run/touch/extra-makefile invocations are not evidence.
 
-The C4.2 gate covers exact depths 2/3/4/32, 12 bounded-model families, 35
-production-source mutations, nine architecture mutations, 18 provider
-variations, 33 reset cut points, 64 deterministic fuzz executions and 64
-different-instance thread repeats.
+The reviewed C4.2/C4.2a gate covers exact depths 2/3/4/32, 12 bounded-model
+families, 51 retained dynamic source mutants, nine architecture mutations, 26
+provider variations, 33 reset cut points, 64 deterministic fuzz executions and
+64 different-instance thread repeats. Mutation adequacy is reported separately
+as 32 explicit source/substitution canaries (`12 + 7 + 9 + 4`), not as the full
+643-field positive semantic inventory. The authoritative runtime receipt has 14
+direct rows and binds a 25-node logical build DAG.
+
+Exact candidate `4bb4e567250ffb9e76831c6094e3f97cdf7bc56d` is frozen as
+`FIXED_PROFILE_REVIEWED`; see the
+[reviewed evidence closure](../../docs/results/2026-08-31-c4-2a-reviewed-evidence-closure.md).
 It does not implement NVMe command legality, Admin commands, PRP/data DMA,
 storage, BAR/MMIO, interrupts, PCI, QEMU or vfio-user.

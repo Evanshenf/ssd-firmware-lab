@@ -29,3 +29,4 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 - [2026-08-30: C4.1 source/profile/wire software oracle](2026-08-30-c4-1-source-profile-wire.md)
 - [2026-08-30: C4.2 recorded queue/CQ/identity suite (superseded)](2026-08-30-c4-2-headless-queue-hif.md)
 - [2026-08-30: C4.2 post-review hold and C4.2a requirement](2026-08-30-c4-2-post-review-hold.md)
+- [2026-08-31: C4.2a reviewed fixed-profile evidence closure](2026-08-31-c4-2a-reviewed-evidence-closure.md)

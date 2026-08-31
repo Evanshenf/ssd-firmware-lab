@@ -6,7 +6,13 @@
 - Date: 2026-08-30
 - Reviewed source: `905a01e9e140a7bda2810db92118f5693b196ac1`
 - Reviewed evidence HEAD: `5df035d31deb5f39ed112154b51f897e43136188`
-- Disposition: **CRITICAL REMAINS / REVIEW HOLD / C4.2a REQUIRED**
+- Disposition: **CLOSED / FIXED_PROFILE_REVIEWED**
+
+Follow-up status: the finite C4.2a recovery at
+`4bb4e567250ffb9e76831c6094e3f97cdf7bc56d` received exact local and hosted
+attestation followed by a targeted confirmed-closed review. The separate
+[reviewed evidence closure](2026-08-31-c4-2a-reviewed-evidence-closure.md)
+removes this hold for that candidate only.
 
 The original C4.2 build, sanitizer, analyzer, model, cross-ISA and repository
 suites completed successfully, and their recorded output remains reproducible.
@@ -52,6 +58,6 @@ association, scrub retire start/query, reserve-time SQHD and fair per-record
 progress. It will publish a new source/evidence chain and update the current
 freeze only after full local and public CI success.
 
-This hold does not add protocol commands, PRP/data DMA, storage, NAND, PCI,
+This historical hold and its closure do not add protocol commands, PRP/data DMA, storage, NAND, PCI,
 BAR/MMIO, interrupts, QEMU/vfio-user or Linux-driver interoperability. It does
 not invalidate C4.1 or the frozen Cycle 03 components.
