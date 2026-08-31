@@ -99,7 +99,7 @@ struct c42_fake_memory {
     uint8_t direct_event_committed;
     uint8_t direct_event_quiescent;
     uint8_t direct_event_token_variant;
-    uint8_t reserved[1];
+    uint8_t provider_write_mask;
     struct c42_fake_memory_mapping sq_map[C42_MAX_QUEUE_PAIRS];
     struct c42_fake_memory_mapping cq_map[C42_MAX_QUEUE_PAIRS];
     struct c42_fake_memory_operation_record scrub[C42_MAX_QUEUE_PAIRS];

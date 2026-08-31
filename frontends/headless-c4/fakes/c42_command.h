@@ -137,6 +137,8 @@ struct c42_fake_command {
     uint8_t injection_write_mask;
     uint8_t injection_flags;
     uint8_t injection_object_variant;
+    uint8_t provider_write_mask;
+    uint8_t reserved_event[3];
     uint32_t injection_event_value;
     uint32_t injection_requested_effect;
     uint32_t injection_applied_effect;

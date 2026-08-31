@@ -279,6 +279,83 @@ def mutations() -> list[dict[str, object]]:
               "                record->state = C42_CONTROL_POISONED;\n"
               "            }")
          ]},
+        {"name": "BM_SQ_READY_NOT_SUPERSEDED",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        if (controller->candidates[index].in_use != 0) {\n"
+                    "            controller->candidates[index].state = C42_CANDIDATE_SUPERSEDED;\n"
+                    "        }",
+                    "        if (controller->candidates[index].in_use != 0 &&\n"
+                    "            !(controller->candidates[index].state ==\n"
+                    "                  C42_CANDIDATE_READY &&\n"
+                    "              controller->candidates[index].descriptor.kind ==\n"
+                    "                  C42_QUEUE_SQ)) {\n"
+                    "            controller->candidates[index].state =\n"
+                    "                C42_CANDIDATE_SUPERSEDED;\n"
+                    "        }")]},
+        {"name": "BM_POST_LP_TARGET_PREPARE",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_identity.c",
+                    "        controller->phase != C42_CONTROLLER_READY) {",
+                    "        (controller->phase != C42_CONTROLLER_READY &&\n"
+                    "         controller->phase != C42_CONTROLLER_RESETTING &&\n"
+                    "         controller->phase != C42_CONTROLLER_TEARING_DOWN)) {")]},
+        {"name": "BM_POST_LP_CANDIDATE_PREPARE",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        (controller->phase != C42_CONTROLLER_COLD_NO_QUEUES &&\n"
+                    "         controller->phase != C42_CONTROLLER_READY) ||\n"
+                    "        !descriptor_valid(controller, descriptor, &queue_index)) {",
+                    "        (controller->phase != C42_CONTROLLER_COLD_NO_QUEUES &&\n"
+                    "         controller->phase != C42_CONTROLLER_READY &&\n"
+                    "         controller->phase != C42_CONTROLLER_RESETTING &&\n"
+                    "         controller->phase != C42_CONTROLLER_TEARING_DOWN) ||\n"
+                    "        !descriptor_valid(controller, descriptor, &queue_index)) {")]},
+        {"name": "BM_POST_LP_DELETE_START",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        controller->phase != C42_CONTROLLER_READY ||\n"
+                    "        (kind != C42_QUEUE_SQ && kind != C42_QUEUE_CQ) ||",
+                    "        (controller->phase != C42_CONTROLLER_READY &&\n"
+                    "         controller->phase != C42_CONTROLLER_RESETTING &&\n"
+                    "         controller->phase != C42_CONTROLLER_TEARING_DOWN) ||\n"
+                    "        (kind != C42_QUEUE_SQ && kind != C42_QUEUE_CQ) ||")]},
+        {"name": "BM_POST_LP_SQ_TAIL",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    if (controller->phase != C42_CONTROLLER_READY) {\n"
+                    "        return controller->phase == C42_CONTROLLER_FAULTED_RESET_REQUIRED ?",
+                    "    if (controller->phase != C42_CONTROLLER_READY &&\n"
+                    "        controller->phase != C42_CONTROLLER_RESETTING &&\n"
+                    "        controller->phase != C42_CONTROLLER_TEARING_DOWN) {\n"
+                    "        return controller->phase == C42_CONTROLLER_FAULTED_RESET_REQUIRED ?")]},
+        {"name": "BM_POST_LP_CQ_HEAD",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    if (controller->phase != C42_CONTROLLER_READY) {\n"
+                    "        return controller->phase == C42_CONTROLLER_FAULTED_RESET_REQUIRED ?",
+                    "    if (controller->phase != C42_CONTROLLER_READY &&\n"
+                    "        controller->phase != C42_CONTROLLER_RESETTING &&\n"
+                    "        controller->phase != C42_CONTROLLER_TEARING_DOWN) {\n"
+                    "        return controller->phase == C42_CONTROLLER_FAULTED_RESET_REQUIRED ?")]},
+        {"name": "BM_OBSERVER_TOKEN_NONCE_MISMATCH",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                    "static void observer_candidate_fill(\n"
+                    "    const struct c42_candidate_record *source,\n"
+                    "    struct c42_observer_candidate_v2 *target)\n"
+                    "{\n"
+                    "    target->token = source->token;\n"
+                    "    target->controller_epoch = source->controller_epoch;",
+                    "static void observer_candidate_fill(\n"
+                    "    const struct c42_candidate_record *source,\n"
+                    "    struct c42_observer_candidate_v2 *target)\n"
+                    "{\n"
+                    "    target->token = source->token;\n"
+                    "    if (target->token.instance_nonce != 0) {\n"
+                    "        target->token.instance_nonce ^= UINT64_C(1);\n"
+                    "    }\n"
+                    "    target->controller_epoch = source->controller_epoch;")]},
     ]
 
 

@@ -627,6 +627,7 @@ static void test_memory_input_match_sites(void)
     struct c42_fake_event_log log;
     struct c42_fake_memory memory;
     struct c42_memory_port port;
+    struct c42_queue_memory_cap sq;
     struct c42_queue_memory_cap cq;
     struct c42_queue_memory_cap bad_cap;
     struct c42_memory_token scrub;
@@ -638,6 +639,7 @@ static void test_memory_input_match_sites(void)
     struct c42_memory_status status = {0};
     struct c42_fake_memory_outcome delayed_marker = {0};
     uint8_t expected[C42_CQE_BYTES] = {0};
+    uint8_t wrong_expected[C42_CQE_BYTES] = {0};
     uint8_t raw[C42_SQE_BYTES] = {0};
     bool quiescent;
 
@@ -651,7 +653,12 @@ static void test_memory_input_match_sites(void)
         memory.instance_nonce, memory.owner_epoch, 41, 0,
         C42_MEMORY_CQ_PUBLISH, 4
     );
-    check(c42_fake_memory_map(&memory, &cq, 4) == C42_OK,
+    sq = memory_cap(
+        memory.instance_nonce, memory.owner_epoch, 41, 0,
+        C42_MEMORY_SQ_READ, 4
+    );
+    check(c42_fake_memory_map(&memory, &cq, 4) == C42_OK &&
+          c42_fake_memory_map(&memory, &sq, 4) == C42_OK,
           "memory mismatch mapping setup");
     scrub = memory_token(memory.instance_nonce, 7301, 1);
     bad_scrub = scrub;
@@ -694,6 +701,16 @@ static void test_memory_input_match_sites(void)
         C42_FAKE_CALL_QUERY, C42_MEMORY_STALE, "scrub-retire-query"
     );
 #undef CHECK_BAD_MEMORY_SCRUB
+    c42_fake_event_log_init(&log);
+    memset(&status, 0xa5, sizeof(status));
+    check(port.ops->scrub_query(
+              port.context, &cq, 3, 0, &scrub,
+              &status) == C42_MEMORY_INVALID,
+          "memory mismatch scrub depth call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_SCRUB, C42_FAKE_CALL_QUERY,
+        C42_MEMORY_INVALID, "memory mismatch scrub depth event"
+    );
 
     memset(&memory.publication[0], 0, sizeof(memory.publication[0]));
     body = memory_token(memory.instance_nonce, 7302, 2);
@@ -727,6 +744,28 @@ static void test_memory_input_match_sites(void)
         C42_MEMORY_STALE, "body-query"
     );
 #undef CHECK_BAD_MEMORY_BODY
+    memcpy(wrong_expected, expected, sizeof(wrong_expected));
+    wrong_expected[0] ^= 1u;
+    c42_fake_event_log_init(&log);
+    memset(&status, 0xa5, sizeof(status));
+    check(port.ops->body_query(
+              port.context, &cq, 0, wrong_expected, &body,
+              &status) == C42_MEMORY_STALE,
+          "memory mismatch body expected call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_BODY, C42_FAKE_CALL_QUERY,
+        C42_MEMORY_STALE, "memory mismatch body expected event"
+    );
+    c42_fake_event_log_init(&log);
+    memset(&status, 0xa5, sizeof(status));
+    check(port.ops->body_query(
+              port.context, &cq, 1, expected, &body,
+              &status) == C42_MEMORY_STALE,
+          "memory mismatch body slot call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_BODY, C42_FAKE_CALL_QUERY,
+        C42_MEMORY_STALE, "memory mismatch body slot event"
+    );
 
     marker = memory_token(memory.instance_nonce, 7303, 3);
     bad_marker = marker;
@@ -749,6 +788,35 @@ static void test_memory_input_match_sites(void)
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_MARKER, C42_FAKE_CALL_QUERY,
         C42_MEMORY_STALE, "memory mismatch marker-query event"
+    );
+    c42_fake_event_log_init(&log);
+    memset(&status, 0xa5, sizeof(status));
+    check(port.ops->marker_query(
+              port.context, &cq, 1, 1, &marker,
+              &status) == C42_MEMORY_STALE,
+          "memory mismatch marker slot call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_MARKER, C42_FAKE_CALL_QUERY,
+        C42_MEMORY_STALE, "memory mismatch marker slot event"
+    );
+
+    c42_fake_event_log_init(&log);
+    check(port.ops->validate(
+              port.context, &cq, C42_MEMORY_SQ_READ,
+              cq.exact_bytes) == C42_MEMORY_INVALID,
+          "memory mismatch validate role call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_VALIDATE, C42_FAKE_CALL_ACTION,
+        C42_MEMORY_INVALID, "memory mismatch validate role event"
+    );
+    c42_fake_event_log_init(&log);
+    check(port.ops->validate(
+              port.context, &cq, C42_MEMORY_CQ_PUBLISH,
+              cq.exact_bytes + 1u) == C42_MEMORY_INVALID,
+          "memory mismatch validate size call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_VALIDATE, C42_FAKE_CALL_ACTION,
+        C42_MEMORY_INVALID, "memory mismatch validate size event"
     );
 
     bad_cap = cq;
@@ -774,6 +842,15 @@ static void test_memory_input_match_sites(void)
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_CAPTURE, C42_FAKE_CALL_ACTION,
         C42_MEMORY_STALE, "memory mismatch capture event"
+    );
+    c42_fake_event_log_init(&log);
+    check(port.ops->capture(
+              port.context, &sq, 4, raw,
+              sizeof(raw)) == C42_MEMORY_STALE,
+          "memory mismatch capture slot call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_CAPTURE, C42_FAKE_CALL_ACTION,
+        C42_MEMORY_STALE, "memory mismatch capture slot event"
     );
 
     c42_fake_event_log_init(&log);
@@ -961,10 +1038,32 @@ static void check_effect_event(
 {
     const struct c42_fake_event *event =
         log->count == 0 ? NULL : &log->events[log->count - 1u];
+    uint8_t expected_mask;
+
+    switch (operation) {
+    case C42_FAKE_COMMAND_PREPARE:
+    case C42_FAKE_COMMAND_ADMIT:
+    case C42_FAKE_COMMAND_POLL:
+    case C42_FAKE_COMMAND_CONSUME_PREPARE:
+        expected_mask = C42_FAKE_EVENT_WRITE_VALUE |
+                        C42_FAKE_EVENT_WRITE_OBJECT;
+        break;
+    case C42_FAKE_COMMAND_COMPLETION_ACQUIRE:
+        expected_mask = C42_FAKE_EVENT_WRITE_OBJECT;
+        break;
+    case C42_FAKE_COMMAND_RESET_BEGIN:
+    case C42_FAKE_COMMAND_TEARDOWN_BEGIN:
+        expected_mask = 0;
+        break;
+    default:
+        expected_mask = C42_FAKE_EVENT_WRITE_VALUE;
+        break;
+    }
 
     check(event != NULL && log->count == 1 &&
           event->operation == operation &&
           event->call_kind == call_kind &&
+          event->output_write_mask == expected_mask &&
           event->requested_effect == effect &&
           event->applied_effect == effect &&
           (event->flags & C42_FAKE_EVENT_EFFECT_APPLIED) != 0,
@@ -1308,6 +1407,210 @@ static void test_command_effect_sites(void)
     );
 }
 
+static void check_output_variant_event(
+    const struct c42_fake_event_log *log,
+    uint32_t operation,
+    uint8_t object_variant,
+    const char *label)
+{
+    const struct c42_fake_event *event =
+        log->count == 0 ? NULL : &log->events[0];
+
+    check(event != NULL && log->count == 1 &&
+          event->operation == operation &&
+          event->output_write_mask == C42_FAKE_EVENT_WRITE_OBJECT &&
+          event->output_structural_valid ==
+              (uint8_t)(object_variant != C42_FAKE_OBJECT_ZERO) &&
+          event->output_record_match ==
+              (uint8_t)(object_variant == C42_FAKE_OBJECT_EXACT),
+          label);
+}
+
+static void test_command_output_object_variants(void)
+{
+    struct c42_fake_event_log log;
+    struct command_case test;
+    struct fwlab_hif_prepare_result prepare;
+    struct fwlab_hif_command_ticket ticket;
+    struct fwlab_hif_ready_event ready;
+    struct fwlab_nvme_completion_intent intent;
+    struct fwlab_hif_completion_lease lease;
+    struct fwlab_hif_consume_token consume;
+    enum fwlab_hif_admission_state admission;
+    enum fwlab_hif_consume_state consume_state;
+    uint32_t count;
+    uint8_t variant;
+    uint64_t nonce = UINT64_C(0x4300000000000500);
+
+    executions++;
+    for (variant = C42_FAKE_OBJECT_ZERO;
+         variant <= C42_FAKE_OBJECT_MISMATCH; ++variant) {
+        command_case_init(&test, ++nonce);
+        push_command_effect(
+            &test.command, C42_FAKE_COMMAND_PREPARE,
+            FWLAB_HIF_PREPARE_RESERVED, C42_FAKE_WRITE_OBJECT,
+            C42_FAKE_COMMAND_EFFECT_PREPARED, variant,
+            "PREPARE output variant injection"
+        );
+        c42_fake_event_log_init(&log);
+        c42_fake_command_bind_event_log(&test.command, &log);
+        memset(&prepare, 0, sizeof(prepare));
+        check(test.port.ops->prepare_start(
+                  test.port.context, &test.key,
+                  &prepare) == FWLAB_HIF_PORT_OK,
+              "PREPARE output variant call");
+        check_output_variant_event(
+            &log, C42_FAKE_COMMAND_PREPARE, variant,
+            "PREPARE output variant event"
+        );
+
+        command_case_init(&test, ++nonce);
+        check(command_prepare(&test), "ADMIT output variant setup");
+        push_command_effect(
+            &test.command, C42_FAKE_COMMAND_ADMIT,
+            FWLAB_HIF_ADMISSION_COMMITTED, C42_FAKE_WRITE_OBJECT,
+            C42_FAKE_COMMAND_EFFECT_ADMITTED, variant,
+            "ADMIT output variant injection"
+        );
+        c42_fake_event_log_init(&log);
+        c42_fake_command_bind_event_log(&test.command, &log);
+        memset(&ticket, 0, sizeof(ticket));
+        admission = FWLAB_HIF_ADMISSION_COMMITTED;
+        check(test.port.ops->admit_start(
+                  test.port.context, &test.admission, &test.canonical,
+                  &admission, &ticket) == FWLAB_HIF_PORT_OK,
+              "ADMIT output variant call");
+        check_output_variant_event(
+            &log, C42_FAKE_COMMAND_ADMIT, variant,
+            "ADMIT output variant event"
+        );
+
+        command_case_init(&test, ++nonce);
+        check(command_admit(&test), "POLL output variant setup");
+        push_command_effect(
+            &test.command, C42_FAKE_COMMAND_POLL, 1,
+            C42_FAKE_WRITE_OBJECT, C42_FAKE_COMMAND_EFFECT_READY,
+            variant, "POLL output variant injection"
+        );
+        c42_fake_event_log_init(&log);
+        c42_fake_command_bind_event_log(&test.command, &log);
+        memset(&ready, 0, sizeof(ready));
+        count = 1;
+        check(test.port.ops->poll(
+                  test.port.context, 1, &ready, 1,
+                  &count) == FWLAB_HIF_PORT_OK,
+              "POLL output variant call");
+        check_output_variant_event(
+            &log, C42_FAKE_COMMAND_POLL, variant,
+            "POLL output variant event"
+        );
+
+        command_case_init(&test, ++nonce);
+        check(command_ready(&test), "acquire output variant setup");
+        push_command_effect(
+            &test.command, C42_FAKE_COMMAND_COMPLETION_ACQUIRE, 0,
+            C42_FAKE_WRITE_OBJECT, C42_FAKE_COMMAND_EFFECT_LEASED,
+            variant, "acquire output variant injection"
+        );
+        c42_fake_event_log_init(&log);
+        c42_fake_command_bind_event_log(&test.command, &log);
+        memset(&intent, 0, sizeof(intent));
+        memset(&lease, 0, sizeof(lease));
+        check(test.port.ops->completion_acquire(
+                  test.port.context, &test.ticket, &intent,
+                  &lease) == FWLAB_HIF_PORT_OK,
+              "acquire output variant call");
+        check_output_variant_event(
+            &log, C42_FAKE_COMMAND_COMPLETION_ACQUIRE, variant,
+            "acquire output variant event"
+        );
+
+        command_case_init(&test, ++nonce);
+        check(command_lease(&test), "consume output variant setup");
+        push_command_effect(
+            &test.command, C42_FAKE_COMMAND_CONSUME_PREPARE,
+            FWLAB_HIF_CONSUME_PREPARED, C42_FAKE_WRITE_OBJECT,
+            C42_FAKE_COMMAND_EFFECT_CONSUME_PREPARED, variant,
+            "consume output variant injection"
+        );
+        c42_fake_event_log_init(&log);
+        c42_fake_command_bind_event_log(&test.command, &log);
+        memset(&consume, 0, sizeof(consume));
+        consume_state = FWLAB_HIF_CONSUME_PREPARED;
+        check(test.port.ops->consume_prepare(
+                  test.port.context, &test.lease, 7301,
+                  &consume, &consume_state) == FWLAB_HIF_PORT_OK,
+              "consume output variant call");
+        check_output_variant_event(
+            &log, C42_FAKE_COMMAND_CONSUME_PREPARE, variant,
+            "consume output variant event"
+        );
+    }
+}
+
+static void test_same_prefill_write_masks(void)
+{
+    struct c42_fake_event_log log;
+    struct command_case test;
+    struct c42_fake_memory memory;
+    struct c42_memory_port memory_port;
+    struct c42_queue_memory_cap cq;
+    struct c42_memory_token scrub;
+    struct c42_memory_status status = {0};
+    bool boolean = true;
+
+    executions++;
+    command_case_init(&test, UINT64_C(0x4300000000000601));
+    check(command_prepare(&test), "same-write prepare setup");
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    check(test.port.ops->prepare_abort(
+              test.port.context, &test.prepared,
+              &boolean) == FWLAB_HIF_PORT_OK && boolean &&
+          log.count == 1 && log.events[0].output_write_mask ==
+              C42_FAKE_EVENT_WRITE_VALUE &&
+          log.events[0].output_structural_valid == 1 &&
+          log.events[0].output_record_match == 1,
+          "same-value bool write remains observable");
+
+    c42_fake_memory_init(
+        &memory, UINT64_C(0x4200000000000601),
+        UINT64_C(0x4200000000000602), 61
+    );
+    memory_port = c42_fake_memory_port(&memory);
+    cq = memory_cap(
+        memory.instance_nonce, memory.owner_epoch, 61, 0,
+        C42_MEMORY_CQ_PUBLISH, 4
+    );
+    scrub = memory_token(memory.instance_nonce, 7601, 1);
+    check(c42_fake_memory_map(&memory, &cq, 4) == C42_OK &&
+          memory_port.ops->scrub_start(
+              memory_port.context, &cq, 4, 0, &scrub,
+              &status) == C42_MEMORY_OK,
+          "same-write memory status setup");
+    c42_fake_event_log_init(&log);
+    c42_fake_memory_bind_event_log(&memory, &log);
+    check(memory_port.ops->scrub_query(
+              memory_port.context, &cq, 4, 0, &scrub,
+              &status) == C42_MEMORY_OK && log.count == 1 &&
+          log.events[0].output_write_mask == C42_FAKE_EVENT_WRITE_OBJECT &&
+          log.events[0].output_structural_valid == 1 &&
+          log.events[0].output_record_match == 1,
+          "same-value status write remains observable");
+
+    check(memory_port.ops->reset_begin(
+              memory_port.context, memory.instance_nonce,
+              61) == C42_MEMORY_OK,
+          "same-write quiescent setup");
+    c42_fake_event_log_init(&log);
+    boolean = true;
+    check(memory_port.ops->reset_quiescent(
+              memory_port.context, memory.instance_nonce, 61,
+              &boolean) == C42_MEMORY_OK && boolean && log.count == 1 &&
+          log.events[0].output_write_mask == C42_FAKE_EVENT_WRITE_VALUE,
+          "same-value quiescent write remains observable");
+}
+
 static void check_mismatched_input_event(
     const struct c42_fake_event_log *log,
     uint32_t operation,
@@ -1430,6 +1733,34 @@ static void test_command_input_match_sites(void)
     check_mismatched_input_event(
         &log, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_QUERY,
         FWLAB_HIF_PORT_STALE, "mismatch admit-query event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_prepare(&test), "mismatch admit client setup");
+    bad_admission = test.admission;
+    bad_admission.client_uid++;
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    admission_state = FWLAB_HIF_ADMISSION_NOT_STARTED;
+    check(test.port.ops->admit_start(
+              test.port.context, &bad_admission, &test.canonical,
+              &admission_state, &test.ticket) == FWLAB_HIF_PORT_STALE,
+          "mismatch admit client call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_STALE, "mismatch admit client event"
+    );
+    test.canonical.origin.word[0]++;
+    bad_admission = test.admission;
+    c42_fake_event_log_init(&log);
+    admission_state = FWLAB_HIF_ADMISSION_NOT_STARTED;
+    check(test.port.ops->admit_query(
+              test.port.context, &bad_admission, &test.canonical,
+              &admission_state, &test.ticket) == FWLAB_HIF_PORT_STALE,
+          "mismatch admit canonical call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_QUERY,
+        FWLAB_HIF_PORT_STALE, "mismatch admit canonical event"
     );
 
     command_case_init(&test, ++nonce);
@@ -2123,6 +2454,7 @@ static void test_command_injection_truth(void)
     c42_fake_event_log_init(&log);
     c42_fake_command_bind_event_log(&test.command, &log);
     memset(&result, 0xa5, sizeof(result));
+    memset(&result.prepared, 0, sizeof(result.prepared));
     check(test.port.ops->prepare_start(
               test.port.context, &test.key, &result) == FWLAB_HIF_PORT_OK &&
           result.prepared.reservation_uid == 0,
@@ -2235,6 +2567,8 @@ int main(void)
     test_command_all_entrypoints();
     test_command_injection_truth();
     test_command_effect_sites();
+    test_command_output_object_variants();
+    test_same_prefill_write_masks();
     test_command_input_match_sites();
     if (failures != 0) {
         return 1;

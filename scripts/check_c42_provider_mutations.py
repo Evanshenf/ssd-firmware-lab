@@ -34,9 +34,9 @@ def variations() -> list[dict[str, object]]:
             "name": "PM_BODY_RETURNS_WRONG_TOKEN",
             "label": "memory event all fields exact",
             "edits": [("frontends/headless-c4/fakes/c42_memory.c",
-                       "        direct_status_fill(status, client_token, direct);\n"
+                       "        direct_status_fill(memory, status, client_token, direct);\n"
                        "        memory->body_call_count++;",
-                       "        direct_status_fill(status, client_token, direct);\n"
+                       "        direct_status_fill(memory, status, client_token, direct);\n"
                        "        if (direct->write_status != 0 &&\n"
                        "            direct->token_variant ==\n"
                        "                C42_FAKE_MEMORY_TOKEN_EXACT) {\n"
@@ -49,6 +49,7 @@ def variations() -> list[dict[str, object]]:
             "label": "consume caller output and applied effect exact",
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {\n"
+                       "            provider_output_mark(command, C42_FAKE_WRITE_VALUE);\n"
                        "            *state = (enum fwlab_hif_consume_state)value;\n"
                        "        }\n"
                        "        (void)omit;\n"
@@ -56,6 +57,7 @@ def variations() -> list[dict[str, object]]:
                        "    }\n"
                        "    record->consume_queries++;",
                        "        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {\n"
+                       "            provider_output_mark(command, C42_FAKE_WRITE_VALUE);\n"
                        "            *state = FWLAB_HIF_CONSUME_ABORTED;\n"
                        "        }\n"
                        "        (void)omit;\n"
@@ -72,8 +74,6 @@ def variations() -> list[dict[str, object]]:
                        "    const struct fwlab_hif_consume_token *token,\n"
                        "    enum fwlab_hif_consume_state *state)\n"
                        "{\n"
-                       "    enum fwlab_hif_consume_state before =\n"
-                       "        state == NULL ? FWLAB_HIF_CONSUME_NOT_STARTED : *state;\n"
                        "    int input_match = context != NULL && token != NULL &&\n"
                        "        find_consume(context, token) != NULL;",
                        "static enum fwlab_hif_command_port_result logged_consume_commit(\n"
@@ -81,8 +81,6 @@ def variations() -> list[dict[str, object]]:
                        "    const struct fwlab_hif_consume_token *token,\n"
                        "    enum fwlab_hif_consume_state *state)\n"
                        "{\n"
-                       "    enum fwlab_hif_consume_state before =\n"
-                       "        state == NULL ? FWLAB_HIF_CONSUME_NOT_STARTED : *state;\n"
                        "    int input_match = fwlab_hif_consume_token_valid(token);")],
         },
         {
@@ -122,6 +120,75 @@ def variations() -> list[dict[str, object]]:
                        "        (injection->apply_effect == 0 && injection->applied_effect != 0) ||",
                        "        (0 != 0 && injection->apply_effect == 0 &&\n"
                        "         injection->applied_effect != 0) ||")],
+        },
+        {
+            "name": "PM_SAME_WRITE_NOT_RECORDED",
+            "label": "same-value bool write remains observable",
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "    record->retired = 1;\n"
+                       "    provider_output_mark(command, C42_FAKE_WRITE_VALUE);\n"
+                       "    *aborted = true;",
+                       "    record->retired = 1;\n"
+                       "    *aborted = true;")],
+        },
+        {
+            "name": "PM_ADMIT_INPUT_MATCH_COLLAPSE",
+            "label": "mismatch admit client event",
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "    return record != NULL &&\n"
+                       "           record->prepare_key.client_uid == key->client_uid &&\n"
+                       "           handle_equal(&command->handle, &record->prepared.handle) &&\n"
+                       "           origin_equal(&command->origin, &record->prepared.origin);",
+                       "    return record != NULL;")],
+        },
+        {
+            "name": "PM_ADMIT_OUTPUT_MATCH_COLLAPSE",
+            "label": "ADMIT output variant event",
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "        context, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_START, call,\n"
+                       "        state == NULL ? UINT32_MAX : (uint32_t)*state, write_mask,\n"
+                       "        admission_request_valid(key, command),\n"
+                       "        input_match,\n"
+                       "        write_mask != 0 &&\n"
+                       "            (((write_mask & C42_FAKE_EVENT_WRITE_VALUE) == 0) ||\n"
+                       "             (state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED)) &&\n"
+                       "            (((write_mask & C42_FAKE_EVENT_WRITE_OBJECT) == 0) ||\n"
+                       "             fwlab_hif_command_ticket_valid(ticket)),\n"
+                       "        (write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&\n"
+                       "            context != NULL && ticket != NULL &&\n"
+                       "            find_ticket(context, ticket) != NULL,\n"
+                       "        key == NULL ? 0 : key->client_uid,",
+                       "        context, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_START, call,\n"
+                       "        state == NULL ? UINT32_MAX : (uint32_t)*state, write_mask,\n"
+                       "        admission_request_valid(key, command),\n"
+                       "        input_match,\n"
+                       "        write_mask != 0 &&\n"
+                       "            (((write_mask & C42_FAKE_EVENT_WRITE_VALUE) == 0) ||\n"
+                       "             (state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED)) &&\n"
+                       "            (((write_mask & C42_FAKE_EVENT_WRITE_OBJECT) == 0) ||\n"
+                       "             fwlab_hif_command_ticket_valid(ticket)),\n"
+                       "        (write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&\n"
+                       "            fwlab_hif_command_ticket_valid(ticket),\n"
+                       "        key == NULL ? 0 : key->client_uid,")],
+        },
+        {
+            "name": "PM_ACQUIRE_OUTPUT_MATCH_COLLAPSE",
+            "label": "acquire output variant event",
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "        (write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&\n"
+                       "            output_record != NULL && intent != NULL &&\n"
+                       "            memcmp(&output_record->intent, intent, sizeof(*intent)) == 0,",
+                       "        (write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&\n"
+                       "            (output_record != NULL ||\n"
+                       "             fwlab_hif_completion_lease_valid(lease)),")],
+        },
+        {
+            "name": "PM_BODY_EXPECTED_IDENTITY_REMOVED",
+            "label": "memory mismatch body expected call",
+            "edits": [("frontends/headless-c4/fakes/c42_memory.c",
+                       "               record->slot != slot ||\n"
+                       "               memcmp(record->expected, expected, C42_CQE_BYTES) != 0) {",
+                       "               record->slot != slot) {")],
         },
     ]
 

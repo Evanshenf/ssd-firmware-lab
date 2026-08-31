@@ -29,4 +29,8 @@ jobs:
             gcc-s390x-linux-gnu libc6-dev-arm64-cross \
             libc6-dev-riscv64-cross libc6-dev-s390x-cross qemu-user
       - name: Run C4.1 portable and memory-HIF matrix
-        run: make -C frontends/headless-c4 check-all
+        run: |
+          python3 scripts/run_c42_gate.py
+          make -C frontends/headless-c4 check-c41 check-clang \
+            check-sanitize check-thread check-analysis check-strict \
+            check-determinism check-cross

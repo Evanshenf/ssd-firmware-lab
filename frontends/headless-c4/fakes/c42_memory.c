@@ -30,6 +30,22 @@ static int token_equal(
            left->kind == right->kind && left->reserved == right->reserved;
 }
 
+static void provider_output_begin(struct c42_fake_memory *memory)
+{
+    if (memory != NULL) {
+        memory->provider_write_mask = 0;
+    }
+}
+
+static void provider_output_mark(
+    struct c42_fake_memory *memory,
+    uint8_t mask)
+{
+    if (memory != NULL) {
+        memory->provider_write_mask |= mask;
+    }
+}
+
 static struct c42_fake_memory_mapping *mapping_for(
     struct c42_fake_memory *memory,
     const struct c42_queue_memory_cap *capability)
@@ -105,12 +121,14 @@ static int direct_outcome_take(
 }
 
 static void status_fill(
+    struct c42_fake_memory *memory,
     struct c42_memory_status *status,
     const struct c42_memory_token *token,
     const struct c42_fake_memory_outcome *outcome,
     uint16_t prefix,
     uint8_t quiescent)
 {
+    provider_output_mark(memory, C42_FAKE_EVENT_WRITE_OBJECT);
     memset(status, 0, sizeof(*status));
     status->token = *token;
     status->result = outcome->effect;
@@ -337,6 +355,7 @@ static void mark_direct_effect(
 }
 
 static void direct_status_fill(
+    struct c42_fake_memory *memory,
     struct c42_memory_status *status,
     const struct c42_memory_token *token,
     const struct c42_fake_memory_direct_injection *direct)
@@ -344,6 +363,7 @@ static void direct_status_fill(
     if (direct->omit_status != 0 || direct->write_status == 0) {
         return;
     }
+    provider_output_mark(memory, C42_FAKE_EVENT_WRITE_OBJECT);
     memset(status, 0, sizeof(*status));
     if (direct->token_variant != C42_FAKE_MEMORY_TOKEN_ZERO) {
         status->token = *token;
@@ -408,6 +428,7 @@ static enum c42_memory_result fake_capture(
     if (direct_result_take(
             memory, C42_FAKE_MEMORY_CAPTURE, &direct)) {
         if (direct->omit_status == 0 && direct->write_status != 0) {
+            provider_output_mark(memory, C42_FAKE_EVENT_WRITE_OBJECT);
             memcpy(
                 output, memory->sq[capability->queue_id][slot],
                 C42_SQE_BYTES
@@ -423,6 +444,7 @@ static enum c42_memory_result fake_capture(
             memory, C42_FAKE_MEMORY_CAPTURE, &outcome)) {
         return (enum c42_memory_result)outcome.effect;
     }
+    provider_output_mark(memory, C42_FAKE_EVENT_WRITE_OBJECT);
     memcpy(output, memory->sq[capability->queue_id][slot], C42_SQE_BYTES);
     memory->capture_count++;
     return C42_MEMORY_OK;
@@ -514,7 +536,7 @@ static enum c42_memory_result scrub_common(
             }
             mark_direct_effect(memory, direct->applied_effect);
         }
-        direct_status_fill(status, client_token, direct);
+        direct_status_fill(memory, status, client_token, direct);
         memory->scrub_call_count++;
         return (enum c42_memory_result)direct->result;
     }
@@ -538,7 +560,9 @@ static enum c42_memory_result scrub_common(
         (outcome.effect == C42_MEMORY_UNKNOWN && outcome.committed != 0)) {
         record->committed = 1;
     }
-    status_fill(status, client_token, &outcome, record->prefix, 0);
+    status_fill(
+        memory, status, client_token, &outcome, record->prefix, 0
+    );
     status->committed = record->committed;
     status->quiescent = record->committed;
     status_apply_override(status, &outcome);
@@ -599,7 +623,7 @@ static enum c42_memory_result fake_scrub_abort(
     }
     if (direct_result_take(
             memory, C42_FAKE_MEMORY_SCRUB_ABORT, &direct)) {
-        direct_status_fill(status, client_token, direct);
+        direct_status_fill(memory, status, client_token, direct);
         if (direct->apply_effect != 0 &&
             direct->applied_effect == C42_MEMORY_RETIRED) {
             record->retired = 1;
@@ -609,7 +633,7 @@ static enum c42_memory_result fake_scrub_abort(
     }
     outcome = next_outcome(memory, C42_FAKE_MEMORY_SCRUB_ABORT, 0);
     status_fill(
-        status, client_token, &outcome, record->prefix,
+        memory, status, client_token, &outcome, record->prefix,
         (uint8_t)(outcome.effect == C42_MEMORY_RETIRED)
     );
     status->committed = record->committed;
@@ -648,7 +672,7 @@ static enum c42_memory_result scrub_retire_common(
     }
     if (direct_result_take(
             memory, C42_FAKE_MEMORY_SCRUB_RETIRE, &direct)) {
-        direct_status_fill(status, client_token, direct);
+        direct_status_fill(memory, status, client_token, direct);
         if (direct->apply_effect != 0 &&
             direct->applied_effect == C42_MEMORY_RETIRED) {
             record->retired = 1;
@@ -669,7 +693,7 @@ static enum c42_memory_result scrub_retire_common(
             record->retired = 1;
         }
     }
-    status_fill(status, client_token, &outcome, record->prefix,
+    status_fill(memory, status, client_token, &outcome, record->prefix,
                 record->retired);
     status->committed = 1;
     status_apply_override(status, &outcome);
@@ -783,7 +807,7 @@ static enum c42_memory_result body_common(
             }
             mark_direct_effect(memory, direct->applied_effect);
         }
-        direct_status_fill(status, client_token, direct);
+        direct_status_fill(memory, status, client_token, direct);
         memory->body_call_count++;
         return (enum c42_memory_result)direct->result;
     }
@@ -805,7 +829,9 @@ static enum c42_memory_result body_common(
         );
         record->prefix = applied;
     }
-    status_fill(status, client_token, &outcome, record->prefix, 0);
+    status_fill(
+        memory, status, client_token, &outcome, record->prefix, 0
+    );
     status_apply_override(status, &outcome);
     memory->body_call_count++;
     return C42_MEMORY_OK;
@@ -884,7 +910,7 @@ static enum c42_memory_result marker_common(
             }
             mark_direct_effect(memory, direct->applied_effect);
         }
-        direct_status_fill(status, client_token, direct);
+        direct_status_fill(memory, status, client_token, direct);
         memory->marker_call_count++;
         return (enum c42_memory_result)direct->result;
     }
@@ -894,7 +920,7 @@ static enum c42_memory_result marker_common(
         memory->cq[capability->queue_id][slot][14] = marker;
         record->committed = 1;
     }
-    status_fill(status, client_token, &outcome, 0, 0);
+    status_fill(memory, status, client_token, &outcome, 0, 0);
     status->committed = record->committed;
     status_apply_override(status, &outcome);
     memory->marker_call_count++;
@@ -983,6 +1009,7 @@ static enum c42_memory_result fake_reset_quiescent(
     if (direct_result_take(
             memory, C42_FAKE_MEMORY_RESET_QUIESCENT, &direct)) {
         if (direct->omit_status == 0 && direct->write_status != 0) {
+            provider_output_mark(memory, C42_FAKE_EVENT_WRITE_VALUE);
             *quiescent = direct->quiescent != 0;
         }
         return (enum c42_memory_result)direct->result;
@@ -990,10 +1017,12 @@ static enum c42_memory_result fake_reset_quiescent(
     if (direct_outcome_take(
             memory, C42_FAKE_MEMORY_RESET_QUIESCENT, &outcome)) {
         if ((outcome.status_override & 2u) != 0) {
+            provider_output_mark(memory, C42_FAKE_EVENT_WRITE_VALUE);
             *quiescent = outcome.status_quiescent != 0;
         }
         return (enum c42_memory_result)outcome.effect;
     }
+    provider_output_mark(memory, C42_FAKE_EVENT_WRITE_VALUE);
     *quiescent = true;
     return C42_MEMORY_OK;
 }
@@ -1057,6 +1086,7 @@ static enum c42_memory_result fake_teardown_quiescent(
     if (direct_result_take(
             memory, C42_FAKE_MEMORY_TEARDOWN_QUIESCENT, &direct)) {
         if (direct->omit_status == 0 && direct->write_status != 0) {
+            provider_output_mark(memory, C42_FAKE_EVENT_WRITE_VALUE);
             *quiescent = direct->quiescent != 0;
         }
         return (enum c42_memory_result)direct->result;
@@ -1064,10 +1094,12 @@ static enum c42_memory_result fake_teardown_quiescent(
     if (direct_outcome_take(
             memory, C42_FAKE_MEMORY_TEARDOWN_QUIESCENT, &outcome)) {
         if ((outcome.status_override & 2u) != 0) {
+            provider_output_mark(memory, C42_FAKE_EVENT_WRITE_VALUE);
             *quiescent = outcome.status_quiescent != 0;
         }
         return (enum c42_memory_result)outcome.effect;
     }
+    provider_output_mark(memory, C42_FAKE_EVENT_WRITE_VALUE);
     *quiescent = true;
     return C42_MEMORY_OK;
 }
@@ -1153,15 +1185,6 @@ static void log_memory_event(
     }
 }
 
-static uint8_t memory_status_write_mask(
-    const struct c42_memory_status *before,
-    const struct c42_memory_status *status)
-{
-    return before != NULL && status != NULL &&
-           memcmp(before, status, sizeof(*status)) != 0 ?
-           C42_FAKE_EVENT_WRITE_OBJECT : 0;
-}
-
 static int memory_status_structural_valid(
     const struct c42_memory_status *status)
 {
@@ -1210,21 +1233,130 @@ static const struct c42_fake_memory_operation_record *memory_record_for(
     return NULL;
 }
 
+static int mapped_request_matches(
+    const struct c42_fake_memory *memory,
+    const struct c42_queue_memory_cap *capability,
+    uint8_t role,
+    uint32_t exact_bytes)
+{
+    return memory != NULL && capability != NULL &&
+           role == capability->role && exact_bytes == capability->exact_bytes &&
+           mapping_for_const(memory, capability) != NULL;
+}
+
+static int capture_request_matches(
+    const struct c42_fake_memory *memory,
+    const struct c42_queue_memory_cap *capability,
+    uint16_t slot,
+    const uint8_t *output,
+    size_t output_size)
+{
+    const struct c42_fake_memory_mapping *mapping;
+
+    if (memory == NULL || capability == NULL || output == NULL ||
+        output_size != C42_SQE_BYTES ||
+        capability->role != C42_MEMORY_SQ_READ) {
+        return 0;
+    }
+    mapping = mapping_for_const(memory, capability);
+    return mapping != NULL && slot < mapping->depth;
+}
+
+static int status_request_structural_valid(
+    const struct c42_queue_memory_cap *capability,
+    const struct c42_memory_token *token)
+{
+    return c42_queue_memory_cap_valid(capability) &&
+           c42_memory_token_valid(token);
+}
+
+static int scrub_request_matches(
+    const struct c42_fake_memory *memory,
+    const struct c42_queue_memory_cap *capability,
+    uint16_t depth,
+    uint8_t inverse_phase,
+    const struct c42_memory_token *token,
+    int require_committed)
+{
+    const struct c42_fake_memory_operation_record *record =
+        memory_record_for(memory, capability, C42_FAKE_MEMORY_SCRUB);
+    const struct c42_fake_memory_mapping *mapping =
+        memory == NULL || capability == NULL ? NULL :
+        mapping_for_const(memory, capability);
+
+    return memory_record_matches(record, capability, token) &&
+           mapping != NULL && mapping->depth == depth && inverse_phase <= 1 &&
+           (require_committed == 0 || record->committed != 0);
+}
+
+static int body_request_matches(
+    const struct c42_fake_memory *memory,
+    const struct c42_queue_memory_cap *capability,
+    uint16_t slot,
+    const uint8_t expected[C42_CQE_BYTES],
+    const struct c42_memory_token *token)
+{
+    const struct c42_fake_memory_operation_record *record =
+        memory_record_for(memory, capability, C42_FAKE_MEMORY_BODY);
+
+    return memory_record_matches(record, capability, token) &&
+           expected != NULL && record->kind == C42_FAKE_MEMORY_BODY &&
+           record->slot == slot &&
+           memcmp(record->expected, expected, C42_CQE_BYTES) == 0;
+}
+
+static int marker_start_matches(
+    const struct c42_fake_memory *memory,
+    const struct c42_queue_memory_cap *capability,
+    uint16_t slot,
+    uint8_t marker)
+{
+    const struct c42_fake_memory_operation_record *record =
+        memory_record_for(memory, capability, C42_FAKE_MEMORY_MARKER);
+
+    return record != NULL && capability != NULL && record->active != 0 &&
+           record->kind == C42_FAKE_MEMORY_BODY &&
+           cap_equal(&record->capability, capability) &&
+           record->slot == slot && record->prefix == 15 &&
+           record->expected[14] == marker;
+}
+
+static int marker_query_matches(
+    const struct c42_fake_memory *memory,
+    const struct c42_queue_memory_cap *capability,
+    uint16_t slot,
+    uint8_t marker,
+    const struct c42_memory_token *token)
+{
+    const struct c42_fake_memory_operation_record *record =
+        memory_record_for(memory, capability, C42_FAKE_MEMORY_MARKER);
+
+    return memory_record_matches(record, capability, token) &&
+           record->kind == C42_FAKE_MEMORY_MARKER &&
+           record->slot == slot && record->expected[14] == marker;
+}
+
 static enum c42_memory_result logged_validate(
     void *context,
     const struct c42_queue_memory_cap *capability,
     uint8_t role,
     uint32_t exact_bytes)
 {
-    enum c42_memory_result call =
-        fake_validate(context, capability, role, exact_bytes);
+    int input_match = mapped_request_matches(
+        context, capability, role, exact_bytes
+    );
+    enum c42_memory_result call;
+
+    provider_output_begin(context);
+    call = fake_validate(context, capability, role, exact_bytes);
 
     log_memory_event(
         context, C42_FAKE_MEMORY_VALIDATE, C42_FAKE_CALL_ACTION,
         call, exact_bytes, 0,
-        c42_queue_memory_cap_valid(capability),
-        context != NULL && capability != NULL &&
-            mapping_for_const(context, capability) != NULL,
+        c42_queue_memory_cap_valid(capability) &&
+            (role == C42_MEMORY_SQ_READ ||
+             role == C42_MEMORY_CQ_PUBLISH) && exact_bytes != 0,
+        input_match,
         1, 1,
         capability == NULL ? 0 : capability->memory_uid,
         NULL, role, exact_bytes
@@ -1239,25 +1371,26 @@ static enum c42_memory_result logged_capture(
     uint8_t *output,
     size_t output_size)
 {
-    uint8_t before[C42_SQE_BYTES] = {0};
-    int have_output = output != NULL && output_size == C42_SQE_BYTES;
+    int input_match = capture_request_matches(
+        context, capability, slot, output, output_size
+    );
     enum c42_memory_result call;
     uint8_t write_mask;
 
-    if (have_output) memcpy(before, output, sizeof(before));
+    provider_output_begin(context);
     call = fake_capture(
         context, capability, slot, output, output_size
     );
-    write_mask = have_output &&
-        memcmp(before, output, sizeof(before)) != 0 ?
-        C42_FAKE_EVENT_WRITE_OBJECT : 0;
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_CAPTURE, C42_FAKE_CALL_ACTION, call, slot,
         write_mask,
-        c42_queue_memory_cap_valid(capability),
-        context != NULL && capability != NULL &&
-            mapping_for_const(context, capability) != NULL,
+        c42_queue_memory_cap_valid(capability) && output != NULL &&
+            output_size == C42_SQE_BYTES && capability != NULL &&
+            capability->role == C42_MEMORY_SQ_READ,
+        input_match,
         write_mask != 0,
         write_mask != 0 && call == C42_MEMORY_OK,
         capability == NULL ? 0 : capability->memory_uid,
@@ -1274,23 +1407,25 @@ static enum c42_memory_result logged_scrub_start(
     const struct c42_memory_token *token,
     struct c42_memory_status *status)
 {
-    struct c42_memory_status before = {0};
-    int input_match = memory_record_matches(
-        memory_record_for(context, capability, C42_FAKE_MEMORY_SCRUB),
-        capability, token
+    int input_match = scrub_request_matches(
+        context, capability, depth, inverse_phase, token, 0
     );
     enum c42_memory_result call;
+    uint8_t write_mask;
 
-    if (status != NULL) before = *status;
+    provider_output_begin(context);
     call = fake_scrub_start(
         context, capability, depth, inverse_phase, token, status
     );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_SCRUB, C42_FAKE_CALL_START, call,
         status == NULL ? UINT32_MAX : status->result,
-        memory_status_write_mask(&before, status),
-        c42_memory_token_valid(token),
+        write_mask,
+        status_request_structural_valid(capability, token) &&
+            inverse_phase <= 1,
         input_match,
         memory_status_structural_valid(status),
         memory_status_matches_token(status, token),
@@ -1307,23 +1442,25 @@ static enum c42_memory_result logged_scrub_query(
     const struct c42_memory_token *token,
     struct c42_memory_status *status)
 {
-    struct c42_memory_status before = {0};
-    int input_match = memory_record_matches(
-        memory_record_for(context, capability, C42_FAKE_MEMORY_SCRUB),
-        capability, token
+    int input_match = scrub_request_matches(
+        context, capability, depth, inverse_phase, token, 0
     );
     enum c42_memory_result call;
+    uint8_t write_mask;
 
-    if (status != NULL) before = *status;
+    provider_output_begin(context);
     call = fake_scrub_query(
         context, capability, depth, inverse_phase, token, status
     );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_SCRUB, C42_FAKE_CALL_QUERY, call,
         status == NULL ? UINT32_MAX : status->result,
-        memory_status_write_mask(&before, status),
-        c42_memory_token_valid(token),
+        write_mask,
+        status_request_structural_valid(capability, token) &&
+            inverse_phase <= 1,
         input_match,
         memory_status_structural_valid(status),
         memory_status_matches_token(status, token),
@@ -1340,23 +1477,25 @@ static enum c42_memory_result logged_scrub_abort(
     const struct c42_memory_token *token,
     struct c42_memory_status *status)
 {
-    struct c42_memory_status before = {0};
-    int input_match = memory_record_matches(
-        memory_record_for(context, capability, C42_FAKE_MEMORY_SCRUB_ABORT),
-        capability, token
+    int input_match = scrub_request_matches(
+        context, capability, depth, inverse_phase, token, 0
     );
     enum c42_memory_result call;
+    uint8_t write_mask;
 
-    if (status != NULL) before = *status;
+    provider_output_begin(context);
     call = fake_scrub_abort(
         context, capability, depth, inverse_phase, token, status
     );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_SCRUB_ABORT, C42_FAKE_CALL_ACTION, call,
         status == NULL ? UINT32_MAX : status->result,
-        memory_status_write_mask(&before, status),
-        c42_memory_token_valid(token),
+        write_mask,
+        status_request_structural_valid(capability, token) &&
+            inverse_phase <= 1,
         input_match,
         memory_status_structural_valid(status),
         memory_status_matches_token(status, token),
@@ -1373,24 +1512,25 @@ static enum c42_memory_result logged_scrub_retire_start(
     const struct c42_memory_token *token,
     struct c42_memory_status *status)
 {
-    struct c42_memory_status before = {0};
-    int input_match = memory_record_matches(
-        memory_record_for(
-            context, capability, C42_FAKE_MEMORY_SCRUB_RETIRE
-        ), capability, token
+    int input_match = scrub_request_matches(
+        context, capability, depth, inverse_phase, token, 1
     );
     enum c42_memory_result call;
+    uint8_t write_mask;
 
-    if (status != NULL) before = *status;
+    provider_output_begin(context);
     call = fake_scrub_retire_start(
         context, capability, depth, inverse_phase, token, status
     );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_SCRUB_RETIRE, C42_FAKE_CALL_START, call,
         status == NULL ? UINT32_MAX : status->result,
-        memory_status_write_mask(&before, status),
-        c42_memory_token_valid(token),
+        write_mask,
+        status_request_structural_valid(capability, token) &&
+            inverse_phase <= 1,
         input_match,
         memory_status_structural_valid(status),
         memory_status_matches_token(status, token),
@@ -1407,24 +1547,25 @@ static enum c42_memory_result logged_scrub_retire_query(
     const struct c42_memory_token *token,
     struct c42_memory_status *status)
 {
-    struct c42_memory_status before = {0};
-    int input_match = memory_record_matches(
-        memory_record_for(
-            context, capability, C42_FAKE_MEMORY_SCRUB_RETIRE
-        ), capability, token
+    int input_match = scrub_request_matches(
+        context, capability, depth, inverse_phase, token, 1
     );
     enum c42_memory_result call;
+    uint8_t write_mask;
 
-    if (status != NULL) before = *status;
+    provider_output_begin(context);
     call = fake_scrub_retire_query(
         context, capability, depth, inverse_phase, token, status
     );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_SCRUB_RETIRE, C42_FAKE_CALL_QUERY, call,
         status == NULL ? UINT32_MAX : status->result,
-        memory_status_write_mask(&before, status),
-        c42_memory_token_valid(token),
+        write_mask,
+        status_request_structural_valid(capability, token) &&
+            inverse_phase <= 1,
         input_match,
         memory_status_structural_valid(status),
         memory_status_matches_token(status, token),
@@ -1441,23 +1582,26 @@ static enum c42_memory_result logged_body_start(
     const struct c42_memory_token *token,
     struct c42_memory_status *status)
 {
-    struct c42_memory_status before = {0};
-    int input_match = memory_record_matches(
-        memory_record_for(context, capability, C42_FAKE_MEMORY_BODY),
-        capability, token
+    int input_match = body_request_matches(
+        context, capability, slot, expected, token
     );
     enum c42_memory_result call;
+    uint8_t write_mask;
 
-    if (status != NULL) before = *status;
+    provider_output_begin(context);
     call = fake_body_start(
         context, capability, slot, expected, token, status
     );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_BODY, C42_FAKE_CALL_START, call,
         status == NULL ? UINT32_MAX : status->result,
-        memory_status_write_mask(&before, status),
-        c42_memory_token_valid(token),
+        write_mask,
+        status_request_structural_valid(capability, token) &&
+            expected != NULL && capability != NULL &&
+            capability->role == C42_MEMORY_CQ_PUBLISH,
         input_match,
         memory_status_structural_valid(status),
         memory_status_matches_token(status, token),
@@ -1474,23 +1618,26 @@ static enum c42_memory_result logged_body_query(
     const struct c42_memory_token *token,
     struct c42_memory_status *status)
 {
-    struct c42_memory_status before = {0};
-    int input_match = memory_record_matches(
-        memory_record_for(context, capability, C42_FAKE_MEMORY_BODY),
-        capability, token
+    int input_match = body_request_matches(
+        context, capability, slot, expected, token
     );
     enum c42_memory_result call;
+    uint8_t write_mask;
 
-    if (status != NULL) before = *status;
+    provider_output_begin(context);
     call = fake_body_query(
         context, capability, slot, expected, token, status
     );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_BODY, C42_FAKE_CALL_QUERY, call,
         status == NULL ? UINT32_MAX : status->result,
-        memory_status_write_mask(&before, status),
-        c42_memory_token_valid(token),
+        write_mask,
+        status_request_structural_valid(capability, token) &&
+            expected != NULL && capability != NULL &&
+            capability->role == C42_MEMORY_CQ_PUBLISH,
         input_match,
         memory_status_structural_valid(status),
         memory_status_matches_token(status, token),
@@ -1507,26 +1654,26 @@ static enum c42_memory_result logged_marker_start(
     const struct c42_memory_token *token,
     struct c42_memory_status *status)
 {
-    struct c42_memory_status before = {0};
-    const struct c42_fake_memory_operation_record *record =
-        memory_record_for(context, capability, C42_FAKE_MEMORY_MARKER);
-    int input_match = record != NULL && capability != NULL &&
-        record->active != 0 && record->kind == C42_FAKE_MEMORY_BODY &&
-        cap_equal(&record->capability, capability) &&
-        record->slot == slot && record->prefix == 15 &&
-        record->expected[14] == marker;
+    int input_match = marker_start_matches(
+        context, capability, slot, marker
+    );
     enum c42_memory_result call;
+    uint8_t write_mask;
 
-    if (status != NULL) before = *status;
+    provider_output_begin(context);
     call = fake_marker_start(
         context, capability, slot, marker, token, status
     );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_MARKER, C42_FAKE_CALL_START, call,
         status == NULL ? UINT32_MAX : status->result,
-        memory_status_write_mask(&before, status),
-        c42_memory_token_valid(token),
+        write_mask,
+        status_request_structural_valid(capability, token) &&
+            capability != NULL &&
+            capability->role == C42_MEMORY_CQ_PUBLISH,
         input_match,
         memory_status_structural_valid(status),
         memory_status_matches_token(status, token),
@@ -1543,23 +1690,26 @@ static enum c42_memory_result logged_marker_query(
     const struct c42_memory_token *token,
     struct c42_memory_status *status)
 {
-    struct c42_memory_status before = {0};
-    int input_match = memory_record_matches(
-        memory_record_for(context, capability, C42_FAKE_MEMORY_MARKER),
-        capability, token
+    int input_match = marker_query_matches(
+        context, capability, slot, marker, token
     );
     enum c42_memory_result call;
+    uint8_t write_mask;
 
-    if (status != NULL) before = *status;
+    provider_output_begin(context);
     call = fake_marker_query(
         context, capability, slot, marker, token, status
     );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_MARKER, C42_FAKE_CALL_QUERY, call,
         status == NULL ? UINT32_MAX : status->result,
-        memory_status_write_mask(&before, status),
-        c42_memory_token_valid(token),
+        write_mask,
+        status_request_structural_valid(capability, token) &&
+            capability != NULL &&
+            capability->role == C42_MEMORY_CQ_PUBLISH,
         input_match,
         memory_status_structural_valid(status),
         memory_status_matches_token(status, token),
@@ -1575,8 +1725,10 @@ static enum c42_memory_result logged_reset_begin(
         instance_nonce == ((struct c42_fake_memory *)context)->instance_nonce &&
         old_epoch == ((struct c42_fake_memory *)context)->controller_epoch &&
         old_epoch != UINT32_MAX;
-    enum c42_memory_result call =
-        fake_reset_begin(context, instance_nonce, old_epoch);
+    enum c42_memory_result call;
+
+    provider_output_begin(context);
+    call = fake_reset_begin(context, instance_nonce, old_epoch);
 
     log_memory_event(
         context, C42_FAKE_MEMORY_RESET_BEGIN, C42_FAKE_CALL_START,
@@ -1591,20 +1743,25 @@ static enum c42_memory_result logged_reset_begin(
 static enum c42_memory_result logged_reset_quiescent(
     void *context, uint64_t instance_nonce, uint32_t epoch, bool *quiescent)
 {
-    bool before = quiescent == NULL ? false : *quiescent;
-    enum c42_memory_result call =
-        fake_reset_quiescent(context, instance_nonce, epoch, quiescent);
-    uint8_t write_mask = quiescent != NULL && *quiescent != before ?
-        C42_FAKE_EVENT_WRITE_VALUE : 0;
+    int input_match = context != NULL &&
+        instance_nonce == ((struct c42_fake_memory *)context)->instance_nonce &&
+        ((struct c42_fake_memory *)context)->reset_active != 0 &&
+        epoch + 1u == ((struct c42_fake_memory *)context)->controller_epoch;
+    enum c42_memory_result call;
+    uint8_t write_mask;
+
+    provider_output_begin(context);
+    call = fake_reset_quiescent(
+        context, instance_nonce, epoch, quiescent
+    );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_RESET_QUIESCENT, C42_FAKE_CALL_QUERY, call,
         quiescent != NULL && *quiescent ? 1u : 0u,
         write_mask, instance_nonce != 0,
-        context != NULL &&
-            instance_nonce == ((struct c42_fake_memory *)context)->instance_nonce &&
-            ((struct c42_fake_memory *)context)->reset_active != 0 &&
-            epoch + 1u == ((struct c42_fake_memory *)context)->controller_epoch,
+        input_match,
         write_mask != 0,
         call == C42_MEMORY_OK && quiescent != NULL && *quiescent,
         epoch,
@@ -1619,8 +1776,10 @@ static enum c42_memory_result logged_teardown_begin(
     int input_match = context != NULL &&
         instance_nonce == ((struct c42_fake_memory *)context)->instance_nonce &&
         old_epoch == ((struct c42_fake_memory *)context)->controller_epoch;
-    enum c42_memory_result call =
-        fake_teardown_begin(context, instance_nonce, old_epoch);
+    enum c42_memory_result call;
+
+    provider_output_begin(context);
+    call = fake_teardown_begin(context, instance_nonce, old_epoch);
 
     log_memory_event(
         context, C42_FAKE_MEMORY_TEARDOWN_BEGIN, C42_FAKE_CALL_START,
@@ -1635,21 +1794,26 @@ static enum c42_memory_result logged_teardown_begin(
 static enum c42_memory_result logged_teardown_quiescent(
     void *context, uint64_t instance_nonce, uint32_t epoch, bool *quiescent)
 {
-    bool before = quiescent == NULL ? false : *quiescent;
-    enum c42_memory_result call =
-        fake_teardown_quiescent(context, instance_nonce, epoch, quiescent);
-    uint8_t write_mask = quiescent != NULL && *quiescent != before ?
-        C42_FAKE_EVENT_WRITE_VALUE : 0;
+    int input_match = context != NULL &&
+        instance_nonce == ((struct c42_fake_memory *)context)->instance_nonce &&
+        ((struct c42_fake_memory *)context)->teardown_active != 0 &&
+        ((struct c42_fake_memory *)context)->teardown_old_epoch == epoch;
+    enum c42_memory_result call;
+    uint8_t write_mask;
+
+    provider_output_begin(context);
+    call = fake_teardown_quiescent(
+        context, instance_nonce, epoch, quiescent
+    );
+    write_mask = context == NULL ? 0 :
+        ((struct c42_fake_memory *)context)->provider_write_mask;
 
     log_memory_event(
         context, C42_FAKE_MEMORY_TEARDOWN_QUIESCENT,
         C42_FAKE_CALL_QUERY, call,
         quiescent != NULL && *quiescent ? 1u : 0u,
         write_mask, instance_nonce != 0,
-        context != NULL &&
-            instance_nonce == ((struct c42_fake_memory *)context)->instance_nonce &&
-            ((struct c42_fake_memory *)context)->teardown_active != 0 &&
-            ((struct c42_fake_memory *)context)->teardown_old_epoch == epoch,
+        input_match,
         write_mask != 0,
         call == C42_MEMORY_OK && quiescent != NULL && *quiescent,
         epoch,

@@ -11,6 +11,8 @@ static uint32_t executions;
 static uint32_t requested_cut_count;
 static uint32_t distinct_cut_count;
 
+#define SEMANTIC_BUSINESS_CONTROLS 2u
+
 struct semantic_cut_key {
     struct c42_observer_v2 observer;
     uint8_t teardown;
@@ -56,18 +58,24 @@ static uint64_t semantic_id(
 
 static void semantic_operation_token(
     struct c42_operation_token *token,
-    struct semantic_id_map *map)
+    struct semantic_id_map *instance_ids,
+    struct semantic_id_map *uid_ids)
 {
-    token->instance_nonce = 0;
-    token->uid = semantic_id(map, token->uid);
+    token->instance_nonce = semantic_id(
+        instance_ids, token->instance_nonce
+    );
+    token->uid = semantic_id(uid_ids, token->uid);
 }
 
 static void semantic_command_handle(
     struct fwlab_nvme_command_handle *handle,
-    struct semantic_id_map *map)
+    struct semantic_id_map *instance_ids,
+    struct semantic_id_map *command_ids)
 {
-    handle->instance_nonce = 0;
-    handle->command_uid = semantic_id(map, handle->command_uid);
+    handle->instance_nonce = semantic_id(
+        instance_ids, handle->instance_nonce
+    );
+    handle->command_uid = semantic_id(command_ids, handle->command_uid);
 }
 
 static void semantic_cut_normalize(
@@ -75,9 +83,14 @@ static void semantic_cut_normalize(
     int teardown,
     struct semantic_cut_key *key)
 {
+    struct semantic_id_map instance_ids = {{0}, 0};
     struct semantic_id_map publication_ids = {{0}, 0};
     struct semantic_id_map notification_ids = {{0}, 0};
-    struct semantic_id_map operation_ids = {{0}, 0};
+    struct semantic_id_map candidate_ids = {{0}, 0};
+    struct semantic_id_map target_ids = {{0}, 0};
+    struct semantic_id_map business_control_ids = {{0}, 0};
+    struct semantic_id_map reset_ids = {{0}, 0};
+    struct semantic_id_map teardown_ids = {{0}, 0};
     struct semantic_id_map command_ids = {{0}, 0};
     struct semantic_id_map client_ids = {{0}, 0};
     struct semantic_id_map memory_ids = {{0}, 0};
@@ -93,7 +106,9 @@ static void semantic_cut_normalize(
     memset(key, 0, sizeof(*key));
     key->observer = *observer;
     key->teardown = (uint8_t)(teardown != 0);
-    key->observer.instance_nonce = 0;
+    key->observer.instance_nonce = semantic_id(
+        &instance_ids, key->observer.instance_nonce
+    );
     for (index = 0; index < C42_MAX_QUEUE_PAIRS; ++index) {
         uint32_t slot;
 
@@ -110,12 +125,14 @@ static void semantic_cut_normalize(
     }
     for (index = 0; index < C42_MAX_QUEUE_PAIRS * 2u; ++index) {
         semantic_operation_token(
-            &key->observer.candidates[index].token, &operation_ids
+            &key->observer.candidates[index].token,
+            &instance_ids, &candidate_ids
         );
     }
     for (index = 0; index < observer->command_capacity; ++index) {
         semantic_command_handle(
-            &key->observer.commands[index].handle, &command_ids
+            &key->observer.commands[index].handle,
+            &instance_ids, &command_ids
         );
         key->observer.commands[index].client_uid = semantic_id(
             &client_ids, key->observer.commands[index].client_uid
@@ -149,26 +166,121 @@ static void semantic_cut_normalize(
         );
         semantic_operation_token(
             &key->observer.notifications[index].token,
-            &notification_ids
+            &instance_ids, &notification_ids
         );
         key->observer.notifications[index].publication_uid = semantic_id(
             &publication_ids,
             key->observer.notifications[index].publication_uid
         );
     }
-    for (index = 0; index < 4; ++index) {
+    for (index = 0; index < SEMANTIC_BUSINESS_CONTROLS; ++index) {
         semantic_operation_token(
-            &key->observer.controls[index].token, &operation_ids
+            &key->observer.controls[index].token,
+            &instance_ids, &business_control_ids
         );
     }
+    semantic_operation_token(
+        &key->observer.controls[SEMANTIC_BUSINESS_CONTROLS].token,
+        &instance_ids, &reset_ids
+    );
+    semantic_operation_token(
+        &key->observer.controls[SEMANTIC_BUSINESS_CONTROLS + 1u].token,
+        &instance_ids, &teardown_ids
+    );
     for (index = 0; index < observer->target_capacity; ++index) {
         semantic_operation_token(
-            &key->observer.targets[index].token, &operation_ids
+            &key->observer.targets[index].token,
+            &instance_ids, &target_ids
         );
         semantic_command_handle(
-            &key->observer.targets[index].handle, &command_ids
+            &key->observer.targets[index].handle,
+            &instance_ids, &command_ids
         );
     }
+}
+
+static void test_semantic_quotient_laws(void)
+{
+    struct c42_observer_v2 left = {0};
+    struct c42_observer_v2 right;
+    struct semantic_cut_key left_key;
+    struct semantic_cut_key right_key;
+
+    executions++;
+    left.version = C42_OBSERVER_VERSION;
+    left.size = sizeof(left);
+    left.instance_nonce = 100;
+    left.command_capacity = 1;
+    left.target_capacity = 1;
+    left.candidates[0].in_use = 1;
+    left.candidates[0].token.instance_nonce = 100;
+    left.candidates[0].token.uid = 10;
+    left.candidates[0].token.generation = 1;
+    left.candidates[0].token.kind = 1;
+    left.commands[0].handle.instance_nonce = 100;
+    left.commands[0].handle.command_uid = 20;
+    left.commands[0].handle.controller_epoch = 1;
+    left.commands[0].handle.generation = 1;
+    left.commands[0].client_uid = 30;
+    left.notifications[0].token.instance_nonce = 100;
+    left.notifications[0].token.uid = 40;
+    left.notifications[0].token.generation = 1;
+    left.notifications[0].token.kind = 4;
+    left.controls[0].token.instance_nonce = 100;
+    left.controls[0].token.uid = 50;
+    left.controls[0].token.generation = 1;
+    left.controls[0].token.kind = 5;
+    left.controls[SEMANTIC_BUSINESS_CONTROLS].token.instance_nonce = 100;
+    left.controls[SEMANTIC_BUSINESS_CONTROLS].token.uid = 60;
+    left.controls[SEMANTIC_BUSINESS_CONTROLS].token.generation = 1;
+    left.controls[SEMANTIC_BUSINESS_CONTROLS].token.kind = 6;
+    left.targets[0].token.instance_nonce = 100;
+    left.targets[0].token.uid = 70;
+    left.targets[0].token.generation = 1;
+    left.targets[0].token.kind = 7;
+    left.targets[0].handle = left.commands[0].handle;
+
+    right = left;
+    right.instance_nonce = 200;
+    right.candidates[0].token.instance_nonce = 200;
+    right.candidates[0].token.uid = 110;
+    right.commands[0].handle.instance_nonce = 200;
+    right.commands[0].handle.command_uid = 120;
+    right.commands[0].client_uid = 130;
+    right.notifications[0].token.instance_nonce = 200;
+    right.notifications[0].token.uid = 140;
+    right.controls[0].token.instance_nonce = 200;
+    right.controls[0].token.uid = 150;
+    right.controls[SEMANTIC_BUSINESS_CONTROLS].token.instance_nonce = 200;
+    right.controls[SEMANTIC_BUSINESS_CONTROLS].token.uid = 160;
+    right.targets[0].token.instance_nonce = 200;
+    right.targets[0].token.uid = 170;
+    right.targets[0].handle.instance_nonce = 200;
+    right.targets[0].handle.command_uid = 120;
+    semantic_cut_normalize(&left, 0, &left_key);
+    semantic_cut_normalize(&right, 0, &right_key);
+    check(memcmp(&left_key, &right_key, sizeof(left_key)) == 0,
+          "typed identity bijection preserves quotient equality");
+
+    right = left;
+    right.candidates[0].token.instance_nonce++;
+    semantic_cut_normalize(&right, 0, &right_key);
+    check(memcmp(&left_key, &right_key, sizeof(left_key)) != 0,
+          "instance equality mismatch changes quotient key");
+
+    right = left;
+    right.candidates[0].token.uid = 0;
+    semantic_cut_normalize(&right, 0, &right_key);
+    check(memcmp(&left_key, &right_key, sizeof(left_key)) != 0,
+          "zero and nonzero identities remain distinct");
+
+    left.targets[0].token.uid = left.candidates[0].token.uid;
+    right = left;
+    right.targets[0].token.uid++;
+    semantic_cut_normalize(&left, 0, &left_key);
+    semantic_cut_normalize(&right, 0, &right_key);
+    check(memcmp(&left_key, &right_key, sizeof(left_key)) == 0,
+          "cross-domain numeric collisions do not affect quotient");
 }
 
 static int register_semantic_cut(
@@ -236,6 +348,16 @@ static struct c42_queue_descriptor cq_descriptor(
     return descriptor;
 }
 
+static struct c42_queue_descriptor sq_descriptor(
+    const struct c42_test_fixture *fixture,
+    const struct c42_queue_memory_cap *cap)
+{
+    struct c42_queue_descriptor descriptor = cq_descriptor(fixture, cap);
+
+    descriptor.kind = C42_QUEUE_SQ;
+    return descriptor;
+}
+
 static int finish_cut(struct c42_test_fixture *fixture, int teardown)
 {
     struct c42_operation_token token = {0};
@@ -285,6 +407,11 @@ static void observe_masks(
         return;
     }
     for (index = 0; index < observer.command_capacity; ++index) {
+        if (observer.commands[index].handle.command_uid != 0) {
+            check(observer.commands[index].handle.instance_nonce ==
+                      observer.instance_nonce,
+                  "observer command shares controller instance identity");
+        }
         if (observer.commands[index].state < 32) {
             *command_mask |= UINT32_C(1) << observer.commands[index].state;
         }
@@ -295,6 +422,9 @@ static void observe_masks(
         }
         if (observer.notifications[index].in_use != 0 &&
             observer.notifications[index].state < 32) {
+            check(observer.notifications[index].token.instance_nonce ==
+                      observer.instance_nonce,
+                  "observer notification shares controller instance identity");
             *notification_mask |= UINT32_C(1) <<
                                   observer.notifications[index].state;
         }
@@ -302,13 +432,28 @@ static void observe_masks(
     for (index = 0; index < C42_MAX_QUEUE_PAIRS * 2u; ++index) {
         if (observer.candidates[index].in_use != 0 &&
             observer.candidates[index].state < 32) {
+            check(observer.candidates[index].token.instance_nonce ==
+                      observer.instance_nonce,
+                  "observer candidate shares controller instance identity");
             *candidate_mask |= UINT32_C(1) << observer.candidates[index].state;
         }
     }
     for (index = 0; index < 4; ++index) {
         if (observer.controls[index].in_use != 0 &&
             observer.controls[index].state < 32) {
+            check(observer.controls[index].token.instance_nonce ==
+                      observer.instance_nonce,
+                  "observer control shares controller instance identity");
             *control_mask |= UINT32_C(1) << observer.controls[index].state;
+        }
+    }
+    for (index = 0; index < observer.target_capacity; ++index) {
+        if (observer.targets[index].in_use != 0) {
+            check(observer.targets[index].token.instance_nonce ==
+                      observer.instance_nonce &&
+                  observer.targets[index].handle.instance_nonce ==
+                      observer.instance_nonce,
+                  "observer target shares controller instance identity");
         }
     }
 }
@@ -694,6 +839,60 @@ static void test_all_candidate_post_lp(void)
             check(fixture.event_log.count == provider_events,
                   "candidate all-state post-LP provider silence");
         }
+    }
+}
+
+static void test_sq_ready_candidate_post_lp(void)
+{
+    uint32_t mode;
+
+    for (mode = 0; mode < 2; ++mode) {
+        struct c42_test_fixture fixture;
+        struct c42_operation_token cq_candidate = {0};
+        struct c42_operation_token sq_candidate = {0};
+        struct c42_operation_token control = {0};
+        struct c42_candidate_status status = {0};
+        struct c42_queue_memory_cap sq_cap;
+        struct c42_queue_descriptor descriptor;
+        uint32_t provider_events;
+
+        executions++;
+        check(c42_test_fixture_init_with_nonce(
+                  &fixture, 4, 0,
+                  UINT64_C(0x4402850000000000) + mode + 1u),
+              "SQ READY candidate post-LP fixture");
+        prepare_candidate_phase(&fixture, 3, &cq_candidate);
+        sq_cap = fresh_cap(
+            &fixture, 1, UINT64_C(0x4402851000000000) + mode
+        );
+        sq_cap.role = C42_MEMORY_SQ_READ;
+        sq_cap.exact_bytes = (uint32_t)fixture.depth * C42_SQE_BYTES;
+        descriptor = sq_descriptor(&fixture, &sq_cap);
+        check(c42_fake_memory_map(
+                  &fixture.memory, &sq_cap, fixture.depth) == C42_OK &&
+              c42_candidate_prepare(
+                  fixture.controller, &descriptor,
+                  &sq_candidate) == C42_OK &&
+              c42_candidate_query(
+                  fixture.controller, &sq_candidate,
+                  &status) == C42_OK &&
+              status.state == C42_CANDIDATE_READY,
+              "SQ READY candidate exact pre-LP state");
+        provider_events = fixture.event_log.count;
+        check((mode == 0 ?
+               c42_reset_start(fixture.controller, &control) :
+               c42_teardown_start(fixture.controller, &control)) == C42_OK,
+              "SQ READY candidate LP succeeds");
+        memset(&status, 0, sizeof(status));
+        check(c42_candidate_query(
+                  fixture.controller, &sq_candidate,
+                  &status) == C42_OK &&
+              status.state == C42_CANDIDATE_SUPERSEDED &&
+              c42_candidate_progress(
+                  fixture.controller, &sq_candidate,
+                  1) == C42_SUPERSEDED &&
+              fixture.event_log.count == provider_events,
+              "SQ READY candidate superseded provider-free after LP");
     }
 }
 
@@ -1245,6 +1444,8 @@ static void test_target_post_lp(void)
         struct c42_test_fixture fixture;
         struct c42_fake_command_script script = {0};
         struct c42_target_ref target = {0};
+        struct c42_target_ref new_target;
+        struct c42_target_ref target_sentinel;
         struct c42_operation_token control = {0};
         uint8_t raw[C42_SQE_BYTES];
         uint8_t sentinel[C42_SQE_BYTES];
@@ -1277,14 +1478,131 @@ static void test_target_post_lp(void)
               "target LP succeeds");
         memset(raw, 0xa5, sizeof(raw));
         memset(sentinel, 0xa5, sizeof(sentinel));
+        memset(&new_target, 0xa5, sizeof(new_target));
+        target_sentinel = new_target;
         check(c42_raw_snapshot_copy(
                   fixture.controller, &target.handle,
                   &target.origin, raw) == C42_SUPERSEDED &&
+              c42_target_prepare(
+                  fixture.controller, 0,
+                  fixture.sq_cap[0].ring_generation, 406,
+                  &new_target) == C42_INVALID &&
+              memcmp(&new_target, &target_sentinel,
+                     sizeof(new_target)) == 0 &&
               memcmp(raw, sentinel, sizeof(raw)) == 0 &&
               c42_target_release(
                   fixture.controller, &target.token) == C42_STALE &&
               fixture.event_log.count == provider_events,
               "old target/raw-copy revoked without provider call after LP");
+    }
+}
+
+static void test_new_entrypoints_post_lp(void)
+{
+    uint32_t mode;
+
+    for (mode = 0; mode < 2; ++mode) {
+        struct c42_test_fixture fixture;
+        struct c42_queue_memory_cap cap;
+        struct c42_queue_descriptor descriptor;
+        struct c42_fake_memory_direct_injection validate = {0};
+        struct c42_operation_token control = {0};
+        struct c42_operation_token candidate;
+        struct c42_operation_token delete_token;
+        struct c42_operation_token candidate_sentinel;
+        struct c42_operation_token delete_sentinel;
+        struct c42_sq_tail_event tail = {0};
+        struct c42_snapshot before = {0};
+        struct c42_snapshot after = {0};
+        uint32_t provider_events;
+
+        executions++;
+        check(c42_test_fixture_init_with_nonce(
+                  &fixture, 4, 0,
+                  UINT64_C(0x4402c00000000000) + mode + 1u),
+              "new-entrypoint post-LP fixture");
+        cap = fresh_cap(
+            &fixture, 1, UINT64_C(0x4402c10000000000) + mode
+        );
+        descriptor = cq_descriptor(&fixture, &cap);
+        check(c42_fake_memory_map(
+                  &fixture.memory, &cap, fixture.depth) == C42_OK &&
+              c42_snapshot_read(fixture.controller, &before) == C42_OK,
+              "new-entrypoint pre-LP setup");
+        provider_events = fixture.event_log.count;
+        check((mode == 0 ?
+               c42_reset_start(fixture.controller, &control) :
+               c42_teardown_start(fixture.controller, &control)) == C42_OK &&
+              c42_snapshot_read(fixture.controller, &after) == C42_OK,
+              "new-entrypoint LP succeeds");
+        descriptor.memory.controller_epoch = after.controller_epoch;
+        validate.operation = C42_FAKE_MEMORY_VALIDATE;
+        validate.result = C42_MEMORY_OK;
+        check(c42_fake_memory_direct_push(
+                  &fixture.memory, &validate) == C42_OK,
+              "new candidate post-LP provider probe");
+        memset(&candidate, 0xa5, sizeof(candidate));
+        candidate_sentinel = candidate;
+        memset(&delete_token, 0xa5, sizeof(delete_token));
+        delete_sentinel = delete_token;
+        tail.instance_nonce = fixture.config.instance_nonce;
+        tail.controller_epoch = after.controller_epoch;
+        tail.ring_generation = fixture.sq_cap[0].ring_generation;
+        tail.queue_id = 0;
+        tail.new_tail = 1;
+        check(c42_candidate_prepare(
+                  fixture.controller, &descriptor,
+                  &candidate) == C42_INVALID &&
+              memcmp(&candidate, &candidate_sentinel,
+                     sizeof(candidate)) == 0 &&
+              c42_delete_start(
+                  fixture.controller, C42_QUEUE_SQ, 0,
+                  &delete_token) == C42_INVALID &&
+              memcmp(&delete_token, &delete_sentinel,
+                     sizeof(delete_token)) == 0 &&
+              c42_sq_tail_event_apply(
+                  fixture.controller, &tail) == C42_WRONG_STATE &&
+              c42_enable(fixture.controller) == C42_WRONG_STATE &&
+              c42_snapshot_read(fixture.controller, &after) == C42_OK &&
+              after.sq[0].host_index == before.sq[0].host_index &&
+              after.sq[0].pending_or_unacked ==
+                  before.sq[0].pending_or_unacked &&
+              fixture.event_log.count == provider_events,
+              "new candidate/delete/tail/enable closed provider-free after LP");
+
+        executions++;
+        check(c42_test_fixture_init_with_nonce(
+                  &fixture, 4, 0,
+                  UINT64_C(0x4402c20000000000) + mode + 1u) &&
+              c42_test_submit(&fixture, 0, 0, 1, 420) &&
+              c42_test_run(&fixture, 128, 4) &&
+              c42_snapshot_read(fixture.controller, &before) == C42_OK &&
+              before.cq[0].pending_or_unacked != 0,
+              "new CQ-head post-LP fixture");
+        provider_events = fixture.event_log.count;
+        memset(&control, 0, sizeof(control));
+        check((mode == 0 ?
+               c42_reset_start(fixture.controller, &control) :
+               c42_teardown_start(fixture.controller, &control)) == C42_OK &&
+              c42_snapshot_read(fixture.controller, &after) == C42_OK,
+              "new CQ-head LP succeeds");
+        {
+            struct c42_cq_head_event head = {0};
+
+            head.instance_nonce = fixture.config.instance_nonce;
+            head.controller_epoch = after.controller_epoch;
+            head.ring_generation = fixture.cq_cap[0].ring_generation;
+            head.queue_id = 0;
+            head.new_head = 1;
+            check(c42_cq_head_event_apply(
+                      fixture.controller, &head) == C42_WRONG_STATE &&
+                  c42_snapshot_read(fixture.controller, &after) == C42_OK &&
+                  after.cq[0].host_index == before.cq[0].host_index &&
+                  after.cq[0].pending_or_unacked ==
+                      before.cq[0].pending_or_unacked &&
+                  fixture.event_log.count == provider_events,
+                  "new CQ-head ACK closed provider-free after LP");
+        }
     }
 }
 
@@ -1588,6 +1906,7 @@ int main(void)
     uint32_t required_command = 0;
     uint32_t state;
 
+    test_semantic_quotient_laws();
     test_command_publication_cuts(
         &command_mask, &reconcile_mask, &notification_mask
     );
@@ -1595,6 +1914,7 @@ int main(void)
     test_candidate_cuts(&candidate_mask);
     test_abnormal_candidate_states(&candidate_mask);
     test_all_candidate_post_lp();
+    test_sq_ready_candidate_post_lp();
     test_retire_unknown_post_lp();
     test_business_control_post_lp(&control_mask);
     test_all_business_control_post_lp();
@@ -1604,6 +1924,7 @@ int main(void)
     test_notification_post_lp();
     test_all_notification_post_lp();
     test_target_post_lp();
+    test_new_entrypoints_post_lp();
     test_reset_teardown_takeover_cuts(&control_mask);
     test_reset_begin_response_unknown_takeover();
     test_notification_cuts(&notification_mask);

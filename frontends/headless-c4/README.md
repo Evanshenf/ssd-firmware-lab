@@ -52,13 +52,22 @@ proof. Queue reset ends at `COLD_NO_QUEUES`; the caller must create, scrub and
 enable fresh Admin queues explicitly.
 
 ```sh
+python3 ../../scripts/run_c42_gate.py
 make check-c42
 make fake-link-c42
 make check-all
 ```
 
-The C4.2 gate covers exact depths 2/3/4/32, 12 bounded-model families, 20
-dynamic broken variants, eight architecture mutations, 33 reset cut points,
-64 deterministic fuzz executions and 64 different-instance thread repeats.
+`run_c42_gate.py` is the authoritative native C4.2 execution boundary. It
+invokes one fixed Makefile with a clean environment and then independently
+requires 13 distinct, fresh ELF programs, their expected runtime markers and
+an exact receipt. Direct Make targets remain useful defense-in-depth and
+developer workflows, but dry-run/touch/extra-makefile invocations are not
+evidence.
+
+The C4.2 gate covers exact depths 2/3/4/32, 12 bounded-model families, 31
+production-source mutations, nine architecture mutations, 11 provider
+variations, 33 reset cut points, 64 deterministic fuzz executions and 64
+different-instance thread repeats.
 It does not implement NVMe command legality, Admin commands, PRP/data DMA,
 storage, BAR/MMIO, interrupts, PCI, QEMU or vfio-user.

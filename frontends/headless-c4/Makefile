@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
+# C42_GUARD_BEGIN
 override SHELL := /bin/sh
 override .SHELLFLAGS := -eu -c
 override PATH := /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -19,8 +20,14 @@ _FWLAB_FLAG_WORD := $(if $(findstring =,$(firstword $(MAKEFLAGS))),,$(firstword 
 ifneq ($(findstring i,$(_FWLAB_FLAG_WORD)),)
 $(error C4.2 refuses inherited Make ignore-error mode)
 endif
+ifneq ($(strip $(findstring n,$(_FWLAB_FLAG_WORD))$(findstring t,$(_FWLAB_FLAG_WORD))$(findstring q,$(_FWLAB_FLAG_WORD))),)
+$(error C4.2 refuses non-executing Make modes)
+endif
 ifneq ($(filter --ignore-errors -i,$(MAKEFLAGS) $(MFLAGS)),)
 $(error C4.2 refuses inherited Make ignore-error mode)
+endif
+ifneq ($(filter --dry-run --just-print --recon --touch --question -n -t -q,$(MAKEFLAGS) $(MFLAGS) $(GNUMAKEFLAGS)),)
+$(error C4.2 refuses non-executing Make modes)
 endif
 _FWLAB_UNSAFE_DIRECTIVE := $(shell /usr/bin/awk '/^[[:space:]]*\.IGNORE([[:space:]]|:)/ || /^[[:space:]]*(override[[:space:]]+)?(MAKEFLAGS|MFLAGS|GNUMAKEFLAGS|MAKEFILES)[[:space:]]*[:+?]?=/ { print "unsafe"; exit }' $(MAKEFILE_LIST))
 ifneq ($(_FWLAB_UNSAFE_DIRECTIVE),)
@@ -74,6 +81,7 @@ _FWLAB_INCLUDED_UNSAFE_DIRECTIVE := $(shell /usr/bin/awk '/^[[:space:]]*\.IGNORE
 ifneq ($(_FWLAB_INCLUDED_UNSAFE_DIRECTIVE),)
 $(error C4.2 refuses unsafe included Make semantics)
 endif
+# C42_GUARD_END
 
 .PHONY: all check-unit check-fuzz check-local-determinism check-architecture \
 	check-c41 check check-clang check-sanitize check-thread check-analysis \
@@ -118,6 +126,7 @@ check-c41: check-unit check-fuzz check-local-determinism check-architecture
 check: check-c41 check-c42
 
 # C42_FROZEN_RULES_BEGIN
+# These targets are defense in depth. scripts/run_c42_gate.py is authoritative.
 FWLAB_FAKE_OUTPUT ?= $(BUILD_DIR)/c42_headless_fake_link
 C42_FAKE_OUTPUT := $(FWLAB_FAKE_OUTPUT)
 C42_QUEUE_BIN := $(BUILD_DIR)/c42_queue_unit
@@ -140,6 +149,7 @@ C42_RECEIPT := $(BUILD_DIR)/c42_execution.receipt
 	check-c42-architecture check-c42-remediation check-c42-build-closure \
 	check-c42-dynamic-mutations check-c42-replay \
 	check-c42-provider-mutations check-c42-make-integrity \
+	check-c42-runner-integrity \
 	check-c42-artifact-receipt
 
 .SECONDEXPANSION:
@@ -286,6 +296,9 @@ check-c42-provider-mutations:
 
 check-c42-make-integrity:
 	python3 ../../scripts/check_c42_make_integrity.py
+
+check-c42-runner-integrity:
+	python3 ../../scripts/check_c42_runner_integrity.py
 
 check-c42-artifact-receipt: $(C42_QUEUE_BIN) $(C42_PUBLICATION_BIN) \
 		$(C42_IDENTITY_BIN) $(C42_RESET_DELETE_BIN) $(C42_REMEDIATION_BIN) \

@@ -68,7 +68,8 @@ def parse_guard_mutant(source: str, addition: str) -> bool:
             mutant, encoding="utf-8"
         )
         result = run(
-            ["make", "-C", str(root / "headless-c4"), "-n", "check-c42-unit"]
+            ["make", "-C", str(root / "headless-c4"),
+             "check-c42-build-closure"]
         )
         return result.returncode != 0 and "C4.2 refuses" in result.stdout
 
@@ -97,18 +98,45 @@ def main() -> int:
     inherited.pop("GNUMAKEFLAGS", None)
     inherited["MAKEFLAGS"] = "-i"
     ignored = run(
-        ["make", "-C", str(FRONTEND), "-n", "check-c42-unit"],
+        ["make", "-C", str(FRONTEND), "check-c42-build-closure"],
         env=inherited,
     )
     if ignored.returncode == 0 or "C4.2 refuses" not in ignored.stdout:
         failures.append("inherited ignore-error mode escaped")
+
+    for flag in ("-n", "-t", "-q", "--dry-run", "--touch", "--question"):
+        inherited = os.environ.copy()
+        inherited.pop("MAKEFILES", None)
+        inherited.pop("MAKEFLAGS", None)
+        inherited.pop("GNUMAKEFLAGS", None)
+        mode = run(
+            ["make", flag, "-C", str(FRONTEND),
+             "check-c42-build-closure"], env=inherited
+        )
+        if mode.returncode == 0 or \
+                "refuses non-executing Make modes" not in mode.stdout:
+            failures.append(f"command-line Make mode escaped: {flag}")
+
+    for name in ("MAKEFLAGS", "GNUMAKEFLAGS"):
+        inherited = os.environ.copy()
+        inherited.pop("MAKEFILES", None)
+        inherited.pop("MAKEFLAGS", None)
+        inherited.pop("GNUMAKEFLAGS", None)
+        inherited[name] = "-n"
+        mode = run(
+            ["make", "-C", str(FRONTEND),
+             "check-c42-build-closure"], env=inherited
+        )
+        if mode.returncode == 0 or \
+                "refuses non-executing Make modes" not in mode.stdout:
+            failures.append(f"inherited non-executing mode escaped: {name}")
 
     inherited = os.environ.copy()
     inherited.pop("MAKEFILES", None)
     inherited.pop("GNUMAKEFLAGS", None)
     inherited["MAKEFLAGS"] = "--eval=.IGNORE:"
     evaluated = run(
-        ["make", "-C", str(FRONTEND), "-n", "check-c42-unit"],
+        ["make", "-C", str(FRONTEND), "check-c42-build-closure"],
         env=inherited,
     )
     if evaluated.returncode == 0 or "C4.2 refuses" not in evaluated.stdout:
@@ -119,7 +147,7 @@ def main() -> int:
     inherited.pop("MAKEFLAGS", None)
     inherited["GNUMAKEFLAGS"] = "-E .IGNORE:"
     evaluated = run(
-        ["make", "-C", str(FRONTEND), "-n", "check-c42-unit"],
+        ["make", "-C", str(FRONTEND), "check-c42-build-closure"],
         env=inherited,
     )
     if evaluated.returncode == 0 or "C4.2 refuses" not in evaluated.stdout:
@@ -150,7 +178,8 @@ def main() -> int:
             inherited.pop("GNUMAKEFLAGS", None)
             inherited["MAKEFILES"] = makefiles
             result = run(
-                ["make", "-C", str(FRONTEND), "-n", "check-c42-unit"],
+                ["make", "-C", str(FRONTEND),
+                 "check-c42-build-closure"],
                 env=inherited,
             )
             if result.returncode == 0 or \
@@ -166,8 +195,8 @@ def main() -> int:
             result = run(
                 [
                     "make", "-f", str(makefiles[0]), "-f",
-                    str(makefiles[1]), "-C", str(FRONTEND), "-n",
-                    "check-c42-unit",
+                    str(makefiles[1]), "-C", str(FRONTEND),
+                    "check-c42-build-closure",
                 ],
             )
             if result.returncode == 0 or \
@@ -180,7 +209,10 @@ def main() -> int:
     inherited.pop("MAKEFILES", None)
     inherited.pop("GNUMAKEFLAGS", None)
     inherited["MAKEFLAGS"] = "SHELL=/bin/true"
-    shell = run(["make", "-C", str(FRONTEND), "-prRn"], env=inherited)
+    shell = run(
+        ["make", "-C", str(FRONTEND), "-pRr",
+         "check-c42-build-closure"], env=inherited
+    )
     if shell.returncode != 0 or "SHELL := /bin/sh" not in shell.stdout or \
             ".SHELLFLAGS := -eu -c" not in shell.stdout:
         failures.append("inherited shell override was not neutralized")
@@ -204,7 +236,8 @@ def main() -> int:
         return 1
     print(
         "C4.2 Make integrity: PASS (.IGNORE/MAKEFLAGS exact negatives; "
-        "MAKEFILES/eval/flags/shell sanitized; broken compiler no artifact)"
+        "MAKEFILES/eval/non-executing modes/shell rejected; "
+        "broken compiler no artifact)"
     )
     return 0
 
