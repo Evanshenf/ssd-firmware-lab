@@ -151,11 +151,13 @@ C42_RECEIPT := $(BUILD_DIR)/c42_execution.receipt
 	check-c42-provider-mutations check-c42-make-integrity \
 	check-c42-runner-integrity \
 	check-c42-claim-models \
+	check-c42-build-tests \
 	check-c42-artifact-receipt
 
 .SECONDEXPANSION:
 _FWLAB_FINAL_PARSE_GUARD = $(if $(filter 2,$(words $(MAKEFILE_LIST))),,$(error C4.2 refuses late or multiple Makefile inputs))
-$(C42_CHECK_TARGETS) check-c42: $$(_FWLAB_FINAL_PARSE_GUARD)
+$(C42_CHECK_TARGETS) $(C42_BUILD_TEST_TARGETS) \
+	check-c42-build-tests check-c42: $$(_FWLAB_FINAL_PARSE_GUARD)
 
 $(C42_QUEUE_BIN): $(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
 		$(C42_FAKE_SOURCES) $(C42_SUPPORT) $(C42_HEADERS) \
@@ -334,6 +336,8 @@ check-c42-artifact-receipt: $(C42_QUEUE_BIN) $(C42_PUBLICATION_BIN) \
 
 check-c42-build-closure: $(C42_ALL_INPUTS)
 	@:
+
+check-c42-build-tests: $(C42_BUILD_TEST_TARGETS)
 
 $(C42_FAKE_OUTPUT): $(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
 		$(C42_FAKE_SOURCES) $(C42_SUPPORT) $(C42_HEADERS) fakes/c42_fake_main.c

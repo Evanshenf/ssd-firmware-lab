@@ -35,6 +35,10 @@ override C42_EVIDENCE_INPUTS := evidence/c42a-p1/profile.toml \
 	evidence/c42a-p1/fault-operators.toml \
 	evidence/c42a-p1/lanes.toml \
 	evidence/c42a-p1/obligations.lock.toml \
+	evidence/c42a-p1/authority.lock.toml \
+	evidence/c42a-p1/c35-reference.toml \
+	../../scripts/c42_authority.py \
+	../../scripts/check_c42_authority.py \
 	../../scripts/extract_c42_interface_inventory.py \
 	../../scripts/check_c42_claim_models.py \
 	../../scripts/gen_c42_obligations.py
@@ -48,4 +52,8 @@ override C42_CHECK_TARGETS := check-c42-build-closure \
 	check-c42-dynamic-mutations check-c42-replay \
 	check-c42-provider-mutations check-c42-make-integrity \
 	check-c42-runner-integrity \
+	check-c42-artifact-receipt
+override C42_BUILD_TEST_TARGETS := check-c42-build-closure \
+	check-c42-unit check-c42-model check-c42-negative check-c42-fuzz \
+	check-c42-local-determinism check-c42-replay \
 	check-c42-artifact-receipt

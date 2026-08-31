@@ -23,9 +23,29 @@ node_type = "runner"
 binding_kind = "exact_repository"
 repository_path = "scripts/run_c42_gate.py"
 execution_mode = "direct"
-child_ids = ["claim_validator", "c42_make", "c35_checker", "architecture_checker", "dynamic_mutations"]
+child_ids = ["authority_launcher", "authority_integrity", "inventory_extractor", "obligation_generator", "claim_validator", "c42_make", "architecture_checker", "c4_architecture_checker", "c35_build", "c35_checker", "dynamic_mutations", "provider_mutations", "make_integrity", "runner_integrity"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "authority_launcher"
+node_type = "runner"
+binding_kind = "exact_repository"
+repository_path = "scripts/c42_authority.py"
+execution_mode = "direct"
+child_ids = ["c35_reference_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["model", "architecture_native"]
+
+[[nodes]]
+id = "authority_integrity"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_authority.py"
+execution_mode = "direct"
+child_ids = ["authority_launcher", "c35_reference_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["model", "architecture_native"]
 
 [[nodes]]
 id = "claim_validator"
@@ -138,6 +158,46 @@ claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["architecture_native"]
 
 [[nodes]]
+id = "c4_architecture_checker"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c4_architecture.py"
+execution_mode = "direct"
+child_ids = ["c35_reference_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "provider_mutations"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_provider_mutations.py"
+execution_mode = "direct"
+child_ids = ["provider_executor"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[nodes]]
+id = "make_integrity"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_make_integrity.py"
+execution_mode = "direct"
+child_ids = ["c42_make"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "runner_integrity"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_runner_integrity.py"
+execution_mode = "direct"
+child_ids = ["authority_launcher"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
 id = "c35_build"
 node_type = "recipe"
 binding_kind = "exact_repository"
@@ -161,7 +221,7 @@ additional_lane_ids = ["architecture_native"]
 id = "c35_reference_sources"
 node_type = "source_group"
 binding_kind = "exact_repository"
-repository_path = "frontends/headless-c35"
+repository_path = "frontends/headless-c4/evidence/c42a-p1/c35-reference.toml"
 execution_mode = "data_only"
 child_ids = []
 claim_ids = ["C42A-BUILD-AUTHORITY"]

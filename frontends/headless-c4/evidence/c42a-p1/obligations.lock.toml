@@ -5,7 +5,7 @@
 schema_version = 1
 profile_id = "C42A-P1"
 generator_version = 1
-input_digest = "ba773661a95d9542983fac8f9cfa0c4cbc630bd3d986a894053b4ce41747819c"
+input_digest = "646fd3563d824c1d268d5ce6cdce1bc81b3e0b4d27c2985b8ad2d50a89ea7cff"
 d_claim = 9
 d_structural_field = 291
 d_inventory = 442
@@ -13,13 +13,13 @@ d_field = 442
 d_entrypoint = 35
 d_edge = 6
 d_transition = 11
-d_build = 16
+d_build = 22
 d_effect = 5
-d_candidate = 2522
-d_fault = 2522
+d_candidate = 2534
+d_fault = 2534
 d_na = 0
-d_lane_candidate = 15218
-d_exec = 15218
+d_lane_candidate = 15246
+d_exec = 15246
 d_lane_na = 0
 
 [[obligations]]
@@ -39,6 +39,26 @@ lane_ids = ["architecture_native", "model"]
 
 [[obligations]]
 id = "C42A-BUILD-AUTHORITY/build/authoritative_runner/authority/build_runtime_substitute/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/authority_integrity/authority/build_checker_suppress/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/authority_integrity/authority/build_runtime_substitute/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/authority_launcher/authority/build_child_omit/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/authority_launcher/authority/build_runtime_substitute/whole"
 status = "open"
 lane_ids = ["architecture_native", "model"]
 
@@ -69,6 +89,16 @@ lane_ids = ["architecture_native", "model"]
 
 [[obligations]]
 id = "C42A-BUILD-AUTHORITY/build/c42_sources/authority/build_child_omit/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/c4_architecture_checker/authority/build_checker_suppress/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/c4_architecture_checker/authority/build_runtime_substitute/whole"
 status = "open"
 lane_ids = ["architecture_native", "model"]
 
@@ -108,6 +138,16 @@ status = "open"
 lane_ids = ["architecture_native", "inventory_clang", "inventory_gcc", "model"]
 
 [[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/make_integrity/authority/build_checker_suppress/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/make_integrity/authority/build_runtime_substitute/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
 id = "C42A-BUILD-AUTHORITY/build/obligation_generator/authority/build_checker_suppress/whole"
 status = "open"
 lane_ids = ["architecture_native", "model"]
@@ -138,6 +178,16 @@ status = "open"
 lane_ids = ["architecture_native", "model", "provider_clang", "provider_gcc"]
 
 [[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/provider_mutations/authority/build_checker_suppress/whole"
+status = "open"
+lane_ids = ["architecture_native", "model", "provider_clang", "provider_gcc"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/provider_mutations/authority/build_runtime_substitute/whole"
+status = "open"
+lane_ids = ["architecture_native", "model", "provider_clang", "provider_gcc"]
+
+[[obligations]]
 id = "C42A-BUILD-AUTHORITY/build/replay_executor/authority/build_checker_suppress/whole"
 status = "open"
 lane_ids = ["architecture_native", "model", "replay_clang", "replay_gcc"]
@@ -146,6 +196,16 @@ lane_ids = ["architecture_native", "model", "replay_clang", "replay_gcc"]
 id = "C42A-BUILD-AUTHORITY/build/replay_executor/authority/build_runtime_substitute/whole"
 status = "open"
 lane_ids = ["architecture_native", "model", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/runner_integrity/authority/build_checker_suppress/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/runner_integrity/authority/build_runtime_substitute/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
 
 [[obligations]]
 id = "C42A-BUILD-AUTHORITY/build/workflow/authority/build_child_omit/whole"

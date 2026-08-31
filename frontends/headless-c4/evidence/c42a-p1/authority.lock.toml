@@ -1,0 +1,265 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[authority]
+schema_version = 1
+profile_id = "C42A-P1"
+topology_sha256 = "c314dee7e2596629bab9d87d0ac8e899b67d6be15ac51239cb6376c936266c6e"
+node_count = 22
+identity_count = 32
+
+[[identities]]
+node_id = "architecture_checker"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_architecture.py"
+sha256 = "b7753d8a6ee499970f5c8496f66d93cb2ffca67d00f99f5cd4b6fd322c8cf603"
+mode = 420
+
+[[identities]]
+node_id = "authoritative_runner"
+node_type = "runner"
+execution_mode = "direct"
+path = "scripts/run_c42_gate.py"
+sha256 = "38f8bb01ebfe6d5a728a3fcb9df36236527945fc844cbf95e9a7e659d17b4b25"
+mode = 420
+
+[[identities]]
+node_id = "authority_integrity"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_authority.py"
+sha256 = "79be08dd3b5e05fd8d23db224e5642d98484881fe476e7d07c5c8c610d17908f"
+mode = 420
+
+[[identities]]
+node_id = "authority_launcher"
+node_type = "runner"
+execution_mode = "direct"
+path = "scripts/c42_authority.py"
+sha256 = "98c3e13bb8f3eb79145b53d37d2c64b451c233ca5d2564edfda8e240cffde58e"
+mode = 420
+
+[[identities]]
+node_id = "c35_build"
+node_type = "recipe"
+execution_mode = "bound_recipe"
+path = "frontends/headless-c35/Makefile"
+sha256 = "7af3bbf41d0de37c41e1e0a20c1002109bfaceab435df576f97ccf54be0d0e62"
+mode = 420
+
+[[identities]]
+node_id = "c35_checker"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c35_architecture.py"
+sha256 = "94eb3cb058fa5791e12464b58e3b381ad8f5e4c7572a074a1c8e2a070fc8d5b7"
+mode = 420
+
+[[identities]]
+node_id = "c35_reference_sources"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/c35-reference.toml"
+sha256 = "6e642a96e2434687f61df7a0c5a36c676f0c330cbfe7c8b904a8f32359a1c04e"
+mode = 420
+
+[[identities]]
+node_id = "c42_make"
+node_type = "recipe"
+execution_mode = "bound_recipe"
+path = "frontends/headless-c4/Makefile"
+sha256 = "dd4da0aef5fa9235d5dacc9e4d2ee3cf87c23847fde6ae6478cb939498d6bcba"
+mode = 420
+
+[[identities]]
+node_id = "c42_sources"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/c42_sources.mk"
+sha256 = "f9fcc9715f08c6d9163f143473c1fa0cd4d1eae57f15b1a7c8f51655d171c6cd"
+mode = 420
+
+[[identities]]
+node_id = "c4_architecture_checker"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c4_architecture.py"
+sha256 = "61a781d5b1ead09149cafd1456baddb685dd05abb8bdcf4787721c849f34f308"
+mode = 420
+
+[[identities]]
+node_id = "claim_validator"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_claim_models.py"
+sha256 = "2e4690a89439c43f35f2eac5952253c1056c77b60c5c42bd883cea7a6a610545"
+mode = 420
+
+[[identities]]
+node_id = "dynamic_mutations"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_dynamic_mutations.py"
+sha256 = "73678399c121ac1703d60100af7065a51307cdd84cec8a4aebfb0e1218a2fa2c"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/build-trust.toml"
+sha256 = "c314dee7e2596629bab9d87d0ac8e899b67d6be15ac51239cb6376c936266c6e"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/c35-reference.toml"
+sha256 = "6e642a96e2434687f61df7a0c5a36c676f0c330cbfe7c8b904a8f32359a1c04e"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/claims.toml"
+sha256 = "b0f2fcb053e5c21509bdaa6d7c3e9406d8ad1e060165170445cfeb5174c4cd10"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/fault-operators.toml"
+sha256 = "8bfeeeaa0e5da4fe051e57c70b4bd3b8150dd13784607d177a42c0c27cb32d26"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/identity-model.toml"
+sha256 = "b3d317e26f10ee3c731e6ca7cd51c635d2c2cbfedcd7f7a42cff279f0b5217e7"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/interface-inventory.toml"
+sha256 = "d7768a5fa88785bf63dd17eeed32fb3ad6c7d7702e3495e3a446b4b77b4f5099"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/lanes.toml"
+sha256 = "1ff1805751dfdcefc614fb7331bbf47f4eb4af08bb7facf58d07e578836d40c1"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/obligations.lock.toml"
+sha256 = "f7f7d01fc8b2548e061d31edbf6aa743bf184aa8af102492450e1f49bde7de79"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/phase-model.toml"
+sha256 = "2b7c445a52a120b5c7f17e42f844708615d7ece2126db79f73f35ddef05e35d6"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/profile.toml"
+sha256 = "3b684cd437522561efab8860eec8a831d8fcee0c311a7276f8bd32aeadbe063f"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/provider-model.toml"
+sha256 = "7247f1cdd0c8a0425916a63200fc1f3e2ef9e0b4e0ff5d0dfee37641848e5bcf"
+mode = 420
+
+[[identities]]
+node_id = "inventory_extractor"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/extract_c42_interface_inventory.py"
+sha256 = "113d61231db422f9a91138c540fe7e9ba6310a5a9a3b4e47cd4e5183fb25d5b5"
+mode = 420
+
+[[identities]]
+node_id = "make_integrity"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_make_integrity.py"
+sha256 = "be08f2e4742ced60cbe1553f0138a827f49dc37b004bd7f8ae0a45830893352d"
+mode = 420
+
+[[identities]]
+node_id = "obligation_generator"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/gen_c42_obligations.py"
+sha256 = "80a9fcafa5e9e1ccba506faa478a6d05bef5115bbb803664025afa44c274e942"
+mode = 420
+
+[[identities]]
+node_id = "phase_executor"
+node_type = "checker"
+execution_mode = "bound_recipe"
+path = "frontends/headless-c4/tests/test_c42_phase_cuts.c"
+sha256 = "b32a195e6c060ae218776d2dbe486221f3c495557ae4fc5f9a416d5d31aa7844"
+mode = 420
+
+[[identities]]
+node_id = "provider_executor"
+node_type = "checker"
+execution_mode = "bound_recipe"
+path = "frontends/headless-c4/tests/test_c42_provider_matrix.c"
+sha256 = "821aca526b3e5c8cfc2bb3a7c983bedb11e3b4198a86ee81d07cd90dce464095"
+mode = 420
+
+[[identities]]
+node_id = "provider_mutations"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_provider_mutations.py"
+sha256 = "89fb0c4b519792b4c9ca13dbf765c8de82e784acd2c53e03fb41ba180bebae6a"
+mode = 420
+
+[[identities]]
+node_id = "replay_executor"
+node_type = "checker"
+execution_mode = "bound_recipe"
+path = "frontends/headless-c4/tests/test_c42_dut_replay.c"
+sha256 = "ba22cf5ccef5839adbf9ea7643df8a93e81894e2f7b3ca1c0219274f9f5899fe"
+mode = 420
+
+[[identities]]
+node_id = "runner_integrity"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_runner_integrity.py"
+sha256 = "dc3f3694f3153d43ec357e5f52d773225f0a6350a8515e1614dd6891ceed45bb"
+mode = 420
+
+[[identities]]
+node_id = "workflow"
+node_type = "runner"
+execution_mode = "direct"
+path = ".github/workflows/c4-portable.yml"
+sha256 = "e51fd9c9ce0c2c0c12a09c633cb97cf0eb1a9f4cf9ab85d38c276f183c3efca6"
+mode = 420

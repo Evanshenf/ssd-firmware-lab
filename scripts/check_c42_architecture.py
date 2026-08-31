@@ -356,7 +356,7 @@ def check_source_mutations() -> list[str]:
                         ["python3",
                          str(mutated_root / "scripts/check_c42_architecture.py"),
                          "--root", str(mutated_root), "--cc", compiler,
-                         "--no-mutation-selftests"],
+                         "--no-mutation-selftests", "--no-c4-child"],
                         cwd=mutated_root, check=False, text=True,
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         timeout=600,
@@ -377,6 +377,7 @@ def main() -> int:
     parser.add_argument("--cc", default="cc")
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--no-mutation-selftests", action="store_true")
+    parser.add_argument("--no-c4-child", action="store_true")
     arguments = parser.parse_args()
     ROOT = arguments.root.resolve()
     HIF = ROOT / "frontends/headless-c4/hif"
@@ -495,12 +496,13 @@ def main() -> int:
     except (OSError, subprocess.TimeoutExpired) as error:
         failures.append(f"C4.2 object audit failed: {error}")
 
-    c41 = run([
-        "python3", str(ROOT / "scripts/check_c4_architecture.py"),
-        "--cc", arguments.cc,
-    ], timeout=600)
-    if c41.returncode:
-        failures.append(f"C4.1/C3 coexistence failed:\n{c41.stdout}")
+    if not arguments.no_c4_child:
+        c41 = run([
+            "python3", str(ROOT / "scripts/check_c4_architecture.py"),
+            "--cc", arguments.cc,
+        ], timeout=600)
+        if c41.returncode:
+            failures.append(f"C4.1/C3 coexistence failed:\n{c41.stdout}")
 
     if failures:
         print("C4.2 architecture isolation failed:", file=sys.stderr)
@@ -509,9 +511,11 @@ def main() -> int:
         return 1
     mutation_text = "source mutations skipped" if arguments.no_mutation_selftests \
                     else "9 compile-valid full-source mutations killed"
+    coexistence = "C4/C3 child delegated" if arguments.no_c4_child \
+        else "C3 coexistence"
     print("C4.2 architecture isolation: PASS (C4.1 freeze; "
           f"{mutation_text}; distinct queue/graph/action identities; "
-          "C3 coexistence)")
+          f"{coexistence})")
     return 0
 
 

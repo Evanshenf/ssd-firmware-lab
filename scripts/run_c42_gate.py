@@ -14,6 +14,14 @@ import subprocess
 import sys
 import tempfile
 
+from c42_authority import (
+    AuthorityError,
+    AuthorityReceipt,
+    materialize_c35_reference,
+    verify_authority_lock,
+    verify_c35_manifest,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontends/headless-c4"
@@ -24,6 +32,28 @@ TIMEOUT_SECONDS = 1200
 WORKSPACE_SIDE_EFFECT_PATHS = (
     ROOT / "frontends/headless-c35/build",
     ROOT / "scripts/__pycache__",
+)
+C35_MANIFEST = (
+    ROOT / "frontends/headless-c4/evidence/c42a-p1/c35-reference.toml"
+)
+AUTHORITY_LOCK = (
+    ROOT / "frontends/headless-c4/evidence/c42a-p1/authority.lock.toml"
+)
+EXPECTED_AUTHORITY_NODES = (
+    "inventory-clang",
+    "inventory-gcc",
+    "obligation-generator",
+    "claim-validator",
+    "c42-build-tests",
+    "c42-architecture",
+    "c4-architecture",
+    "c35-build",
+    "c35-checker",
+    "authority-integrity",
+    "dynamic-mutations",
+    "provider-mutations",
+    "make-integrity",
+    "runner-integrity",
 )
 
 EXPECTED_BINARIES = (
@@ -184,6 +214,8 @@ def main() -> int:
         return fail("fixed Make executable or Makefile is unavailable")
 
     try:
+        verify_authority_lock(ROOT, AUTHORITY_LOCK)
+        authority_lock_digest = sha256(AUTHORITY_LOCK)
         workspace_before = workspace_side_effect_state()
         with tempfile.TemporaryDirectory(prefix="c42-authoritative-") as name:
             temporary = Path(name)
@@ -191,21 +223,107 @@ def main() -> int:
             home = temporary / "home"
             home.mkdir()
             environment = clean_environment(home)
+            authority = AuthorityReceipt(ROOT, temporary)
+
+            def authorized(
+                node_id: str,
+                argv: list[str],
+                *,
+                cwd: Path = ROOT,
+                timeout: int = TIMEOUT_SECONDS,
+                outputs: tuple[Path, ...] = (),
+            ) -> subprocess.CompletedProcess[str]:
+                result = authority.run(
+                    node_id, argv, cwd=cwd, environment=environment,
+                    timeout=timeout, expected_outputs=outputs,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(
+                        f"authority child failed: {node_id}:\n{result.stdout}"
+                    )
+                return result
+
+            python = sys.executable
+            authorized("inventory-clang", [
+                python, str(ROOT / "scripts/extract_c42_interface_inventory.py"),
+                "--check", "--cc", "clang",
+            ], timeout=120)
+            authorized("inventory-gcc", [
+                python, str(ROOT / "scripts/extract_c42_interface_inventory.py"),
+                "--check", "--cc", "gcc",
+            ], timeout=120)
+            authorized("obligation-generator", [
+                python, str(ROOT / "scripts/gen_c42_obligations.py"), "--check",
+            ], timeout=120)
+            authorized("claim-validator", [
+                python, str(ROOT / "scripts/check_c42_claim_models.py"),
+                "--self-test",
+            ], timeout=120)
+
+            paths = [build / binary for binary, _ in EXPECTED_BINARIES]
             command = [
                 str(MAKE), "-f", str(MAKEFILE),
                 "-C", str(FRONTEND), "CC=cc", f"BUILD_DIR={build}",
                 f"FWLAB_FAKE_OUTPUT={build / 'c42_headless_fake_link'}",
-                "check-c42",
+                "check-c42-build-tests",
             ]
-            run = subprocess.run(
-                command, cwd=ROOT, env=environment, check=False, text=True,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                timeout=TIMEOUT_SECONDS,
+            authorized(
+                "c42-build-tests", command,
+                outputs=tuple([*paths, build / "c42_execution.receipt"]),
             )
-            if run.returncode != 0:
-                return fail("fixed Make execution failed", run.stdout)
 
-            paths = [build / binary for binary, _ in EXPECTED_BINARIES]
+            authorized("c42-architecture", [
+                python, str(ROOT / "scripts/check_c42_architecture.py"),
+                "--cc", "cc", "--no-c4-child",
+            ], timeout=900)
+            authorized("c4-architecture", [
+                python, str(ROOT / "scripts/check_c4_architecture.py"),
+                "--cc", "cc", "--no-c35-child",
+            ], timeout=300)
+
+            c35_manifest = verify_c35_manifest(ROOT, C35_MANIFEST, "cc")
+            c35_root = temporary / "c35-reference"
+            materialize_c35_reference(ROOT, c35_manifest, c35_root)
+            c35_component = c35_root / "frontends/headless-c35"
+            c35_build = c35_component / "build"
+            c35_outputs = tuple(
+                c35_build / value for value in (
+                    "libfwlab_portable_core_c31_c34.a",
+                    "c35_lane_s", "c35_lane_m", "c35_lane_b", "c35_lane_p",
+                )
+            )
+            authorized("c35-build", [
+                "make", "-C", str(c35_component), "CC=cc", "AR=ar",
+                "BUILD_DIR=build",
+                "CFLAGS=-std=c11 -O2 -g0 -Wall -Wextra -Werror "
+                "-Wpedantic -fno-common",
+                "LDFLAGS=", "lanes",
+            ], cwd=c35_root, timeout=600, outputs=c35_outputs)
+            c35_checked = authorized("c35-checker", [
+                python, str(c35_root / "scripts/check_c35_architecture.py"),
+            ], cwd=c35_root, timeout=300)
+            if "C3.5c architecture: PASS " not in c35_checked.stdout or \
+                    "archive=b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f" \
+                    not in c35_checked.stdout:
+                raise RuntimeError("direct C3.5 checker marker/hash differs")
+
+            authorized("authority-integrity", [
+                python, str(ROOT / "scripts/check_c42_authority.py"),
+            ], timeout=300)
+
+            authorized("dynamic-mutations", [
+                python, str(ROOT / "scripts/check_c42_dynamic_mutations.py"),
+            ], timeout=900)
+            authorized("provider-mutations", [
+                python, str(ROOT / "scripts/check_c42_provider_mutations.py"),
+            ], timeout=900)
+            authorized("make-integrity", [
+                python, str(ROOT / "scripts/check_c42_make_integrity.py"),
+            ], timeout=300)
+            authorized("runner-integrity", [
+                python, str(ROOT / "scripts/check_c42_runner_integrity.py"),
+            ], timeout=300)
+
             digests: list[str] = []
             inodes: list[tuple[int, int]] = []
             realpaths: list[Path] = []
@@ -219,14 +337,19 @@ def main() -> int:
             validate_receipt(
                 build / "c42_execution.receipt", paths, digests
             )
+            authority_digest, authority_nodes = authority.finalize(
+                EXPECTED_AUTHORITY_NODES
+            )
         if workspace_side_effect_state() != workspace_before:
             raise RuntimeError("gate modified guarded source-workspace output")
-    except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+    except (AuthorityError, OSError, RuntimeError, subprocess.TimeoutExpired) as error:
         return fail(str(error))
 
     print(
         "C4.2 authoritative runner: PASS "
         f"binaries={len(EXPECTED_BINARIES)} distinct=exact receipt=exact "
+        f"authority={authority_digest} nodes={authority_nodes} "
+        f"lock={authority_lock_digest} "
         "workspace=unchanged"
     )
     return 0

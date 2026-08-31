@@ -73,6 +73,7 @@ def symbols(paths: list[Path], undefined: bool) -> set[str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cc", default="cc")
+    parser.add_argument("--no-c35-child", action="store_true")
     arguments = parser.parse_args()
     failures: list[str] = []
 
@@ -135,42 +136,45 @@ def main() -> int:
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
         failures.append(f"architecture object audit failed: {error}")
 
-    try:
-        with tempfile.TemporaryDirectory(
-                prefix="fwlab-c41-c35-architecture-") as directory:
-            isolated_root = Path(directory) / "repo"
-            shutil.copytree(
-                ROOT, isolated_root,
-                ignore=shutil.ignore_patterns(
-                    ".git", "build", "__pycache__", "*.pyc", "*.o"
-                ),
-            )
-            c35 = run([
-                "make", "-C", str(isolated_root / "frontends/headless-c35"),
-                "CC=cc", "AR=ar", "BUILD_DIR=build",
-                "CFLAGS=-std=c11 -O2 -g -Wall -Wextra -Werror "
-                "-Wpedantic -fno-common",
-                "LDFLAGS=", "check-architecture",
-            ], timeout=300)
-            if c35.returncode:
-                failures.append(
-                    f"C3.5 coexistence regression failed:\n{c35.stdout}"
+    if not arguments.no_c35_child:
+        try:
+            with tempfile.TemporaryDirectory(
+                    prefix="fwlab-c41-c35-architecture-") as directory:
+                isolated_root = Path(directory) / "repo"
+                shutil.copytree(
+                    ROOT, isolated_root,
+                    ignore=shutil.ignore_patterns(
+                        ".git", "build", "__pycache__", "*.pyc", "*.o"
+                    ),
                 )
-            elif "archive=b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f" \
-                    not in c35.stdout:
-                failures.append(
-                    "C3.5 coexistence did not prove the frozen archive hash"
-                )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        failures.append(f"C3.5 coexistence isolation failed: {error}")
+                c35 = run([
+                    "make", "-C", str(isolated_root / "frontends/headless-c35"),
+                    "CC=cc", "AR=ar", "BUILD_DIR=build",
+                    "CFLAGS=-std=c11 -O2 -g -Wall -Wextra -Werror "
+                    "-Wpedantic -fno-common",
+                    "LDFLAGS=", "check-architecture",
+                ], timeout=300)
+                if c35.returncode:
+                    failures.append(
+                        f"C3.5 coexistence regression failed:\n{c35.stdout}"
+                    )
+                elif "archive=b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f" \
+                        not in c35.stdout:
+                    failures.append(
+                        "C3.5 coexistence did not prove the frozen archive hash"
+                    )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            failures.append(f"C3.5 coexistence isolation failed: {error}")
 
     if failures:
         print("C4.1 architecture isolation failed:", file=sys.stderr)
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         return 1
+    coexistence = "C3 child delegated" if arguments.no_c35_child \
+        else "C3 archive/lane hashes unchanged"
     print("C4.1 architecture isolation: PASS (address-free portable core; "
-          "raw HIF private; C3 archive/lane hashes unchanged)")
+          f"raw HIF private; {coexistence})")
     return 0
 
 
