@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "6d636abbae281718fab323858334a4381234a0cf"
+EXPECTED_C4_2_CANDIDATE = "54279e935362fbfc0fc4199b84a06c4260ef43f4"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -776,15 +776,15 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/Makefile":
         "c621ba76c2071be6727046b90ddf240ac61dff25f72b0912b63b8b3021764598",
     "frontends/headless-c4/c42_sources.mk":
-        "014500239d761348fe920e6a571d8db6156f01fdb52529cc2c9df111c57e9407",
+        "c1f4846884e7ca25244346f9c5c0b2e1eb805bd2ff1db0566d1b37db45b2b037",
     "frontends/headless-c4/evidence/c42a-p1/authority.lock.toml":
-        "2cdc28a5f3ce9bf6376dcb41b3ba4fc5d8c946861c38e298125b47ee535153ce",
+        "79086c6724de1821239d607745177db8444373508370e5c6e5b74d23dcc0bad8",
     "frontends/headless-c4/evidence/c42a-p1/build-trust.toml":
-        "7d05dd56c2cfc34ea86de25b0c9e37779f57e740fd394e03a83485d9393c99c0",
+        "a653f91c681aac574514515dab261f1a37f9639e0e798ea93c2e7dd5b594ef89",
     "frontends/headless-c4/evidence/c42a-p1/c35-reference.toml":
         "6e642a96e2434687f61df7a0c5a36c676f0c330cbfe7c8b904a8f32359a1c04e",
     "frontends/headless-c4/evidence/c42a-p1/claims.toml":
-        "1f78f70e5a5cba9f92a7b91026b7b81d07b2822d0bef5c51d3a40d23e1d1004d",
+        "3db2dd4f798b6fe9ca30d855a91f1a405374c53178c910acbdf24dcbf91fc153",
     "frontends/headless-c4/evidence/c42a-p1/fault-operators.toml":
         "ce04f6fc0bfc59f80dfd12a83d466269d148b2fd89bfd56106914bae8af384a6",
     "frontends/headless-c4/evidence/c42a-p1/identity-model.toml":
@@ -794,7 +794,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/evidence/c42a-p1/lanes.toml":
         "1ff1805751dfdcefc614fb7331bbf47f4eb4af08bb7facf58d07e578836d40c1",
     "frontends/headless-c4/evidence/c42a-p1/obligations.lock.toml":
-        "d46164c902c0d2e5d274b1614e9eb7c73ced07ab25e0000217ff510951c77226",
+        "9ce798300df15b96c38d33fb9e3f50775269e4cebc55d9507d82d7159fcd9f23",
     "frontends/headless-c4/evidence/c42a-p1/phase-model.toml":
         "6670d7164e79d061635c9ed7eef69bc8a0010bb124a812630de0a9c52954316a",
     "frontends/headless-c4/evidence/c42a-p1/profile.toml":
@@ -884,11 +884,11 @@ EXPECTED_C4_2_FILES = {
     "scripts/check_c42_analysis.py":
         "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a",
     "scripts/check_c42_claim_models.py":
-        "41d4e2ff092a45785f3968f585a93c4a92a533895ee1a7d426f0618cf53886ec",
+        "dab38186bdc9990c1df97446d25d77c0c796d5532336969fb2fc8a5935dd737d",
     "scripts/check_c42_determinism.py":
-        "0f2ae7c5e63096ae8107886345cde4a94286ba162272a26f1a6cbcd086693a26",
+        "2e03613288b90812fd064638a2aea23020397740f00a6f4571bf082dc96bb06a",
     "scripts/check_c42_cross.py":
-        "af3b932ab6588d91f4ea5841671c241c26c73ed64be0d920ea79e69e48be57ff",
+        "2d7fd5d1a696758585b9775ed2be1488bfdc58748e186a05b101f64e136b4934",
     "scripts/check_c42_dynamic_mutations.py":
         "9c5f526f6231ad6fbfb475b3f36a2dcbb1e277c7675e2dc00f70219fd2bb2fd7",
     "scripts/check_c42_make_integrity.py":
@@ -1519,6 +1519,9 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "scripts/check_c42_authority.py",
         "check-c42-claim-models",
         "scripts/check_c42_claim_models.py",
+        "scripts/check_c42_analysis.py",
+        "scripts/check_c42_determinism.py",
+        "scripts/check_c42_cross.py",
         "scripts/extract_c42_interface_inventory.py",
         "scripts/gen_c42_obligations.py",
         "scripts/gen_c42_provider_obligations.py",
@@ -1556,6 +1559,9 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "tests/c42_state_obligation_oracle.h",
         "../../scripts/check_c4_architecture.py",
         "../../scripts/check_c35_architecture.py",
+        "../../scripts/check_c42_analysis.py",
+        "../../scripts/check_c42_determinism.py",
+        "../../scripts/check_c42_cross.py",
         "../../scripts/check_c42_make_integrity.py",
         "../../scripts/check_c42_provider_mutations.py",
         "../../scripts/check_c42_runner_integrity.py",
