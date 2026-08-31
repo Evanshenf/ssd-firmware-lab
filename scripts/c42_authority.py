@@ -366,7 +366,7 @@ def render_c35_manifest(document: dict[str, Any]) -> str:
     metadata = document["reference"]
     lines = [
         "# SPDX-FileCopyrightText: 2026 Evanshenf\n",
-        "# SPDX-License-Identifier: BSD-3-Clause\n\n",
+        "# SPDX-License-" "Identifier: BSD-3-Clause\n\n",
         "[reference]\n",
         f"schema_version = {metadata['schema_version']}\n",
         f"profile_id = {quote(str(metadata['profile_id']))}\n",
@@ -576,7 +576,7 @@ def render_authority_lock(document: dict[str, Any]) -> str:
     metadata = document["authority"]
     lines = [
         "# SPDX-FileCopyrightText: 2026 Evanshenf\n",
-        "# SPDX-License-Identifier: BSD-3-Clause\n\n",
+        "# SPDX-License-" "Identifier: BSD-3-Clause\n\n",
         "[authority]\n",
         f"schema_version = {metadata['schema_version']}\n",
         f"profile_id = {quote(str(metadata['profile_id']))}\n",

@@ -334,7 +334,7 @@ def render(document: dict[str, object]) -> str:
     assert isinstance(metadata, dict)
     lines = [
         "# SPDX-FileCopyrightText: 2026 Evanshenf\n",
-        "# SPDX-License-Identifier: BSD-3-Clause\n\n",
+        "# SPDX-License-" "Identifier: BSD-3-Clause\n\n",
         "[inventory]\n",
         f"schema_version = {metadata['schema_version']}\n",
         f"profile_id = {quoted(str(metadata['profile_id']))}\n",

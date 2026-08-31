@@ -1227,7 +1227,7 @@ def render_lock(model: dict[str, Any]) -> str:
     counts = model["counts"]
     lines = [
         "# SPDX-FileCopyrightText: 2026 Evanshenf\n",
-        "# SPDX-License-Identifier: BSD-3-Clause\n\n",
+        "# SPDX-License-" "Identifier: BSD-3-Clause\n\n",
         "[lock]\n",
         "schema_version = 1\n",
         f"profile_id = {quote(str(model['profile_id']))}\n",
@@ -1355,8 +1355,8 @@ def self_test(model_dir: Path) -> int:
         (
             "lock-drift",
             LOCK_NAME,
-            "# SPDX-License-Identifier: BSD-3-Clause",
-            "# SPDX-License-Identifier: BSD-3-Clause\n# drift",
+            "# SPDX-License-" "Identifier: BSD-3-Clause",
+            "# SPDX-License-" "Identifier: BSD-3-Clause\n# drift",
             True,
         ),
     )

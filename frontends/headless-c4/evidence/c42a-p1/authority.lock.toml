@@ -45,7 +45,7 @@ node_id = "authority_launcher"
 node_type = "runner"
 execution_mode = "direct"
 path = "scripts/c42_authority.py"
-sha256 = "98c3e13bb8f3eb79145b53d37d2c64b451c233ca5d2564edfda8e240cffde58e"
+sha256 = "43b815350e42dad04dcf5fe8570b4d00e52781c31e690bab2ef172cc1959735b"
 mode = 420
 
 [[identities]]
@@ -101,7 +101,7 @@ node_id = "claim_validator"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_claim_models.py"
-sha256 = "dab38186bdc9990c1df97446d25d77c0c796d5532336969fb2fc8a5935dd737d"
+sha256 = "8008d1c5d193f4f217911928122c6cabdb44e668eae568346bf8484f8e45da3e"
 mode = 420
 
 [[identities]]
@@ -221,7 +221,7 @@ node_id = "inventory_extractor"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/extract_c42_interface_inventory.py"
-sha256 = "113d61231db422f9a91138c540fe7e9ba6310a5a9a3b4e47cd4e5183fb25d5b5"
+sha256 = "f92ea059b9e039ac86bcb1daa9f447520cf91272c1a2db76c47d6eb6486d234f"
 mode = 420
 
 [[identities]]
