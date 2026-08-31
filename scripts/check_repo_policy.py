@@ -690,8 +690,9 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "51aadccd601f8ab67caa070c53aba871a154ea4b"
+EXPECTED_C4_2_CANDIDATE = "e3cc589716dd061fcd7a7a6ab31ef5ee6e5d90e0"
 EXPECTED_C4_2_CLOSED_ROOTS = [
+    ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
     "docs/legal/c4-2a-source-boundary-review.md",
     "docs/results/2026-08-30-c4-2-headless-queue-hif.md",
@@ -740,9 +741,13 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "scripts/check_c42_dynamic_mutations.py",
     "scripts/check_c42_make_integrity.py",
     "scripts/check_c42_provider_mutations.py",
+    "scripts/check_c42_runner_integrity.py",
+    "scripts/run_c42_gate.py",
 ]
 EXPECTED_C4_2_UNFROZEN_NAMES: list[str] = []
 EXPECTED_C4_2_FILES = {
+    ".github/workflows/c4-portable.yml":
+        "c440f7e4b23ec4e2f60ce9ba0477d7074f561a73bb0a73cffb3eadfbfac1b1ca",
     "docs/legal/c4-2-source-boundary-review.md":
         "a31b0df5e067abedce68b55d0f0d7fcf7a817bfaacfbcb21acdf94747fecf195",
     "docs/legal/c4-2a-source-boundary-review.md":
@@ -754,7 +759,7 @@ EXPECTED_C4_2_FILES = {
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/c42_sources.mk":
-        "41213b5a0ca62495b4e4ae121105e1821e3d93f563ca60b55106cc37c934996e",
+        "6be371ab57c091c76ac35a634091fc0904821ff3e4359eedee5bc443fdbfadb5",
     "frontends/headless-c4/hif/c42.h":
         "a6a0b681e91cb7299e085f645daeef95e124344a2c8d7207bd3a3a6b05042df6",
     "frontends/headless-c4/hif/c42_internal.h":
@@ -770,17 +775,17 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/hif/c42_runtime.c":
         "350f5b897fd632fbb5ba8388b3c7b109dc30f797c8b996cc7c376aa003c34a29",
     "frontends/headless-c4/fakes/c42_command.c":
-        "32359266537cccad816ea1681818002f943b2dfe436263a825d1df8abc0665ab",
+        "7d78540900bc21f484585e98a15c3530f6810ded23f2623cec2bf829ee826476",
     "frontends/headless-c4/fakes/c42_command.h":
-        "32109f6a679f297da4bbfd85f75f5da344883e5fdf586ae9edf346e8f297491e",
+        "84daddbd6aa2b7a2434e717ad9c1dcc102983c8b0b549926cc489c5ecd44a896",
     "frontends/headless-c4/fakes/c42_event.c":
         "e9db0d359161c5da4aff0c078542e706c57e97eea19771331e9c783765ec64b8",
     "frontends/headless-c4/fakes/c42_event.h":
         "9bce30b60adbd484d820bb8a1c89ea53db9ed3dc4b4a798766677b00a6a26e3e",
     "frontends/headless-c4/fakes/c42_memory.c":
-        "df0451d1f7d1a7eab21c7103ecdb52405f86d6768a426000c94e3f221a5e8a02",
+        "bca2953bcb4c8ddc58467c3179a5dfe096142536e8008ad74c78b65038b6fc62",
     "frontends/headless-c4/fakes/c42_memory.h":
-        "b8f954b836286de1e7a47a7da298ab05ece0d4031c8a9ff64333f115bf5812da",
+        "53d8c35c149db20e89f75c6bab743ecd9450c81210f09bece937526b2210f406",
     "frontends/headless-c4/fakes/c42_fake_main.c":
         "e0479faa676ac64e4083b637ef8b965ffcc2ad019d9382ab60db49c1771594a1",
     "frontends/headless-c4/tests/c42_support.c":
@@ -806,9 +811,9 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/test_c42_remediation.c":
         "b580298d4909d440251a601377a2a9201bf359948ea652665e881d4ba17a51a9",
     "frontends/headless-c4/tests/test_c42_provider_matrix.c":
-        "f2636f3889e85eb5c9b0fdfb0ece10945e080ff77d13cdc72bd952b3d0bb06d0",
+        "5d729367789304ac00a89a94e84e635f8b575b96e8fc0eab1dc0858ae3994ba4",
     "frontends/headless-c4/tests/test_c42_phase_cuts.c":
-        "f6cb27bdd0eaff75d6a715e9bb698a3afbd8aab135ec44afc53d78cace2fa9b3",
+        "18f162116ef70add163896ec65fbb5f523c1f0b56c61118f47f9616487f602ba",
     "frontends/headless-c4/tests/test_c42_dut_replay.c":
         "ba22cf5ccef5839adbf9ea7643df8a93e81894e2f7b3ca1c0219274f9f5899fe",
     "frontends/headless-c4/tests/test_c42_public_abi.c":
@@ -834,11 +839,15 @@ EXPECTED_C4_2_FILES = {
     "scripts/check_c42_cross.py":
         "af3b932ab6588d91f4ea5841671c241c26c73ed64be0d920ea79e69e48be57ff",
     "scripts/check_c42_dynamic_mutations.py":
-        "27ca547ca6b0377bbfa2eb09c5fa0e8c158f81cc7b65d37ed0a2829faa3fd9a0",
+        "95e25c90660d7b8bfb2094aafa814e78688439c9296120140f68c2b66496c62c",
     "scripts/check_c42_make_integrity.py":
-        "9c0e61a5a1cbc5a26634513372f947e380154ca016bd5fecd721f2cfd54ac0c1",
+        "be08f2e4742ced60cbe1553f0138a827f49dc37b004bd7f8ae0a45830893352d",
     "scripts/check_c42_provider_mutations.py":
-        "6032dcfe12129f79c5e59ca423ea49528202c6e22e091e2aba774e60babd83e0",
+        "efbecbe07e657af4403cbe124c3beaf11c424e69188a88a722f5e33ab6458f30",
+    "scripts/check_c42_runner_integrity.py":
+        "579ebedbd3a667f371349e0cfa8c2c30ead64bb6fd97d231178c46d78023ea51",
+    "scripts/run_c42_gate.py":
+        "05449388b5dfff71aa04785349ef48db9a39a716e2bcc754d8371a738c7353cb",
 }
 
 EXPECTED_FREEZES = {
@@ -1357,7 +1366,9 @@ def check_freezes(
 
 
 EXPECTED_C42_RULES_SHA256 = \
-    "d5f7a7b530b99f5a9d3a336727708b6af38427fc0c6a3c956ed28bb383b18719"
+    "1510e36c75ee2208e407b125e4f84cfb066ad2300a1d5a4199af38890b5c289c"
+EXPECTED_C42_GUARD_SHA256 = \
+    "2412a8543cd7bfb1bead4b528f046e94851fc3febf5c996a3bf9032b0c2239fe"
 
 
 def check_c42_build_closure(failures: list[str]) -> None:
@@ -1368,6 +1379,15 @@ def check_c42_build_closure(failures: list[str]) -> None:
         encoding="utf-8"
     )
     logical_makefile = re.sub(r"\\\n[ \t]*", " ", makefile)
+    guard_begin = "# C42_GUARD_BEGIN\n"
+    guard_end = "# C42_GUARD_END\n"
+    if makefile.count(guard_begin) != 1 or makefile.count(guard_end) != 1:
+        failures.append("C4.2 Make guard markers are missing or ambiguous")
+    else:
+        guard = makefile.split(guard_begin, 1)[1].split(guard_end, 1)[0]
+        if hashlib.sha256(guard.encode("utf-8")).hexdigest() != \
+                EXPECTED_C42_GUARD_SHA256:
+            failures.append("C4.2 complete Make guard block changed")
     if re.search(
             r"^[ \t]*\.IGNORE(?:[ \t]|:)",
             logical_makefile, re.MULTILINE):
@@ -1431,6 +1451,8 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "check-c42-artifact-receipt", "C42_RECEIPT",
         "check-c42-make-integrity",
         "check-c42-provider-mutations",
+        "check-c42-runner-integrity",
+        "scripts/run_c42_gate.py",
     )
     for token in required_make_tokens:
         if token not in makefile:
@@ -1461,13 +1483,16 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "tests/c42_dut_bfs.h", "tests/c42_model.h",
         "../../scripts/check_c42_make_integrity.py",
         "../../scripts/check_c42_provider_mutations.py",
+        "../../scripts/check_c42_runner_integrity.py",
+        "../../scripts/run_c42_gate.py",
         "../../include/fwlab/contracts/hif_command_port.h",
     )
     for source in required_sources:
         if source not in source_list:
             failures.append(f"C4.2 frozen source list is incomplete: {source}")
     database = subprocess.run(
-        ["make", "-C", str(ROOT / "frontends/headless-c4"), "-prRn"],
+        ["make", "-C", str(ROOT / "frontends/headless-c4"),
+         "-pRr", "check-c42-build-closure"],
         cwd=ROOT, check=False, text=True,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         timeout=30,
@@ -1478,6 +1503,8 @@ def check_c42_build_closure(failures: list[str]) -> None:
     if "overriding recipe for target" in database.stderr or \
             "ignoring old recipe for target" in database.stderr:
         failures.append("C4.2 protected Make target has an overriding recipe")
+    if re.search(r"^\.IGNORE(?:\s|:)", database.stdout, re.MULTILINE):
+        failures.append("C4.2 resolved Make database enables .IGNORE")
 
     def target_prerequisites(name: str) -> list[str] | None:
         prefix = f"{name}:"
@@ -1496,6 +1523,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "check-c42-artifact-receipt",
         "check-c42-make-integrity",
         "check-c42-provider-mutations",
+        "check-c42-runner-integrity",
     }
     expected_prerequisites = {
         "check-c42": expected_targets,
@@ -1521,6 +1549,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "check-c42-dynamic-mutations": set(),
         "check-c42-make-integrity": set(),
         "check-c42-provider-mutations": set(),
+        "check-c42-runner-integrity": set(),
         "check-c42-artifact-receipt": {
             "build/c42_queue_unit", "build/c42_publication_unit",
             "build/c42_identity_unit", "build/c42_reset_delete_unit",
@@ -1593,6 +1622,13 @@ def check_c42_build_closure(failures: list[str]) -> None:
             failures.append(
                 f"C4.2 effective Make variable changed: {name}"
             )
+
+    workflow = (ROOT / ".github/workflows/c4-portable.yml").read_text(
+        encoding="utf-8"
+    )
+    if "python3 scripts/run_c42_gate.py" not in workflow or \
+            "make -C frontends/headless-c4 check-all" in workflow:
+        failures.append("C4 workflow does not use the authoritative C4.2 runner")
 
 
 def main() -> int:
