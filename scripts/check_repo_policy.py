@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "bd0195bd9764c234102b5d5b3eb4973069cd1d06"
+EXPECTED_C4_2_CANDIDATE = "51aadccd601f8ab67caa070c53aba871a154ea4b"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     "docs/legal/c4-2-source-boundary-review.md",
     "docs/legal/c4-2a-source-boundary-review.md",
@@ -739,6 +739,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "scripts/check_c42_cross.py",
     "scripts/check_c42_dynamic_mutations.py",
     "scripts/check_c42_make_integrity.py",
+    "scripts/check_c42_provider_mutations.py",
 ]
 EXPECTED_C4_2_UNFROZEN_NAMES: list[str] = []
 EXPECTED_C4_2_FILES = {
@@ -753,9 +754,9 @@ EXPECTED_C4_2_FILES = {
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/c42_sources.mk":
-        "f36cccd4617581300eccbf8238ecf31478292e09980f68d884c3b6b7acee348b",
+        "41213b5a0ca62495b4e4ae121105e1821e3d93f563ca60b55106cc37c934996e",
     "frontends/headless-c4/hif/c42.h":
-        "619fa57028d0b7c1817fa5101fc6aa9269c643df583895d5431599afc6ad1be3",
+        "a6a0b681e91cb7299e085f645daeef95e124344a2c8d7207bd3a3a6b05042df6",
     "frontends/headless-c4/hif/c42_internal.h":
         "4c6bb8158a4adf0ae3eb8d90e9cbe1cd9fb70d9b197bdff517ab976b9c26e73c",
     "frontends/headless-c4/hif/c42_memory_port.h":
@@ -769,7 +770,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/hif/c42_runtime.c":
         "350f5b897fd632fbb5ba8388b3c7b109dc30f797c8b996cc7c376aa003c34a29",
     "frontends/headless-c4/fakes/c42_command.c":
-        "78720cb2257a813b0b412ed6f3cccd00d30afc96ffc2357d294a85b92f3dce3a",
+        "32359266537cccad816ea1681818002f943b2dfe436263a825d1df8abc0665ab",
     "frontends/headless-c4/fakes/c42_command.h":
         "32109f6a679f297da4bbfd85f75f5da344883e5fdf586ae9edf346e8f297491e",
     "frontends/headless-c4/fakes/c42_event.c":
@@ -777,7 +778,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/fakes/c42_event.h":
         "9bce30b60adbd484d820bb8a1c89ea53db9ed3dc4b4a798766677b00a6a26e3e",
     "frontends/headless-c4/fakes/c42_memory.c":
-        "a1fbaa81f93e3d27ba3dc924a34eb3419a324f34c0844d641bd3fe134bb6330c",
+        "df0451d1f7d1a7eab21c7103ecdb52405f86d6768a426000c94e3f221a5e8a02",
     "frontends/headless-c4/fakes/c42_memory.h":
         "b8f954b836286de1e7a47a7da298ab05ece0d4031c8a9ff64333f115bf5812da",
     "frontends/headless-c4/fakes/c42_fake_main.c":
@@ -805,9 +806,9 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/test_c42_remediation.c":
         "b580298d4909d440251a601377a2a9201bf359948ea652665e881d4ba17a51a9",
     "frontends/headless-c4/tests/test_c42_provider_matrix.c":
-        "9ea7d421df120992e65908afc2ce984e313f7217355d479cb340a754283fda13",
+        "f2636f3889e85eb5c9b0fdfb0ece10945e080ff77d13cdc72bd952b3d0bb06d0",
     "frontends/headless-c4/tests/test_c42_phase_cuts.c":
-        "caf07fd53d694f6564ca17f8aa3e4c1a3bfd1bcb709cb27c92c29e87d3e2dcfe",
+        "f6cb27bdd0eaff75d6a715e9bb698a3afbd8aab135ec44afc53d78cace2fa9b3",
     "frontends/headless-c4/tests/test_c42_dut_replay.c":
         "ba22cf5ccef5839adbf9ea7643df8a93e81894e2f7b3ca1c0219274f9f5899fe",
     "frontends/headless-c4/tests/test_c42_public_abi.c":
@@ -825,7 +826,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/fuzz_c42.c":
         "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54",
     "scripts/check_c42_architecture.py":
-        "d7676c11e7b590cb6ec4130dd4cdee438cef5c7956d078685431d0582556d593",
+        "39ba8f39d02afcf3c019a26da9c7167dff4249bf8f75c449a2e44023a7967aab",
     "scripts/check_c42_analysis.py":
         "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a",
     "scripts/check_c42_determinism.py":
@@ -833,9 +834,11 @@ EXPECTED_C4_2_FILES = {
     "scripts/check_c42_cross.py":
         "af3b932ab6588d91f4ea5841671c241c26c73ed64be0d920ea79e69e48be57ff",
     "scripts/check_c42_dynamic_mutations.py":
-        "87fce9cd40c86eaae91d66a20f29cad30c4d4482b85ef6bab62f845719f8518f",
+        "27ca547ca6b0377bbfa2eb09c5fa0e8c158f81cc7b65d37ed0a2829faa3fd9a0",
     "scripts/check_c42_make_integrity.py":
-        "a0857d18a4d9517bef5cafc4eddf121c32af412b53ecd6570709cedd42940f0e",
+        "9c0e61a5a1cbc5a26634513372f947e380154ca016bd5fecd721f2cfd54ac0c1",
+    "scripts/check_c42_provider_mutations.py":
+        "6032dcfe12129f79c5e59ca423ea49528202c6e22e091e2aba774e60babd83e0",
 }
 
 EXPECTED_FREEZES = {
@@ -1354,7 +1357,7 @@ def check_freezes(
 
 
 EXPECTED_C42_RULES_SHA256 = \
-    "65a3cba2b183a973b485687dd6297b3adb9b8eb1de480dadf777c92dc2451baa"
+    "d5f7a7b530b99f5a9d3a336727708b6af38427fc0c6a3c956ed28bb383b18719"
 
 
 def check_c42_build_closure(failures: list[str]) -> None:
@@ -1370,10 +1373,13 @@ def check_c42_build_closure(failures: list[str]) -> None:
             logical_makefile, re.MULTILINE):
         failures.append("C4.2 Makefile may not define .IGNORE")
     if re.search(
-            r"^[ \t]*(?:override[ \t]+)?(?:MAKEFLAGS|MFLAGS)"
+            r"^[ \t]*(?:override[ \t]+)?"
+            r"(?:MAKEFLAGS|MFLAGS|GNUMAKEFLAGS|MAKEFILES)"
             r"[ \t]*[:+?]?=",
             logical_makefile, re.MULTILINE):
-        failures.append("C4.2 Makefile may not assign MAKEFLAGS/MFLAGS")
+        failures.append(
+            "C4.2 Makefile may not assign Make flag/include variables"
+        )
     begin = "# C42_FROZEN_RULES_BEGIN\n"
     end = "# C42_FROZEN_RULES_END\n"
     if makefile.count(begin) != 1 or makefile.count(end) != 1:
@@ -1396,7 +1402,8 @@ def check_c42_build_closure(failures: list[str]) -> None:
         if re.search(
                 r"^[^#\t\n][^:\n]*:\s*"
                 r"(?:(?:private|override|export|unexport)\s+)*"
-                r"(?:SHELL|\.SHELLFLAGS|MAKEFLAGS|MFLAGS|BUILD_DIR|CC|"
+                r"(?:SHELL|\.SHELLFLAGS|MAKEFLAGS|MFLAGS|GNUMAKEFLAGS|"
+                r"MAKEFILES|BUILD_DIR|CC|"
                 r"CPPFLAGS|CFLAGS|LDFLAGS|FWLAB_FAKE_OUTPUT|C42_[A-Z0-9_]+)"
                 r"\s*[:+?]?=",
                 logical_outside, re.MULTILINE):
@@ -1423,6 +1430,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "check-c42-dynamic-mutations", "check-c42-architecture",
         "check-c42-artifact-receipt", "C42_RECEIPT",
         "check-c42-make-integrity",
+        "check-c42-provider-mutations",
     )
     for token in required_make_tokens:
         if token not in makefile:
@@ -1452,6 +1460,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "tests/c42_support.h", "tests/c42_reference.h",
         "tests/c42_dut_bfs.h", "tests/c42_model.h",
         "../../scripts/check_c42_make_integrity.py",
+        "../../scripts/check_c42_provider_mutations.py",
         "../../include/fwlab/contracts/hif_command_port.h",
     )
     for source in required_sources:
@@ -1486,6 +1495,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "check-c42-dynamic-mutations", "check-c42-replay",
         "check-c42-artifact-receipt",
         "check-c42-make-integrity",
+        "check-c42-provider-mutations",
     }
     expected_prerequisites = {
         "check-c42": expected_targets,
@@ -1510,6 +1520,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "check-c42-architecture": set(),
         "check-c42-dynamic-mutations": set(),
         "check-c42-make-integrity": set(),
+        "check-c42-provider-mutations": set(),
         "check-c42-artifact-receipt": {
             "build/c42_queue_unit", "build/c42_publication_unit",
             "build/c42_identity_unit", "build/c42_reset_delete_unit",
@@ -1567,6 +1578,8 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "CPPFLAGS": ["-I../../include -I."],
         "CFLAGS": ["$(BASE_CFLAGS)"],
         "LDFLAGS": [],
+        "GNUMAKEFLAGS": [""],
+        "MAKEFILES": [""],
         "BUILD_DIR": ["build"],
         "CORE_SOURCES": [
             "../../core/c4-nvme/c41_codec.c "
