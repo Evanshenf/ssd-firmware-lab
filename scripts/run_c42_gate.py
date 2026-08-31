@@ -43,6 +43,7 @@ EXPECTED_AUTHORITY_NODES = (
     "inventory-clang",
     "inventory-gcc",
     "obligation-generator",
+    "provider-obligation-generator",
     "claim-validator",
     "c42-build-tests",
     "c42-architecture",
@@ -255,6 +256,12 @@ def main() -> int:
             authorized("obligation-generator", [
                 python, str(ROOT / "scripts/gen_c42_obligations.py"), "--check",
             ], timeout=120)
+            provider_stimuli = temporary / "provider-obligations.inc"
+            authorized("provider-obligation-generator", [
+                python,
+                str(ROOT / "scripts/gen_c42_provider_obligations.py"),
+                "--output", str(provider_stimuli),
+            ], timeout=120, outputs=(provider_stimuli,))
             authorized("claim-validator", [
                 python, str(ROOT / "scripts/check_c42_claim_models.py"),
                 "--self-test",

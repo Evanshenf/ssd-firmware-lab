@@ -41,7 +41,8 @@ override C42_EVIDENCE_INPUTS := evidence/c42a-p1/profile.toml \
 	../../scripts/check_c42_authority.py \
 	../../scripts/extract_c42_interface_inventory.py \
 	../../scripts/check_c42_claim_models.py \
-	../../scripts/gen_c42_obligations.py
+	../../scripts/gen_c42_obligations.py \
+	../../scripts/gen_c42_provider_obligations.py
 override C42_ALL_INPUTS := $(C42_SOURCES) $(C42_FAKE_SOURCES) $(C42_SUPPORT) \
 	$(C42_REFERENCE) $(C42_TEST_SOURCES) $(C42_HEADERS) \
 	$(C42_EVIDENCE_INPUTS)

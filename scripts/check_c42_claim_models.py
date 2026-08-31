@@ -216,10 +216,40 @@ def expand_record_rules(
     claims: dict[str, dict[str, Any]],
     lanes: set[str],
     witnesses: set[str],
+    entrypoints: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], set[str]]:
     expanded: list[dict[str, Any]] = []
     covered: set[tuple[str, str]] = set()
     identifiers: set[str] = set()
+    override_identifiers: set[str] = set()
+    overrides: dict[tuple[str, str, str], str] = {}
+    for override in rows(
+            document, "field_overrides", f"{model_name}-model.toml"):
+        override_id = str(override.get("id", ""))
+        source_rule_id = str(override.get("record_rule_id", ""))
+        field_ids = string_list(
+            override.get("field_ids", []), f"field override {override_id} fields"
+        )
+        case_ids = string_list(
+            override.get("case_ids", []), f"field override {override_id} cases"
+        )
+        rule_kind = override.get("rule")
+        if not override_id or override_id in override_identifiers or \
+                not source_rule_id or not field_ids or not case_ids or \
+                rule_kind not in ALLOWED_FIELD_RULES:
+            raise ModelError(f"{model_name}: invalid field override {override_id}")
+        override_identifiers.add(override_id)
+        ensure_references(field_ids, set(fields), f"field override {override_id}")
+        for field_id in field_ids:
+            for case_id in case_ids:
+                key = (source_rule_id, field_id, case_id)
+                if key in overrides:
+                    raise ModelError(
+                        f"{model_name}: duplicate field override "
+                        f"{source_rule_id}/{field_id}/{case_id}"
+                    )
+                overrides[key] = str(rule_kind)
+    consumed_overrides: set[tuple[str, str, str]] = set()
     for rule in rows(document, "record_rules", f"{model_name}-model.toml"):
         identifier = str(rule.get("id", ""))
         if not identifier or identifier in identifiers:
@@ -229,6 +259,37 @@ def expand_record_rules(
         if not record_ids:
             raise ModelError(f"record rule {identifier}: records empty")
         ensure_references(record_ids, set(records), identifier)
+        bound_entrypoint_ids = string_list(
+            rule.get("entrypoint_ids", []),
+            f"record rule {identifier} entrypoints",
+        )
+        outcome_ids = string_list(
+            rule.get("outcome_ids", []),
+            f"record rule {identifier} outcomes",
+        )
+        if bound_entrypoint_ids:
+            if entrypoints is None or not outcome_ids:
+                raise ModelError(
+                    f"record rule {identifier}: incomplete entrypoint binding"
+                )
+            ensure_references(
+                bound_entrypoint_ids, set(entrypoints),
+                f"record rule {identifier}",
+            )
+            for entrypoint_id in bound_entrypoint_ids:
+                output_records = string_list(
+                    entrypoints[entrypoint_id].get("output_records", []),
+                    f"entrypoint {entrypoint_id} output records",
+                )
+                if not set(record_ids).intersection(output_records):
+                    raise ModelError(
+                        f"record rule {identifier}: entrypoint "
+                        f"{entrypoint_id} does not expose its record"
+                    )
+        elif outcome_ids:
+            raise ModelError(
+                f"record rule {identifier}: outcomes lack entrypoints"
+            )
         case_rows = rule.get("cases")
         if case_rows is None:
             case_rows = [{
@@ -251,6 +312,16 @@ def expand_record_rules(
                 raise ModelError(f"record rule {identifier}: invalid case")
             case_ids.add(case_id)
             normalized_cases.append((case_id, str(default), str(reserved)))
+        if bound_entrypoint_ids:
+            expected_cases = {
+                f"{entrypoint_id.removeprefix('memory_')}_{outcome_id}"
+                for entrypoint_id in bound_entrypoint_ids
+                for outcome_id in outcome_ids
+            }
+            if case_ids != expected_cases:
+                raise ModelError(
+                    f"record rule {identifier}: operation/outcome cases differ"
+                )
         claim_ids, additional = verify_claims_and_lanes(
             rule, identifier, claims, lanes, witnesses
         )
@@ -272,6 +343,11 @@ def expand_record_rules(
                             f"semantic field/case classified twice: {field_id}@{case_id}"
                         )
                     covered.add(key)
+                    override_key = (identifier, field_id, case_id)
+                    rule_kind = reserved if field.get("reserved") else default
+                    if override_key in overrides:
+                        rule_kind = overrides[override_key]
+                        consumed_overrides.add(override_key)
                     node_id = field_id if len(normalized_cases) == 1 else (
                         f"{field_id}@{case_id}"
                     )
@@ -281,7 +357,7 @@ def expand_record_rules(
                         "is_field_slot": True,
                         "model_kind": model_name,
                         "target_kind": "field",
-                        "rule_kind": reserved if field.get("reserved") else default,
+                        "rule_kind": rule_kind,
                         "semantic_tags": tags,
                         "case_id": case_id,
                         "claim_ids": claim_ids,
@@ -289,7 +365,13 @@ def expand_record_rules(
                         "element_count": int(field["element_count"]),
                         "source_rule_id": identifier,
                     })
-    return expanded, identifiers
+    if consumed_overrides != set(overrides):
+        missing = sorted(set(overrides) - consumed_overrides)
+        raise ModelError(
+            f"{model_name}: unmatched field overrides: "
+            + ",".join("/".join(key) for key in missing)
+        )
+    return expanded, identifiers | override_identifiers
 
 
 def provider_nodes(
@@ -346,6 +428,41 @@ def provider_nodes(
                 scalar_slots[f"{entrypoint_id}.{direction}.{scalar}"] = direction
         if isinstance(entrypoint.get("output_bytes"), int):
             scalar_slots[f"{entrypoint_id}.output.bytes"] = "output"
+    scalar_overrides: dict[tuple[str, str], str] = {}
+    scalar_override_ids: set[str] = set()
+    for override in rows(document, "scalar_overrides", "provider-model.toml"):
+        override_id = str(override.get("id", ""))
+        scalar_ids = string_list(
+            override.get("scalar_ids", []),
+            f"provider scalar override {override_id} scalars",
+        )
+        case_ids = string_list(
+            override.get("case_ids", []),
+            f"provider scalar override {override_id} cases",
+        )
+        rule_kind = override.get("rule")
+        if not override_id or override_id in node_ids or \
+                override_id in scalar_override_ids or not scalar_ids or \
+                not case_ids or rule_kind not in ALLOWED_FIELD_RULES:
+            raise ModelError(
+                f"provider scalar override invalid: {override_id}"
+            )
+        ensure_references(
+            scalar_ids, set(scalar_slots),
+            f"provider scalar override {override_id}",
+        )
+        scalar_override_ids.add(override_id)
+        node_ids.add(override_id)
+        for scalar_id in scalar_ids:
+            for case_id in case_ids:
+                key = (scalar_id, case_id)
+                if key in scalar_overrides:
+                    raise ModelError(
+                        f"provider scalar override duplicate: "
+                        f"{scalar_id}@{case_id}"
+                    )
+                scalar_overrides[key] = str(rule_kind)
+    consumed_scalar_overrides: set[tuple[str, str]] = set()
     covered_scalars: set[tuple[str, str]] = set()
     covered_scalar_bases: set[str] = set()
     for rule in rows(document, "scalar_rules", "provider-model.toml"):
@@ -405,6 +522,9 @@ def provider_nodes(
                         f"provider scalar/case classified twice: {scalar_id}@{case_id}"
                     )
                 covered_scalars.add(key)
+                effective_rule = scalar_overrides.get(key, rule_kind)
+                if key in scalar_overrides:
+                    consumed_scalar_overrides.add(key)
                 node_id = scalar_id if len(scalar_cases) == 1 else (
                     f"{scalar_id}@{case_id}"
                 )
@@ -414,7 +534,7 @@ def provider_nodes(
                     "is_field_slot": True,
                     "model_kind": "provider",
                     "target_kind": "field",
-                    "rule_kind": rule_kind,
+                    "rule_kind": effective_rule,
                     "semantic_tags": sorted(tags),
                     "case_id": case_id,
                     "claim_ids": claim_ids,
@@ -424,6 +544,12 @@ def provider_nodes(
                 })
     if covered_scalar_bases != set(scalar_slots):
         raise ModelError("provider scalar coverage differs from inventory")
+    if consumed_scalar_overrides != set(scalar_overrides):
+        missing = sorted(set(scalar_overrides) - consumed_scalar_overrides)
+        raise ModelError(
+            "provider scalar overrides unmatched: "
+            + ",".join(f"{scalar}@{case}" for scalar, case in missing)
+        )
 
     for table_name, target_kind in (
         ("relations", "relation"),
@@ -760,7 +886,7 @@ def build_model(model_dir: Path = DEFAULT_MODEL_DIR) -> dict[str, Any]:
     nodes: list[dict[str, Any]] = []
     provider_fields, provider_rule_ids = expand_record_rules(
         "provider", documents["provider-model.toml"], records, fields,
-        claims, lanes, witnesses,
+        claims, lanes, witnesses, entrypoints,
     )
     identity_fields, identity_rule_ids = expand_record_rules(
         "identity", documents["identity-model.toml"], records, fields,
@@ -863,6 +989,8 @@ def build_model(model_dir: Path = DEFAULT_MODEL_DIR) -> dict[str, Any]:
         "profile_id": "C42A-P1",
         "input_digest": input_digest(model_dir),
         "counts": counts,
+        "nodes": nodes,
+        "operators": operators,
         "obligations": sorted(obligations, key=lambda item: str(item["id"])),
     }
 
@@ -920,8 +1048,8 @@ def self_test(model_dir: Path) -> int:
         (
             "unclassified-field",
             "provider-model.toml",
-            ', "memory_status"]',
-            "]",
+            'records = ["memory_status"]',
+            'records = ["memory_token"]',
             False,
         ),
         (
@@ -943,6 +1071,33 @@ def self_test(model_dir: Path) -> int:
             "build-trust.toml",
             'child_ids = ["authoritative_runner", "claim_validator"]',
             'child_ids = ["workflow", "authoritative_runner", "claim_validator"]',
+            False,
+        ),
+        (
+            "unknown-field-override-rule",
+            "provider-model.toml",
+            'record_rule_id = "provider_memory_status_contracts"',
+            'record_rule_id = "unknown_memory_status_contracts"',
+            False,
+        ),
+        (
+            "incomplete-operation-outcomes",
+            "provider-model.toml",
+            'outcome_ids = ["success", "in_progress", "failure"]',
+            'outcome_ids = ["success", "in_progress"]',
+            False,
+        ),
+        (
+            "unknown-scalar-override-slot",
+            "provider-model.toml",
+            'scalar_ids = ["command_admit_start.output.admission_state", '
+            '"command_admit_query.output.admission_state", '
+            '"command_consume_commit.output.consume_state", '
+            '"command_consume_query.output.consume_state"]',
+            'scalar_ids = ["unknown.output.state", '
+            '"command_admit_query.output.admission_state", '
+            '"command_consume_commit.output.consume_state", '
+            '"command_consume_query.output.consume_state"]',
             False,
         ),
         (

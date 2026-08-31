@@ -4,9 +4,9 @@
 [authority]
 schema_version = 1
 profile_id = "C42A-P1"
-topology_sha256 = "c314dee7e2596629bab9d87d0ac8e899b67d6be15ac51239cb6376c936266c6e"
-node_count = 22
-identity_count = 32
+topology_sha256 = "7f9ab539872c217497be14b823b14a079ddeb7764d923b9baa81973a148d7ba7"
+node_count = 23
+identity_count = 33
 
 [[identities]]
 node_id = "architecture_checker"
@@ -21,7 +21,7 @@ node_id = "authoritative_runner"
 node_type = "runner"
 execution_mode = "direct"
 path = "scripts/run_c42_gate.py"
-sha256 = "38f8bb01ebfe6d5a728a3fcb9df36236527945fc844cbf95e9a7e659d17b4b25"
+sha256 = "be1971024bf1bf49ce07cb89ed34e9239bcde9d67ccc1405a24808deaa50d42e"
 mode = 420
 
 [[identities]]
@@ -69,7 +69,7 @@ node_id = "c42_make"
 node_type = "recipe"
 execution_mode = "bound_recipe"
 path = "frontends/headless-c4/Makefile"
-sha256 = "bed72e86586beb4f13a85d2b74e6afce75b75b602cbde4804b49816828c564e5"
+sha256 = "92495086bfc98f1043bf4aae280b4554e2c9a673235843a0d93b72161f635768"
 mode = 420
 
 [[identities]]
@@ -77,7 +77,7 @@ node_id = "c42_sources"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/c42_sources.mk"
-sha256 = "3454ae17226f2468ea17f0bc689fa8aefa2d068741fd0ce5a886392740e4d5f7"
+sha256 = "1029099e851dffee2a36a9470a3037a31897e2cb29000937e3a5fac4fb53dd34"
 mode = 420
 
 [[identities]]
@@ -93,7 +93,7 @@ node_id = "claim_validator"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_claim_models.py"
-sha256 = "2e4690a89439c43f35f2eac5952253c1056c77b60c5c42bd883cea7a6a610545"
+sha256 = "9e92ea94e302024168a6103aade5fee2eee7710ce9c7db0be461e93cde27dfa4"
 mode = 420
 
 [[identities]]
@@ -109,7 +109,7 @@ node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/build-trust.toml"
-sha256 = "c314dee7e2596629bab9d87d0ac8e899b67d6be15ac51239cb6376c936266c6e"
+sha256 = "7f9ab539872c217497be14b823b14a079ddeb7764d923b9baa81973a148d7ba7"
 mode = 420
 
 [[identities]]
@@ -125,7 +125,7 @@ node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/claims.toml"
-sha256 = "b0f2fcb053e5c21509bdaa6d7c3e9406d8ad1e060165170445cfeb5174c4cd10"
+sha256 = "ddc73e132cee9e5608278dc63f9707d7fb7b1427b91f409472e69905aca4e948"
 mode = 420
 
 [[identities]]
@@ -165,7 +165,7 @@ node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/obligations.lock.toml"
-sha256 = "f7f7d01fc8b2548e061d31edbf6aa743bf184aa8af102492450e1f49bde7de79"
+sha256 = "4f4ba5fb5b4d02f0051f43548d3f3d067b8e129df52dbafbb89731bff6d6214d"
 mode = 420
 
 [[identities]]
@@ -189,7 +189,7 @@ node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/provider-model.toml"
-sha256 = "7247f1cdd0c8a0425916a63200fc1f3e2ef9e0b4e0ff5d0dfee37641848e5bcf"
+sha256 = "f5c13662bd640438c826fc2bdd9acf88e1078b3ebc853cdf73ecf854eabd11d7"
 mode = 420
 
 [[identities]]
@@ -229,7 +229,7 @@ node_id = "provider_executor"
 node_type = "checker"
 execution_mode = "bound_recipe"
 path = "frontends/headless-c4/tests/test_c42_provider_matrix.c"
-sha256 = "821aca526b3e5c8cfc2bb3a7c983bedb11e3b4198a86ee81d07cd90dce464095"
+sha256 = "c12b32514d357595b3fa60a7576424cf64cef324efe836fa457b1bb55311b7f1"
 mode = 420
 
 [[identities]]
@@ -237,7 +237,15 @@ node_id = "provider_mutations"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_provider_mutations.py"
-sha256 = "89fb0c4b519792b4c9ca13dbf765c8de82e784acd2c53e03fb41ba180bebae6a"
+sha256 = "1950d89f85f604259acd5e180abe393a75ff13d8539ddbf76614297e36bf05f5"
+mode = 420
+
+[[identities]]
+node_id = "provider_obligation_generator"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/gen_c42_provider_obligations.py"
+sha256 = "56e04d28a805722c20ef4926fddef52a48cfcbd20471c4ed7e3d2ff44ca9241f"
 mode = 420
 
 [[identities]]

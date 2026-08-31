@@ -17,7 +17,7 @@ additional_lane_ids = ["provider_gcc", "provider_clang"]
 
 [[record_rules]]
 id = "provider_result_contracts"
-records = ["nvme_completion_intent", "command_prepare_result", "memory_status"]
+records = ["nvme_completion_intent", "command_prepare_result", "command_ticket", "command_ready_event", "command_completion_lease", "command_consume_token"]
 cases = [
   { id = "success", default_rule = "conditional", reserved_rule = "required_zero" },
   { id = "in_progress", default_rule = "preserve", reserved_rule = "preserve" },
@@ -25,6 +25,64 @@ cases = [
 ]
 claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-PROVIDER-OUTPUT-EXACT"]
 additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[record_rules]]
+id = "provider_memory_status_contracts"
+records = ["memory_status"]
+entrypoint_ids = ["memory_scrub_start", "memory_scrub_query", "memory_scrub_abort", "memory_scrub_retire_start", "memory_scrub_retire_query", "memory_body_start", "memory_body_query", "memory_marker_start", "memory_marker_query"]
+outcome_ids = ["success", "in_progress", "failure"]
+cases = [
+  { id = "scrub_start_success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "scrub_start_in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "scrub_start_failure", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "scrub_query_success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "scrub_query_in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "scrub_query_failure", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "scrub_abort_success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "scrub_abort_in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "scrub_abort_failure", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "scrub_retire_start_success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "scrub_retire_start_in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "scrub_retire_start_failure", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "scrub_retire_query_success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "scrub_retire_query_in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "scrub_retire_query_failure", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "body_start_success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "body_start_in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "body_start_failure", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "body_query_success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "body_query_in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "body_query_failure", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "marker_start_success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "marker_start_in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "marker_start_failure", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "marker_query_success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "marker_query_in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "marker_query_failure", default_rule = "preserve", reserved_rule = "preserve" },
+]
+claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-PROVIDER-OUTPUT-EXACT"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[field_overrides]]
+id = "memory_status_success_token_exact"
+record_rule_id = "provider_memory_status_contracts"
+field_ids = ["memory_status.token"]
+case_ids = ["scrub_start_success", "scrub_query_success", "scrub_abort_success", "scrub_retire_start_success", "scrub_retire_query_success", "body_start_success", "body_query_success", "marker_start_success", "marker_query_success"]
+rule = "exact"
+
+[[field_overrides]]
+id = "prepare_result_identity_exact"
+record_rule_id = "provider_result_contracts"
+field_ids = ["command_prepare_result.version", "command_prepare_result.size"]
+case_ids = ["success"]
+rule = "exact"
+
+[[field_overrides]]
+id = "completion_intent_identity_exact"
+record_rule_id = "provider_result_contracts"
+field_ids = ["nvme_completion_intent.version", "nvme_completion_intent.size", "nvme_completion_intent.handle", "nvme_completion_intent.origin"]
+case_ids = ["success"]
+rule = "exact"
 
 [[entrypoint_rules]]
 id = "provider_command_entrypoints"
@@ -62,6 +120,12 @@ cases = [
 ]
 claim_ids = ["C42A-PROVIDER-OUTPUT-EXACT"]
 additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[scalar_overrides]]
+id = "provider_in_progress_state_outputs"
+scalar_ids = ["command_admit_start.output.admission_state", "command_admit_query.output.admission_state", "command_consume_commit.output.consume_state", "command_consume_query.output.consume_state"]
+case_ids = ["in_progress"]
+rule = "conditional"
 
 [[relations]]
 id = "relation_fresh_admit_generation"

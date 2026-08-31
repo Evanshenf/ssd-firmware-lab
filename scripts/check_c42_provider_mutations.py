@@ -6,12 +6,15 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
+
+from check_c42_claim_models import ModelError, build_model
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +34,105 @@ def replace_unique(path: Path, before: str, after: str) -> None:
 def variations() -> list[dict[str, object]]:
     return [
         {
+            "name": "PM_REQUIRED_ZERO_OUTPUT_VIOLATION",
+            "label": "prepare_start exact event",
+            "operator_ids": ["field_required_zero_violation"],
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "    result->disposition = disposition;\n"
+                       "    if (record != NULL && disposition == "
+                       "FWLAB_HIF_PREPARE_RESERVED) {",
+                       "    result->disposition = disposition;\n"
+                       "    result->reserved[0] = 1;\n"
+                       "    if (record != NULL && disposition == "
+                       "FWLAB_HIF_PREPARE_RESERVED) {")],
+        },
+        {
+            "name": "PM_CALL_KIND_SUBSTITUTED",
+            "label": "prepare_start exact event",
+            "operator_ids": ["entrypoint_call_kind_substitute"],
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "        context, C42_FAKE_COMMAND_PREPARE, "
+                       "C42_FAKE_CALL_START, call,",
+                       "        context, C42_FAKE_COMMAND_PREPARE, "
+                       "C42_FAKE_CALL_QUERY, call,")],
+        },
+        {
+            "name": "PM_PRESERVED_OUTPUT_OVERWRITTEN",
+            "label": "prepare-start in-progress preserves output",
+            "operator_ids": ["field_preserve_overwrite"],
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "    if (command->script.prepare_delay != 0) {\n"
+                       "        return FWLAB_HIF_PORT_IN_PROGRESS;\n"
+                       "    }",
+                       "    if (command->script.prepare_delay != 0) {\n"
+                       "        result->version = FWLAB_HIF_COMMAND_PORT_VERSION;\n"
+                       "        return FWLAB_HIF_PORT_IN_PROGRESS;\n"
+                       "    }")],
+        },
+        {
+            "name": "PM_POLL_SEQUENCE_STALLED",
+            "label": "poll ready sequence strictly advances",
+            "operator_ids": ["relation_stall"],
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "    events[0].sequence = command->next_ready_sequence++;\n"
+                       "    selected->ready_sent = 1;",
+                       "    events[0].sequence = command->next_ready_sequence;\n"
+                       "    selected->ready_sent = 1;")],
+        },
+        {
+            "name": "PM_COMMAND_EFFECT_SKIPPED",
+            "label": "effect CONSUME_COMMIT caller/provider state",
+            "operator_ids": ["effect_skip"],
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "    if (injection_take(\n"
+                       "            command, C42_FAKE_COMMAND_CONSUME_COMMIT,\n"
+                       "            &injected, &value, &omit)) {\n"
+                       "        if ((command->injection_flags & "
+                       "C42_FAKE_APPLY_EFFECT) != 0) {\n"
+                       "            record->consume_committed = 1;\n"
+                       "            mark_injected_effect(\n"
+                       "                command, "
+                       "C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED\n"
+                       "            );",
+                       "    if (injection_take(\n"
+                       "            command, C42_FAKE_COMMAND_CONSUME_COMMIT,\n"
+                       "            &injected, &value, &omit)) {\n"
+                       "        if ((command->injection_flags & "
+                       "C42_FAKE_APPLY_EFFECT) != 0) {\n"
+                       "            mark_injected_effect(\n"
+                       "                command, "
+                       "C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED\n"
+                       "            );")],
+        },
+        {
+            "name": "PM_MEMORY_EFFECT_DUPLICATED",
+            "label": "memory capture exact 64-byte output and provider effect",
+            "operator_ids": ["effect_duplicate"],
+            "edits": [("frontends/headless-c4/fakes/c42_memory.c",
+                       "        if (direct->apply_effect != 0) {\n"
+                       "            memory->capture_count++;\n"
+                       "            mark_direct_effect(memory, "
+                       "direct->applied_effect);",
+                       "        if (direct->apply_effect != 0) {\n"
+                       "            memory->capture_count += 2;\n"
+                       "            mark_direct_effect(memory, "
+                       "direct->applied_effect);")],
+        },
+        {
+            "name": "PM_RESPONSE_LOSS_ORDER_COLLAPSED",
+            "label": "response lost before effect",
+            "operator_ids": ["response_order_swap"],
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "        if (command->injection_requested_effect !=\n"
+                       "                C42_FAKE_COMMAND_EFFECT_NONE &&\n"
+                       "            event.output_write_mask == 0 &&",
+                       "        if (command->injection_applied_effect !=\n"
+                       "                C42_FAKE_COMMAND_EFFECT_NONE &&\n"
+                       "            event.output_write_mask == 0 &&")],
+        },
+        {
             "name": "PM_BODY_RETURNS_WRONG_TOKEN",
+            "operator_ids": ["field_corrupt"],
             "label": "memory event all fields exact",
             "edits": [("frontends/headless-c4/fakes/c42_memory.c",
                        "        direct_status_fill(memory, status, client_token, direct);\n"
@@ -46,6 +147,7 @@ def variations() -> list[dict[str, object]]:
         },
         {
             "name": "PM_CONSUME_RETURNS_WRONG_STATE",
+            "operator_ids": ["field_invalid_enum"],
             "label": "consume caller output and applied effect exact",
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {\n"
@@ -106,6 +208,7 @@ def variations() -> list[dict[str, object]]:
         },
         {
             "name": "PM_ALLOW_OK_WITHOUT_STATUS",
+            "operator_ids": ["field_required_omission"],
             "label": "memory rejects transactional OK without exact status",
             "edits": [("frontends/headless-c4/fakes/c42_memory.c",
                        "        (injection->result == C42_MEMORY_OK && output_required &&\n"
@@ -137,23 +240,44 @@ def variations() -> list[dict[str, object]]:
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "    if (record == NULL ||\n"
                        "        record->prepare_key.client_uid != key->client_uid ||\n"
+                       "        record->prepare_key.client_generation != key->generation ||\n"
                        "        !handle_equal(&command->handle, &record->prepared.handle) ||\n"
                        "        !origin_equal(&command->origin, &record->prepared.origin)) {",
                        "    if (record == NULL ||\n"
                        "        (0 != 0 &&\n"
                        "         record->prepare_key.client_uid != key->client_uid) ||\n"
+                       "        record->prepare_key.client_generation != key->generation ||\n"
                        "        !handle_equal(&command->handle, &record->prepared.handle) ||\n"
                        "        !origin_equal(&command->origin, &record->prepared.origin)) {")],
         },
         {
+            "name": "PM_FRESH_ADMIT_GENERATION_RELATION_REMOVED",
+            "label": "mismatch fresh admit generation rejected unchanged",
+            "operator_ids": ["field_stale_key", "relation_split"],
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "    if (record == NULL || record->prepare_key.client_uid != key->client_uid ||\n"
+                       "        record->prepare_key.client_generation != key->generation ||\n"
+                       "        !handle_equal(&canonical->handle, &record->prepared.handle) ||",
+                       "    if (record == NULL || record->prepare_key.client_uid != key->client_uid ||\n"
+                       "        !handle_equal(&canonical->handle, &record->prepared.handle) ||")],
+        },
+        {
             "name": "PM_ADMIT_GENERATION_IDENTITY_REMOVED",
             "label": "mismatch admit generation query rejected unchanged",
-            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+            "edits": [
+                ("frontends/headless-c4/fakes/c42_command.c",
+                 "    if (record == NULL || record->prepare_key.client_uid != key->client_uid ||\n"
+                 "        record->prepare_key.client_generation != key->generation ||\n"
+                 "        !handle_equal(&canonical->handle, &record->prepared.handle) ||",
+                 "    if (record == NULL || record->prepare_key.client_uid != key->client_uid ||\n"
+                 "        !handle_equal(&canonical->handle, &record->prepared.handle) ||"),
+                ("frontends/headless-c4/fakes/c42_command.c",
                        "           left->client_uid == right->client_uid &&\n"
                        "           left->generation == right->generation &&\n"
                        "           left->reserved == right->reserved;",
                        "           left->client_uid == right->client_uid &&\n"
-                       "           left->reserved == right->reserved;")],
+                       "           left->reserved == right->reserved;")
+            ],
         },
         {
             "name": "PM_ADMIT_CANONICAL_DWORD_IDENTITY_REMOVED",
@@ -307,6 +431,60 @@ def variations() -> list[dict[str, object]]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--name", action="append", default=[],
+        help="run only the named provider variation (repeatable)",
+    )
+    arguments = parser.parse_args()
+    selected = variations()
+    try:
+        provider_operator_ids = {
+            str(obligation["operator_id"])
+            for obligation in build_model()["obligations"]
+            if obligation.get("model_kind") == "provider"
+        }
+    except (ModelError, OSError) as error:
+        print(
+            f"C4.2 provider variations: FAIL: cannot derive operators: {error}",
+            file=sys.stderr,
+        )
+        return 2
+    if arguments.name:
+        requested = set(arguments.name)
+        known = {str(variation["name"]) for variation in selected}
+        unknown = sorted(requested - known)
+        if unknown:
+            print(
+                "C4.2 provider variations: FAIL: unknown variation(s): "
+                + ",".join(unknown), file=sys.stderr,
+            )
+            return 2
+        selected = [
+            variation for variation in selected
+            if str(variation["name"]) in requested
+        ]
+    declared_operator_ids = {
+        str(operator_id)
+        for variation in selected
+        for operator_id in variation.get("operator_ids", [])
+    }
+    unknown_operator_ids = sorted(
+        declared_operator_ids - provider_operator_ids
+    )
+    if unknown_operator_ids:
+        print(
+            "C4.2 provider variations: FAIL: unknown operator canary: "
+            + ",".join(unknown_operator_ids), file=sys.stderr,
+        )
+        return 2
+    if not arguments.name and declared_operator_ids != provider_operator_ids:
+        missing = sorted(provider_operator_ids - declared_operator_ids)
+        print(
+            "C4.2 provider variations: FAIL: operator canaries incomplete: "
+            + ",".join(missing), file=sys.stderr,
+        )
+        return 2
     compilers = [name for name in ("gcc", "clang") if shutil.which(name)]
     if len(compilers) != 2:
         print("C4.2 provider variations require gcc and clang", file=sys.stderr)
@@ -317,7 +495,7 @@ def main() -> int:
     baseline = {name: sha256(ROOT / name) for name in tracked}
     total = 0
     try:
-        for variation in variations():
+        for variation in selected:
             name = str(variation["name"])
             allowed = {str(edit[0]) for edit in variation["edits"]}
             outputs: list[str] = []
@@ -379,7 +557,8 @@ def main() -> int:
         return 1
     print(
         f"C4.2 provider variations: PASS variations={total} "
-        f"compilers=2 binaries={total * 2}"
+        f"compilers=2 binaries={total * 2} "
+        f"operator_canaries={len(declared_operator_ids)}"
     )
     return 0
 

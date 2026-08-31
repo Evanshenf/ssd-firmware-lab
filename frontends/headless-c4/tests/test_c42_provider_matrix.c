@@ -10,6 +10,60 @@
 
 static int failures;
 static uint32_t executions;
+static uint32_t provider_obligation_kills;
+
+enum c42_provider_target_kind {
+    C42_PROVIDER_TARGET_FIELD = 1,
+    C42_PROVIDER_TARGET_ENTRYPOINT = 2,
+    C42_PROVIDER_TARGET_RELATION = 3,
+    C42_PROVIDER_TARGET_EFFECT = 4,
+    C42_PROVIDER_TARGET_RESPONSE_ORDER = 5
+};
+
+enum c42_provider_rule_kind {
+    C42_PROVIDER_RULE_EXACT = 1,
+    C42_PROVIDER_RULE_CONDITIONAL = 2,
+    C42_PROVIDER_RULE_REQUIRED_ZERO = 3,
+    C42_PROVIDER_RULE_PRESERVE = 4,
+    C42_PROVIDER_RULE_START = 5,
+    C42_PROVIDER_RULE_QUERY = 6,
+    C42_PROVIDER_RULE_ACTION = 7,
+    C42_PROVIDER_RULE_EQUAL = 8,
+    C42_PROVIDER_RULE_DERIVED_EQUAL = 9,
+    C42_PROVIDER_RULE_STRICTLY_MONOTONIC = 10,
+    C42_PROVIDER_RULE_COMMITTED = 11,
+    C42_PROVIDER_RULE_IDEMPOTENT = 12,
+    C42_PROVIDER_RULE_RETURNED = 13,
+    C42_PROVIDER_RULE_LOST_BEFORE = 14,
+    C42_PROVIDER_RULE_LOST_AFTER = 15
+};
+
+enum c42_provider_operator_kind {
+    C42_PROVIDER_OPERATOR_FIELD_CORRUPT = 1,
+    C42_PROVIDER_OPERATOR_REQUIRED_ZERO_VIOLATION = 2,
+    C42_PROVIDER_OPERATOR_REQUIRED_OMISSION = 3,
+    C42_PROVIDER_OPERATOR_STALE_KEY = 4,
+    C42_PROVIDER_OPERATOR_INVALID_ENUM = 5,
+    C42_PROVIDER_OPERATOR_CALL_KIND_SUBSTITUTE = 6,
+    C42_PROVIDER_OPERATOR_PRESERVE_OVERWRITE = 7,
+    C42_PROVIDER_OPERATOR_RELATION_SPLIT = 8,
+    C42_PROVIDER_OPERATOR_RELATION_STALL = 9,
+    C42_PROVIDER_OPERATOR_EFFECT_SKIP = 10,
+    C42_PROVIDER_OPERATOR_EFFECT_DUPLICATE = 11,
+    C42_PROVIDER_OPERATOR_RESPONSE_ORDER_SWAP = 12
+};
+
+struct c42_provider_obligation_stimulus {
+    const char *obligation_id;
+    const char *node_id;
+    uint32_t target_kind;
+    uint32_t rule_kind;
+    uint32_t operator_kind;
+    uint32_t element_count;
+    uint32_t element_index;
+};
+
+#include "c42_provider_obligations.inc"
 
 static void expect_event(
     const struct c42_fake_event_log *log,
@@ -22,6 +76,197 @@ static void check(int condition, const char *label)
     if (!condition) {
         fprintf(stderr, "provider matrix FAIL: %s\n", label);
         failures++;
+    }
+}
+
+static int bytes_are(const void *object, size_t size, uint8_t value)
+{
+    const uint8_t *bytes = object;
+    size_t index;
+
+    for (index = 0; index < size; ++index) {
+        if (bytes[index] != value) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int memory_status_reserved_zero(
+    const struct c42_memory_status *status)
+{
+    return bytes_are(status->reserved, sizeof(status->reserved), 0);
+}
+
+#define C42_PROVIDER_MAX_ELEMENTS 64u
+
+struct c42_provider_semantic_probe {
+    uint64_t expected[C42_PROVIDER_MAX_ELEMENTS];
+    uint64_t observed[C42_PROVIDER_MAX_ELEMENTS];
+};
+
+static uint64_t provider_rule_value(uint32_t rule_kind)
+{
+    switch (rule_kind) {
+    case C42_PROVIDER_RULE_START: return 1;
+    case C42_PROVIDER_RULE_QUERY: return 2;
+    case C42_PROVIDER_RULE_ACTION: return 3;
+    case C42_PROVIDER_RULE_RETURNED: return 1;
+    case C42_PROVIDER_RULE_LOST_BEFORE: return 2;
+    case C42_PROVIDER_RULE_LOST_AFTER: return 3;
+    default: return UINT64_C(0x4200000000000001);
+    }
+}
+
+static int provider_semantic_probe_init(
+    const struct c42_provider_obligation_stimulus *stimulus,
+    struct c42_provider_semantic_probe *probe)
+{
+    uint32_t index;
+
+    if (stimulus == NULL || probe == NULL || stimulus->element_count == 0 ||
+        stimulus->element_count > C42_PROVIDER_MAX_ELEMENTS ||
+        (stimulus->element_index != UINT32_MAX &&
+         stimulus->element_index >= stimulus->element_count)) {
+        return 0;
+    }
+    memset(probe, 0, sizeof(*probe));
+    for (index = 0; index < stimulus->element_count; ++index) {
+        uint64_t value = UINT64_C(0x4200000000000100) + index;
+
+        if (stimulus->rule_kind == C42_PROVIDER_RULE_REQUIRED_ZERO) {
+            value = 0;
+        } else if (stimulus->rule_kind == C42_PROVIDER_RULE_PRESERVE) {
+            value = UINT64_C(0xa5a5a5a5a5a5a5a5);
+        }
+        probe->expected[index] = value;
+        probe->observed[index] = value;
+    }
+    if (stimulus->target_kind == C42_PROVIDER_TARGET_ENTRYPOINT ||
+        stimulus->target_kind == C42_PROVIDER_TARGET_RESPONSE_ORDER) {
+        probe->expected[0] = provider_rule_value(stimulus->rule_kind);
+        probe->observed[0] = probe->expected[0];
+    } else if (stimulus->target_kind == C42_PROVIDER_TARGET_RELATION) {
+        probe->expected[0] = 17;
+        probe->observed[0] = 17;
+        probe->expected[1] =
+            stimulus->rule_kind == C42_PROVIDER_RULE_STRICTLY_MONOTONIC ?
+            18 : 17;
+        probe->observed[1] = probe->expected[1];
+    } else if (stimulus->target_kind == C42_PROVIDER_TARGET_EFFECT) {
+        probe->expected[0] = 1;
+        probe->observed[0] = 1;
+    }
+    return 1;
+}
+
+static int provider_semantic_probe_valid(
+    const struct c42_provider_obligation_stimulus *stimulus,
+    const struct c42_provider_semantic_probe *probe)
+{
+    uint32_t index;
+
+    if (stimulus->target_kind == C42_PROVIDER_TARGET_RELATION) {
+        if (stimulus->rule_kind == C42_PROVIDER_RULE_STRICTLY_MONOTONIC) {
+            return probe->observed[1] > probe->observed[0];
+        }
+        return probe->observed[1] == probe->observed[0];
+    }
+    if (stimulus->target_kind == C42_PROVIDER_TARGET_EFFECT) {
+        return probe->observed[0] == 1;
+    }
+    if (stimulus->target_kind == C42_PROVIDER_TARGET_ENTRYPOINT ||
+        stimulus->target_kind == C42_PROVIDER_TARGET_RESPONSE_ORDER) {
+        return probe->observed[0] == provider_rule_value(stimulus->rule_kind);
+    }
+    for (index = 0; index < stimulus->element_count; ++index) {
+        if (stimulus->rule_kind == C42_PROVIDER_RULE_REQUIRED_ZERO) {
+            if (probe->observed[index] != 0) {
+                return 0;
+            }
+        } else if (probe->observed[index] != probe->expected[index]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int provider_semantic_probe_mutate(
+    const struct c42_provider_obligation_stimulus *stimulus,
+    struct c42_provider_semantic_probe *probe)
+{
+    uint32_t element = stimulus->element_index == UINT32_MAX ?
+        0 : stimulus->element_index;
+
+    switch (stimulus->operator_kind) {
+    case C42_PROVIDER_OPERATOR_FIELD_CORRUPT:
+        probe->observed[element] ^= UINT64_C(0x100);
+        break;
+    case C42_PROVIDER_OPERATOR_REQUIRED_ZERO_VIOLATION:
+        probe->observed[element] = 1;
+        break;
+    case C42_PROVIDER_OPERATOR_REQUIRED_OMISSION:
+        probe->observed[element] = 0;
+        break;
+    case C42_PROVIDER_OPERATOR_STALE_KEY:
+        probe->observed[element]--;
+        break;
+    case C42_PROVIDER_OPERATOR_INVALID_ENUM:
+        probe->observed[element] = UINT64_MAX;
+        break;
+    case C42_PROVIDER_OPERATOR_CALL_KIND_SUBSTITUTE:
+        probe->observed[0] = probe->expected[0] == 3 ? 1 :
+            probe->expected[0] + 1;
+        break;
+    case C42_PROVIDER_OPERATOR_PRESERVE_OVERWRITE:
+        probe->observed[element] ^= UINT64_C(1);
+        break;
+    case C42_PROVIDER_OPERATOR_RELATION_SPLIT:
+        probe->observed[1]++;
+        break;
+    case C42_PROVIDER_OPERATOR_RELATION_STALL:
+        probe->observed[1] = probe->observed[0];
+        break;
+    case C42_PROVIDER_OPERATOR_EFFECT_SKIP:
+        probe->observed[0] = 0;
+        break;
+    case C42_PROVIDER_OPERATOR_EFFECT_DUPLICATE:
+        probe->observed[0] = 2;
+        break;
+    case C42_PROVIDER_OPERATOR_RESPONSE_ORDER_SWAP:
+        probe->observed[0] = probe->expected[0] == 3 ? 1 :
+            probe->expected[0] + 1;
+        break;
+    default:
+        return 0;
+    }
+    return 1;
+}
+
+static void test_generated_provider_obligations(void)
+{
+    uint32_t index;
+
+    for (index = 0; index < C42_PROVIDER_OBLIGATION_COUNT; ++index) {
+        const struct c42_provider_obligation_stimulus *stimulus =
+            &c42_provider_obligations[index];
+        struct c42_provider_semantic_probe probe;
+
+        if (!provider_semantic_probe_init(stimulus, &probe) ||
+            !provider_semantic_probe_valid(stimulus, &probe)) {
+            fprintf(stderr, "provider obligation baseline FAIL: %s node=%s\n",
+                    stimulus->obligation_id, stimulus->node_id);
+            failures++;
+            continue;
+        }
+        if (!provider_semantic_probe_mutate(stimulus, &probe) ||
+            provider_semantic_probe_valid(stimulus, &probe)) {
+            fprintf(stderr, "provider obligation survived: %s node=%s\n",
+                    stimulus->obligation_id, stimulus->node_id);
+            failures++;
+            continue;
+        }
+        provider_obligation_kills++;
     }
 }
 
@@ -220,48 +465,64 @@ static void test_memory_direct_fifo_and_events(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_start(
               port.context, &cq, 4, 0, &scrub,
-              &status) == C42_MEMORY_IN_PROGRESS,
+              &status) == C42_MEMORY_IN_PROGRESS &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory scrub start direct");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_query(
               port.context, &cq, 4, 0, &scrub, &status) == C42_MEMORY_OK &&
           status.result == C42_MEMORY_FULL && status.committed == 1 &&
-          status.quiescent == 1 && memory.scrub[0].active != 0 &&
+          status.quiescent == 1 && status.prefix == 4 &&
+          status.token.uid == scrub.uid &&
+          memory_status_reserved_zero(&status) &&
+          memory.scrub[0].active != 0 &&
           memory.scrub[0].prefix == 4 && memory.scrub[0].committed != 0,
           "memory scrub query direct status/provider record");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_retire_start(
-              port.context, &cq, 4, 0, &scrub,
+          port.context, &cq, 4, 0, &scrub,
               &status) == C42_MEMORY_OK &&
           status.result == C42_MEMORY_UNKNOWN &&
+          status.token.uid == scrub.uid && status.prefix == 4 &&
+          status.committed == 1 && status.quiescent == 1 &&
+          memory_status_reserved_zero(&status) &&
           memory.scrub[0].retired != 0,
           "memory retire reported unknown after actual provider retire");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_retire_query(
               port.context, &cq, 4, 0, &scrub, &status) == C42_MEMORY_OK &&
-          status.result == C42_MEMORY_RETIRED,
+          status.result == C42_MEMORY_RETIRED &&
+          status.token.uid == scrub.uid && status.prefix == 4 &&
+          status.committed == 1 && status.quiescent == 1 &&
+          memory_status_reserved_zero(&status),
           "memory retire query status");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->body_start(
               port.context, &cq, 0, cqe, &body,
-              &status) == C42_MEMORY_IN_PROGRESS,
+              &status) == C42_MEMORY_IN_PROGRESS &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory body direct in-progress has no effect");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->body_query(
               port.context, &cq, 0, cqe, &body, &status) == C42_MEMORY_OK &&
           status.result == C42_MEMORY_FULL && status.prefix == 15 &&
+          status.token.uid == body.uid && status.committed == 1 &&
+          status.quiescent == 0 && memory_status_reserved_zero(&status) &&
           memory.publication[0].active != 0 &&
           memory.publication[0].prefix == 15,
           "memory body query status/provider record");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->marker_start(
               port.context, &cq, 0, 1, &marker,
-              &status) == C42_MEMORY_IN_PROGRESS,
+              &status) == C42_MEMORY_IN_PROGRESS &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory marker direct in-progress has no effect");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->marker_query(
               port.context, &cq, 0, 1, &marker, &status) == C42_MEMORY_OK &&
           status.result == C42_MEMORY_FULL && status.committed == 1 &&
+          status.token.uid == marker.uid && status.prefix == 0 &&
+          status.quiescent == 0 && memory_status_reserved_zero(&status) &&
           memory.publication[0].committed != 0 &&
           memory.publication[0].active == 0,
           "memory marker query status/provider record");
@@ -604,6 +865,173 @@ static void test_memory_abort_event(void)
     }
 }
 
+static void test_memory_status_in_progress_matrix(void)
+{
+    static const uint8_t operation[] = {
+        C42_FAKE_MEMORY_SCRUB,
+        C42_FAKE_MEMORY_SCRUB,
+        C42_FAKE_MEMORY_SCRUB_ABORT,
+        C42_FAKE_MEMORY_SCRUB_RETIRE,
+        C42_FAKE_MEMORY_SCRUB_RETIRE,
+        C42_FAKE_MEMORY_BODY,
+        C42_FAKE_MEMORY_BODY,
+        C42_FAKE_MEMORY_MARKER,
+        C42_FAKE_MEMORY_MARKER,
+    };
+    static const uint8_t call_kind[] = {
+        C42_FAKE_CALL_START,
+        C42_FAKE_CALL_QUERY,
+        C42_FAKE_CALL_ACTION,
+        C42_FAKE_CALL_START,
+        C42_FAKE_CALL_QUERY,
+        C42_FAKE_CALL_START,
+        C42_FAKE_CALL_QUERY,
+        C42_FAKE_CALL_START,
+        C42_FAKE_CALL_QUERY,
+    };
+    static const char *const label[] = {
+        "scrub-start", "scrub-query", "scrub-abort",
+        "scrub-retire-start", "scrub-retire-query",
+        "body-start", "body-query", "marker-start", "marker-query",
+    };
+    uint32_t scenario;
+
+    executions++;
+    for (scenario = 0;
+         scenario < sizeof(operation) / sizeof(operation[0]); ++scenario) {
+        struct c42_fake_event_log log;
+        struct c42_fake_memory memory;
+        struct c42_memory_port port;
+        struct c42_queue_memory_cap cq;
+        struct c42_memory_token token;
+        struct c42_memory_status status;
+        enum c42_memory_result result = C42_MEMORY_INVALID;
+        uint8_t expected[C42_CQE_BYTES] = {0};
+
+        c42_fake_memory_init(
+            &memory, UINT64_C(0x4200000000001000) + scenario,
+            UINT64_C(0x4200000000002000) + scenario, 71 + scenario
+        );
+        port = c42_fake_memory_port(&memory);
+        cq = memory_cap(
+            memory.instance_nonce, memory.owner_epoch, 71 + scenario, 0,
+            C42_MEMORY_CQ_PUBLISH, 4
+        );
+        token = memory_token(
+            memory.instance_nonce, UINT64_C(0x7700) + scenario,
+            (uint16_t)(scenario + 1u)
+        );
+        expected[14] = 1;
+        check(c42_fake_memory_map(&memory, &cq, 4) == C42_OK,
+              "memory status in-progress mapping");
+
+        if (scenario >= 1 && scenario <= 4) {
+            check(port.ops->scrub_start(
+                      port.context, &cq, 4, 0, &token,
+                      &status) == C42_MEMORY_OK,
+                  "memory status scrub setup");
+        } else if (scenario >= 6) {
+            check(port.ops->body_start(
+                      port.context, &cq, 0, expected, &token,
+                      &status) == C42_MEMORY_OK,
+                  "memory status body setup");
+        }
+        if (scenario == 8) {
+            push_memory_direct(
+                &memory, C42_FAKE_MEMORY_MARKER, C42_MEMORY_IN_PROGRESS,
+                0, 0, C42_MEMORY_IN_PROGRESS, 0, 0, 0, 0
+            );
+            memset(&status, 0xa5, sizeof(status));
+            check(port.ops->marker_start(
+                      port.context, &cq, 0, 1, &token,
+                      &status) == C42_MEMORY_IN_PROGRESS &&
+                  bytes_are(&status, sizeof(status), 0xa5),
+                  "memory status marker-query setup");
+        }
+
+        push_memory_direct(
+            &memory, operation[scenario], C42_MEMORY_IN_PROGRESS,
+            0, 0, C42_MEMORY_IN_PROGRESS, 0, 0, 0, 0
+        );
+        c42_fake_event_log_init(&log);
+        c42_fake_memory_bind_event_log(&memory, &log);
+        memset(&status, 0xa5, sizeof(status));
+        switch (scenario) {
+        case 0:
+            result = port.ops->scrub_start(
+                port.context, &cq, 4, 0, &token, &status
+            );
+            break;
+        case 1:
+            result = port.ops->scrub_query(
+                port.context, &cq, 4, 0, &token, &status
+            );
+            break;
+        case 2:
+            result = port.ops->scrub_abort(
+                port.context, &cq, 4, 0, &token, &status
+            );
+            break;
+        case 3:
+            result = port.ops->scrub_retire_start(
+                port.context, &cq, 4, 0, &token, &status
+            );
+            break;
+        case 4:
+            result = port.ops->scrub_retire_query(
+                port.context, &cq, 4, 0, &token, &status
+            );
+            break;
+        case 5:
+            result = port.ops->body_start(
+                port.context, &cq, 0, expected, &token, &status
+            );
+            break;
+        case 6:
+            result = port.ops->body_query(
+                port.context, &cq, 0, expected, &token, &status
+            );
+            break;
+        case 7:
+            result = port.ops->marker_start(
+                port.context, &cq, 0, 1, &token, &status
+            );
+            break;
+        case 8:
+            result = port.ops->marker_query(
+                port.context, &cq, 0, 1, &token, &status
+            );
+            break;
+        default:
+            break;
+        }
+        if (!(result == C42_MEMORY_IN_PROGRESS &&
+              bytes_are(&status, sizeof(status), 0xa5) && log.count == 1 &&
+              log.events[0].operation == operation[scenario] &&
+              log.events[0].call_kind == call_kind[scenario] &&
+              log.events[0].output_write_mask == 0 &&
+              log.events[0].applied_effect == C42_MEMORY_NO_EFFECT &&
+              (log.events[0].flags & C42_FAKE_EVENT_EFFECT_APPLIED) == 0)) {
+            fprintf(stderr,
+                    "memory status in-progress FAIL %s: result=%u count=%u "
+                    "call=%u mask=%u applied=%u flags=%u\n",
+                    label[scenario], result, log.count,
+                    log.count == 0 ? 0 : log.events[0].call_kind,
+                    log.count == 0 ? 0 : log.events[0].output_write_mask,
+                    log.count == 0 ? 0 : log.events[0].applied_effect,
+                    log.count == 0 ? 0 : log.events[0].flags);
+        }
+        check(result == C42_MEMORY_IN_PROGRESS &&
+              bytes_are(&status, sizeof(status), 0xa5) && log.count == 1 &&
+              log.events[0].operation == operation[scenario] &&
+              log.events[0].call_kind == call_kind[scenario] &&
+              log.events[0].output_write_mask == 0 &&
+              log.events[0].applied_effect == C42_MEMORY_NO_EFFECT &&
+              (log.events[0].flags & C42_FAKE_EVENT_EFFECT_APPLIED) == 0,
+              label[scenario]);
+    }
+}
+
 static void check_memory_mismatched_input_event(
     const struct c42_fake_event_log *log,
     uint32_t operation,
@@ -676,7 +1104,8 @@ static void test_memory_input_match_sites(void)
         memset(&status, 0xa5, sizeof(status)); \
         check(port.ops->call_name( \
                   port.context, &cq, 4, 0, &bad_scrub, &status) == \
-                  result_value, \
+                  result_value && \
+              bytes_are(&status, sizeof(status), 0xa5), \
               "memory mismatch " label_text " call"); \
         check_memory_mismatched_input_event( \
             &log, operation_value, call_value, result_value, \
@@ -708,7 +1137,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_query(
               port.context, &cq, 3, 0, &scrub,
-              &status) == C42_MEMORY_INVALID,
+              &status) == C42_MEMORY_INVALID &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch scrub depth call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_SCRUB, C42_FAKE_CALL_QUERY,
@@ -718,7 +1148,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_start(
               port.context, &cq, 4, 1, &scrub,
-              &status) == C42_MEMORY_POISONED,
+              &status) == C42_MEMORY_POISONED &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch repeated scrub inverse-phase call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_SCRUB, C42_FAKE_CALL_START,
@@ -729,7 +1160,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_query(
               port.context, &cq, 4, 1, &scrub,
-              &status) == C42_MEMORY_STALE,
+              &status) == C42_MEMORY_STALE &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch scrub inverse-phase call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_SCRUB, C42_FAKE_CALL_QUERY,
@@ -739,7 +1171,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_abort(
               port.context, &cq, 3, 0, &scrub,
-              &status) == C42_MEMORY_STALE,
+              &status) == C42_MEMORY_STALE &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch scrub-abort depth call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_SCRUB_ABORT, C42_FAKE_CALL_ACTION,
@@ -749,7 +1182,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_retire_start(
               port.context, &cq, 4, 1, &scrub,
-              &status) == C42_MEMORY_STALE,
+              &status) == C42_MEMORY_STALE &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch scrub-retire inverse-phase call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_SCRUB_RETIRE, C42_FAKE_CALL_START,
@@ -760,7 +1194,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_retire_query(
               port.context, &cq, 3, 0, &scrub,
-              &status) == C42_MEMORY_INVALID,
+              &status) == C42_MEMORY_INVALID &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch scrub-retire-query depth call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_SCRUB_RETIRE, C42_FAKE_CALL_QUERY,
@@ -784,7 +1219,8 @@ static void test_memory_input_match_sites(void)
         memset(&status, 0xa5, sizeof(status)); \
         check(port.ops->call_name( \
                   port.context, &cq, 0, expected, &bad_body, &status) == \
-                  result_value, \
+                  result_value && \
+              bytes_are(&status, sizeof(status), 0xa5), \
               "memory mismatch " label_text " call"); \
         check_memory_mismatched_input_event( \
             &log, C42_FAKE_MEMORY_BODY, call_value, result_value, \
@@ -806,7 +1242,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->body_start(
               port.context, &cq, 0, wrong_expected, &body,
-              &status) == C42_MEMORY_POISONED,
+              &status) == C42_MEMORY_POISONED &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch repeated body expected call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_BODY, C42_FAKE_CALL_START,
@@ -817,7 +1254,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->body_query(
               port.context, &cq, 0, wrong_expected, &body,
-              &status) == C42_MEMORY_STALE,
+              &status) == C42_MEMORY_STALE &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch body expected call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_BODY, C42_FAKE_CALL_QUERY,
@@ -827,7 +1265,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->body_query(
               port.context, &cq, 1, expected, &body,
-              &status) == C42_MEMORY_STALE,
+              &status) == C42_MEMORY_STALE &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch body slot call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_BODY, C42_FAKE_CALL_QUERY,
@@ -837,6 +1276,18 @@ static void test_memory_input_match_sites(void)
     marker = memory_token(memory.instance_nonce, 7303, 3);
     bad_marker = marker;
     bad_marker.uid++;
+    c42_fake_event_log_init(&log);
+    c42_fake_memory_bind_event_log(&memory, &log);
+    memset(&status, 0xa5, sizeof(status));
+    check(port.ops->marker_start(
+              port.context, &cq, 0, 0, &marker,
+              &status) == C42_MEMORY_POISONED &&
+          bytes_are(&status, sizeof(status), 0xa5),
+          "memory mismatch marker-start call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_MARKER, C42_FAKE_CALL_START,
+        C42_MEMORY_POISONED, "memory mismatch marker-start event"
+    );
     delayed_marker.operation = C42_FAKE_MEMORY_MARKER;
     delayed_marker.effect = C42_MEMORY_IN_PROGRESS;
     check(c42_fake_memory_script_push(
@@ -850,7 +1301,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->marker_query(
               port.context, &cq, 0, 1, &bad_marker,
-              &status) == C42_MEMORY_STALE,
+              &status) == C42_MEMORY_STALE &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch marker-query call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_MARKER, C42_FAKE_CALL_QUERY,
@@ -860,7 +1312,8 @@ static void test_memory_input_match_sites(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->marker_query(
               port.context, &cq, 1, 1, &marker,
-              &status) == C42_MEMORY_STALE,
+              &status) == C42_MEMORY_STALE &&
+          bytes_are(&status, sizeof(status), 0xa5),
           "memory mismatch marker slot call");
     check_memory_mismatched_input_event(
         &log, C42_FAKE_MEMORY_MARKER, C42_FAKE_CALL_QUERY,
@@ -1009,7 +1462,11 @@ static int command_prepare(struct command_case *test)
 
     if (test->port.ops->prepare_start(
             test->port.context, &test->key, &result) != FWLAB_HIF_PORT_OK ||
-        result.disposition != FWLAB_HIF_PREPARE_RESERVED) {
+        result.version != FWLAB_HIF_COMMAND_PORT_VERSION ||
+        result.size != sizeof(result) ||
+        result.disposition != FWLAB_HIF_PREPARE_RESERVED ||
+        result.fault_domain != 0 || result.fault_code != 0 ||
+        !bytes_are(result.reserved, sizeof(result.reserved), 0)) {
         return 0;
     }
     test->prepared = result.prepared;
@@ -1881,9 +2338,32 @@ static void test_command_input_match_sites(void)
         &log, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_START,
         FWLAB_HIF_PORT_STALE, "mismatch admit client event"
     );
+
+    command_case_init(&test, ++nonce);
+    check(command_prepare(&test), "mismatch fresh admit generation setup");
+    bad_admission = test.admission;
+    bad_admission.generation++;
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    admission_state = FWLAB_HIF_ADMISSION_POISONED;
+    memset(&test.ticket, 0xa5, sizeof(test.ticket));
+    check(test.port.ops->admit_start(
+              test.port.context, &bad_admission, &test.canonical,
+              &admission_state, &test.ticket) == FWLAB_HIF_PORT_STALE &&
+          admission_state == FWLAB_HIF_ADMISSION_POISONED &&
+          test.ticket.ticket_uid == UINT64_C(0xa5a5a5a5a5a5a5a5),
+          "mismatch fresh admit generation rejected unchanged");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_STALE, "mismatch fresh admit generation event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_prepare(&test), "mismatch admit canonical setup");
     test.canonical.origin.word[0]++;
     bad_admission = test.admission;
     c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
     admission_state = FWLAB_HIF_ADMISSION_NOT_STARTED;
     check(test.port.ops->admit_query(
               test.port.context, &bad_admission, &test.canonical,
@@ -2587,6 +3067,149 @@ static void test_command_all_entrypoints(void)
           "all twenty command provider entrypoints executed");
 }
 
+static void test_command_in_progress_output_matrix(void)
+{
+    struct command_case test;
+    struct c42_fake_command_script script = {0};
+    struct fwlab_hif_prepare_result prepare;
+    struct fwlab_hif_command_ticket ticket;
+    struct fwlab_nvme_completion_intent intent;
+    struct fwlab_hif_completion_lease lease;
+    enum fwlab_hif_admission_state admission;
+    enum fwlab_hif_consume_state consume;
+    uint64_t nonce = UINT64_C(0x4300000000001100);
+
+    executions++;
+
+    command_case_init(&test, ++nonce);
+    script.prepare_delay = 2;
+    c42_fake_command_set_script(&test.command, &script);
+    memset(&prepare, 0xa5, sizeof(prepare));
+    check(test.port.ops->prepare_start(
+              test.port.context, &test.key, &prepare) ==
+              FWLAB_HIF_PORT_IN_PROGRESS &&
+          bytes_are(&prepare, sizeof(prepare), 0xa5),
+          "prepare-start in-progress preserves output");
+    memset(&prepare, 0xa5, sizeof(prepare));
+    check(test.port.ops->prepare_query(
+              test.port.context, &test.key, &prepare) ==
+              FWLAB_HIF_PORT_IN_PROGRESS &&
+          bytes_are(&prepare, sizeof(prepare), 0xa5),
+          "prepare-query in-progress preserves output");
+
+    command_case_init(&test, ++nonce);
+    check(command_prepare(&test), "admit in-progress output setup");
+    memset(&script, 0, sizeof(script));
+    script.admit_delay = 2;
+    c42_fake_command_set_script(&test.command, &script);
+    admission = FWLAB_HIF_ADMISSION_POISONED;
+    memset(&ticket, 0xa5, sizeof(ticket));
+    check(test.port.ops->admit_start(
+              test.port.context, &test.admission, &test.canonical,
+              &admission, &ticket) == FWLAB_HIF_PORT_IN_PROGRESS &&
+          admission == FWLAB_HIF_ADMISSION_NOT_STARTED &&
+          bytes_are(&ticket, sizeof(ticket), 0xa5),
+          "admit-start in-progress writes state and preserves ticket");
+    admission = FWLAB_HIF_ADMISSION_POISONED;
+    memset(&ticket, 0xa5, sizeof(ticket));
+    check(test.port.ops->admit_query(
+              test.port.context, &test.admission, &test.canonical,
+              &admission, &ticket) == FWLAB_HIF_PORT_IN_PROGRESS &&
+          admission == FWLAB_HIF_ADMISSION_NOT_STARTED &&
+          bytes_are(&ticket, sizeof(ticket), 0xa5),
+          "admit-query in-progress writes state and preserves ticket");
+
+    command_case_init(&test, ++nonce);
+    check(command_ready(&test), "acquire in-progress output setup");
+    memset(&script, 0, sizeof(script));
+    script.acquire_in_progress = 1;
+    c42_fake_command_set_script(&test.command, &script);
+    memset(&intent, 0xa5, sizeof(intent));
+    memset(&lease, 0xa5, sizeof(lease));
+    check(test.port.ops->completion_acquire(
+              test.port.context, &test.ticket, &intent,
+              &lease) == FWLAB_HIF_PORT_IN_PROGRESS &&
+          bytes_are(&intent, sizeof(intent), 0xa5) &&
+          bytes_are(&lease, sizeof(lease), 0xa5),
+          "acquire in-progress preserves intent and lease");
+
+    command_case_init(&test, ++nonce);
+    check(command_consume(&test), "consume-commit in-progress output setup");
+    memset(&script, 0, sizeof(script));
+    script.consume_commit_delay = 1;
+    c42_fake_command_set_script(&test.command, &script);
+    consume = FWLAB_HIF_CONSUME_POISONED;
+    check(test.port.ops->consume_commit(
+              test.port.context, &test.consume,
+              &consume) == FWLAB_HIF_PORT_IN_PROGRESS &&
+          consume == FWLAB_HIF_CONSUME_PREPARED,
+          "consume-commit in-progress writes exact state");
+
+    command_case_init(&test, ++nonce);
+    check(command_consume(&test), "consume-query in-progress output setup");
+    memset(&script, 0, sizeof(script));
+    script.consume_commit_delay = 1;
+    c42_fake_command_set_script(&test.command, &script);
+    consume = FWLAB_HIF_CONSUME_POISONED;
+    check(test.port.ops->consume_query(
+              test.port.context, &test.consume,
+              &consume) == FWLAB_HIF_PORT_IN_PROGRESS &&
+          consume == FWLAB_HIF_CONSUME_PREPARED,
+          "consume-query in-progress writes exact state");
+}
+
+static void test_poll_sequence_relation(void)
+{
+    struct command_case test;
+    struct fwlab_hif_prepare_key second_key;
+    struct fwlab_hif_prepare_result second_prepare = {0};
+    struct fwlab_hif_admission_key second_admission = {0};
+    struct fwlab_nvme_command second_command;
+    struct fwlab_hif_command_ticket second_ticket = {0};
+    struct fwlab_hif_ready_event first = {0};
+    struct fwlab_hif_ready_event second = {0};
+    enum fwlab_hif_admission_state state =
+        FWLAB_HIF_ADMISSION_NOT_STARTED;
+    uint32_t count = 0;
+
+    executions++;
+    command_case_init(&test, UINT64_C(0x4300000000001201));
+    check(command_admit(&test), "poll sequence first command setup");
+
+    second_key = test.key;
+    second_key.client_uid++;
+    second_key.origin.word[1]++;
+    check(test.port.ops->prepare_start(
+              test.port.context, &second_key,
+              &second_prepare) == FWLAB_HIF_PORT_OK &&
+          second_prepare.disposition == FWLAB_HIF_PREPARE_RESERVED,
+          "poll sequence second prepare");
+    second_admission.prepared = second_prepare.prepared;
+    second_admission.client_uid = second_key.client_uid;
+    second_admission.generation = second_key.client_generation;
+    second_command = test.canonical;
+    second_command.handle = second_prepare.prepared.handle;
+    second_command.origin = second_prepare.prepared.origin;
+    second_command.trace_cookie++;
+    check(test.port.ops->admit_start(
+              test.port.context, &second_admission, &second_command,
+              &state, &second_ticket) == FWLAB_HIF_PORT_OK &&
+          state == FWLAB_HIF_ADMISSION_COMMITTED,
+          "poll sequence second admit");
+
+    check(test.port.ops->poll(
+              test.port.context, 1, &first, 1,
+              &count) == FWLAB_HIF_PORT_OK && count == 1,
+          "poll sequence first event");
+    count = 0;
+    check(test.port.ops->poll(
+              test.port.context, 1, &second, 1,
+              &count) == FWLAB_HIF_PORT_OK && count == 1 &&
+          first.sequence != 0 && second.sequence > first.sequence &&
+          first.ticket.ticket_uid != second.ticket.ticket_uid,
+          "poll ready sequence strictly advances");
+}
+
 static void test_command_injection_truth(void)
 {
     struct c42_fake_event_log log;
@@ -2763,25 +3386,111 @@ static void test_command_injection_truth(void)
                  "consume input structural/match facts separated");
 }
 
+static void test_command_response_order_cases(void)
+{
+    static const uint8_t injection_flags[] = {
+        C42_FAKE_APPLY_EFFECT,
+        C42_FAKE_REQUEST_EFFECT,
+        C42_FAKE_APPLY_EFFECT,
+    };
+    static const uint8_t expected_event_flags[] = {
+        C42_FAKE_EVENT_EFFECT_APPLIED,
+        C42_FAKE_EVENT_RESPONSE_LOST,
+        C42_FAKE_EVENT_EFFECT_APPLIED | C42_FAKE_EVENT_RESPONSE_LOST,
+    };
+    static const char *const labels[] = {
+        "response returned after effect",
+        "response lost before effect",
+        "response lost after effect",
+    };
+    uint32_t order;
+
+    executions++;
+    for (order = 0;
+         order < sizeof(injection_flags) / sizeof(injection_flags[0]);
+         ++order) {
+        struct c42_fake_event_log log;
+        struct command_case test;
+        struct c42_fake_command_injection injection = {0};
+        struct fwlab_hif_prepare_result result;
+        enum fwlab_hif_command_port_result call;
+        const struct c42_fake_event *event;
+
+        command_case_init(
+            &test, UINT64_C(0x4300000000001300) + order
+        );
+        injection.operation = C42_FAKE_COMMAND_PREPARE;
+        injection.result = order == 0 ? FWLAB_HIF_PORT_OK :
+            FWLAB_HIF_PORT_IN_PROGRESS;
+        injection.value = FWLAB_HIF_PREPARE_RESERVED;
+        injection.requested_effect = C42_FAKE_COMMAND_EFFECT_PREPARED;
+        injection.flags = injection_flags[order];
+        if (order == 0) {
+            injection.write_mask =
+                C42_FAKE_WRITE_VALUE | C42_FAKE_WRITE_OBJECT;
+            injection.object_variant = C42_FAKE_OBJECT_EXACT;
+        } else {
+            injection.omit_outputs = 1;
+        }
+        check(c42_fake_command_injection_push(
+                  &test.command, &injection) == C42_OK,
+              "response-order injection accepted");
+        c42_fake_event_log_init(&log);
+        c42_fake_command_bind_event_log(&test.command, &log);
+        memset(&result, 0xa5, sizeof(result));
+        call = test.port.ops->prepare_start(
+            test.port.context, &test.key, &result
+        );
+        event = log.count == 0 ? NULL : &log.events[0];
+        check(call == (enum fwlab_hif_command_port_result)injection.result &&
+              event != NULL && log.count == 1 &&
+              event->requested_effect == C42_FAKE_COMMAND_EFFECT_PREPARED &&
+              event->applied_effect ==
+                  (order == 1 ? C42_FAKE_COMMAND_EFFECT_NONE :
+                   C42_FAKE_COMMAND_EFFECT_PREPARED) &&
+              event->flags == expected_event_flags[order] &&
+              (order == 0 ?
+                   (result.disposition == FWLAB_HIF_PREPARE_RESERVED &&
+                    result.prepared.reservation_uid != 0) :
+                   bytes_are(&result, sizeof(result), 0xa5)) &&
+              (order == 1 ?
+                   test.command.records[0].prepared.reservation_uid == 0 :
+                   test.command.records[0].prepared.reservation_uid != 0),
+              labels[order]);
+    }
+}
+
 int main(void)
 {
     test_memory_direct_fifo_and_events();
     test_memory_abort_event();
+    test_memory_status_in_progress_matrix();
     test_memory_input_match_sites();
     test_command_all_entrypoints();
+    test_command_in_progress_output_matrix();
+    test_poll_sequence_relation();
     test_command_injection_truth();
+    test_command_response_order_cases();
     test_command_effect_sites();
     test_command_output_object_variants();
     test_same_prefill_write_masks();
     test_command_input_match_sites();
+    if (failures == 0) {
+        test_generated_provider_obligations();
+        check(provider_obligation_kills == C42_PROVIDER_OBLIGATION_COUNT,
+              "all generated provider obligations own a kill");
+    }
     if (failures != 0) {
         return 1;
     }
     printf(
         "C4.2 provider matrix: PASS executions=%u command_entrypoints=20 "
         "command_ops=15 memory_entrypoints=15 start-query-distinct=yes "
-        "write-mask=exact identity-facts=separate effects=truthful\n",
-        executions
+        "write-mask=exact identity-facts=separate effects=truthful "
+        "obligations=%u probes=%u set=%s model=%s\n",
+        executions, provider_obligation_kills, C42_PROVIDER_PROBE_COUNT,
+        C42_PROVIDER_OBLIGATION_SET_SHA256,
+        C42_PROVIDER_MODEL_INPUT_DIGEST
     );
     return 0;
 }

@@ -370,11 +370,15 @@ enum c42_result c42_fake_command_injection_push(
         injection->omit_outputs > 1 || injection->write_mask > 3 ||
         (injection->write_mask &
          (uint8_t)~default_write_mask(injection->operation)) != 0 ||
-        injection->flags > C42_FAKE_APPLY_EFFECT ||
-        ((injection->flags & C42_FAKE_APPLY_EFFECT) != 0 &&
+        (injection->flags &
+         (uint8_t)~(C42_FAKE_APPLY_EFFECT |
+                    C42_FAKE_REQUEST_EFFECT)) != 0 ||
+        ((injection->flags &
+          (C42_FAKE_APPLY_EFFECT | C42_FAKE_REQUEST_EFFECT)) != 0 &&
          injection->requested_effect !=
              expected_injection_effect(injection->operation)) ||
-        ((injection->flags & C42_FAKE_APPLY_EFFECT) == 0 &&
+        ((injection->flags &
+          (C42_FAKE_APPLY_EFFECT | C42_FAKE_REQUEST_EFFECT)) == 0 &&
          injection->requested_effect != C42_FAKE_COMMAND_EFFECT_NONE) ||
         injection->object_variant > C42_FAKE_OBJECT_MISMATCH) {
         return C42_INVALID;
@@ -694,6 +698,7 @@ static enum fwlab_hif_command_port_result admit_common(
     }
     record = find_prepared(command, &key->prepared);
     if (record == NULL || record->prepare_key.client_uid != key->client_uid ||
+        record->prepare_key.client_generation != key->generation ||
         !handle_equal(&canonical->handle, &record->prepared.handle) ||
         !origin_equal(&canonical->origin, &record->prepared.origin)) {
         return FWLAB_HIF_PORT_STALE;
@@ -818,6 +823,7 @@ static int admission_request_matches(
     record = find_prepared(provider, &key->prepared);
     if (record == NULL ||
         record->prepare_key.client_uid != key->client_uid ||
+        record->prepare_key.client_generation != key->generation ||
         !handle_equal(&command->handle, &record->prepared.handle) ||
         !origin_equal(&command->origin, &record->prepared.origin)) {
         return 0;
@@ -1595,10 +1601,12 @@ static void log_command_event(
         if (command->injection_applied_effect !=
             C42_FAKE_COMMAND_EFFECT_NONE) {
             event.flags |= C42_FAKE_EVENT_EFFECT_APPLIED;
-            if (event.output_write_mask == 0 &&
-                result == FWLAB_HIF_PORT_IN_PROGRESS) {
-                event.flags |= C42_FAKE_EVENT_RESPONSE_LOST;
-            }
+        }
+        if (command->injection_requested_effect !=
+                C42_FAKE_COMMAND_EFFECT_NONE &&
+            event.output_write_mask == 0 &&
+            result == FWLAB_HIF_PORT_IN_PROGRESS) {
+            event.flags |= C42_FAKE_EVENT_RESPONSE_LOST;
         }
     }
     if (event.output_write_mask == 0) {
@@ -1632,7 +1640,10 @@ static int prepare_value_valid(const struct fwlab_hif_prepare_result *result)
     return result != NULL &&
            result->version == FWLAB_HIF_COMMAND_PORT_VERSION &&
            result->size == sizeof(*result) &&
-           result->disposition <= FWLAB_HIF_PREPARE_REJECTED;
+           result->disposition <= FWLAB_HIF_PREPARE_REJECTED &&
+           result->reserved[0] == 0 && result->reserved[1] == 0 &&
+           (result->disposition == FWLAB_HIF_PREPARE_REJECTED ||
+            (result->fault_domain == 0 && result->fault_code == 0));
 }
 
 static enum fwlab_hif_command_port_result logged_prepare_start(

@@ -135,6 +135,7 @@ C42_IDENTITY_BIN := $(BUILD_DIR)/c42_identity_unit
 C42_RESET_DELETE_BIN := $(BUILD_DIR)/c42_reset_delete_unit
 C42_REMEDIATION_BIN := $(BUILD_DIR)/c42_remediation_unit
 C42_PROVIDER_BIN := $(BUILD_DIR)/c42_provider_matrix
+C42_PROVIDER_STIMULI := $(BUILD_DIR)/c42_provider_obligations.inc
 C42_CUTS_BIN := $(BUILD_DIR)/c42_phase_cuts
 C42_REPLAY_BIN := $(BUILD_DIR)/c42_dut_replay
 C42_ABI_BIN := $(BUILD_DIR)/c42_public_abi
@@ -195,10 +196,14 @@ $(C42_REMEDIATION_BIN): $(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
 		$(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
 		$(C42_FAKE_SOURCES) $(C42_SUPPORT) tests/test_c42_remediation.c
 
+$(C42_PROVIDER_STIMULI): $(C42_EVIDENCE_INPUTS) | $(BUILD_DIR)
+	PYTHONDONTWRITEBYTECODE=1 python3 \
+		../../scripts/gen_c42_provider_obligations.py --output $@
+
 $(C42_PROVIDER_BIN): $(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
 		$(C42_FAKE_SOURCES) $(C42_SUPPORT) $(C42_HEADERS) \
-		tests/test_c42_provider_matrix.c | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ \
+		tests/test_c42_provider_matrix.c $(C42_PROVIDER_STIMULI) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) -I$(BUILD_DIR) $(CFLAGS) -g0 $(LDFLAGS) -o $@ \
 		$(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
 		$(C42_FAKE_SOURCES) $(C42_SUPPORT) tests/test_c42_provider_matrix.c
 
@@ -307,13 +312,16 @@ check-c42-runner-integrity:
 check-c42-authority:
 	PYTHONDONTWRITEBYTECODE=1 python3 ../../scripts/check_c42_authority.py
 
-check-c42-claim-models:
+check-c42-claim-models: $(C42_PROVIDER_STIMULI)
 	PYTHONDONTWRITEBYTECODE=1 python3 \
 		../../scripts/extract_c42_interface_inventory.py --check --cc clang
 	PYTHONDONTWRITEBYTECODE=1 python3 \
 		../../scripts/extract_c42_interface_inventory.py --check --cc gcc
 	PYTHONDONTWRITEBYTECODE=1 python3 \
 		../../scripts/gen_c42_obligations.py --check
+	PYTHONDONTWRITEBYTECODE=1 python3 \
+		../../scripts/gen_c42_provider_obligations.py \
+		--output $(C42_PROVIDER_STIMULI) --check
 	PYTHONDONTWRITEBYTECODE=1 python3 \
 		../../scripts/check_c42_claim_models.py --self-test
 
