@@ -4,9 +4,9 @@
 [authority]
 schema_version = 1
 profile_id = "C42A-P1"
-topology_sha256 = "a653f91c681aac574514515dab261f1a37f9639e0e798ea93c2e7dd5b594ef89"
-node_count = 27
-identity_count = 37
+topology_sha256 = "8b15fb6e271057112622df0d99bf9dbd578ab11075f0a82c507925ea44dab1b5"
+node_count = 25
+identity_count = 36
 
 [[identities]]
 node_id = "analysis"
@@ -29,7 +29,7 @@ node_id = "authoritative_runner"
 node_type = "runner"
 execution_mode = "direct"
 path = "scripts/run_c42_gate.py"
-sha256 = "a29b9a2cdbf26117d799a809b1a1777d4f0c4729e80a3a945d246b40f3041d8e"
+sha256 = "38f8bb01ebfe6d5a728a3fcb9df36236527945fc844cbf95e9a7e659d17b4b25"
 mode = 420
 
 [[identities]]
@@ -37,7 +37,7 @@ node_id = "authority_integrity"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_authority.py"
-sha256 = "79be08dd3b5e05fd8d23db224e5642d98484881fe476e7d07c5c8c610d17908f"
+sha256 = "ff1dfdd5f010e03ab66495bc3a4fa05dfba4e04dfcc8fbb9fd00446b07e3f26e"
 mode = 420
 
 [[identities]]
@@ -77,7 +77,7 @@ node_id = "c42_make"
 node_type = "recipe"
 execution_mode = "bound_recipe"
 path = "frontends/headless-c4/Makefile"
-sha256 = "c621ba76c2071be6727046b90ddf240ac61dff25f72b0912b63b8b3021764598"
+sha256 = "84fad64fba504f890a7e1912dc639b9ee5e19fb5666e3fb028803c587807565a"
 mode = 420
 
 [[identities]]
@@ -85,7 +85,7 @@ node_id = "c42_sources"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/c42_sources.mk"
-sha256 = "c1f4846884e7ca25244346f9c5c0b2e1eb805bd2ff1db0566d1b37db45b2b037"
+sha256 = "39aa224e5a570754d3f6719c51491008ff2b650f88b972c4f7142e2613fe4b6f"
 mode = 420
 
 [[identities]]
@@ -101,7 +101,7 @@ node_id = "claim_validator"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_claim_models.py"
-sha256 = "8008d1c5d193f4f217911928122c6cabdb44e668eae568346bf8484f8e45da3e"
+sha256 = "a090d8fb9a682f21d695074eb37ff9b1d3ed4229f68a0c2567e600990fb8f72c"
 mode = 420
 
 [[identities]]
@@ -109,7 +109,7 @@ node_id = "cross"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_cross.py"
-sha256 = "2d7fd5d1a696758585b9775ed2be1488bfdc58748e186a05b101f64e136b4934"
+sha256 = "2b4610b5afb4a7104cee6334df7770a6fb0a5b45f6cb37208efb48af9d257fb2"
 mode = 420
 
 [[identities]]
@@ -117,7 +117,7 @@ node_id = "determinism"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_determinism.py"
-sha256 = "2e03613288b90812fd064638a2aea23020397740f00a6f4571bf082dc96bb06a"
+sha256 = "a2360e9d1d8f0ddfee237d17c483d140c6807adc4c404cd50591fa7b27eb75de"
 mode = 420
 
 [[identities]]
@@ -125,7 +125,7 @@ node_id = "dynamic_mutations"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_dynamic_mutations.py"
-sha256 = "9c5f526f6231ad6fbfb475b3f36a2dcbb1e277c7675e2dc00f70219fd2bb2fd7"
+sha256 = "59c8513e955c508a599ccddbf7e3592c844cd9ad8fa800d413649c7e2eebc35c"
 mode = 420
 
 [[identities]]
@@ -133,7 +133,7 @@ node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/build-trust.toml"
-sha256 = "a653f91c681aac574514515dab261f1a37f9639e0e798ea93c2e7dd5b594ef89"
+sha256 = "8b15fb6e271057112622df0d99bf9dbd578ab11075f0a82c507925ea44dab1b5"
 mode = 420
 
 [[identities]]
@@ -149,7 +149,7 @@ node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/claims.toml"
-sha256 = "3db2dd4f798b6fe9ca30d855a91f1a405374c53178c910acbdf24dcbf91fc153"
+sha256 = "c9e8e090981703503b8e0817e9cead889c32e70e6c0d8e272584008cb4db0aff"
 mode = 420
 
 [[identities]]
@@ -188,8 +188,16 @@ mode = 420
 node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
+path = "frontends/headless-c4/evidence/c42a-p1/mutation-ownership.toml"
+sha256 = "374f950777abae9aaea814c38664629115906ef48490d6292dbf8801615a9d82"
+mode = 420
+
+[[identities]]
+node_id = "evidence_models"
+node_type = "source_group"
+execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/obligations.lock.toml"
-sha256 = "9ce798300df15b96c38d33fb9e3f50775269e4cebc55d9507d82d7159fcd9f23"
+sha256 = "e78998ecabe3c4faff8d8398e53c794846d8b416ecd0bbd19b9632da9ccc7aec"
 mode = 420
 
 [[identities]]
@@ -229,7 +237,7 @@ node_id = "make_integrity"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_make_integrity.py"
-sha256 = "be08f2e4742ced60cbe1553f0138a827f49dc37b004bd7f8ae0a45830893352d"
+sha256 = "8626d3cd4ff9d7c4ea0dcab6126b41c06a5e4530a90a9728c784657bb234f378"
 mode = 420
 
 [[identities]]
@@ -245,7 +253,7 @@ node_id = "phase_executor"
 node_type = "checker"
 execution_mode = "bound_recipe"
 path = "frontends/headless-c4/tests/test_c42_phase_cuts.c"
-sha256 = "21aac528fc1238ad1cb4793bce9a21e45c999eaeaa431f967468d7284d0184fa"
+sha256 = "326209cd367e3dfd6ac43724942e10c401b1d436869b91ec793c3070bd3863ec"
 mode = 420
 
 [[identities]]
@@ -253,7 +261,7 @@ node_id = "provider_executor"
 node_type = "checker"
 execution_mode = "bound_recipe"
 path = "frontends/headless-c4/tests/test_c42_provider_matrix.c"
-sha256 = "c12b32514d357595b3fa60a7576424cf64cef324efe836fa457b1bb55311b7f1"
+sha256 = "fb81ff3a236aaa77710e16a27a0b957c643bde23b8757d8d521f9007e996af75"
 mode = 420
 
 [[identities]]
@@ -261,15 +269,7 @@ node_id = "provider_mutations"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_provider_mutations.py"
-sha256 = "1950d89f85f604259acd5e180abe393a75ff13d8539ddbf76614297e36bf05f5"
-mode = 420
-
-[[identities]]
-node_id = "provider_obligation_generator"
-node_type = "checker"
-execution_mode = "direct"
-path = "scripts/gen_c42_provider_obligations.py"
-sha256 = "56e04d28a805722c20ef4926fddef52a48cfcbd20471c4ed7e3d2ff44ca9241f"
+sha256 = "30cca02f6cf7523e3402551019d308c98746dfe71d488533e5630e4b8da6a905"
 mode = 420
 
 [[identities]]
@@ -277,7 +277,7 @@ node_id = "replay_executor"
 node_type = "checker"
 execution_mode = "bound_recipe"
 path = "frontends/headless-c4/tests/test_c42_dut_replay.c"
-sha256 = "1006ffa1d4d2f982fa1694ee36a15dbfdf455394700e5a7c2dbdc773adff92a0"
+sha256 = "ba22cf5ccef5839adbf9ea7643df8a93e81894e2f7b3ca1c0219274f9f5899fe"
 mode = 420
 
 [[identities]]
@@ -285,15 +285,7 @@ node_id = "runner_integrity"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_runner_integrity.py"
-sha256 = "dc3f3694f3153d43ec357e5f52d773225f0a6350a8515e1614dd6891ceed45bb"
-mode = 420
-
-[[identities]]
-node_id = "state_obligation_generator"
-node_type = "checker"
-execution_mode = "direct"
-path = "scripts/gen_c42_state_obligations.py"
-sha256 = "e6585dfc68867fc2149431bec40bd547e069d8a5b40b470e0c01c850761c7248"
+sha256 = "44992f571e89eb5979f0ab48eb5bcbf050a6a6fb804d894f1619a146bcf780b8"
 mode = 420
 
 [[identities]]

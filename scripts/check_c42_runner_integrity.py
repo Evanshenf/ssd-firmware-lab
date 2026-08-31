@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 
+from check_c42_claim_models import ModelError, build_model
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts/run_c42_gate.py"
@@ -49,8 +51,18 @@ def load_runner():
 def main() -> int:
     failures: list[str] = []
     try:
+        owned = [
+            obligation for obligation in build_model()["obligations"]
+            if obligation.get("executor_id") == "runner_integrity"
+        ]
+        if len(owned) != 1 or \
+                owned[0].get("mutant_id") != "BA_RUNNER_HOSTILE_MAKEFLAGS" or \
+                owned[0].get("expected_diagnostic_ids") != [
+                    "runner accepted inherited input: MAKEFLAGS"
+                ]:
+            raise ModelError("runner owned-canary mapping differs")
         runner = load_runner()
-    except (OSError, RuntimeError) as error:
+    except (ModelError, OSError, RuntimeError) as error:
         print(f"C4.2 authoritative runner integrity: FAIL: {error}",
               file=sys.stderr)
         return 1
@@ -162,6 +174,7 @@ def main() -> int:
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         return 1
+    print(f"C4.2 owned kill: {owned[0]['id']}")
     print(
         "C4.2 authoritative runner integrity: PASS "
         "(argv/all-env rejected; non-ELF/path-inode-digest aliases rejected; "

@@ -29,6 +29,7 @@ MODEL_FILES = (
     "phase-model.toml",
     "build-trust.toml",
     "fault-operators.toml",
+    "mutation-ownership.toml",
     "lanes.toml",
 )
 LOCK_NAME = "obligations.lock.toml"
@@ -1043,7 +1044,7 @@ def obligation_identifier(
     ))
 
 
-def derive_obligations(
+def derive_applicable_obligations(
     claims: dict[str, dict[str, Any]],
     nodes: list[dict[str, Any]],
     operators: dict[str, dict[str, Any]],
@@ -1093,6 +1094,125 @@ def derive_obligations(
                         "lane_ids": obligation_lanes,
                     })
     return obligations, lane_candidates
+
+
+def derive_owned_obligations(
+    document: dict[str, Any],
+    applicable: list[dict[str, Any]],
+    claims: dict[str, dict[str, Any]],
+    build_ids: set[str],
+) -> tuple[list[dict[str, Any]], int, set[str]]:
+    metadata = require_table(
+        document, "ownership", "mutation-ownership.toml"
+    )
+    if metadata.get("profile_id") != "C42A-P1" or \
+            metadata.get("denominator_kind") != "explicit_source_canary":
+        raise ModelError("mutation ownership profile/denominator differs")
+    owner_rows = unique_rows(
+        rows(document, "owner", "mutation-ownership.toml"),
+        "mutation owner",
+    )
+    expected_count = metadata.get("expected_owner_count")
+    if not isinstance(expected_count, int) or expected_count != len(owner_rows):
+        raise ModelError("mutation ownership count differs")
+
+    applicable_by_id = {str(item["id"]): item for item in applicable}
+    applicable_pairs = {
+        (str(item["model_kind"]), str(item["operator_id"]))
+        for item in applicable
+    }
+    owned: list[dict[str, Any]] = []
+    owned_pairs: set[tuple[str, str]] = set()
+    seen_obligations: set[str] = set()
+    lane_candidates = 0
+    for owner_id, row in sorted(owner_rows.items()):
+        obligation_id = row.get("obligation_id")
+        mutant_id = row.get("mutant_id")
+        executor_id = row.get("executor_id")
+        anchor_id = row.get("anchor_id")
+        if not all(
+                isinstance(value, str) and value
+                for value in (
+                    obligation_id, mutant_id, executor_id, anchor_id
+                )):
+            raise ModelError(f"mutation owner identity incomplete: {owner_id}")
+        if obligation_id in seen_obligations:
+            raise ModelError(f"duplicate owned obligation: {obligation_id}")
+        source = applicable_by_id.get(str(obligation_id))
+        if source is None:
+            raise ModelError(
+                f"owned obligation is not applicable: {owner_id}: "
+                f"{obligation_id}"
+            )
+        if executor_id not in build_ids:
+            raise ModelError(
+                f"mutation owner executor is not a build node: {owner_id}"
+            )
+        changed_files = string_list(
+            row.get("changed_file_ids", []),
+            f"mutation owner {owner_id} changed files",
+        )
+        if len(changed_files) != len(set(changed_files)):
+            raise ModelError(f"mutation owner changed files duplicate: {owner_id}")
+        for relative in changed_files:
+            path = ROOT / relative
+            if not path.is_file() or path.is_symlink():
+                raise ModelError(
+                    f"mutation owner changed file unavailable: {owner_id}: "
+                    f"{relative}"
+                )
+        diagnostics = string_list(
+            row.get("expected_diagnostic_ids", []),
+            f"mutation owner {owner_id} diagnostics",
+        )
+        if not diagnostics or len(diagnostics) != len(set(diagnostics)):
+            raise ModelError(
+                f"mutation owner diagnostics empty/duplicate: {owner_id}"
+            )
+        obligation = dict(source)
+        obligation.update({
+            "owner_id": owner_id,
+            "mutant_id": str(mutant_id),
+            "executor_id": str(executor_id),
+            "anchor_id": str(anchor_id),
+            "changed_file_ids": changed_files,
+            "expected_diagnostic_ids": diagnostics,
+        })
+        seen_obligations.add(str(obligation_id))
+        owned_pairs.add((
+            str(obligation["model_kind"]),
+            str(obligation["operator_id"]),
+        ))
+        lane_candidates += len(obligation["lane_ids"])
+        owned.append(obligation)
+
+    if owned_pairs != applicable_pairs:
+        missing = sorted(applicable_pairs - owned_pairs)
+        extra = sorted(owned_pairs - applicable_pairs)
+        raise ModelError(
+            "mutation owner model/operator coverage differs: missing="
+            + ",".join(f"{kind}:{operator}" for kind, operator in missing)
+            + " extra="
+            + ",".join(f"{kind}:{operator}" for kind, operator in extra)
+        )
+
+    trust_root_only = set(string_list(
+        metadata.get("trust_root_only_claim_ids", []),
+        "mutation ownership trust-root-only claims",
+    ))
+    active_claims = {
+        identifier for identifier, claim in claims.items()
+        if claim.get("status") == "active"
+    }
+    owned_claims = {str(item["claim_id"]) for item in owned}
+    if owned_claims & trust_root_only or \
+            owned_claims | trust_root_only != active_claims:
+        raise ModelError(
+            "owned/trust-root claim partition differs: owned="
+            + ",".join(sorted(owned_claims)) + " trust-root="
+            + ",".join(sorted(trust_root_only))
+        )
+    return owned, lane_candidates, trust_root_only
 
 
 def build_model(model_dir: Path = DEFAULT_MODEL_DIR) -> dict[str, Any]:
@@ -1164,9 +1284,14 @@ def build_model(model_dir: Path = DEFAULT_MODEL_DIR) -> dict[str, Any]:
     )
 
     operators = operator_data(documents["fault-operators.toml"], lanes)
-    obligations, lane_candidates = derive_obligations(
+    applicable_obligations, _ = derive_applicable_obligations(
         claims, nodes, operators, lanes
     )
+    obligations, lane_candidates, trust_root_only_claims = \
+        derive_owned_obligations(
+            documents["mutation-ownership.toml"], applicable_obligations,
+            claims, build_ids,
+        )
     active_claims = sum(1 for claim in claims.values() if claim.get("status") == "active")
     covered_operators = {str(item["operator_id"]) for item in obligations}
     if covered_operators != set(operators):
@@ -1179,10 +1304,12 @@ def build_model(model_dir: Path = DEFAULT_MODEL_DIR) -> dict[str, Any]:
         identifier for identifier, claim in claims.items()
         if claim.get("status") == "active"
     }
-    if covered_claims != active_claim_ids:
+    if covered_claims | trust_root_only_claims != active_claim_ids:
         raise ModelError(
             "active claims lack obligations: "
-            + ",".join(sorted(active_claim_ids - covered_claims))
+            + ",".join(sorted(
+                active_claim_ids - covered_claims - trust_root_only_claims
+            ))
         )
     counts = {
         "d_claim": active_claims,
@@ -1215,6 +1342,7 @@ def build_model(model_dir: Path = DEFAULT_MODEL_DIR) -> dict[str, Any]:
         "counts": counts,
         "nodes": nodes,
         "operators": operators,
+        "trust_root_only_claim_ids": sorted(trust_root_only_claims),
         "obligations": sorted(obligations, key=lambda item: str(item["id"])),
     }
 
@@ -1229,9 +1357,10 @@ def render_lock(model: dict[str, Any]) -> str:
         "# SPDX-FileCopyrightText: 2026 Evanshenf\n",
         "# SPDX-License-" "Identifier: BSD-3-Clause\n\n",
         "[lock]\n",
-        "schema_version = 1\n",
+        "schema_version = 2\n",
         f"profile_id = {quote(str(model['profile_id']))}\n",
-        "generator_version = 1\n",
+        "generator_version = 2\n",
+        "denominator_kind = \"explicit_source_canary\"\n",
         f"input_digest = {quote(str(model['input_digest']))}\n",
     ]
     for key in (
@@ -1241,11 +1370,27 @@ def render_lock(model: dict[str, Any]) -> str:
         "d_lane_candidate", "d_exec", "d_lane_na",
     ):
         lines.append(f"{key} = {int(counts[key])}\n")
+    lines.append(
+        "trust_root_only_claim_ids = [" + ", ".join(
+            quote(value) for value in model["trust_root_only_claim_ids"]
+        ) + "]\n"
+    )
     for obligation in model["obligations"]:
         lines.extend([
             "\n[[obligations]]\n",
             f"id = {quote(str(obligation['id']))}\n",
+            f"owner_id = {quote(str(obligation['owner_id']))}\n",
+            f"mutant_id = {quote(str(obligation['mutant_id']))}\n",
+            f"executor_id = {quote(str(obligation['executor_id']))}\n",
+            f"anchor_id = {quote(str(obligation['anchor_id']))}\n",
             f"status = {quote(str(obligation['status']))}\n",
+            "changed_file_ids = [" + ", ".join(
+                quote(value) for value in obligation["changed_file_ids"]
+            ) + "]\n",
+            "expected_diagnostic_ids = [" + ", ".join(
+                quote(value)
+                for value in obligation["expected_diagnostic_ids"]
+            ) + "]\n",
             "lane_ids = [" + ", ".join(
                 quote(value) for value in obligation["lane_ids"]
             ) + "]\n",
@@ -1343,6 +1488,22 @@ def self_test(model_dir: Path) -> int:
             '"command_admit_query.output.admission_state", '
             '"command_consume_commit.output.consume_state", '
             '"command_consume_query.output.consume_state"]',
+            False,
+        ),
+        (
+            "ownership-count-drift",
+            "mutation-ownership.toml",
+            "expected_owner_count = 32",
+            "expected_owner_count = 31",
+            False,
+        ),
+        (
+            "ownership-inapplicable-obligation",
+            "mutation-ownership.toml",
+            "command_prepare_result.reserved@success/success/"
+            "field_required_zero_violation/0\"",
+            "command_prepare_result.reserved@success/success/"
+            "field_corrupt/0\"",
             False,
         ),
         (

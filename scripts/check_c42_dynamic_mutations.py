@@ -342,6 +342,9 @@ def mutations() -> list[dict[str, object]]:
                     "        return controller->phase == C42_CONTROLLER_FAULTED_RESET_REQUIRED ?")]},
         {"name": "BM_OBSERVER_TOKEN_NONCE_MISMATCH",
          "target": "c42_phase_cuts", "replay": False,
+         "case_id": "candidate-observer",
+         "operator_ids": ["field_corrupt"],
+         "expected_label": "observer candidate shares controller instance identity",
          "edits": [("frontends/headless-c4/hif/c42_runtime.c",
                     "static void observer_candidate_fill(\n"
                     "    const struct c42_candidate_record *source,\n"
@@ -358,6 +361,44 @@ def mutations() -> list[dict[str, object]]:
                     "        target->token.instance_nonce ^= UINT64_C(1);\n"
                     "    }\n"
                     "    target->controller_epoch = source->controller_epoch;")]},
+        {"name": "BM_OBSERVER_CANDIDATE_RESERVED_NONZERO",
+         "target": "c42_phase_cuts", "replay": False,
+         "case_id": "candidate-observer",
+         "operator_ids": ["field_required_zero_violation"],
+         "expected_label": "observer candidate reserved zero exact",
+         "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                    "    target->retire_started = source->retire_started;\n"
+                    "    target->provider_retired = source->provider_retired;",
+                    "    target->retire_started = source->retire_started;\n"
+                    "    target->provider_retired = source->provider_retired;\n"
+                    "    target->reserved0[0] = 1;")]},
+        {"name": "BM_OBSERVER_CANDIDATE_EPOCH_STALE",
+         "target": "c42_phase_cuts", "replay": False,
+         "case_id": "candidate-observer",
+         "operator_ids": ["field_stale_key"],
+         "expected_label": "observer candidate controller epoch exact",
+         "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                    "    target->token = source->token;\n"
+                    "    target->controller_epoch = source->controller_epoch;\n"
+                    "    target->state = source->state;",
+                    "    target->token = source->token;\n"
+                    "    target->controller_epoch = source->controller_epoch;\n"
+                    "    if (target->controller_epoch != 0) {\n"
+                    "        target->controller_epoch--;\n"
+                    "    }\n"
+                    "    target->state = source->state;")]},
+        {"name": "BM_OBSERVER_CANDIDATE_STATE_INVALID",
+         "target": "c42_phase_cuts", "replay": False,
+         "case_id": "candidate-observer",
+         "operator_ids": ["field_invalid_enum"],
+         "expected_label": "observer candidate state enum exact",
+         "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                    "    target->controller_epoch = source->controller_epoch;\n"
+                    "    target->state = source->state;\n"
+                    "    target->associated_cq_ring_generation =",
+                    "    target->controller_epoch = source->controller_epoch;\n"
+                    "    target->state = UINT32_MAX;\n"
+                    "    target->associated_cq_ring_generation =")]},
         {"name": "BM_OBSERVER_PUBLICATION_TOKEN_UID_MISMATCH",
          "target": "c42_phase_cuts", "replay": False,
          "operator_ids": ["identity_edge_split"],
@@ -375,6 +416,7 @@ def mutations() -> list[dict[str, object]]:
                     "    }")]},
         {"name": "BM_OBSERVER_NOTIFICATION_UID_MISMATCH",
          "target": "c42_phase_cuts", "replay": False,
+         "case_id": "identity-graph",
          "operator_ids": ["identity_edge_split"],
          "expected_label": "identity notification command-slot-record exact",
          "edits": [("frontends/headless-c4/hif/c42_runtime.c",
@@ -387,20 +429,105 @@ def mutations() -> list[dict[str, object]]:
                     "        target->notification_uid++;\n"
                     "    }\n"
                     "    target->sq_ring_generation = source->sq_ring_generation;")]},
-        {"name": "BM_OBSERVER_TARGET_COMMAND_UID_MISMATCH",
+        {"name": "BM_OBSERVER_COMMAND_NOTIFICATION_DOMAIN_COLLAPSED",
          "target": "c42_phase_cuts", "replay": False,
+         "case_id": "identity-graph",
+         "expected_label":
+             "identity command-notification domains independently sourced",
+         "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                    "    target->client_uid = source->client_uid;\n"
+                    "    target->publication_uid = source->publication_uid;\n"
+                    "    target->notification_uid = source->notification_uid;",
+                    "    target->client_uid = source->client_uid;\n"
+                    "    target->publication_uid = source->publication_uid;\n"
+                    "    target->notification_uid = target->handle.command_uid;")]},
+        {"name": "BM_COMMAND_NOTIFICATION_DOMAIN_COLLAPSED",
+         "target": "c42_phase_cuts", "replay": False,
+         "case_id": "identity-graph",
+         "operator_ids": ["identity_domain_collapse"],
+         "expected_label":
+             "identity command-notification domains independently sourced",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    if (c41_capture_command(&command->raw, &context, &command->command) !=\n"
+                    "        C41_WIRE_OK) {\n"
+                    "        command->state = C42_COMMAND_ABORT_RECONCILE;\n"
+                    "        c42_fault_sq(controller, command->sq_index, C42_FAULT_CANONICAL);\n"
+                    "        return 1;\n"
+                    "    }\n"
+                    "    command->state = C42_COMMAND_PORT_RESERVED;",
+                    "    if (c41_capture_command(&command->raw, &context, &command->command) !=\n"
+                    "        C41_WIRE_OK) {\n"
+                    "        command->state = C42_COMMAND_ABORT_RECONCILE;\n"
+                    "        c42_fault_sq(controller, command->sq_index, C42_FAULT_CANONICAL);\n"
+                    "        return 1;\n"
+                    "    }\n"
+                    "    command->notification_uid = command->command.handle.command_uid;\n"
+                    "    controller->notifications[index].token.uid =\n"
+                    "        command->command.handle.command_uid;\n"
+                    "    command->state = C42_COMMAND_PORT_RESERVED;")]},
+        {"name": "BM_OBSERVER_TARGET_COMMAND_UID_OMITTED",
+         "target": "c42_phase_cuts", "replay": False,
+         "case_id": "identity-graph",
+         "operator_ids": ["field_required_omission"],
+         "expected_label": "identity command-target full handle exact",
          "edits": [("frontends/headless-c4/hif/c42_runtime.c",
                     "    target->token = source->value.token;\n"
                     "    target->handle = source->value.handle;\n"
                     "    target->sq_ring_generation = source->sq_ring_generation;",
                     "    target->token = source->value.token;\n"
                     "    target->handle = source->value.handle;\n"
-                    "    if (target->handle.command_uid != 0) {\n"
-                    "        target->handle.command_uid++;\n"
-                    "    }\n"
+                    "    target->handle.command_uid = 0;\n"
                     "    target->sq_ring_generation = source->sq_ring_generation;")]},
+        {"name": "BM_CONTROL_STATUS_CAUSE_CORRUPT",
+         "target": "c42_phase_cuts", "replay": False,
+         "case_id": "control-status",
+         "operator_ids": ["field_corrupt"],
+         "expected_label": "phase control cause-retry exact",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    local.state = record->state;\n"
+                    "    local.cause = record->cause;\n"
+                    "    local.retry = record->retry;",
+                    "    local.state = record->state;\n"
+                    "    local.cause = record->cause + 1u;\n"
+                    "    local.retry = record->retry;")]},
+        {"name": "BM_CONTROL_STATUS_RESERVED_NONZERO",
+         "target": "c42_phase_cuts", "replay": False,
+         "case_id": "control-status",
+         "operator_ids": ["field_required_zero_violation"],
+         "expected_label": "phase control reserved zero exact",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    local.cause = record->cause;\n"
+                    "    local.retry = record->retry;\n"
+                    "    *status = local;",
+                    "    local.cause = record->cause;\n"
+                    "    local.retry = record->retry;\n"
+                    "    local.reserved[0] = 1;\n"
+                    "    *status = local;")]},
+        {"name": "BM_CONTROL_STATUS_TOKEN_OMITTED",
+         "target": "c42_phase_cuts", "replay": False,
+         "case_id": "control-status",
+         "operator_ids": ["field_required_omission"],
+         "expected_label": "phase control token exact",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    local.token = record->token;\n"
+                    "    local.state = record->state;",
+                    "    memset(&local.token, 0, sizeof(local.token));\n"
+                    "    local.state = record->state;")]},
+        {"name": "BM_CONTROL_STATUS_STATE_INVALID",
+         "target": "c42_phase_cuts", "replay": False,
+         "case_id": "control-status",
+         "operator_ids": ["field_invalid_enum"],
+         "expected_label": "phase control state enum exact",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    local.token = record->token;\n"
+                    "    local.state = record->state;\n"
+                    "    local.cause = record->cause;",
+                    "    local.token = record->token;\n"
+                    "    local.state = UINT32_MAX;\n"
+                    "    local.cause = record->cause;")]},
         {"name": "BM_STEP_SKIPS_EPOCH_CONTROL",
          "target": "c42_phase_cuts", "replay": False,
+         "case_id": "epoch-first-step",
          "operator_ids": ["transition_skip"],
          "expected_label": "epoch one-unit exported step exact",
          "edits": [("frontends/headless-c4/hif/c42_runtime.c",
@@ -426,7 +553,6 @@ def mutations() -> list[dict[str, object]]:
                     "    }")]},
         {"name": "BM_IDENTITY_DOMAIN_COLLAPSED",
          "target": "c42_phase_cuts", "replay": False,
-         "operator_ids": ["identity_domain_collapse"],
          "expected_label": "cross-domain numeric collisions do not affect quotient",
          "edits": [
                    ("frontends/headless-c4/tests/test_c42_phase_cuts.c",
@@ -442,6 +568,17 @@ def mutations() -> list[dict[str, object]]:
                     "    struct semantic_id_map target_ids = {{0}, 0};\n",
                     "")
          ]},
+        {"name": "BM_READY_POLL_CREDIT_DROPPED",
+         "target": "c42_remediation_unit", "replay": False,
+         "operator_ids": ["transition_stall"],
+         "expected_label": "F18 local retry earns one HIF poll credit",
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "        if (command->state == C42_COMMAND_LEASED ||\n"
+                    "            command->state == C42_COMMAND_CONSUME_PREPARE) {\n"
+                    "            controller->ready_poll_pending = (uint8_t)(poll_needed != 0);",
+                    "        if (command->state == C42_COMMAND_LEASED ||\n"
+                    "            command->state == C42_COMMAND_CONSUME_PREPARE) {\n"
+                    "            controller->ready_poll_pending = 0;")]},
         {"name": "BM_EPOCH_TRANSITION_STALLS",
          "target": "c42_phase_cuts", "replay": False,
          "operator_ids": ["transition_stall"],
@@ -461,6 +598,7 @@ def mutations() -> list[dict[str, object]]:
                     "    if (record->memory_started == 0) {")]},
         {"name": "BM_EPOCH_PROVIDER_CALL_DUPLICATED",
          "target": "c42_phase_cuts", "replay": False,
+         "case_id": "epoch-quiescent-vector",
          "operator_ids": ["transition_duplicate"],
          "expected_label": "epoch one-unit provider vector exact",
          "edits": [("frontends/headless-c4/hif/c42_queue.c",
@@ -479,6 +617,7 @@ def mutations() -> list[dict[str, object]]:
                     "        controller->providers.memory.ops->teardown_quiescent(")]},
         {"name": "BM_EPOCH_TERMINATES_EARLY",
          "target": "c42_phase_cuts", "replay": False,
+         "case_id": "epoch-rank-decrease",
          "operator_ids": ["transition_early_terminal"],
          "expected_label": "epoch mandatory rank decreases exactly",
          "edits": [("frontends/headless-c4/hif/c42_queue.c",
@@ -497,6 +636,7 @@ def mutations() -> list[dict[str, object]]:
                     "            record->state = C42_CONTROL_WAITING;")]},
         {"name": "BM_EPOCH_TERMINATES_LATE",
          "target": "c42_phase_cuts", "replay": False,
+         "case_id": "epoch-terminal",
          "operator_ids": ["transition_late_terminal"],
          "expected_label": "epoch exact rank-derived bound reached",
          "edits": [("frontends/headless-c4/hif/c42_queue.c",
@@ -540,7 +680,10 @@ def tracked_files() -> list[str]:
     output = subprocess.check_output(
         ["git", "ls-files"], cwd=ROOT, text=True
     )
-    return [line for line in output.splitlines() if line]
+    return [
+        line for line in output.splitlines()
+        if line and (ROOT / line).is_file()
+    ]
 
 
 def replace_unique(path: Path, before: str, after: str) -> None:
@@ -553,6 +696,16 @@ def replace_unique(path: Path, before: str, after: str) -> None:
     path.write_text(changed, encoding="utf-8")
 
 
+def failure_diagnostics(output: bytes) -> set[str]:
+    pattern = re.compile(
+        rb"^(?:phase cuts|C4\.2a remediation) FAIL: (.+)$",
+        re.MULTILINE,
+    )
+    return {
+        value.decode("utf-8", "strict") for value in pattern.findall(output)
+    }
+
+
 def build_binary(
     root: Path,
     compiler: str,
@@ -561,6 +714,7 @@ def build_binary(
     arguments: tuple[str, ...] = (),
     expected_family: str | None = None,
     expected_label: str | None = None,
+    expected_diagnostics: set[str] | None = None,
 ) -> bytes:
     make_target = output / target
     build = subprocess.run(
@@ -591,6 +745,15 @@ def build_binary(
             f"{compiler}/{target} missed exact owner diagnostic "
             f"{expected_label}:\n{run.stdout.decode(errors='replace')}"
         )
+    if expected_diagnostics is not None:
+        actual_diagnostics = failure_diagnostics(run.stdout)
+        if actual_diagnostics != expected_diagnostics:
+            raise RuntimeError(
+                f"{compiler}/{target} owner diagnostics differ: "
+                f"expected={sorted(expected_diagnostics)} "
+                f"actual={sorted(actual_diagnostics)}\n"
+                f"{run.stdout.decode(errors='replace')}"
+            )
     if expected_family is not None:
         pattern = re.compile(
             rb"C4\.2 DUT reference FAIL: family=" +
@@ -632,13 +795,17 @@ def main() -> int:
     total = 0
     aggregate_binaries = 0
     replay_mutants = 0
+    executed_owned = 0
     try:
+        model = build_model()
+        state_obligations = [
+            obligation for obligation in model["obligations"]
+            if obligation.get("model_kind") in {"identity", "phase"}
+            and obligation.get("executor_id") == "dynamic_mutations"
+        ]
         state_operator_ids = {
             str(obligation["operator_id"])
-            for obligation in build_model()["obligations"]
-            if obligation.get("model_kind") in {"identity", "phase"} and
-            (str(obligation["operator_id"]).startswith("identity_") or
-             str(obligation["operator_id"]).startswith("transition_"))
+            for obligation in state_obligations
         }
         selected = [
             mutation for mutation in mutations()
@@ -656,6 +823,44 @@ def main() -> int:
                 "state operator canaries incomplete: "
                 + ",".join(sorted(state_operator_ids - declared_operator_ids))
             )
+        owned_by_mutant: dict[str, list[dict[str, object]]] = {}
+        for obligation in state_obligations:
+            owned_by_mutant.setdefault(
+                str(obligation["mutant_id"]), []
+            ).append(obligation)
+        known_mutations = {
+            str(mutation["name"]): mutation for mutation in mutations()
+        }
+        unknown_owned = sorted(set(owned_by_mutant) - set(known_mutations))
+        if unknown_owned:
+            raise RuntimeError(
+                "ownership references unknown mutation(s): "
+                + ",".join(unknown_owned)
+            )
+        for mutant_id, owned in owned_by_mutant.items():
+            mutation = known_mutations[mutant_id]
+            owner_operators = {
+                str(obligation["operator_id"]) for obligation in owned
+            }
+            if not owner_operators.issubset(
+                    set(mutation.get("operator_ids", []))):
+                raise RuntimeError(
+                    f"{mutant_id} ownership/operator set differs"
+                )
+            changed = {str(edit[0]) for edit in mutation["edits"]}
+            for obligation in owned:
+                if changed != set(obligation["changed_file_ids"]):
+                    raise RuntimeError(
+                        f"{mutant_id} ownership changed-file set differs"
+                    )
+            expected = {
+                str(value) for obligation in owned
+                for value in obligation["expected_diagnostic_ids"]
+            }
+            if str(mutation["expected_label"]) not in expected:
+                raise RuntimeError(
+                    f"{mutant_id} ownership diagnostic set differs"
+                )
         for mutation in selected:
             name = str(mutation["name"])
             replay = bool(mutation.get("replay", True))
@@ -683,14 +888,25 @@ def main() -> int:
                         f"{name} changed unexpected files: {sorted(changed ^ allowed)}"
                     )
                 outputs = []
+                owned = owned_by_mutant.get(name, [])
+                owned_diagnostics = None if not owned else {
+                    str(value) for obligation in owned
+                    for value in obligation["expected_diagnostic_ids"]
+                }
+                owned_arguments = (
+                    ("--owned-case", str(mutation["case_id"]))
+                    if owned and mutation.get("case_id") is not None else ()
+                )
                 for compiler in compilers:
                     selected_output = build_binary(
                         mutant_root, compiler, str(mutation["target"]),
                         Path(directory) / f"build-{compiler}",
+                        arguments=owned_arguments,
                         expected_label=(
                             str(mutation["expected_label"])
                             if mutation.get("expected_label") is not None else None
                         ),
+                        expected_diagnostics=owned_diagnostics,
                     )
                     replay_output = b""
                     if replay:
@@ -709,6 +925,9 @@ def main() -> int:
                 total += 1
                 aggregate_binaries += 4 if replay else 2
                 replay_mutants += 1 if replay else 0
+                executed_owned += len(owned)
+                for obligation in owned:
+                    print(f"C4.2 owned kill: {obligation['id']}")
                 print(f"C4.2 production mutant {name}: PASS")
     except (OSError, RuntimeError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired, ModelError) as error:
@@ -717,7 +936,9 @@ def main() -> int:
     print(f"C4.2 dynamic mutations: PASS mutants={total} compilers=2 "
           f"unit-plus-replay={replay_mutants} unit-specific="
           f"{total - replay_mutants} aggregate-binaries={aggregate_binaries} "
-          f"state-operator-canaries={len(declared_operator_ids)}")
+          f"state-operator-canaries={len(declared_operator_ids)} "
+          f"owned-obligations={executed_owned}/"
+          f"{sum(len(value) for value in owned_by_mutant.values())}")
     return 0
 
 

@@ -7,11 +7,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-import os
 import shutil
 import subprocess
-import sys
 import tempfile
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,10 +69,6 @@ CFLAGS = [
     "-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
     "-Wpedantic", "-fno-common",
 ]
-PROVIDER_GENERATOR = ROOT / "scripts/gen_c42_provider_obligations.py"
-STATE_GENERATOR = ROOT / "scripts/gen_c42_state_obligations.py"
-
-
 def require(name: str) -> str:
     path = shutil.which(name)
     if path is None:
@@ -81,28 +76,14 @@ def require(name: str) -> str:
     return path
 
 
-def generate_stimuli(output: Path) -> None:
-    environment = dict(os.environ)
-    environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    subprocess.check_call([
-        sys.executable, str(PROVIDER_GENERATOR),
-        "--output", str(output / "c42_provider_obligations.inc"),
-    ], cwd=ROOT, env=environment)
-    subprocess.check_call([
-        sys.executable, str(STATE_GENERATOR),
-        "--output", str(output / "c42_state_obligations.inc"),
-    ], cwd=ROOT, env=environment)
-
-
 def build(
     compiler: str,
     output: Path,
-    generated: Path,
     sources: list[Path],
     main: Path,
 ) -> None:
     subprocess.check_call([
-        compiler, f"-I{INCLUDE}", f"-I{HIF}", f"-I{generated}",
+        compiler, f"-I{INCLUDE}", f"-I{HIF}",
         *CFLAGS, "-o", str(output),
         *(str(path) for path in sources), str(main),
     ], cwd=ROOT)
@@ -114,11 +95,10 @@ def main() -> int:
         native = require("cc")
         with tempfile.TemporaryDirectory(prefix="c42-cross-") as directory:
             output = Path(directory)
-            generate_stimuli(output)
             expected: dict[str, bytes] = {}
             for name, (sources, source) in PROGRAMS.items():
                 binary = output / f"native-{name}"
-                build(native, binary, output, sources, source)
+                build(native, binary, sources, source)
                 expected[name] = subprocess.check_output(
                     [str(binary)], cwd=ROOT, timeout=300
                 )
@@ -128,7 +108,7 @@ def main() -> int:
                 runner = require(runner_name)
                 for name, (sources, source) in PROGRAMS.items():
                     binary = output / f"{target}-{name}"
-                    build(compiler, binary, output, sources, source)
+                    build(compiler, binary, sources, source)
                     header = binary.read_bytes()[:16]
                     if len(header) != 16 or header[:4] != b"\x7fELF" or \
                             header[4] != 2 or header[5] != elf_data:

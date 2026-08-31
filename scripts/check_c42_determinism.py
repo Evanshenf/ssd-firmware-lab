@@ -7,11 +7,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-import os
 import shutil
 import subprocess
-import sys
 import tempfile
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,32 +58,14 @@ CFLAGS = [
     "-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
     "-Wpedantic", "-fno-common",
 ]
-PROVIDER_GENERATOR = ROOT / "scripts/gen_c42_provider_obligations.py"
-STATE_GENERATOR = ROOT / "scripts/gen_c42_state_obligations.py"
-
-
-def generate_stimuli(output: Path) -> None:
-    environment = dict(os.environ)
-    environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    subprocess.check_call([
-        sys.executable, str(PROVIDER_GENERATOR),
-        "--output", str(output / "c42_provider_obligations.inc"),
-    ], cwd=ROOT, env=environment)
-    subprocess.check_call([
-        sys.executable, str(STATE_GENERATOR),
-        "--output", str(output / "c42_state_obligations.inc"),
-    ], cwd=ROOT, env=environment)
-
-
 def build(
     compiler: str,
     output: Path,
-    generated: Path,
     sources: list[Path],
     main: Path,
 ) -> None:
     subprocess.check_call([
-        compiler, f"-I{INCLUDE}", f"-I{HIF}", f"-I{generated}",
+        compiler, f"-I{INCLUDE}", f"-I{HIF}",
         *CFLAGS, "-o", str(output),
         *(str(path) for path in sources), str(main),
     ], cwd=ROOT)
@@ -98,12 +79,11 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="c42-determinism-") as directory:
             output = Path(directory)
-            generate_stimuli(output)
             for name, (sources, source) in PROGRAMS.items():
                 values: dict[str, bytes] = {}
                 for compiler in ("gcc", "clang"):
                     binary = output / f"{compiler}-{name}"
-                    build(compiler, binary, output, sources, source)
+                    build(compiler, binary, sources, source)
                     values[compiler] = subprocess.check_output(
                         [str(binary)], cwd=ROOT, timeout=300
                     )

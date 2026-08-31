@@ -14,6 +14,8 @@ import subprocess
 import sys
 import tempfile
 
+from check_c42_claim_models import ModelError, build_model
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontends/headless-c4"
@@ -77,6 +79,21 @@ def parse_guard_mutant(source: str, addition: str) -> bool:
 def main() -> int:
     source = MAKEFILE.read_text(encoding="utf-8")
     failures: list[str] = []
+
+    try:
+        owned = [
+            obligation for obligation in build_model()["obligations"]
+            if obligation.get("executor_id") == "make_integrity"
+        ]
+        if len(owned) != 1 or \
+                owned[0].get("mutant_id") != "BA_C42_MAKE_IGNORE_DIRECTIVE" or \
+                owned[0].get("expected_diagnostic_ids") != [
+                    "executed .IGNORE negative"
+                ]:
+            raise ModelError("Make owned-canary mapping differs")
+    except (ModelError, OSError) as error:
+        print(f"C4.2 Make integrity: FAIL: {error}", file=sys.stderr)
+        return 1
 
     if unsafe_directive(source) is not None:
         failures.append("live Makefile contains an unsafe directive")
@@ -234,6 +251,7 @@ def main() -> int:
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         return 1
+    print(f"C4.2 owned kill: {owned[0]['id']}")
     print(
         "C4.2 Make integrity: PASS (.IGNORE/MAKEFLAGS exact negatives; "
         "MAKEFILES/eval/non-executing modes/shell rejected; "

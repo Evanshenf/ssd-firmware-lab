@@ -23,6 +23,7 @@ from c42_authority import (
     verify_c35_manifest,
     verify_materialized_c35_reference,
 )
+from check_c42_claim_models import ModelError, build_model
 
 
 FRONTEND = ROOT / "frontends/headless-c4"
@@ -106,6 +107,20 @@ def main() -> int:
     arguments = parser.parse_args()
     negatives = 0
     try:
+        owned = [
+            obligation for obligation in build_model()["obligations"]
+            if obligation.get("executor_id") == "authority_integrity"
+        ]
+        expected_owned = {
+            "BA_SUPPRESSED_C35_CHECKER": "suppressed checker",
+            "BA_RECEIPT_MISSING_NODE": "missing receipt node",
+        }
+        if {
+            str(obligation["mutant_id"]):
+                str(obligation["expected_diagnostic_ids"][0])
+            for obligation in owned
+        } != expected_owned:
+            raise AuthorityError("authority owned-canary mapping differs")
         verify_authority_lock(
             ROOT, DEFAULT_AUTHORITY_LOCK,
             require_policy=not arguments.no_policy,
@@ -199,10 +214,12 @@ def main() -> int:
                 "missing receipt node",
             )
             negatives += 1
-    except (AuthorityError, OSError) as error:
+    except (AuthorityError, ModelError, OSError) as error:
         print(f"C4.2 authority integrity: FAIL: {error}")
         return 1
 
+    for obligation in owned:
+        print(f"C4.2 owned kill: {obligation['id']}")
     print(
         "C4.2 authority integrity: PASS "
         f"negatives={negatives} lock=exact c35=finite receipt=normalized"

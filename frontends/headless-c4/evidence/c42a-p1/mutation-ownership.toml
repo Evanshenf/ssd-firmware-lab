@@ -1,0 +1,308 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[ownership]
+schema_version = 1
+profile_id = "C42A-P1"
+denominator_kind = "explicit_source_canary"
+expected_owner_count = 32
+trust_root_only_claim_ids = ["C42A-STRUCTURAL-INVENTORY"]
+
+[[owner]]
+id = "provider_required_zero"
+obligation_id = "C42A-PROVIDER-OUTPUT-EXACT/provider/command_prepare_result.reserved@success/success/field_required_zero_violation/0"
+mutant_id = "PM_REQUIRED_ZERO_OUTPUT_VIOLATION"
+executor_id = "provider_mutations"
+anchor_id = "command.prepare_result.reserved0"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_command.c"]
+expected_diagnostic_ids = ["prepare_start exact event"]
+
+[[owner]]
+id = "provider_call_kind"
+obligation_id = "C42A-PROVIDER-INPUT-EXACT/provider/command_prepare_start/call_kind/entrypoint_call_kind_substitute/whole"
+mutant_id = "PM_CALL_KIND_SUBSTITUTED"
+executor_id = "provider_mutations"
+anchor_id = "command.prepare.start.call_kind"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_command.c"]
+expected_diagnostic_ids = ["prepare_start exact event"]
+
+[[owner]]
+id = "provider_preserve"
+obligation_id = "C42A-PROVIDER-OUTPUT-EXACT/provider/command_prepare_result.version@in_progress/in_progress/field_preserve_overwrite/0"
+mutant_id = "PM_PRESERVED_OUTPUT_OVERWRITTEN"
+executor_id = "provider_mutations"
+anchor_id = "command.prepare.in_progress.output"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_command.c"]
+expected_diagnostic_ids = ["prepare-start in-progress preserves output"]
+
+[[owner]]
+id = "provider_relation_stall"
+obligation_id = "C42A-PROVIDER-OUTPUT-EXACT/provider/relation_poll_sequence/all/relation_stall/whole"
+mutant_id = "PM_POLL_SEQUENCE_STALLED"
+executor_id = "provider_mutations"
+anchor_id = "command.poll.ready_sequence.increment"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_command.c"]
+expected_diagnostic_ids = ["poll ready sequence strictly advances"]
+
+[[owner]]
+id = "provider_effect_skip"
+obligation_id = "C42A-PROVIDER-EFFECT-ORDER/provider/effect_command/all/effect_skip/whole"
+mutant_id = "PM_COMMAND_EFFECT_SKIPPED"
+executor_id = "provider_mutations"
+anchor_id = "command.consume_commit.applied_effect"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_command.c"]
+expected_diagnostic_ids = ["effect CONSUME_COMMIT caller/provider state"]
+
+[[owner]]
+id = "provider_effect_duplicate"
+obligation_id = "C42A-PROVIDER-EFFECT-ORDER/provider/effect_memory/all/effect_duplicate/whole"
+mutant_id = "PM_MEMORY_EFFECT_DUPLICATED"
+executor_id = "provider_mutations"
+anchor_id = "memory.capture.applied_effect"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_memory.c"]
+expected_diagnostic_ids = ["memory capture exact 64-byte output and provider effect"]
+
+[[owner]]
+id = "provider_response_order"
+obligation_id = "C42A-PROVIDER-EFFECT-ORDER/provider/response_lost_before/all/response_order_swap/whole"
+mutant_id = "PM_RESPONSE_LOSS_ORDER_COLLAPSED"
+executor_id = "provider_mutations"
+anchor_id = "command.response_loss.effect_order"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_command.c"]
+expected_diagnostic_ids = ["response lost before effect"]
+
+[[owner]]
+id = "provider_field_corrupt"
+obligation_id = "C42A-PROVIDER-OUTPUT-EXACT/provider/memory_status.token@body_start_success/body_start_success/field_corrupt/0"
+mutant_id = "PM_BODY_RETURNS_WRONG_TOKEN"
+executor_id = "provider_mutations"
+anchor_id = "memory.body.status.token"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_memory.c"]
+expected_diagnostic_ids = [
+  "memory body query status/provider record",
+  "memory event all fields exact",
+]
+
+[[owner]]
+id = "provider_invalid_enum"
+obligation_id = "C42A-PROVIDER-OUTPUT-EXACT/provider/command_consume_commit.output.consume_state@success/success/field_invalid_enum/0"
+mutant_id = "PM_CONSUME_RETURNS_WRONG_STATE"
+executor_id = "provider_mutations"
+anchor_id = "command.consume.output.state"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_command.c"]
+expected_diagnostic_ids = [
+  "consume caller output and applied effect exact",
+  "consume effect event injection invoked",
+]
+
+[[owner]]
+id = "provider_required_omission"
+obligation_id = "C42A-PROVIDER-OUTPUT-EXACT/provider/memory_status.token@scrub_start_success/scrub_start_success/field_required_omission/0"
+mutant_id = "PM_ALLOW_OK_WITHOUT_STATUS"
+executor_id = "provider_mutations"
+anchor_id = "memory.scrub_start.transactional_ok.requires_status"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_memory.c"]
+expected_diagnostic_ids = ["memory rejects transactional OK without exact status"]
+
+[[owner]]
+id = "provider_stale_key"
+obligation_id = "C42A-PROVIDER-INPUT-EXACT/provider/command_prepare_key.client_generation/all/field_stale_key/0"
+mutant_id = "PM_FRESH_ADMIT_GENERATION_RELATION_REMOVED"
+executor_id = "provider_mutations"
+anchor_id = "command.admit.fresh_generation"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_command.c"]
+expected_diagnostic_ids = ["mismatch fresh admit generation rejected unchanged"]
+
+[[owner]]
+id = "provider_relation_split"
+obligation_id = "C42A-PROVIDER-INPUT-EXACT/provider/relation_fresh_admit_generation/all/relation_split/whole"
+mutant_id = "PM_FRESH_ADMIT_GENERATION_RELATION_REMOVED"
+executor_id = "provider_mutations"
+anchor_id = "command.admit.fresh_generation"
+changed_file_ids = ["frontends/headless-c4/fakes/c42_command.c"]
+expected_diagnostic_ids = ["mismatch fresh admit generation event"]
+
+[[owner]]
+id = "identity_field_corrupt"
+obligation_id = "C42A-OBSERVER-EXACT/identity/observer_candidate.token/lifecycle_guard/field_corrupt/0"
+mutant_id = "BM_OBSERVER_TOKEN_NONCE_MISMATCH"
+executor_id = "dynamic_mutations"
+anchor_id = "observer.candidate.token"
+changed_file_ids = ["frontends/headless-c4/hif/c42_runtime.c"]
+expected_diagnostic_ids = ["observer candidate shares controller instance identity"]
+
+[[owner]]
+id = "identity_required_zero"
+obligation_id = "C42A-OBSERVER-EXACT/identity/observer_candidate.reserved0/lifecycle_guard/field_required_zero_violation/0"
+mutant_id = "BM_OBSERVER_CANDIDATE_RESERVED_NONZERO"
+executor_id = "dynamic_mutations"
+anchor_id = "observer.candidate.reserved0"
+changed_file_ids = ["frontends/headless-c4/hif/c42_runtime.c"]
+expected_diagnostic_ids = ["observer candidate reserved zero exact"]
+
+[[owner]]
+id = "identity_required_omission"
+obligation_id = "C42A-OBSERVER-EXACT/identity/observer_target.handle/lifecycle_guard/field_required_omission/0"
+mutant_id = "BM_OBSERVER_TARGET_COMMAND_UID_OMITTED"
+executor_id = "dynamic_mutations"
+anchor_id = "observer.target.handle.command_uid"
+changed_file_ids = ["frontends/headless-c4/hif/c42_runtime.c"]
+expected_diagnostic_ids = [
+  "identity command-target full handle exact",
+]
+
+[[owner]]
+id = "identity_stale_key"
+obligation_id = "C42A-OBSERVER-EXACT/identity/observer_candidate.controller_epoch/lifecycle_guard/field_stale_key/0"
+mutant_id = "BM_OBSERVER_CANDIDATE_EPOCH_STALE"
+executor_id = "dynamic_mutations"
+anchor_id = "observer.candidate.controller_epoch"
+changed_file_ids = ["frontends/headless-c4/hif/c42_runtime.c"]
+expected_diagnostic_ids = ["observer candidate controller epoch exact"]
+
+[[owner]]
+id = "identity_invalid_enum"
+obligation_id = "C42A-OBSERVER-EXACT/identity/observer_candidate.state/lifecycle_guard/field_invalid_enum/0"
+mutant_id = "BM_OBSERVER_CANDIDATE_STATE_INVALID"
+executor_id = "dynamic_mutations"
+anchor_id = "observer.candidate.state"
+changed_file_ids = ["frontends/headless-c4/hif/c42_runtime.c"]
+expected_diagnostic_ids = ["observer candidate state enum exact"]
+
+[[owner]]
+id = "identity_edge_split"
+obligation_id = "C42A-IDENTITY-GRAPH/identity/edge_notification_command_record/lifetime/identity_edge_split/whole"
+mutant_id = "BM_OBSERVER_NOTIFICATION_UID_MISMATCH"
+executor_id = "dynamic_mutations"
+anchor_id = "observer.notification.notification_uid"
+changed_file_ids = ["frontends/headless-c4/hif/c42_runtime.c"]
+expected_diagnostic_ids = ["identity notification command-slot-record exact"]
+
+[[owner]]
+id = "identity_domain_collapse"
+obligation_id = "C42A-IDENTITY-GRAPH/identity/domain_command_notification/lifetime/identity_domain_collapse/whole"
+mutant_id = "BM_COMMAND_NOTIFICATION_DOMAIN_COLLAPSED"
+executor_id = "dynamic_mutations"
+anchor_id = "queue.command.notification_domain"
+changed_file_ids = ["frontends/headless-c4/hif/c42_queue.c"]
+expected_diagnostic_ids = ["identity command-notification domains independently sourced"]
+
+[[owner]]
+id = "phase_field_corrupt"
+obligation_id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/control_status.cause/control_episode/field_corrupt/0"
+mutant_id = "BM_CONTROL_STATUS_CAUSE_CORRUPT"
+executor_id = "dynamic_mutations"
+anchor_id = "control.query.cause"
+changed_file_ids = ["frontends/headless-c4/hif/c42_queue.c"]
+expected_diagnostic_ids = ["phase control cause-retry exact"]
+
+[[owner]]
+id = "phase_required_zero"
+obligation_id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/control_status.reserved/control_episode/field_required_zero_violation/0"
+mutant_id = "BM_CONTROL_STATUS_RESERVED_NONZERO"
+executor_id = "dynamic_mutations"
+anchor_id = "control.query.reserved0"
+changed_file_ids = ["frontends/headless-c4/hif/c42_queue.c"]
+expected_diagnostic_ids = ["phase control reserved zero exact"]
+
+[[owner]]
+id = "phase_required_omission"
+obligation_id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/control_status.token/control_episode/field_required_omission/0"
+mutant_id = "BM_CONTROL_STATUS_TOKEN_OMITTED"
+executor_id = "dynamic_mutations"
+anchor_id = "control.query.token"
+changed_file_ids = ["frontends/headless-c4/hif/c42_queue.c"]
+expected_diagnostic_ids = ["phase control token exact"]
+
+[[owner]]
+id = "phase_invalid_enum"
+obligation_id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/control_status.state/control_episode/field_invalid_enum/0"
+mutant_id = "BM_CONTROL_STATUS_STATE_INVALID"
+executor_id = "dynamic_mutations"
+anchor_id = "control.query.state"
+changed_file_ids = ["frontends/headless-c4/hif/c42_queue.c"]
+expected_diagnostic_ids = ["phase control state enum exact"]
+
+[[owner]]
+id = "phase_transition_skip"
+obligation_id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_command_begin/reset/transition_skip/whole"
+mutant_id = "BM_STEP_SKIPS_EPOCH_CONTROL"
+executor_id = "dynamic_mutations"
+anchor_id = "runtime.step.epoch_control"
+changed_file_ids = ["frontends/headless-c4/hif/c42_runtime.c"]
+expected_diagnostic_ids = ["epoch one-unit exported step exact"]
+
+[[owner]]
+id = "phase_transition_stall"
+obligation_id = "C42A-READY-BOUNDED-SERVICE/phase/ready_poll_service/ready_service/transition_stall/whole"
+mutant_id = "BM_READY_POLL_CREDIT_DROPPED"
+executor_id = "dynamic_mutations"
+anchor_id = "publication.ready_poll_credit"
+changed_file_ids = ["frontends/headless-c4/hif/c42_publication.c"]
+expected_diagnostic_ids = [
+  "F18 local retry earns one HIF poll credit",
+  "F18 poll credit bounds same/different-CQ HIF latency",
+]
+
+[[owner]]
+id = "phase_transition_duplicate"
+obligation_id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_quiescent/reset/transition_duplicate/whole"
+mutant_id = "BM_EPOCH_PROVIDER_CALL_DUPLICATED"
+executor_id = "dynamic_mutations"
+anchor_id = "queue.epoch.provider_call"
+changed_file_ids = ["frontends/headless-c4/hif/c42_queue.c"]
+expected_diagnostic_ids = ["epoch one-unit provider vector exact"]
+
+[[owner]]
+id = "phase_transition_early_terminal"
+obligation_id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_command_begin/reset/transition_early_terminal/whole"
+mutant_id = "BM_EPOCH_TERMINATES_EARLY"
+executor_id = "dynamic_mutations"
+anchor_id = "queue.epoch.early_terminal"
+changed_file_ids = ["frontends/headless-c4/hif/c42_queue.c"]
+expected_diagnostic_ids = ["epoch mandatory rank decreases exactly"]
+
+[[owner]]
+id = "phase_transition_late_terminal"
+obligation_id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_quiescent/reset/transition_late_terminal/whole"
+mutant_id = "BM_EPOCH_TERMINATES_LATE"
+executor_id = "dynamic_mutations"
+anchor_id = "queue.epoch.late_terminal"
+changed_file_ids = ["frontends/headless-c4/hif/c42_queue.c"]
+expected_diagnostic_ids = ["epoch exact rank-derived bound reached"]
+
+[[owner]]
+id = "build_checker_suppress"
+obligation_id = "C42A-BUILD-AUTHORITY/build/c35_checker/authority/build_checker_suppress/whole"
+mutant_id = "BA_SUPPRESSED_C35_CHECKER"
+executor_id = "authority_integrity"
+anchor_id = "c35.checker.main"
+changed_file_ids = ["scripts/check_c35_architecture.py"]
+expected_diagnostic_ids = ["suppressed checker"]
+
+[[owner]]
+id = "build_recipe_substitute"
+obligation_id = "C42A-BUILD-AUTHORITY/build/c42_make/authority/build_recipe_substitute/whole"
+mutant_id = "BA_C42_MAKE_IGNORE_DIRECTIVE"
+executor_id = "make_integrity"
+anchor_id = "c42.make.ignore_directive"
+changed_file_ids = ["frontends/headless-c4/Makefile"]
+expected_diagnostic_ids = ["executed .IGNORE negative"]
+
+[[owner]]
+id = "build_child_omit"
+obligation_id = "C42A-BUILD-AUTHORITY/build/authoritative_runner/authority/build_child_omit/whole"
+mutant_id = "BA_RECEIPT_MISSING_NODE"
+executor_id = "authority_integrity"
+anchor_id = "authority.receipt.expected_nodes"
+changed_file_ids = []
+expected_diagnostic_ids = ["missing receipt node"]
+
+[[owner]]
+id = "build_runtime_substitute"
+obligation_id = "C42A-BUILD-AUTHORITY/build/authoritative_runner/authority/build_runtime_substitute/whole"
+mutant_id = "BA_RUNNER_HOSTILE_MAKEFLAGS"
+executor_id = "runner_integrity"
+anchor_id = "runner.hostile_environment.MAKEFLAGS"
+changed_file_ids = []
+expected_diagnostic_ids = ["runner accepted inherited input: MAKEFLAGS"]

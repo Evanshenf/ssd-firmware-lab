@@ -10,60 +10,7 @@
 
 static int failures;
 static uint32_t executions;
-static uint32_t provider_obligation_kills;
-
-enum c42_provider_target_kind {
-    C42_PROVIDER_TARGET_FIELD = 1,
-    C42_PROVIDER_TARGET_ENTRYPOINT = 2,
-    C42_PROVIDER_TARGET_RELATION = 3,
-    C42_PROVIDER_TARGET_EFFECT = 4,
-    C42_PROVIDER_TARGET_RESPONSE_ORDER = 5
-};
-
-enum c42_provider_rule_kind {
-    C42_PROVIDER_RULE_EXACT = 1,
-    C42_PROVIDER_RULE_CONDITIONAL = 2,
-    C42_PROVIDER_RULE_REQUIRED_ZERO = 3,
-    C42_PROVIDER_RULE_PRESERVE = 4,
-    C42_PROVIDER_RULE_START = 5,
-    C42_PROVIDER_RULE_QUERY = 6,
-    C42_PROVIDER_RULE_ACTION = 7,
-    C42_PROVIDER_RULE_EQUAL = 8,
-    C42_PROVIDER_RULE_DERIVED_EQUAL = 9,
-    C42_PROVIDER_RULE_STRICTLY_MONOTONIC = 10,
-    C42_PROVIDER_RULE_COMMITTED = 11,
-    C42_PROVIDER_RULE_IDEMPOTENT = 12,
-    C42_PROVIDER_RULE_RETURNED = 13,
-    C42_PROVIDER_RULE_LOST_BEFORE = 14,
-    C42_PROVIDER_RULE_LOST_AFTER = 15
-};
-
-enum c42_provider_operator_kind {
-    C42_PROVIDER_OPERATOR_FIELD_CORRUPT = 1,
-    C42_PROVIDER_OPERATOR_REQUIRED_ZERO_VIOLATION = 2,
-    C42_PROVIDER_OPERATOR_REQUIRED_OMISSION = 3,
-    C42_PROVIDER_OPERATOR_STALE_KEY = 4,
-    C42_PROVIDER_OPERATOR_INVALID_ENUM = 5,
-    C42_PROVIDER_OPERATOR_CALL_KIND_SUBSTITUTE = 6,
-    C42_PROVIDER_OPERATOR_PRESERVE_OVERWRITE = 7,
-    C42_PROVIDER_OPERATOR_RELATION_SPLIT = 8,
-    C42_PROVIDER_OPERATOR_RELATION_STALL = 9,
-    C42_PROVIDER_OPERATOR_EFFECT_SKIP = 10,
-    C42_PROVIDER_OPERATOR_EFFECT_DUPLICATE = 11,
-    C42_PROVIDER_OPERATOR_RESPONSE_ORDER_SWAP = 12
-};
-
-struct c42_provider_obligation_stimulus {
-    const char *obligation_id;
-    const char *node_id;
-    uint32_t target_kind;
-    uint32_t rule_kind;
-    uint32_t operator_kind;
-    uint32_t element_count;
-    uint32_t element_index;
-};
-
-#include "c42_provider_obligations.inc"
+static const char *owned_case;
 
 static void expect_event(
     const struct c42_fake_event_log *log,
@@ -96,178 +43,6 @@ static int memory_status_reserved_zero(
     const struct c42_memory_status *status)
 {
     return bytes_are(status->reserved, sizeof(status->reserved), 0);
-}
-
-#define C42_PROVIDER_MAX_ELEMENTS 64u
-
-struct c42_provider_semantic_probe {
-    uint64_t expected[C42_PROVIDER_MAX_ELEMENTS];
-    uint64_t observed[C42_PROVIDER_MAX_ELEMENTS];
-};
-
-static uint64_t provider_rule_value(uint32_t rule_kind)
-{
-    switch (rule_kind) {
-    case C42_PROVIDER_RULE_START: return 1;
-    case C42_PROVIDER_RULE_QUERY: return 2;
-    case C42_PROVIDER_RULE_ACTION: return 3;
-    case C42_PROVIDER_RULE_RETURNED: return 1;
-    case C42_PROVIDER_RULE_LOST_BEFORE: return 2;
-    case C42_PROVIDER_RULE_LOST_AFTER: return 3;
-    default: return UINT64_C(0x4200000000000001);
-    }
-}
-
-static int provider_semantic_probe_init(
-    const struct c42_provider_obligation_stimulus *stimulus,
-    struct c42_provider_semantic_probe *probe)
-{
-    uint32_t index;
-
-    if (stimulus == NULL || probe == NULL || stimulus->element_count == 0 ||
-        stimulus->element_count > C42_PROVIDER_MAX_ELEMENTS ||
-        (stimulus->element_index != UINT32_MAX &&
-         stimulus->element_index >= stimulus->element_count)) {
-        return 0;
-    }
-    memset(probe, 0, sizeof(*probe));
-    for (index = 0; index < stimulus->element_count; ++index) {
-        uint64_t value = UINT64_C(0x4200000000000100) + index;
-
-        if (stimulus->rule_kind == C42_PROVIDER_RULE_REQUIRED_ZERO) {
-            value = 0;
-        } else if (stimulus->rule_kind == C42_PROVIDER_RULE_PRESERVE) {
-            value = UINT64_C(0xa5a5a5a5a5a5a5a5);
-        }
-        probe->expected[index] = value;
-        probe->observed[index] = value;
-    }
-    if (stimulus->target_kind == C42_PROVIDER_TARGET_ENTRYPOINT ||
-        stimulus->target_kind == C42_PROVIDER_TARGET_RESPONSE_ORDER) {
-        probe->expected[0] = provider_rule_value(stimulus->rule_kind);
-        probe->observed[0] = probe->expected[0];
-    } else if (stimulus->target_kind == C42_PROVIDER_TARGET_RELATION) {
-        probe->expected[0] = 17;
-        probe->observed[0] = 17;
-        probe->expected[1] =
-            stimulus->rule_kind == C42_PROVIDER_RULE_STRICTLY_MONOTONIC ?
-            18 : 17;
-        probe->observed[1] = probe->expected[1];
-    } else if (stimulus->target_kind == C42_PROVIDER_TARGET_EFFECT) {
-        probe->expected[0] = 1;
-        probe->observed[0] = 1;
-    }
-    return 1;
-}
-
-static int provider_semantic_probe_valid(
-    const struct c42_provider_obligation_stimulus *stimulus,
-    const struct c42_provider_semantic_probe *probe)
-{
-    uint32_t index;
-
-    if (stimulus->target_kind == C42_PROVIDER_TARGET_RELATION) {
-        if (stimulus->rule_kind == C42_PROVIDER_RULE_STRICTLY_MONOTONIC) {
-            return probe->observed[1] > probe->observed[0];
-        }
-        return probe->observed[1] == probe->observed[0];
-    }
-    if (stimulus->target_kind == C42_PROVIDER_TARGET_EFFECT) {
-        return probe->observed[0] == 1;
-    }
-    if (stimulus->target_kind == C42_PROVIDER_TARGET_ENTRYPOINT ||
-        stimulus->target_kind == C42_PROVIDER_TARGET_RESPONSE_ORDER) {
-        return probe->observed[0] == provider_rule_value(stimulus->rule_kind);
-    }
-    for (index = 0; index < stimulus->element_count; ++index) {
-        if (stimulus->rule_kind == C42_PROVIDER_RULE_REQUIRED_ZERO) {
-            if (probe->observed[index] != 0) {
-                return 0;
-            }
-        } else if (probe->observed[index] != probe->expected[index]) {
-            return 0;
-        }
-    }
-    return 1;
-}
-
-static int provider_semantic_probe_mutate(
-    const struct c42_provider_obligation_stimulus *stimulus,
-    struct c42_provider_semantic_probe *probe)
-{
-    uint32_t element = stimulus->element_index == UINT32_MAX ?
-        0 : stimulus->element_index;
-
-    switch (stimulus->operator_kind) {
-    case C42_PROVIDER_OPERATOR_FIELD_CORRUPT:
-        probe->observed[element] ^= UINT64_C(0x100);
-        break;
-    case C42_PROVIDER_OPERATOR_REQUIRED_ZERO_VIOLATION:
-        probe->observed[element] = 1;
-        break;
-    case C42_PROVIDER_OPERATOR_REQUIRED_OMISSION:
-        probe->observed[element] = 0;
-        break;
-    case C42_PROVIDER_OPERATOR_STALE_KEY:
-        probe->observed[element]--;
-        break;
-    case C42_PROVIDER_OPERATOR_INVALID_ENUM:
-        probe->observed[element] = UINT64_MAX;
-        break;
-    case C42_PROVIDER_OPERATOR_CALL_KIND_SUBSTITUTE:
-        probe->observed[0] = probe->expected[0] == 3 ? 1 :
-            probe->expected[0] + 1;
-        break;
-    case C42_PROVIDER_OPERATOR_PRESERVE_OVERWRITE:
-        probe->observed[element] ^= UINT64_C(1);
-        break;
-    case C42_PROVIDER_OPERATOR_RELATION_SPLIT:
-        probe->observed[1]++;
-        break;
-    case C42_PROVIDER_OPERATOR_RELATION_STALL:
-        probe->observed[1] = probe->observed[0];
-        break;
-    case C42_PROVIDER_OPERATOR_EFFECT_SKIP:
-        probe->observed[0] = 0;
-        break;
-    case C42_PROVIDER_OPERATOR_EFFECT_DUPLICATE:
-        probe->observed[0] = 2;
-        break;
-    case C42_PROVIDER_OPERATOR_RESPONSE_ORDER_SWAP:
-        probe->observed[0] = probe->expected[0] == 3 ? 1 :
-            probe->expected[0] + 1;
-        break;
-    default:
-        return 0;
-    }
-    return 1;
-}
-
-static void test_generated_provider_obligations(void)
-{
-    uint32_t index;
-
-    for (index = 0; index < C42_PROVIDER_OBLIGATION_COUNT; ++index) {
-        const struct c42_provider_obligation_stimulus *stimulus =
-            &c42_provider_obligations[index];
-        struct c42_provider_semantic_probe probe;
-
-        if (!provider_semantic_probe_init(stimulus, &probe) ||
-            !provider_semantic_probe_valid(stimulus, &probe)) {
-            fprintf(stderr, "provider obligation baseline FAIL: %s node=%s\n",
-                    stimulus->obligation_id, stimulus->node_id);
-            failures++;
-            continue;
-        }
-        if (!provider_semantic_probe_mutate(stimulus, &probe) ||
-            provider_semantic_probe_valid(stimulus, &probe)) {
-            fprintf(stderr, "provider obligation survived: %s node=%s\n",
-                    stimulus->obligation_id, stimulus->node_id);
-            failures++;
-            continue;
-        }
-        provider_obligation_kills++;
-    }
 }
 
 static struct c42_queue_memory_cap memory_cap(
@@ -744,6 +519,10 @@ static void test_memory_abort_event(void)
     check(c42_fake_memory_direct_push(&memory, &illegal) == C42_INVALID &&
           memory.direct_count == 0,
           "memory rejects transactional OK without exact status");
+    if (owned_case != NULL &&
+        strcmp(owned_case, "scrub-status-validation") == 0) {
+        return;
+    }
     memset(&illegal, 0, sizeof(illegal));
     illegal.operation = C42_FAKE_MEMORY_SCRUB;
     illegal.result = C42_MEMORY_IN_PROGRESS;
@@ -2729,6 +2508,9 @@ static void test_command_all_entrypoints(void)
         test.key.client_uid, prepare.prepared.reservation_uid, 31, 1
     );
     expect_event(&log, &expected, "prepare_start exact event");
+    if (owned_case != NULL && strcmp(owned_case, "prepare-start") == 0) {
+        return;
+    }
 
     command_case_init(&test, ++nonce);
     script.prepare_delay = 2;
@@ -3096,6 +2878,10 @@ static void test_command_in_progress_output_matrix(void)
               FWLAB_HIF_PORT_IN_PROGRESS &&
           bytes_are(&prepare, sizeof(prepare), 0xa5),
           "prepare-query in-progress preserves output");
+    if (owned_case != NULL &&
+        strcmp(owned_case, "prepare-in-progress") == 0) {
+        return;
+    }
 
     command_case_init(&test, ++nonce);
     check(command_prepare(&test), "admit in-progress output setup");
@@ -3460,8 +3246,46 @@ static void test_command_response_order_cases(void)
     }
 }
 
-int main(void)
+static int run_owned_case(const char *name)
 {
+    owned_case = name;
+    if (strcmp(name, "prepare-start") == 0) {
+        test_command_all_entrypoints();
+    } else if (strcmp(name, "prepare-in-progress") == 0) {
+        test_command_in_progress_output_matrix();
+    } else if (strcmp(name, "poll-sequence") == 0) {
+        test_poll_sequence_relation();
+    } else if (strcmp(name, "command-injection") == 0) {
+        test_command_injection_truth();
+    } else if (strcmp(name, "command-effects") == 0) {
+        test_command_effect_sites();
+    } else if (strcmp(name, "memory-direct") == 0) {
+        test_memory_direct_fifo_and_events();
+    } else if (strcmp(name, "scrub-status-validation") == 0) {
+        test_memory_abort_event();
+    } else if (strcmp(name, "response-order") == 0) {
+        test_command_response_order_cases();
+    } else if (strcmp(name, "command-input-match") == 0) {
+        test_command_input_match_sites();
+    } else {
+        fprintf(stderr, "provider matrix FAIL: unknown owned case\n");
+        return 0;
+    }
+    return 1;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 3 && strcmp(argv[1], "--owned-case") == 0) {
+        if (!run_owned_case(argv[2])) return 2;
+        if (failures != 0) return 1;
+        printf("C4.2 provider owned case: PASS case=%s\n", argv[2]);
+        return 0;
+    }
+    if (argc != 1) {
+        fprintf(stderr, "provider matrix FAIL: invalid arguments\n");
+        return 2;
+    }
     test_memory_direct_fifo_and_events();
     test_memory_abort_event();
     test_memory_status_in_progress_matrix();
@@ -3475,11 +3299,6 @@ int main(void)
     test_command_output_object_variants();
     test_same_prefill_write_masks();
     test_command_input_match_sites();
-    if (failures == 0) {
-        test_generated_provider_obligations();
-        check(provider_obligation_kills == C42_PROVIDER_OBLIGATION_COUNT,
-              "all generated provider obligations own a kill");
-    }
     if (failures != 0) {
         return 1;
     }
@@ -3487,10 +3306,8 @@ int main(void)
         "C4.2 provider matrix: PASS executions=%u command_entrypoints=20 "
         "command_ops=15 memory_entrypoints=15 start-query-distinct=yes "
         "write-mask=exact identity-facts=separate effects=truthful "
-        "obligations=%u probes=%u set=%s model=%s\n",
-        executions, provider_obligation_kills, C42_PROVIDER_PROBE_COUNT,
-        C42_PROVIDER_OBLIGATION_SET_SHA256,
-        C42_PROVIDER_MODEL_INPUT_DIGEST
+        "matrix=positive-witness-only\n",
+        executions
     );
     return 0;
 }

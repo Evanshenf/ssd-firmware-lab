@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -31,11 +32,16 @@ def replace_unique(path: Path, before: str, after: str) -> None:
     path.write_text(text.replace(before, after, 1), encoding="utf-8")
 
 
+def failure_diagnostics(output: str) -> set[str]:
+    return set(re.findall(r"^provider matrix FAIL: (.+)$", output, re.MULTILINE))
+
+
 def variations() -> list[dict[str, object]]:
     return [
         {
             "name": "PM_REQUIRED_ZERO_OUTPUT_VIOLATION",
             "label": "prepare_start exact event",
+            "case_id": "prepare-start",
             "operator_ids": ["field_required_zero_violation"],
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "    result->disposition = disposition;\n"
@@ -49,6 +55,7 @@ def variations() -> list[dict[str, object]]:
         {
             "name": "PM_CALL_KIND_SUBSTITUTED",
             "label": "prepare_start exact event",
+            "case_id": "prepare-start",
             "operator_ids": ["entrypoint_call_kind_substitute"],
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "        context, C42_FAKE_COMMAND_PREPARE, "
@@ -59,6 +66,7 @@ def variations() -> list[dict[str, object]]:
         {
             "name": "PM_PRESERVED_OUTPUT_OVERWRITTEN",
             "label": "prepare-start in-progress preserves output",
+            "case_id": "prepare-in-progress",
             "operator_ids": ["field_preserve_overwrite"],
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "    if (command->script.prepare_delay != 0) {\n"
@@ -72,6 +80,7 @@ def variations() -> list[dict[str, object]]:
         {
             "name": "PM_POLL_SEQUENCE_STALLED",
             "label": "poll ready sequence strictly advances",
+            "case_id": "poll-sequence",
             "operator_ids": ["relation_stall"],
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "    events[0].sequence = command->next_ready_sequence++;\n"
@@ -82,6 +91,7 @@ def variations() -> list[dict[str, object]]:
         {
             "name": "PM_COMMAND_EFFECT_SKIPPED",
             "label": "effect CONSUME_COMMIT caller/provider state",
+            "case_id": "command-effects",
             "operator_ids": ["effect_skip"],
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "    if (injection_take(\n"
@@ -107,6 +117,7 @@ def variations() -> list[dict[str, object]]:
         {
             "name": "PM_MEMORY_EFFECT_DUPLICATED",
             "label": "memory capture exact 64-byte output and provider effect",
+            "case_id": "memory-direct",
             "operator_ids": ["effect_duplicate"],
             "edits": [("frontends/headless-c4/fakes/c42_memory.c",
                        "        if (direct->apply_effect != 0) {\n"
@@ -121,6 +132,7 @@ def variations() -> list[dict[str, object]]:
         {
             "name": "PM_RESPONSE_LOSS_ORDER_COLLAPSED",
             "label": "response lost before effect",
+            "case_id": "response-order",
             "operator_ids": ["response_order_swap"],
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "        if (command->injection_requested_effect !=\n"
@@ -134,6 +146,7 @@ def variations() -> list[dict[str, object]]:
             "name": "PM_BODY_RETURNS_WRONG_TOKEN",
             "operator_ids": ["field_corrupt"],
             "label": "memory event all fields exact",
+            "case_id": "memory-direct",
             "edits": [("frontends/headless-c4/fakes/c42_memory.c",
                        "        direct_status_fill(memory, status, client_token, direct);\n"
                        "        memory->body_call_count++;",
@@ -149,6 +162,7 @@ def variations() -> list[dict[str, object]]:
             "name": "PM_CONSUME_RETURNS_WRONG_STATE",
             "operator_ids": ["field_invalid_enum"],
             "label": "consume caller output and applied effect exact",
+            "case_id": "command-injection",
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {\n"
                        "            provider_output_mark(command, C42_FAKE_WRITE_VALUE);\n"
@@ -160,7 +174,7 @@ def variations() -> list[dict[str, object]]:
                        "    record->consume_queries++;",
                        "        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {\n"
                        "            provider_output_mark(command, C42_FAKE_WRITE_VALUE);\n"
-                       "            *state = FWLAB_HIF_CONSUME_ABORTED;\n"
+                       "            *state = (enum fwlab_hif_consume_state)UINT32_MAX;\n"
                        "        }\n"
                        "        (void)omit;\n"
                        "        return injected;\n"
@@ -210,11 +224,13 @@ def variations() -> list[dict[str, object]]:
             "name": "PM_ALLOW_OK_WITHOUT_STATUS",
             "operator_ids": ["field_required_omission"],
             "label": "memory rejects transactional OK without exact status",
+            "case_id": "scrub-status-validation",
             "edits": [("frontends/headless-c4/fakes/c42_memory.c",
                        "        (injection->result == C42_MEMORY_OK && output_required &&\n"
                        "         injection->write_status == 0) ||",
-                       "        (0 != 0 && injection->result == C42_MEMORY_OK &&\n"
-                       "         output_required && injection->write_status == 0) ||")],
+                       "        (injection->result == C42_MEMORY_OK && output_required &&\n"
+                       "         injection->write_status == 0 &&\n"
+                       "         injection->operation != C42_FAKE_MEMORY_SCRUB) ||")],
         },
         {
             "name": "PM_ALLOW_UNUSED_EFFECT_METADATA",
@@ -254,6 +270,7 @@ def variations() -> list[dict[str, object]]:
             "name": "PM_FRESH_ADMIT_GENERATION_RELATION_REMOVED",
             "label": "mismatch fresh admit generation rejected unchanged",
             "operator_ids": ["field_stale_key", "relation_split"],
+            "case_id": "command-input-match",
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
                        "    if (record == NULL || record->prepare_key.client_uid != key->client_uid ||\n"
                        "        record->prepare_key.client_generation != key->generation ||\n"
@@ -439,10 +456,15 @@ def main() -> int:
     arguments = parser.parse_args()
     selected = variations()
     try:
+        model = build_model()
+        provider_obligations = [
+            obligation for obligation in model["obligations"]
+            if obligation.get("model_kind") == "provider"
+            and obligation.get("executor_id") == "provider_mutations"
+        ]
         provider_operator_ids = {
             str(obligation["operator_id"])
-            for obligation in build_model()["obligations"]
-            if obligation.get("model_kind") == "provider"
+            for obligation in provider_obligations
         }
     except (ModelError, OSError) as error:
         print(
@@ -485,6 +507,46 @@ def main() -> int:
             + ",".join(missing), file=sys.stderr,
         )
         return 2
+    owned_by_mutant: dict[str, list[dict[str, object]]] = {}
+    for obligation in provider_obligations:
+        owned_by_mutant.setdefault(
+            str(obligation["mutant_id"]), []
+        ).append(obligation)
+    known_variations = {str(variation["name"]): variation for variation in variations()}
+    unknown_owned = sorted(set(owned_by_mutant) - set(known_variations))
+    if unknown_owned:
+        print(
+            "C4.2 provider variations: FAIL: ownership references unknown "
+            "variation(s): " + ",".join(unknown_owned), file=sys.stderr,
+        )
+        return 2
+    try:
+        for mutant_id, owned in owned_by_mutant.items():
+            variation = known_variations[mutant_id]
+            owner_operators = {
+                str(obligation["operator_id"]) for obligation in owned
+            }
+            if owner_operators != set(variation.get("operator_ids", [])):
+                raise RuntimeError(
+                    f"{mutant_id} ownership/operator set differs"
+                )
+            changed = {str(edit[0]) for edit in variation["edits"]}
+            for obligation in owned:
+                if changed != set(obligation["changed_file_ids"]):
+                    raise RuntimeError(
+                        f"{mutant_id} ownership changed-file set differs"
+                    )
+            expected = {
+                str(value) for obligation in owned
+                for value in obligation["expected_diagnostic_ids"]
+            }
+            if str(variation["label"]) not in expected:
+                raise RuntimeError(
+                    f"{mutant_id} ownership diagnostic set differs"
+                )
+    except RuntimeError as error:
+        print(f"C4.2 provider variations: FAIL: {error}", file=sys.stderr)
+        return 2
     compilers = [name for name in ("gcc", "clang") if shutil.which(name)]
     if len(compilers) != 2:
         print("C4.2 provider variations require gcc and clang", file=sys.stderr)
@@ -492,8 +554,10 @@ def main() -> int:
     tracked = subprocess.check_output(
         ["git", "ls-files"], cwd=ROOT, text=True
     ).splitlines()
+    tracked = [name for name in tracked if (ROOT / name).is_file()]
     baseline = {name: sha256(ROOT / name) for name in tracked}
     total = 0
+    executed_owned = 0
     try:
         for variation in selected:
             name = str(variation["name"])
@@ -518,6 +582,7 @@ def main() -> int:
                     raise RuntimeError(
                         f"{name} changed unexpected files: {sorted(changed ^ allowed)}"
                     )
+                owned = owned_by_mutant.get(name, [])
                 for compiler in compilers:
                     output = Path(directory) / f"build-{compiler}"
                     binary = output / "c42_provider_matrix"
@@ -537,7 +602,13 @@ def main() -> int:
                             f"{name}/{compiler} did not compile:\n{built.stdout}"
                         )
                     run = subprocess.run(
-                        [str(binary)], cwd=mutant, check=False, text=True,
+                        [
+                            str(binary),
+                            *(
+                                ["--owned-case", str(variation["case_id"])]
+                                if owned else []
+                            ),
+                        ], cwd=mutant, check=False, text=True,
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         timeout=120,
                     )
@@ -547,10 +618,25 @@ def main() -> int:
                             f"{name}/{compiler} escaped exact provider oracle:\n"
                             f"{run.stdout}"
                         )
+                    if owned:
+                        expected = {
+                            str(value) for obligation in owned
+                            for value in obligation["expected_diagnostic_ids"]
+                        }
+                        actual = failure_diagnostics(run.stdout)
+                        if actual != expected:
+                            raise RuntimeError(
+                                f"{name}/{compiler} owner diagnostics differ: "
+                                f"expected={sorted(expected)} "
+                                f"actual={sorted(actual)}\n{run.stdout}"
+                            )
                     outputs.append(run.stdout)
                 if outputs[0] != outputs[1]:
                     raise RuntimeError(f"{name} GCC/Clang output differs")
                 total += 1
+                executed_owned += len(owned_by_mutant.get(name, []))
+                for obligation in owned_by_mutant.get(name, []):
+                    print(f"C4.2 owned kill: {obligation['id']}")
                 print(f"C4.2 provider variation {name}: PASS")
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
         print(f"C4.2 provider variations: FAIL: {error}", file=sys.stderr)
@@ -558,7 +644,9 @@ def main() -> int:
     print(
         f"C4.2 provider variations: PASS variations={total} "
         f"compilers=2 binaries={total * 2} "
-        f"operator_canaries={len(declared_operator_ids)}"
+        f"operator_canaries={len(declared_operator_ids)} "
+        f"owned_obligations={executed_owned}/"
+        f"{sum(len(value) for value in owned_by_mutant.values())}"
     )
     return 0
 

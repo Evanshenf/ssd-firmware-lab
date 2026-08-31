@@ -2,7 +2,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include "c42_support.h"
-#include "c42_state_obligation_oracle.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +16,6 @@ static int failures;
 static uint32_t executions;
 static uint32_t requested_cut_count;
 static uint32_t distinct_cut_count;
-static uint32_t state_obligation_kills;
 static uint32_t epoch_assumption_failures;
 
 #define SEMANTIC_BUSINESS_CONTROLS 2u
@@ -472,12 +470,29 @@ static void observe_masks(
         }
     }
     for (index = 0; index < C42_MAX_QUEUE_PAIRS * 2u; ++index) {
-        if (observer.candidates[index].in_use != 0 &&
-            observer.candidates[index].state < 32) {
+        if (observer.candidates[index].in_use != 0) {
+            check(observer.candidates[index].state >= C42_CANDIDATE_PREPARED &&
+                  observer.candidates[index].state <= C42_CANDIDATE_RETIRED,
+                  "observer candidate state enum exact");
             check(observer.candidates[index].token.instance_nonce ==
                       observer.instance_nonce,
                   "observer candidate shares controller instance identity");
-            *candidate_mask |= UINT32_C(1) << observer.candidates[index].state;
+            check(observer.candidates[index].state ==
+                      C42_CANDIDATE_SUPERSEDED ||
+                  observer.candidates[index].controller_epoch ==
+                      observer.controller_epoch,
+                  "observer candidate controller epoch exact");
+            check(observer.candidates[index].reserved0[0] == 0 &&
+                  observer.candidates[index].reserved0[1] == 0 &&
+                  observer.candidates[index].reserved0[2] == 0 &&
+                  observer.candidates[index].reserved[0] == 0 &&
+                  observer.candidates[index].reserved[1] == 0 &&
+                  observer.candidates[index].reserved[2] == 0,
+                  "observer candidate reserved zero exact");
+            if (observer.candidates[index].state < 32) {
+                *candidate_mask |=
+                    UINT32_C(1) << observer.candidates[index].state;
+            }
         }
     }
     for (index = 0; index < 4; ++index) {
@@ -1433,6 +1448,8 @@ static C42_TEST_NOINLINE void test_identity_graph_witnesses(void)
           command->notification_uid ==
               observer.notifications[command_index].token.uid,
           "identity notification command-slot-record exact");
+    check(command->handle.command_uid != command->notification_uid,
+          "identity command-notification domains independently sourced");
     check(command->handle.instance_nonce == observer.instance_nonce &&
           observer.notifications[command_index].token.instance_nonce ==
               observer.instance_nonce &&
@@ -2157,6 +2174,26 @@ static int event_logs_equal(
                   left->count * sizeof(left->events[0])) == 0;
 }
 
+static void check_phase_control_status(
+    const struct c42_control_status *status,
+    const struct c42_operation_token *token)
+{
+    check(status->token.instance_nonce == token->instance_nonce &&
+          status->token.uid == token->uid &&
+          status->token.generation == token->generation &&
+          status->token.kind == token->kind &&
+          status->token.reserved == token->reserved,
+          "phase control token exact");
+    check(status->state >= C42_CONTROL_STARTED &&
+          status->state <= C42_CONTROL_SUPERSEDED,
+          "phase control state enum exact");
+    check(status->cause == 0 && status->retry == 0,
+          "phase control cause-retry exact");
+    check(status->reserved[0] == 0 && status->reserved[1] == 0 &&
+          status->reserved[2] == 0,
+          "phase control reserved zero exact");
+}
+
 static C42_TEST_NOINLINE void test_epoch_rank_traces(void)
 {
     static struct c42_test_fixture one;
@@ -2229,6 +2266,7 @@ static C42_TEST_NOINLINE void test_epoch_rank_traces(void)
                       one.controller, &one_token,
                       &one_status) == C42_OK,
                   "epoch one-unit control query");
+            check_phase_control_status(&one_status, &one_token);
             if (one_status.state == C42_CONTROL_COMMITTED) {
                 units++;
                 break;
@@ -2248,6 +2286,7 @@ static C42_TEST_NOINLINE void test_epoch_rank_traces(void)
                   &bulk_status) == C42_OK &&
               bulk_status.state == C42_CONTROL_COMMITTED,
               "epoch bulk exported step reaches exact bound");
+        check_phase_control_status(&bulk_status, &bulk_token);
         check(c42_snapshot_read(one.controller, &one_snapshot) == C42_OK &&
               c42_snapshot_read(bulk.controller, &bulk_snapshot) == C42_OK &&
               c42_observer_read_v2(one.controller, &one_observer) == C42_OK &&
@@ -2282,6 +2321,7 @@ static C42_TEST_NOINLINE void test_epoch_rank_traces(void)
                      sizeof(one_status)) == 0 &&
               event_logs_equal(&one.event_log, &bulk.event_log),
               "epoch terminal follow-up is globally stable");
+        check_phase_control_status(&one_status, &one_token);
     }
 }
 
@@ -2406,7 +2446,141 @@ static C42_TEST_NOINLINE void test_notification_suppressed_cut(uint32_t *notific
     check(step < 512, "notification suppressed cut terminal");
 }
 
-int main(void)
+static void test_owned_candidate_observer(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_operation_token candidate = {0};
+    uint32_t command_mask = 0;
+    uint32_t reconcile_mask = 0;
+    uint32_t notification_mask = 0;
+    uint32_t candidate_mask = 0;
+    uint32_t control_mask = 0;
+
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0x4403f00000000001)),
+          "owned candidate observer fixture");
+    prepare_candidate_phase(&fixture, 0, &candidate);
+    observe_masks(
+        &fixture, &command_mask, &reconcile_mask, &notification_mask,
+        &candidate_mask, &control_mask
+    );
+}
+
+static void test_owned_control_status(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_operation_token token = {0};
+    struct c42_control_status status = {0};
+
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0x4403f00000000002)) &&
+          c42_reset_start(fixture.controller, &token) == C42_OK &&
+          c42_control_query(
+              fixture.controller, &token, &status) == C42_OK,
+          "owned control status fixture");
+    check_phase_control_status(&status, &token);
+}
+
+static void test_owned_epoch_first_step(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_operation_token token = {0};
+    struct c42_step_result result = {0};
+
+    check(epoch_trace_start(
+              &fixture, EPOCH_TRACE_RESET,
+              UINT64_C(0x4403f00000000003), 0, &token),
+          "owned epoch first-step fixture");
+    check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+          result.requested_budget == 1 && result.units_executed == 1 &&
+          result.transitions == 1,
+          "epoch one-unit exported step exact");
+}
+
+static void test_owned_epoch_rank_decrease(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_operation_token token = {0};
+    struct c42_step_result result = {0};
+    uint32_t before;
+    uint32_t after;
+
+    check(epoch_trace_start(
+              &fixture, EPOCH_TRACE_RESET,
+              UINT64_C(0x4403f00000000004), 0, &token),
+          "owned epoch rank fixture");
+    before = epoch_rank_m(&fixture, EPOCH_TRACE_RESET);
+    check(c42_step(fixture.controller, 1, &result) == C42_OK,
+          "owned epoch rank step");
+    after = epoch_rank_m(&fixture, EPOCH_TRACE_RESET);
+    check(before == after + 1u,
+          "epoch mandatory rank decreases exactly");
+}
+
+static void test_owned_epoch_quiescent_vector(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_operation_token token = {0};
+    struct c42_step_result result = {0};
+    uint32_t events;
+
+    check(epoch_trace_start(
+              &fixture, EPOCH_TRACE_RESET,
+              UINT64_C(0x4403f00000000005), 0, &token) &&
+          c42_step(fixture.controller, 1, &result) == C42_OK &&
+          c42_step(fixture.controller, 1, &result) == C42_OK,
+          "owned epoch quiescent fixture");
+    events = fixture.event_log.count;
+    check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+          fixture.event_log.count - events == 2,
+          "epoch one-unit provider vector exact");
+}
+
+static void test_owned_epoch_terminal(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_operation_token token = {0};
+    struct c42_control_status status = {0};
+    struct c42_step_result result = {0};
+
+    check(epoch_trace_start(
+              &fixture, EPOCH_TRACE_RESET,
+              UINT64_C(0x4403f00000000006), 0, &token) &&
+          c42_step(fixture.controller, 1, &result) == C42_OK &&
+          c42_step(fixture.controller, 1, &result) == C42_OK &&
+          c42_step(fixture.controller, 1, &result) == C42_OK &&
+          c42_control_query(
+              fixture.controller, &token, &status) == C42_OK &&
+          status.state == C42_CONTROL_COMMITTED,
+          "epoch exact rank-derived bound reached");
+}
+
+static int run_owned_case(const char *name)
+{
+    if (strcmp(name, "candidate-observer") == 0) {
+        test_owned_candidate_observer();
+    } else if (strcmp(name, "control-status") == 0) {
+        test_owned_control_status();
+    } else if (strcmp(name, "identity-graph") == 0) {
+        test_identity_graph_witnesses();
+    } else if (strcmp(name, "epoch-rank") == 0) {
+        test_epoch_rank_traces();
+    } else if (strcmp(name, "epoch-first-step") == 0) {
+        test_owned_epoch_first_step();
+    } else if (strcmp(name, "epoch-rank-decrease") == 0) {
+        test_owned_epoch_rank_decrease();
+    } else if (strcmp(name, "epoch-quiescent-vector") == 0) {
+        test_owned_epoch_quiescent_vector();
+    } else if (strcmp(name, "epoch-terminal") == 0) {
+        test_owned_epoch_terminal();
+    } else {
+        fprintf(stderr, "phase cuts FAIL: unknown owned case\n");
+        return 0;
+    }
+    return 1;
+}
+
+int main(int argc, char **argv)
 {
     uint32_t command_mask = 0;
     uint32_t reconcile_mask = 0;
@@ -2415,6 +2589,17 @@ int main(void)
     uint32_t control_mask = 0;
     uint32_t required_command = 0;
     uint32_t state;
+
+    if (argc == 3 && strcmp(argv[1], "--owned-case") == 0) {
+        if (!run_owned_case(argv[2])) return 2;
+        if (failures != 0) return 1;
+        printf("C4.2 phase owned case: PASS case=%s\n", argv[2]);
+        return 0;
+    }
+    if (argc != 1) {
+        fprintf(stderr, "phase cuts FAIL: invalid arguments\n");
+        return 2;
+    }
 
     test_semantic_quotient_laws();
     test_command_publication_cuts(
@@ -2455,11 +2640,6 @@ int main(void)
         (UINT32_C(1) << C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD) |
         (UINT32_C(1) << C42_OBSERVER_COMMAND_CONSUME_POISON_HOLD);
     test_notification_suppressed_cut(&notification_mask);
-    if (failures == 0) {
-        check(c42_state_obligations_run(&state_obligation_kills) &&
-              state_obligation_kills == C42_STATE_OBLIGATION_COUNT,
-              "all generated state obligations own a kill");
-    }
     check(requested_cut_count == 130,
           "phase requested cut count is exact");
     check(distinct_cut_count == 74,
@@ -2517,13 +2697,11 @@ int main(void)
         "C4.2 phase cuts: PASS executions=%u requested=%u distinct=%u "
         "command=%08x "
         "reconcile=%08x notification=%08x candidate=%08x control=%08x "
-        "obligations=%u probes=%u assumption_failures=%u set=%s model=%s\n",
+        "assumption_failures=%u matrix=positive-witness-only\n",
         executions, requested_cut_count, distinct_cut_count,
         command_mask, reconcile_mask,
         notification_mask, candidate_mask, control_mask,
-        state_obligation_kills, C42_STATE_PROBE_COUNT,
-        epoch_assumption_failures,
-        C42_STATE_OBLIGATION_SET_SHA256, C42_STATE_MODEL_INPUT_DIGEST
+        epoch_assumption_failures
     );
     return 0;
 }

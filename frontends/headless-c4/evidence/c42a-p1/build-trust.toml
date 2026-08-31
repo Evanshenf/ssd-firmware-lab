@@ -23,7 +23,7 @@ node_type = "runner"
 binding_kind = "exact_repository"
 repository_path = "scripts/run_c42_gate.py"
 execution_mode = "direct"
-child_ids = ["authority_launcher", "authority_integrity", "inventory_extractor", "obligation_generator", "provider_obligation_generator", "state_obligation_generator", "claim_validator", "c42_make", "architecture_checker", "c4_architecture_checker", "c35_build", "c35_checker", "dynamic_mutations", "provider_mutations", "make_integrity", "runner_integrity"]
+child_ids = ["authority_launcher", "authority_integrity", "inventory_extractor", "obligation_generator", "claim_validator", "c42_make", "architecture_checker", "c4_architecture_checker", "c35_build", "c35_checker", "dynamic_mutations", "provider_mutations", "make_integrity", "runner_integrity"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["architecture_native"]
 
@@ -53,7 +53,7 @@ node_type = "checker"
 binding_kind = "exact_repository"
 repository_path = "scripts/check_c42_claim_models.py"
 execution_mode = "direct"
-child_ids = ["inventory_extractor", "obligation_generator", "provider_obligation_generator", "state_obligation_generator", "evidence_models"]
+child_ids = ["inventory_extractor", "obligation_generator", "evidence_models"]
 claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["model"]
 
@@ -78,26 +78,6 @@ claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["model"]
 
 [[nodes]]
-id = "provider_obligation_generator"
-node_type = "checker"
-binding_kind = "exact_repository"
-repository_path = "scripts/gen_c42_provider_obligations.py"
-execution_mode = "direct"
-child_ids = ["obligation_generator", "evidence_models"]
-claim_ids = ["C42A-BUILD-AUTHORITY"]
-additional_lane_ids = ["model", "provider_gcc", "provider_clang"]
-
-[[nodes]]
-id = "state_obligation_generator"
-node_type = "checker"
-binding_kind = "exact_repository"
-repository_path = "scripts/gen_c42_state_obligations.py"
-execution_mode = "direct"
-child_ids = ["obligation_generator", "evidence_models"]
-claim_ids = ["C42A-BUILD-AUTHORITY"]
-additional_lane_ids = ["model", "phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
-
-[[nodes]]
 id = "evidence_models"
 node_type = "source_group"
 binding_kind = "exact_repository"
@@ -113,7 +93,7 @@ node_type = "recipe"
 binding_kind = "exact_repository"
 repository_path = "frontends/headless-c4/Makefile"
 execution_mode = "bound_recipe"
-child_ids = ["c42_sources", "provider_obligation_generator", "state_obligation_generator", "provider_executor", "phase_executor", "replay_executor", "analysis", "determinism", "cross", "c35_build"]
+child_ids = ["c42_sources", "provider_executor", "phase_executor", "replay_executor", "analysis", "determinism", "cross", "c35_build"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["architecture_native"]
 
@@ -133,7 +113,7 @@ node_type = "checker"
 binding_kind = "exact_repository"
 repository_path = "frontends/headless-c4/tests/test_c42_provider_matrix.c"
 execution_mode = "bound_recipe"
-child_ids = ["c42_sources", "provider_obligation_generator"]
+child_ids = ["c42_sources"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["provider_gcc", "provider_clang"]
 
@@ -143,7 +123,7 @@ node_type = "checker"
 binding_kind = "exact_repository"
 repository_path = "frontends/headless-c4/tests/test_c42_phase_cuts.c"
 execution_mode = "bound_recipe"
-child_ids = ["c42_sources", "state_obligation_generator"]
+child_ids = ["c42_sources"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["phase_gcc", "phase_clang"]
 
@@ -183,7 +163,7 @@ node_type = "checker"
 binding_kind = "exact_repository"
 repository_path = "scripts/check_c42_determinism.py"
 execution_mode = "direct"
-child_ids = ["provider_obligation_generator", "state_obligation_generator", "c42_sources"]
+child_ids = ["c42_sources"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["architecture_native", "provider_gcc", "provider_clang", "phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
 
@@ -193,7 +173,7 @@ node_type = "checker"
 binding_kind = "exact_repository"
 repository_path = "scripts/check_c42_cross.py"
 execution_mode = "direct"
-child_ids = ["provider_obligation_generator", "state_obligation_generator", "c42_sources"]
+child_ids = ["c42_sources"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["architecture_native"]
 
