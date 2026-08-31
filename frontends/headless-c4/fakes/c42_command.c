@@ -511,7 +511,8 @@ static enum fwlab_hif_command_port_result fake_prepare_start(
     uint32_t value;
     int omit;
 
-    if (command == NULL || result == NULL || !prepare_key_valid(command, key)) {
+    if (command == NULL || key == NULL || result == NULL ||
+        !prepare_key_valid(command, key)) {
         return FWLAB_HIF_PORT_INVALID;
     }
     if (injection_take(
@@ -584,7 +585,8 @@ static enum fwlab_hif_command_port_result fake_prepare_query(
     uint32_t value;
     int omit;
 
-    if (command == NULL || result == NULL || !prepare_key_valid(command, key)) {
+    if (command == NULL || key == NULL || result == NULL ||
+        !prepare_key_valid(command, key)) {
         return FWLAB_HIF_PORT_INVALID;
     }
     record = find_prepare_key(command, key);
