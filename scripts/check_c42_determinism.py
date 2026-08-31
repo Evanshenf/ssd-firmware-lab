@@ -39,6 +39,10 @@ PROGRAMS = {
     "c42_remediation_unit": (
         [*COMMON], HIF / "tests/test_c42_remediation.c"
     ),
+    "c42_provider_matrix": (
+        [*COMMON], HIF / "tests/test_c42_provider_matrix.c"
+    ),
+    "c42_phase_cuts": ([*COMMON], HIF / "tests/test_c42_phase_cuts.c"),
     "c42_dut_replay": (
         [*COMMON, HIF / "tests/c42_reference.c",
          HIF / "tests/c42_dut_bfs.c"],

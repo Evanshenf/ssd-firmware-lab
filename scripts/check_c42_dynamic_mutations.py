@@ -22,24 +22,36 @@ HIF = ROOT / "frontends/headless-c4"
 
 def mutations() -> list[dict[str, object]]:
     return [
-        {"name": "BM_HEAD_ADVANCES_BEFORE_ADMISSION_RECONCILE",
+        {"name": "BM_HEAD_ADVANCES_DURING_ADMIT_QUERY",
          "target": "c42_remediation_unit",
          "edits": [
              ("frontends/headless-c4/hif/c42_queue.c",
-              "        command->ticket = ticket;\n"
-              "        command->state = C42_COMMAND_PORT_COMMITTED;\n"
-              "        return 1;",
-              "        command->ticket = ticket;\n"
-              "        command->state = C42_COMMAND_PORT_COMMITTED;\n"
-              "        controller->sq[command->sq_index].device_head =\n"
-              "            (uint16_t)((controller->sq[command->sq_index].device_head + 1u) %\n"
-              "                       controller->sq[command->sq_index].depth);\n"
-              "        return 1;"),
+              "    if (result == FWLAB_HIF_PORT_IN_PROGRESS) {\n"
+              "        command->state = C42_COMMAND_ADMIT_QUERY;\n"
+              "        return 1;\n"
+              "    }",
+              "    if (result == FWLAB_HIF_PORT_IN_PROGRESS) {\n"
+              "        if (command->admit_started == 1) {\n"
+              "            struct c42_sq_record *early_sq =\n"
+              "                &controller->sq[command->sq_index];\n\n"
+              "            early_sq->device_head = (uint16_t)(\n"
+              "                (early_sq->device_head + 1u) % early_sq->depth\n"
+              "            );\n"
+              "            command->admit_started = 2;\n"
+              "        }\n"
+              "        command->state = C42_COMMAND_ADMIT_QUERY;\n"
+              "        return 1;\n"
+              "    }"),
              ("frontends/headless-c4/hif/c42_queue.c",
               "    command->state = C42_COMMAND_HIF_COMMITTED;\n"
               "    sq->device_head = (uint16_t)((sq->device_head + 1u) % sq->depth);\n"
               "    sq->pending--;",
               "    command->state = C42_COMMAND_HIF_COMMITTED;\n"
+              "    if (command->admit_started != 2) {\n"
+              "        sq->device_head = (uint16_t)(\n"
+              "            (sq->device_head + 1u) % sq->depth\n"
+              "        );\n"
+              "    }\n"
               "    sq->pending--;"),
          ]},
         {"name": "BM_REREAD_SQE_ON_BACKPRESSURE",
@@ -181,12 +193,13 @@ def mutations() -> list[dict[str, object]]:
                     "    return controller->cq[queue_index].life == C42_QUEUE_LIVE &&\n"
                     "           cq_delete_dependencies_clear(controller, queue_index);",
                     "    return controller->cq[queue_index].life == C42_QUEUE_LIVE;")]},
-        {"name": "BM_CREATE_LIVE_BEFORE_SCRUB", "target": "c42_queue_unit",
+        {"name": "BM_CREATE_LIVE_FROM_SCRUB_UNKNOWN",
+         "target": "c42_queue_unit",
          "edits": [("frontends/headless-c4/hif/c42_queue.c",
                     "    if (candidate->state != C42_CANDIDATE_READY ||\n"
                     "        !c42_queue_index(candidate->descriptor.queue_id, &index)) {",
                     "    if ((candidate->state != C42_CANDIDATE_READY &&\n"
-                    "         candidate->state != C42_CANDIDATE_PREPARED) ||\n"
+                    "         candidate->state != C42_CANDIDATE_SCRUB_UNKNOWN) ||\n"
                     "        !c42_queue_index(candidate->descriptor.queue_id, &index)) {")]},
         {"name": "BM_RECREATE_BEFORE_TOMBSTONE_CLEAR", "target": "c42_reset_delete_unit",
          "edits": [("frontends/headless-c4/hif/c42_queue.c",
@@ -210,7 +223,7 @@ def mutations() -> list[dict[str, object]]:
 
 
 MUTANT_FAMILY = {
-    "BM_HEAD_ADVANCES_BEFORE_ADMISSION_RECONCILE": "F03-capture-backpressure",
+    "BM_HEAD_ADVANCES_DURING_ADMIT_QUERY": "F03-capture-backpressure",
     "BM_REREAD_SQE_ON_BACKPRESSURE": "F03-capture-backpressure",
     "BM_DUPLICATE_CID_ALLOWED": "F04-sq-invalid-cid",
     "BM_MATCH_CID_WITHOUT_RING_GENERATION": "F08-cid-reuse-target",
@@ -226,7 +239,7 @@ MUTANT_FAMILY = {
     "BM_BLIND_REWRITE_UNKNOWN_MARKER": "F09-publication-faults",
     "BM_NOTIFY_BEFORE_CROSS_COMMIT": "F09-publication-faults",
     "BM_DELETE_CQ_WITH_UNACKED": "F10-delete-tombstone",
-    "BM_CREATE_LIVE_BEFORE_SCRUB": "F01-create-contract",
+    "BM_CREATE_LIVE_FROM_SCRUB_UNKNOWN": "F01-create-contract",
     "BM_RECREATE_BEFORE_TOMBSTONE_CLEAR": "F10-delete-tombstone",
     "BM_RESET_REOPEN_BEFORE_REVOKE": "F11-reset-teardown",
     "BM_DELETE_DROPS_DOORBELLED_SQE": "F10-delete-tombstone",

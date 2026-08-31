@@ -78,9 +78,13 @@ static const struct c42_reference_action ref_f01[] = {
                C42_REF_CREATE_PREPARE),
     REF_ACTION("commit-before-scrub", REF_BIT(0), REF_BIT(2),
                C42_REF_QUEUE_CONTROL_STEP, C42_REF_CREATE_EARLY_COMMIT),
-    REF_ACTION("scrub-cq1", REF_BIT(0), 0, C42_REF_MAP_EVENT,
+    REF_ACTION("scrub-unknown", REF_BIT(0), 0, C42_REF_MAP_EVENT,
                C42_REF_CREATE_PROGRESS),
-    REF_ACTION("commit-cq1", REF_BIT(2), 0, C42_REF_QUEUE_CONTROL_STEP,
+    REF_ACTION("commit-while-unknown", REF_BIT(2), REF_BIT(4),
+               C42_REF_QUEUE_CONTROL_STEP, C42_REF_CREATE_UNKNOWN_COMMIT),
+    REF_ACTION("scrub-proof", REF_BIT(2), 0, C42_REF_MAP_EVENT,
+               C42_REF_CREATE_RECOVER),
+    REF_ACTION("commit-cq1", REF_BIT(4), 0, C42_REF_QUEUE_CONTROL_STEP,
                C42_REF_CREATE_COMMIT),
 };
 static const struct c42_reference_action ref_f02[] = {
@@ -102,11 +106,13 @@ static const struct c42_reference_action ref_f03[] = {
                C42_REF_CAPTURE_BACKPRESSURE),
     REF_ACTION("prepare-reserved", REF_BIT(3), 0, C42_REF_PORT_STEP,
                C42_REF_CAPTURE_PORT_RESERVED),
-    REF_ACTION("admit-committed", REF_BIT(4), 0, C42_REF_PORT_STEP,
+    REF_ACTION("admit-query", REF_BIT(4), 0, C42_REF_PORT_STEP,
+               C42_REF_CAPTURE_ADMIT_QUERY),
+    REF_ACTION("admit-committed", REF_BIT(5), 0, C42_REF_PORT_STEP,
                C42_REF_CAPTURE_PORT_COMMITTED),
-    REF_ACTION("hif-head-active", REF_BIT(5), 0, C42_REF_PORT_STEP,
+    REF_ACTION("hif-head-active", REF_BIT(6), 0, C42_REF_PORT_STEP,
                C42_REF_CAPTURE_HIF_COMMITTED),
-    REF_ACTION("publish-stable", REF_BIT(6), 0, C42_REF_PUBLICATION_STEP,
+    REF_ACTION("publish-stable", REF_BIT(7), 0, C42_REF_PUBLICATION_STEP,
                C42_REF_CAPTURE_PUBLISH),
 };
 static const struct c42_reference_action ref_f04[] = {
@@ -160,7 +166,8 @@ static const struct c42_reference_action ref_f07[] = {
                C42_REF_FULL_ACK_RESUME),
 };
 static const struct c42_reference_action ref_f08[] = {
-    REF_ACTION("marker-visible", 0, REF_BIT(4), C42_REF_PUBLICATION_STEP,
+    REF_ACTION("marker-visible", 0, REF_BIT(4) | REF_BIT(5),
+               C42_REF_PUBLICATION_STEP,
                C42_REF_IDENTITY_MARKER),
     REF_ACTION("target", REF_BIT(0), REF_BIT(3), C42_REF_TARGET_STEP,
                C42_REF_IDENTITY_TARGET),
@@ -170,8 +177,17 @@ static const struct c42_reference_action ref_f08[] = {
                C42_REF_PUBLICATION_STEP,
                C42_REF_IDENTITY_CROSS_COMMIT),
     REF_ACTION("generation-mismatch", 0,
-               REF_BIT(0) | REF_BIT(1) | REF_BIT(2) | REF_BIT(3),
+               REF_BIT(0) | REF_BIT(1) | REF_BIT(2) | REF_BIT(3) |
+               REF_BIT(5),
                C42_REF_TARGET_STEP, C42_REF_TARGET_GENERATION_MISMATCH),
+    REF_ACTION("target-active", 0,
+               REF_BIT(0) | REF_BIT(1) | REF_BIT(2) | REF_BIT(3) |
+               REF_BIT(4),
+               C42_REF_TARGET_STEP, C42_REF_IDENTITY_TARGET_ACTIVE),
+    REF_ACTION("target-acquire", REF_BIT(5), 0, C42_REF_TARGET_STEP,
+               C42_REF_IDENTITY_TARGET_ACQUIRE),
+    REF_ACTION("target-release", REF_BIT(6), 0, C42_REF_TARGET_STEP,
+               C42_REF_IDENTITY_TARGET_RELEASE),
 };
 static const struct c42_reference_action ref_f09[] = {
     REF_ACTION("reserve", 0, 0, C42_REF_CQ_RESERVE,
@@ -382,6 +398,12 @@ int c42_reference_transition(
         after->last_result = 2;
         break;
     case C42_REF_CREATE_PROGRESS:
+        after->candidate_state = 2;
+        break;
+    case C42_REF_CREATE_UNKNOWN_COMMIT:
+        after->last_result = 2;
+        break;
+    case C42_REF_CREATE_RECOVER:
         after->candidate_state = 3;
         break;
     case C42_REF_CREATE_COMMIT:
@@ -444,6 +466,10 @@ int c42_reference_transition(
         after->command_state[0] = 3;
         after->command_identity_ok[0] = 1;
         after->port_records = 1;
+        break;
+    case C42_REF_CAPTURE_ADMIT_QUERY:
+        after->command_state[0] = 4;
+        after->command_identity_ok[0] = 1;
         break;
     case C42_REF_CAPTURE_PORT_COMMITTED:
         after->command_state[0] = 5;
@@ -672,6 +698,22 @@ int c42_reference_transition(
         break;
     case C42_REF_IDENTITY_TARGET:
         after->last_result = 8;
+        break;
+    case C42_REF_IDENTITY_TARGET_ACTIVE:
+        after->sq_host_tail[0] = 1;
+        after->sq_device_head[0] = 1;
+        after->capture_count = 1;
+        after->command_count = 1;
+        after->active_identity_count = 1;
+        after->notification_count = 1;
+        reference_command(after, 0, 333, 6);
+        reference_raw(after, 0, 333);
+        after->port_records = 1;
+        after->port_admitted = 1;
+        break;
+    case C42_REF_IDENTITY_TARGET_ACQUIRE:
+        after->target_count = 1;
+        after->target_identity_ok = 1;
         break;
     case C42_REF_IDENTITY_DUPLICATE:
         after->sq_host_tail[0] = 2;
@@ -910,6 +952,7 @@ int c42_reference_transition(
     default:
         return 0;
     }
+    after->event_count = after->order_mask == UINT32_C(0x1ff) ? 9u : 0u;
     return 1;
 }
 

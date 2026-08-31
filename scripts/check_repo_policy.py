@@ -723,6 +723,8 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "frontends/headless-c4/tests/test_c42_identity.c",
     "frontends/headless-c4/tests/test_c42_reset_delete.c",
     "frontends/headless-c4/tests/test_c42_remediation.c",
+    "frontends/headless-c4/tests/test_c42_provider_matrix.c",
+    "frontends/headless-c4/tests/test_c42_phase_cuts.c",
     "frontends/headless-c4/tests/test_c42_dut_replay.c",
     "frontends/headless-c4/tests/test_c42_public_abi.c",
     "frontends/headless-c4/tests/test_c42_thread.c",
@@ -750,7 +752,7 @@ EXPECTED_C4_2_FILES = {
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/c42_sources.mk":
-        "753c476caeae9de844fcff496fcd49f208fdfc0b47a978e7554ec120a8f83d84",
+        "f5205e24a99fa33d4179d62c8ab983b20c5eabfaee6409fee3a267b8d875e87f",
     "frontends/headless-c4/hif/c42.h":
         "619fa57028d0b7c1817fa5101fc6aa9269c643df583895d5431599afc6ad1be3",
     "frontends/headless-c4/hif/c42_internal.h":
@@ -766,17 +768,17 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/hif/c42_runtime.c":
         "350f5b897fd632fbb5ba8388b3c7b109dc30f797c8b996cc7c376aa003c34a29",
     "frontends/headless-c4/fakes/c42_command.c":
-        "c6d79286398349f31be85dc3094382045d4191f4ced23fd10394afad2940db94",
+        "ba37313b5c1cb1907f54cb823929a6e86961d1fcb97cc2a794c4036dc8b0d2ee",
     "frontends/headless-c4/fakes/c42_command.h":
-        "48ed1a6354f4407a15259253feb8a4de22791c2be4a9caec343b212691d1d55c",
+        "69287fe494e56eb438f5398ceb15b0baea2d6116ff9f076a3e1020c7cbb9684e",
     "frontends/headless-c4/fakes/c42_event.c":
-        "02846749a362987939a3c4435cd679713df099cec93618b48f79f10099803a6d",
+        "e9db0d359161c5da4aff0c078542e706c57e97eea19771331e9c783765ec64b8",
     "frontends/headless-c4/fakes/c42_event.h":
-        "ccb4c34b94e1a3b6ff46c8687b6af29a42df2a39ae5c5e99be766c59715a9ff4",
+        "fab09df47e8f36b4e24145b63c4d606d1a779e349e3cf832c004386c9ed8231f",
     "frontends/headless-c4/fakes/c42_memory.c":
-        "72709e225001d4df66c95794be148becbee27a81ffb3032512efcb69df71a779",
+        "bda1ce77fac4e9ad309c73acad5e6062185f1009a30e1a16ce13f97af35a81f4",
     "frontends/headless-c4/fakes/c42_memory.h":
-        "1dd481ad0a6635e234255352f8afe1c1f8e428d14339ed2887bdc42bcf89198f",
+        "eedb4fbd80bbed854175cf46d489769612377dd9e395e0fb185762e5abad4119",
     "frontends/headless-c4/fakes/c42_fake_main.c":
         "e0479faa676ac64e4083b637ef8b965ffcc2ad019d9382ab60db49c1771594a1",
     "frontends/headless-c4/tests/c42_support.c":
@@ -784,15 +786,15 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/c42_support.h":
         "6830ee74ad5e92d08a8fb8df09170239f855c800b8069e541e77b4d34f277e54",
     "frontends/headless-c4/tests/c42_reference.c":
-        "35b1a0d7dde644920329e43e998bf508f2215490ef2a51d54213be95808c6c10",
+        "30b1625be55a5cce26db3c08ab39c9600a453ca95a8f2b1a25578406c941e305",
     "frontends/headless-c4/tests/c42_reference.h":
-        "e4e447efa7544ec27dd912fc8c36ef8482d109054e6d289089740c2fbbe478aa",
+        "9fcc276b37d33ecfdaa856aa009211c5816488105716ca414ba8ceb35479948d",
     "frontends/headless-c4/tests/c42_dut_bfs.c":
-        "45bbb7bda6a6e93a6bdbd3bea612e203fbc5dfe3c79dbf5c991051a48b7ca4f0",
+        "98a6bc6918e0b9a1cb310474dc196a7a696a78857e0c12c8ca363820fe6bfa80",
     "frontends/headless-c4/tests/c42_dut_bfs.h":
         "847cea1418ae76827bf5b088be2e012a420a88b04fc031c53770a93f929c9381",
     "frontends/headless-c4/tests/test_c42_queue.c":
-        "fed633eb19858f2f7c8bb72583e48c20e21c0ab3c8ee0a9056cf08ae554982b6",
+        "03d42d806a8a20f5b3daef8303c30c513a71f62cb6f031bcad63d8bfcbe767c6",
     "frontends/headless-c4/tests/test_c42_publication.c":
         "1cd904553e73c7fbbe282f2c651f5b63927ebc43139fe71f672f558b0edb8922",
     "frontends/headless-c4/tests/test_c42_identity.c":
@@ -800,15 +802,19 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/test_c42_reset_delete.c":
         "f0e4bcfd2e7e3bc9f4ea88a60788eab104fdc0efcb3ed65d38e904146cd8744a",
     "frontends/headless-c4/tests/test_c42_remediation.c":
-        "69bc5f2dc61652a88729a697ce0cbe44d72833e72a9f3b876ef1c0eb4a6c2285",
+        "b316680f7cede1cd3c5aa57b4d3911feabbfc8a9d3d43c65de3e6ffff34f6bb7",
+    "frontends/headless-c4/tests/test_c42_provider_matrix.c":
+        "cda6866f287b045b32351c64df065458f19e5e5f128171aa1bd7286af779afaa",
+    "frontends/headless-c4/tests/test_c42_phase_cuts.c":
+        "b17db09b4c793c18b2a1568a67150e969a26e179ce4502dcfc49aaef658632f6",
     "frontends/headless-c4/tests/test_c42_dut_replay.c":
-        "087637f4c81a9b5d159bc772582f54a1fe2dbdecb765f6c8e3a5f7ffead60a21",
+        "ba22cf5ccef5839adbf9ea7643df8a93e81894e2f7b3ca1c0219274f9f5899fe",
     "frontends/headless-c4/tests/test_c42_public_abi.c":
-        "51d9f18df23e115c5fd70f7ab8b4fec758e391616b338b518b7eb306258a9f19",
+        "faa1659379d29d328c86eb33a28cdeacde1759210dfc38d3997d059c114c834f",
     "frontends/headless-c4/tests/test_c42_thread.c":
         "e61d683dcccce3416cc381f38060266985154baad88fb2764b6c217aa249a1e3",
     "frontends/headless-c4/tests/c42_model.c":
-        "94a2c29bf95fefdf6e72a5f4dd3a6bee360a2fb43962f576936fe4311bd307af",
+        "05d92191a4e0e00647422c1434057f662f238459f436600ea72c1dab09803802",
     "frontends/headless-c4/tests/c42_model.h":
         "a401463e23a6d659f2464bd5a2d6b38b8d94ff36f8639588cd3f56aa210b0214",
     "frontends/headless-c4/tests/model_c42.c":
@@ -818,15 +824,15 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/fuzz_c42.c":
         "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54",
     "scripts/check_c42_architecture.py":
-        "c56184abf2bc31413a406cce146360ef07a23af11c8f8336bdb48e162f4518a6",
+        "6d23d2d4bbe4425eb221eee96c21bc86c1c79aec017a51319072f98aa52fa131",
     "scripts/check_c42_analysis.py":
         "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a",
     "scripts/check_c42_determinism.py":
-        "dde4e1c13608f31390ea1fb10ddc8605914b567d3bb975fdc3953d3a32ef3333",
+        "0f2ae7c5e63096ae8107886345cde4a94286ba162272a26f1a6cbcd086693a26",
     "scripts/check_c42_cross.py":
-        "df599133d087607cba7ca9d34d7c12687ed307922f4fa8d69d0fe56da7d2a592",
+        "af3b932ab6588d91f4ea5841671c241c26c73ed64be0d920ea79e69e48be57ff",
     "scripts/check_c42_dynamic_mutations.py":
-        "c0fc058e292a23508d61f901ea03ee4d2240c5e1baae43383e0a4142fde54661",
+        "caec0c9dd3c002984036b9538352733938afbeb3a92f60dd49c97bcde61341cd",
 }
 
 EXPECTED_FREEZES = {
@@ -1345,7 +1351,7 @@ def check_freezes(
 
 
 EXPECTED_C42_RULES_SHA256 = \
-    "42b24510188f978c535c8f377429507a2f496b42f1efe80166ec59332ce60131"
+    "a96dacf317a90bb948cbe18074d559ceeb871c66d4bb63c83d0db2e84f75753e"
 
 
 def check_c42_build_closure(failures: list[str]) -> None:
@@ -1360,10 +1366,42 @@ def check_c42_build_closure(failures: list[str]) -> None:
     if makefile.count(begin) != 1 or makefile.count(end) != 1:
         failures.append("C4.2 frozen Makefile rule markers are missing or ambiguous")
     else:
-        rules = makefile.split(begin, 1)[1].split(end, 1)[0]
+        before_rules, remainder = makefile.split(begin, 1)
+        rules, after_rules = remainder.split(end, 1)
         if hashlib.sha256(rules.encode("utf-8")).hexdigest() != \
                 EXPECTED_C42_RULES_SHA256:
             failures.append("C4.2 frozen Makefile rule block changed")
+        outside_rules = before_rules + after_rules
+        logical_outside = re.sub(r"\\\n[ \t]*", " ", outside_rules)
+        if re.search(
+                r"^(?:override\s+)?(?:FWLAB_FAKE_OUTPUT|C42_[A-Z0-9_]+|"
+                r"SHELL|\.SHELLFLAGS)\s*[:+?]?=",
+                logical_outside, re.MULTILINE):
+            failures.append(
+                "C4.2 effective Make variable is assigned outside frozen rules"
+            )
+        if re.search(
+                r"^[^#\t\n][^:\n]*:\s*"
+                r"(?:(?:private|override|export|unexport)\s+)*"
+                r"(?:SHELL|\.SHELLFLAGS|MAKEFLAGS|MFLAGS|BUILD_DIR|CC|"
+                r"CPPFLAGS|CFLAGS|LDFLAGS|FWLAB_FAKE_OUTPUT|C42_[A-Z0-9_]+)"
+                r"\s*[:+?]?=",
+                logical_outside, re.MULTILINE):
+            failures.append(
+                "C4.2 target/pattern-specific Make variable is outside frozen rules"
+            )
+        for line in logical_outside.splitlines():
+            stripped = line.lstrip()
+            if not stripped or line.startswith("\t") or \
+                    stripped.startswith("#") or \
+                    ":" not in stripped:
+                continue
+            targets = stripped.split(":", 1)[0].split()
+            if any("c42" in target.lower() for target in targets):
+                failures.append(
+                    "C4.2 target or pattern is defined outside frozen rules"
+                )
+                break
     required_make_tokens = (
         "include c42_sources.mk", "$(C42_SOURCES)",
         "$(C42_FAKE_SOURCES)", "$(C42_SUPPORT)", "$(C42_REFERENCE)",
@@ -1389,7 +1427,8 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "tests/c42_support.c", "tests/c42_reference.c", "tests/c42_dut_bfs.c",
         "tests/test_c42_queue.c", "tests/test_c42_publication.c",
         "tests/test_c42_identity.c", "tests/test_c42_reset_delete.c",
-        "tests/test_c42_remediation.c", "tests/test_c42_dut_replay.c",
+        "tests/test_c42_remediation.c", "tests/test_c42_provider_matrix.c",
+        "tests/test_c42_phase_cuts.c", "tests/test_c42_dut_replay.c",
         "tests/test_c42_public_abi.c",
         "tests/c42_model.c", "tests/model_c42.c", "tests/broken_c42.c",
         "tests/fuzz_c42.c", "tests/test_c42_thread.c", "fakes/c42_fake_main.c",
@@ -1430,12 +1469,70 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "check-c42-local-determinism", "check-c42-architecture",
         "check-c42-dynamic-mutations", "check-c42-replay",
     }
-    actual_targets = target_prerequisites("check-c42")
-    if actual_targets is None or set(actual_targets) != expected_targets:
-        failures.append("C4.2 check-c42 resolved dependency graph is incomplete")
-    actual_inputs = target_prerequisites("check-c42-build-closure")
-    if actual_inputs is None or set(actual_inputs) != set(required_sources):
-        failures.append("C4.2 resolved build-input closure differs from manifest")
+    expected_prerequisites = {
+        "check-c42": expected_targets,
+        "check-c42-build-closure": set(required_sources),
+        "check-c42-unit": {
+            "build/c42_queue_unit", "build/c42_publication_unit",
+            "build/c42_identity_unit", "build/c42_reset_delete_unit",
+            "build/c42_remediation_unit", "build/c42_provider_matrix",
+            "build/c42_phase_cuts", "build/c42_public_abi",
+        },
+        "check-c42-remediation": {"build/c42_remediation_unit"},
+        "check-c42-replay": {"build/c42_dut_replay"},
+        "check-c42-model": {"build/c42_model"},
+        "check-c42-negative": {"build/c42_broken"},
+        "check-c42-fuzz": {"build/c42_fuzz"},
+        "check-c42-thread": {"build/c42_thread"},
+        "check-c42-local-determinism": {
+            "check-c42-unit", "check-c42-model", "check-c42-negative",
+            "check-c42-fuzz", "build/c42_dut_replay",
+            "build/c42_headless_fake_link",
+        },
+        "check-c42-architecture": set(),
+        "check-c42-dynamic-mutations": set(),
+        "fake-link-c42": {"build/c42_headless_fake_link"},
+    }
+    for target, expected in expected_prerequisites.items():
+        actual = target_prerequisites(target)
+        if actual is None or set(actual) != expected:
+            failures.append(
+                f"C4.2 protected Make target differs from closure: {target}"
+            )
+
+    protected_effective_targets = set(expected_prerequisites) | {
+        "build/c42_queue_unit", "build/c42_publication_unit",
+        "build/c42_identity_unit", "build/c42_reset_delete_unit",
+        "build/c42_remediation_unit", "build/c42_provider_matrix",
+        "build/c42_phase_cuts", "build/c42_dut_replay",
+        "build/c42_public_abi", "build/c42_model", "build/c42_broken",
+        "build/c42_fuzz", "build/c42_thread",
+        "build/c42_headless_fake_link",
+    }
+    target_specific = any(
+        line.startswith(f"{target}:") and
+        "=" in line[len(target) + 1:]
+        for line in database.stdout.splitlines()
+        for target in protected_effective_targets
+    )
+    if target_specific:
+        failures.append(
+            "C4.2 protected Make target has a target-specific variable"
+        )
+
+    def global_variable(name: str) -> list[str]:
+        pattern = re.compile(
+            rf"^{re.escape(name)}\s*[:+?]?=\s*(.*)$"
+        )
+        return [
+            match.group(1).strip()
+            for line in database.stdout.splitlines()
+            if (match := pattern.match(line)) is not None
+        ]
+
+    if global_variable("SHELL") != ["/bin/sh"] or \
+            global_variable(".SHELLFLAGS") != ["-c"]:
+        failures.append("C4.2 effective Make shell semantics changed")
 
 
 def main() -> int:

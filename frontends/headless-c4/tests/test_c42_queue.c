@@ -315,9 +315,16 @@ static void test_candidate_contract_and_scrub_unknown(void)
               fixture.controller, &token, &status) == C42_OK &&
           status.state == C42_CANDIDATE_SCRUB_UNKNOWN,
           "unknown scrub stays queryable candidate");
-    check(c42_snapshot_read(fixture.controller, &after) == C42_OK &&
-          after.cq[1].life == C42_QUEUE_PREPARED,
-          "unknown scrub cannot expose LIVE queue");
+    check(c42_snapshot_read(fixture.controller, &before) == C42_OK &&
+          before.cq[1].life == C42_QUEUE_PREPARED &&
+          c42_candidate_commit(
+              fixture.controller, &token) == C42_WRONG_STATE &&
+          c42_candidate_query(
+              fixture.controller, &token, &status) == C42_OK &&
+          status.state == C42_CANDIDATE_SCRUB_UNKNOWN &&
+          c42_snapshot_read(fixture.controller, &after) == C42_OK &&
+          memcmp(&before, &after, sizeof(before)) == 0,
+          "unknown scrub commit rejection is bitwise state preserving");
     check(c42_candidate_progress(fixture.controller, &token, 1) == C42_OK &&
           c42_candidate_query(
               fixture.controller, &token, &status) == C42_OK &&

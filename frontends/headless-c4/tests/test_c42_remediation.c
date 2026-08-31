@@ -1127,6 +1127,7 @@ static C42_TEST_NOINLINE void test_hif_poll_credit_fairness(void)
 static C42_TEST_NOINLINE void test_admission_head_active_lp(void)
 {
     struct c42_test_fixture fixture;
+    struct c42_fake_command_script script = {0};
     struct c42_observer_v2 observer;
     struct c42_snapshot snapshot;
     uint32_t step;
@@ -1136,6 +1137,24 @@ static C42_TEST_NOINLINE void test_admission_head_active_lp(void)
               &fixture, 4, 0, UINT64_C(0xa139200000000001)) &&
           c42_test_submit(&fixture, 0, 0, 1, 232),
           "F03 admission LP fixture");
+    script.admit_delay = 1;
+    c42_fake_command_set_script(&fixture.command, &script);
+    for (step = 0; step < 64; ++step) {
+        struct c42_step_result result = {0};
+
+        check(c42_step(fixture.controller, 1, &result) == C42_OK &&
+              c42_observer_read_v2(
+                  fixture.controller, &observer) == C42_OK,
+              "F03 step to ADMIT_QUERY");
+        if (observer.commands[0].state ==
+            C42_OBSERVER_COMMAND_ADMIT_QUERY) break;
+    }
+    check(step < 64 &&
+          c42_snapshot_read(fixture.controller, &snapshot) == C42_OK &&
+          snapshot.sq[0].device_index == 0 &&
+          snapshot.sq[0].pending_or_unacked == 1 &&
+          snapshot.active_commands == 0,
+          "F03 ADMIT_QUERY cannot expose head or active identity");
     for (step = 0; step < 64; ++step) {
         struct c42_step_result result = {0};
 

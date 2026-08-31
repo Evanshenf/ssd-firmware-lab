@@ -90,17 +90,28 @@ def origin_encodes_raw(text: str) -> bool:
     raw_source = re.compile(
         r"\b(?:command_id|queue_id|cid|qid|sqid|raw)\b"
     )
-    assignment = re.compile(
+    declaration = re.compile(
         r"\b(?:u?int(?:8|16|32|64)_t|size_t|uintptr_t)\s+"
-        r"([A-Za-z_]\w*)\s*=\s*([^;]+);"
+        r"([A-Za-z_]\w*)\s*(?:=\s*([^;]+))?;"
     )
-    assignments = list(assignment.finditer(text))
+    declared = {match.group(1) for match in declaration.finditer(text)}
+    assignments = [
+        (match.group(1), match.group(2))
+        for match in declaration.finditer(text)
+        if match.group(2) is not None
+    ]
+    simple_assignment = re.compile(
+        r"(?<![.>\w])([A-Za-z_]\w*)\s*=\s*([^=;][^;]*);"
+    )
+    assignments.extend(
+        (match.group(1), match.group(2))
+        for match in simple_assignment.finditer(text)
+        if match.group(1) in declared
+    )
     tainted: set[str] = set()
     for _ in range(32):
         changed = False
-        for match in assignments:
-            target = match.group(1)
-            value = match.group(2)
+        for target, value in assignments:
             if raw_source.search(value) or any(
                     re.search(rf"\b{re.escape(alias)}\b", value)
                     for alias in tainted):
@@ -214,11 +225,13 @@ def source_mutations() -> list[dict[str, object]]:
             "needle": "HIF origin encodes a raw queue identity",
             "edits": [("frontends/headless-c4/hif/c42_queue.c",
                        "command->origin.word[1] = origin_uid;",
-                       "uint64_t raw_identity_value = command->command_id;\n"
-                       "    uint64_t forwarded_identity_value =\n"
-                       "        raw_identity_value;\n"
-                       "    command->origin.word[1] =\n"
-                       "        forwarded_identity_value;")],
+                       "uint64_t first_identity_value;\n"
+                       "    uint64_t second_identity_value;\n"
+                       "    uint64_t third_identity_value;\n\n"
+                       "    first_identity_value = command->command_id;\n"
+                       "    second_identity_value = first_identity_value;\n"
+                       "    third_identity_value = second_identity_value;\n"
+                       "    command->origin.word[1] = third_identity_value;")],
         },
         {
             "name": "AM_HIF_MINTS_GRAPH_HANDLE",

@@ -198,6 +198,29 @@ static void prepare_result_fill(
     }
 }
 
+static void prepare_result_injection_fill(
+    const struct c42_fake_command_record *record,
+    uint32_t disposition,
+    uint8_t write_mask,
+    uint8_t object_variant,
+    struct fwlab_hif_prepare_result *result)
+{
+    if ((write_mask & C42_FAKE_WRITE_VALUE) != 0) {
+        result->version = FWLAB_HIF_COMMAND_PORT_VERSION;
+        result->size = sizeof(*result);
+        result->disposition = disposition;
+    }
+    if ((write_mask & C42_FAKE_WRITE_OBJECT) != 0) {
+        memset(&result->prepared, 0, sizeof(result->prepared));
+        if (object_variant != C42_FAKE_OBJECT_ZERO && record != NULL) {
+            result->prepared = record->prepared;
+            if (object_variant == C42_FAKE_OBJECT_MISMATCH) {
+                result->prepared.reservation_uid++;
+            }
+        }
+    }
+}
+
 void c42_fake_command_init(
     struct c42_fake_command *command,
     uint64_t instance_nonce,
@@ -239,6 +262,8 @@ void c42_fake_command_bind_event_log(
     }
 }
 
+static uint8_t default_write_mask(uint32_t operation);
+
 enum c42_result c42_fake_command_injection_push(
     struct c42_fake_command *command,
     const struct c42_fake_command_injection *injection)
@@ -249,6 +274,8 @@ enum c42_result c42_fake_command_injection_push(
         injection->operation > C42_FAKE_COMMAND_TEARDOWN_QUIESCENT ||
         injection->result > FWLAB_HIF_PORT_COUNTER_EXHAUSTED + 2u ||
         injection->omit_outputs > 1 || injection->write_mask > 3 ||
+        (injection->write_mask &
+         (uint8_t)~default_write_mask(injection->operation)) != 0 ||
         injection->flags > C42_FAKE_APPLY_EFFECT ||
         injection->object_variant > C42_FAKE_OBJECT_MISMATCH) {
         return C42_INVALID;
@@ -256,6 +283,24 @@ enum c42_result c42_fake_command_injection_push(
     command->injections[command->injection_count] = *injection;
     command->injection_count++;
     return C42_OK;
+}
+
+static uint8_t default_write_mask(uint32_t operation)
+{
+    switch (operation) {
+    case C42_FAKE_COMMAND_PREPARE:
+    case C42_FAKE_COMMAND_ADMIT:
+    case C42_FAKE_COMMAND_POLL:
+    case C42_FAKE_COMMAND_CONSUME_PREPARE:
+        return C42_FAKE_WRITE_VALUE | C42_FAKE_WRITE_OBJECT;
+    case C42_FAKE_COMMAND_COMPLETION_ACQUIRE:
+        return C42_FAKE_WRITE_OBJECT;
+    case C42_FAKE_COMMAND_RESET_BEGIN:
+    case C42_FAKE_COMMAND_TEARDOWN_BEGIN:
+        return 0;
+    default:
+        return C42_FAKE_WRITE_VALUE;
+    }
 }
 
 static int injection_take(
@@ -269,6 +314,7 @@ static int injection_take(
     command->injection_write_mask = 0;
     command->injection_flags = 0;
     command->injection_object_variant = C42_FAKE_OBJECT_ZERO;
+    command->injection_event_value = 0;
     if (command->injection_index < command->injection_count) {
         const struct c42_fake_command_injection *injection =
             &command->injections[command->injection_index];
@@ -283,11 +329,11 @@ static int injection_take(
         command->injection_write_mask = injection->write_mask;
         if (command->injection_write_mask == 0 &&
             injection->omit_outputs == 0) {
-            command->injection_write_mask =
-                C42_FAKE_WRITE_VALUE | C42_FAKE_WRITE_OBJECT;
+            command->injection_write_mask = default_write_mask(operation);
         }
         command->injection_flags = injection->flags;
         command->injection_object_variant = injection->object_variant;
+        command->injection_event_value = injection->value;
         *omit_outputs = command->injection_write_mask == 0;
         return 1;
     }
@@ -302,7 +348,8 @@ static int injection_take(
     *omit_outputs = command->script.inject_omit_outputs != 0;
     command->injection_active = 1;
     command->injection_write_mask = *omit_outputs != 0 ? 0 :
-        C42_FAKE_WRITE_VALUE | C42_FAKE_WRITE_OBJECT;
+        default_write_mask(operation);
+    command->injection_event_value = *value;
     return 1;
 }
 
@@ -354,9 +401,23 @@ static enum fwlab_hif_command_port_result fake_prepare_start(
     }
     if (injection_take(
             command, C42_FAKE_COMMAND_PREPARE, &injected, &value, &omit)) {
-        if (omit == 0) {
-            prepare_result_fill(NULL, value, result);
+        record = find_prepare_key(command, key);
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            if (record == NULL) {
+                record = allocate_record(command);
+                if (record != NULL) {
+                    record->prepare_key = *key;
+                }
+            }
+            if (record != NULL) {
+                mint_prepared(command, record);
+            }
         }
+        prepare_result_injection_fill(
+            record, value, command->injection_write_mask,
+            command->injection_object_variant, result
+        );
+        (void)omit;
         return injected;
     }
     record = find_prepare_key(command, key);
@@ -406,9 +467,14 @@ static enum fwlab_hif_command_port_result fake_prepare_query(
     }
     if (injection_take(
             command, C42_FAKE_COMMAND_PREPARE, &injected, &value, &omit)) {
-        if (omit == 0) {
-            prepare_result_fill(record, value, result);
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            mint_prepared(command, record);
         }
+        prepare_result_injection_fill(
+            record, value, command->injection_write_mask,
+            command->injection_object_variant, result
+        );
+        (void)omit;
         return injected;
     }
     record->prepare_queries++;
@@ -442,9 +508,13 @@ static enum fwlab_hif_command_port_result prepare_abort_common(
     if (injection_take(
             command, C42_FAKE_COMMAND_PREPARE_ABORT,
             &injected, &value, &omit)) {
-        if (omit == 0) {
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            record->retired = 1;
+        }
+        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {
             *aborted = value != 0;
         }
+        (void)omit;
         return injected;
     }
     if (record->admitted != 0) {
@@ -580,6 +650,7 @@ static enum fwlab_hif_command_port_result fake_poll(
     struct c42_fake_command *command = context;
     struct c42_fake_command_record *selected = NULL;
     enum fwlab_hif_command_port_result injected;
+    uint64_t injected_sequence = 0;
     uint32_t value;
     uint32_t index;
     int omit;
@@ -590,12 +661,39 @@ static enum fwlab_hif_command_port_result fake_poll(
     }
     if (injection_take(
             command, C42_FAKE_COMMAND_POLL, &injected, &value, &omit)) {
-        if (omit == 0) {
-            *count = value;
-            if (capacity != 0) {
-                memset(events, 0, sizeof(*events));
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            for (index = 0; index < C42_FAKE_COMMAND_RECORDS; ++index) {
+                struct c42_fake_command_record *record =
+                    &command->records[index];
+
+                if (record->in_use != 0 && record->admitted != 0 &&
+                    record->ready_sent == 0 && record->retired == 0) {
+                    selected = record;
+                    record->ready_sent = 1;
+                    injected_sequence = command->next_ready_sequence++;
+                    break;
+                }
             }
         }
+        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {
+            *count = value;
+        }
+        if ((command->injection_write_mask & C42_FAKE_WRITE_OBJECT) != 0 &&
+            capacity != 0) {
+            memset(events, 0, sizeof(*events));
+            if (selected != NULL &&
+                command->injection_object_variant != C42_FAKE_OBJECT_ZERO) {
+                events[0].version = FWLAB_HIF_COMMAND_PORT_VERSION;
+                events[0].size = sizeof(events[0]);
+                events[0].ticket = selected->ticket;
+                events[0].sequence = injected_sequence;
+                if (command->injection_object_variant ==
+                    C42_FAKE_OBJECT_MISMATCH) {
+                    events[0].ticket.ticket_uid++;
+                }
+            }
+        }
+        (void)omit;
         return injected;
     }
     *count = 0;
@@ -744,9 +842,13 @@ static enum fwlab_hif_command_port_result completion_release_common(
     if (injection_take(
             command, C42_FAKE_COMMAND_COMPLETION_RELEASE,
             &injected, &value, &omit)) {
-        if (omit == 0) {
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            record->released = 1;
+        }
+        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {
             *released = value != 0;
         }
+        (void)omit;
         return injected;
     }
     record->released = 1;
@@ -864,9 +966,13 @@ static enum fwlab_hif_command_port_result consume_abort_common(
     if (injection_take(
             command, C42_FAKE_COMMAND_CONSUME_ABORT,
             &injected, &value, &omit)) {
-        if (omit == 0) {
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            record->retired = 1;
+        }
+        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {
             *state = (enum fwlab_hif_consume_state)value;
         }
+        (void)omit;
         return injected;
     }
     record->retired = 1;
@@ -911,9 +1017,13 @@ static enum fwlab_hif_command_port_result fake_consume_commit(
     if (injection_take(
             command, C42_FAKE_COMMAND_CONSUME_COMMIT,
             &injected, &value, &omit)) {
-        if (omit == 0) {
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            record->consume_committed = 1;
+        }
+        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {
             *state = (enum fwlab_hif_consume_state)value;
         }
+        (void)omit;
         return injected;
     }
     record->consume_queries++;
@@ -949,9 +1059,13 @@ static enum fwlab_hif_command_port_result fake_consume_query(
     if (injection_take(
             command, C42_FAKE_COMMAND_CONSUME_QUERY,
             &injected, &value, &omit)) {
-        if (omit == 0) {
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            record->consume_committed = 1;
+        }
+        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {
             *state = (enum fwlab_hif_consume_state)value;
         }
+        (void)omit;
         return injected;
     }
     if (record->consume_committed == 0) {
@@ -988,9 +1102,13 @@ static enum fwlab_hif_command_port_result fake_consume_retire(
     if (injection_take(
             command, C42_FAKE_COMMAND_CONSUME_RETIRE,
             &injected, &value, &omit)) {
-        if (omit == 0) {
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            record->retired = 1;
+        }
+        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {
             *state = (enum fwlab_hif_consume_state)value;
         }
+        (void)omit;
         return injected;
     }
     record->retired = 1;
@@ -1016,6 +1134,14 @@ static enum fwlab_hif_command_port_result fake_reset_begin(
     if (injection_take(
             command, C42_FAKE_COMMAND_RESET_BEGIN,
             &injected, &value, &omit)) {
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            command->reset_active = 1;
+            command->reset_old_epoch = old_epoch;
+            command->controller_epoch = old_epoch + 1u;
+            for (index = 0; index < C42_FAKE_COMMAND_RECORDS; ++index) {
+                command->records[index].retired = 1;
+            }
+        }
         (void)value;
         (void)omit;
         return injected;
@@ -1048,9 +1174,10 @@ static enum fwlab_hif_command_port_result fake_reset_quiescent(
     if (injection_take(
             command, C42_FAKE_COMMAND_RESET_QUIESCENT,
             &injected, &value, &omit)) {
-        if (omit == 0) {
+        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {
             *quiescent = value != 0;
         }
+        (void)omit;
         return injected;
     }
     *quiescent = true;
@@ -1075,6 +1202,16 @@ static enum fwlab_hif_command_port_result fake_teardown_begin(
     if (injection_take(
             command, C42_FAKE_COMMAND_TEARDOWN_BEGIN,
             &injected, &value, &omit)) {
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            command->teardown_active = 1;
+            command->teardown_old_epoch = old_epoch;
+            if (old_epoch != UINT32_MAX) {
+                command->controller_epoch = old_epoch + 1u;
+            }
+            for (index = 0; index < C42_FAKE_COMMAND_RECORDS; ++index) {
+                command->records[index].retired = 1;
+            }
+        }
         (void)value;
         (void)omit;
         return injected;
@@ -1109,9 +1246,10 @@ static enum fwlab_hif_command_port_result fake_teardown_quiescent(
     if (injection_take(
             command, C42_FAKE_COMMAND_TEARDOWN_QUIESCENT,
             &injected, &value, &omit)) {
-        if (omit == 0) {
+        if ((command->injection_write_mask & C42_FAKE_WRITE_VALUE) != 0) {
             *quiescent = value != 0;
         }
+        (void)omit;
         return injected;
     }
     *quiescent = true;
@@ -1121,17 +1259,61 @@ static enum fwlab_hif_command_port_result fake_teardown_quiescent(
 static void log_command_event(
     struct c42_fake_command *command,
     uint32_t operation,
+    uint8_t call_kind,
     enum fwlab_hif_command_port_result result,
     uint32_t value,
-    int written,
+    uint8_t write_mask,
     int identity_valid,
-    uint64_t token_uid)
+    uint64_t token_uid,
+    uint64_t object_uid,
+    uint32_t parameter0,
+    uint32_t parameter1)
 {
+    struct c42_fake_event event = {0};
+
+    event.token_uid = token_uid;
+    event.object_uid = object_uid;
+    event.operation = operation;
+    event.direct_result = (uint32_t)result;
+    event.output_value = value;
+    event.parameter0 = parameter0;
+    event.parameter1 = parameter1;
+    event.provider = C42_FAKE_EVENT_COMMAND;
+    event.call_kind = call_kind;
+    event.identity_valid = (uint8_t)(identity_valid != 0);
+    event.logical_effect = value <= UINT8_MAX ? (uint8_t)value : UINT8_MAX;
+    if (command != NULL && command->injection_active != 0) {
+        event.output_value = command->injection_event_value;
+        event.logical_effect = command->injection_event_value <= UINT8_MAX ?
+                               (uint8_t)command->injection_event_value :
+                               UINT8_MAX;
+        event.output_write_mask = command->injection_write_mask;
+        if ((event.output_write_mask & C42_FAKE_EVENT_WRITE_OBJECT) == 0) {
+            event.object_uid = 0;
+        } else if (command->injection_object_variant !=
+                   C42_FAKE_OBJECT_EXACT) {
+            event.identity_valid = 0;
+        }
+        if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0) {
+            event.flags |= C42_FAKE_EVENT_EFFECT_APPLIED;
+            event.applied_effect = event.logical_effect;
+            if (event.output_write_mask == 0) {
+                event.flags |= C42_FAKE_EVENT_RESPONSE_LOST;
+            }
+        }
+    } else {
+        event.output_write_mask = write_mask;
+    }
     c42_fake_event_append(
-        command == NULL ? NULL : command->event_log,
-        C42_FAKE_EVENT_COMMAND, operation, (uint32_t)result, value,
-        (uint8_t)(written != 0), (uint8_t)(identity_valid != 0), token_uid
+        command == NULL ? NULL : command->event_log, &event
     );
+    if (command != NULL) {
+        command->injection_active = 0;
+        command->injection_write_mask = 0;
+        command->injection_flags = 0;
+        command->injection_object_variant = C42_FAKE_OBJECT_ZERO;
+        command->injection_event_value = 0;
+    }
 }
 
 static enum fwlab_hif_command_port_result logged_prepare_start(
@@ -1143,10 +1325,14 @@ static enum fwlab_hif_command_port_result logged_prepare_start(
         fake_prepare_start(context, key, result);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_PREPARE, call,
+        context, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_START, call,
         result == NULL ? UINT32_MAX : result->disposition,
-        result != NULL && result->version == FWLAB_HIF_COMMAND_PORT_VERSION,
-        key != NULL, key == NULL ? 0 : key->client_uid
+        result != NULL && result->version == FWLAB_HIF_COMMAND_PORT_VERSION ?
+            C42_FAKE_EVENT_WRITE_VALUE | C42_FAKE_EVENT_WRITE_OBJECT : 0,
+        key != NULL, key == NULL ? 0 : key->client_uid,
+        result == NULL ? 0 : result->prepared.reservation_uid,
+        key == NULL ? 0 : key->controller_epoch,
+        key == NULL ? 0 : key->client_generation
     );
     return call;
 }
@@ -1160,10 +1346,14 @@ static enum fwlab_hif_command_port_result logged_prepare_query(
         fake_prepare_query(context, key, result);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_PREPARE, call,
+        context, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_QUERY, call,
         result == NULL ? UINT32_MAX : result->disposition,
-        result != NULL && result->version == FWLAB_HIF_COMMAND_PORT_VERSION,
-        key != NULL, key == NULL ? 0 : key->client_uid
+        result != NULL && result->version == FWLAB_HIF_COMMAND_PORT_VERSION ?
+            C42_FAKE_EVENT_WRITE_VALUE | C42_FAKE_EVENT_WRITE_OBJECT : 0,
+        key != NULL, key == NULL ? 0 : key->client_uid,
+        result == NULL ? 0 : result->prepared.reservation_uid,
+        key == NULL ? 0 : key->controller_epoch,
+        key == NULL ? 0 : key->client_generation
     );
     return call;
 }
@@ -1177,10 +1367,12 @@ static enum fwlab_hif_command_port_result logged_prepare_abort(
         fake_prepare_abort(context, prepared, aborted);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_PREPARE_ABORT, call,
+        context, C42_FAKE_COMMAND_PREPARE_ABORT, C42_FAKE_CALL_START, call,
         aborted != NULL && *aborted ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK, fwlab_hif_prepared_token_valid(prepared),
-        prepared == NULL ? 0 : prepared->reservation_uid
+        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        fwlab_hif_prepared_token_valid(prepared),
+        prepared == NULL ? 0 : prepared->reservation_uid, 0,
+        prepared == NULL ? 0 : prepared->generation, 0
     );
     return call;
 }
@@ -1194,10 +1386,12 @@ static enum fwlab_hif_command_port_result logged_prepare_abort_query(
         fake_prepare_abort_query(context, prepared, aborted);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_PREPARE_ABORT, call,
+        context, C42_FAKE_COMMAND_PREPARE_ABORT, C42_FAKE_CALL_QUERY, call,
         aborted != NULL && *aborted ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK, fwlab_hif_prepared_token_valid(prepared),
-        prepared == NULL ? 0 : prepared->reservation_uid
+        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        fwlab_hif_prepared_token_valid(prepared),
+        prepared == NULL ? 0 : prepared->reservation_uid, 0,
+        prepared == NULL ? 0 : prepared->generation, 0
     );
     return call;
 }
@@ -1211,12 +1405,17 @@ static enum fwlab_hif_command_port_result logged_admit_start(
 {
     enum fwlab_hif_command_port_result call =
         fake_admit_start(context, key, command, state, ticket);
-    int written = state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED;
+    uint8_t write_mask =
+        state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED ?
+        C42_FAKE_EVENT_WRITE_VALUE | C42_FAKE_EVENT_WRITE_OBJECT : 0;
 
     log_command_event(
-        context, C42_FAKE_COMMAND_ADMIT, call,
-        state == NULL ? UINT32_MAX : (uint32_t)*state, written,
-        key != NULL && command != NULL, key == NULL ? 0 : key->client_uid
+        context, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_START, call,
+        state == NULL ? UINT32_MAX : (uint32_t)*state, write_mask,
+        key != NULL && command != NULL, key == NULL ? 0 : key->client_uid,
+        ticket == NULL ? 0 : ticket->ticket_uid,
+        key == NULL ? 0 : key->generation,
+        command == NULL ? 0 : command->handle.generation
     );
     return call;
 }
@@ -1230,12 +1429,17 @@ static enum fwlab_hif_command_port_result logged_admit_query(
 {
     enum fwlab_hif_command_port_result call =
         fake_admit_query(context, key, command, state, ticket);
-    int written = state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED;
+    uint8_t write_mask =
+        state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED ?
+        C42_FAKE_EVENT_WRITE_VALUE | C42_FAKE_EVENT_WRITE_OBJECT : 0;
 
     log_command_event(
-        context, C42_FAKE_COMMAND_ADMIT, call,
-        state == NULL ? UINT32_MAX : (uint32_t)*state, written,
-        key != NULL && command != NULL, key == NULL ? 0 : key->client_uid
+        context, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_QUERY, call,
+        state == NULL ? UINT32_MAX : (uint32_t)*state, write_mask,
+        key != NULL && command != NULL, key == NULL ? 0 : key->client_uid,
+        ticket == NULL ? 0 : ticket->ticket_uid,
+        key == NULL ? 0 : key->generation,
+        command == NULL ? 0 : command->handle.generation
     );
     return call;
 }
@@ -1250,14 +1454,22 @@ static enum fwlab_hif_command_port_result logged_poll(
     enum fwlab_hif_command_port_result call =
         fake_poll(context, budget, events, capacity, count);
     int written = count != NULL && *count <= capacity;
+    uint8_t write_mask = written ? C42_FAKE_EVENT_WRITE_VALUE : 0;
     int valid = written && (*count == 0 ||
                 (events != NULL && events[0].sequence != 0));
 
+    if (written && *count == 1 && events != NULL) {
+        write_mask |= C42_FAKE_EVENT_WRITE_OBJECT;
+    }
+
     log_command_event(
-        context, C42_FAKE_COMMAND_POLL, call,
-        count == NULL ? UINT32_MAX : *count, written, valid,
+        context, C42_FAKE_COMMAND_POLL, C42_FAKE_CALL_ACTION, call,
+        count == NULL ? UINT32_MAX : *count, write_mask, valid,
         written && *count == 1 && events != NULL ?
-            events[0].ticket.ticket_uid : 0
+            events[0].ticket.ticket_uid : 0,
+        written && *count == 1 && events != NULL ?
+            events[0].sequence : 0,
+        budget, capacity
     );
     return call;
 }
@@ -1271,14 +1483,20 @@ static enum fwlab_hif_command_port_result logged_completion_acquire(
     enum fwlab_hif_command_port_result call = fake_completion_acquire(
         context, ticket, intent, lease
     );
-    int written = fwlab_hif_completion_lease_valid(lease) &&
-                  fwlab_nvme_completion_valid(intent);
+    uint8_t write_mask =
+        fwlab_hif_completion_lease_valid(lease) &&
+        fwlab_nvme_completion_valid(intent) ?
+        C42_FAKE_EVENT_WRITE_OBJECT : 0;
 
     log_command_event(
-        context, C42_FAKE_COMMAND_COMPLETION_ACQUIRE, call,
-        lease == NULL ? 0 : (uint32_t)lease->lease_uid, written,
+        context, C42_FAKE_COMMAND_COMPLETION_ACQUIRE,
+        C42_FAKE_CALL_ACTION, call,
+        lease == NULL ? 0 : (uint32_t)lease->lease_uid, write_mask,
         fwlab_hif_command_ticket_valid(ticket),
-        ticket == NULL ? 0 : ticket->ticket_uid
+        ticket == NULL ? 0 : ticket->ticket_uid,
+        lease == NULL ? 0 : lease->lease_uid,
+        lease == NULL ? 0 : lease->generation,
+        intent == NULL ? 0 : intent->result_dword0
     );
     return call;
 }
@@ -1293,10 +1511,13 @@ static enum fwlab_hif_command_port_result logged_completion_release_start(
         fake_completion_release_start(context, lease, client_uid, released);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_COMPLETION_RELEASE, call,
-        released != NULL && *released ? 1u : 0u, call == FWLAB_HIF_PORT_OK,
+        context, C42_FAKE_COMMAND_COMPLETION_RELEASE,
+        C42_FAKE_CALL_START, call,
+        released != NULL && *released ? 1u : 0u,
+        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
         fwlab_hif_completion_lease_valid(lease),
-        lease == NULL ? 0 : lease->lease_uid
+        lease == NULL ? 0 : lease->lease_uid, client_uid,
+        lease == NULL ? 0 : lease->generation, 0
     );
     return call;
 }
@@ -1311,10 +1532,13 @@ static enum fwlab_hif_command_port_result logged_completion_release_query(
         fake_completion_release_query(context, lease, client_uid, released);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_COMPLETION_RELEASE, call,
-        released != NULL && *released ? 1u : 0u, call == FWLAB_HIF_PORT_OK,
+        context, C42_FAKE_COMMAND_COMPLETION_RELEASE,
+        C42_FAKE_CALL_QUERY, call,
+        released != NULL && *released ? 1u : 0u,
+        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
         fwlab_hif_completion_lease_valid(lease),
-        lease == NULL ? 0 : lease->lease_uid
+        lease == NULL ? 0 : lease->lease_uid, client_uid,
+        lease == NULL ? 0 : lease->generation, 0
     );
     return call;
 }
@@ -1329,14 +1553,20 @@ static enum fwlab_hif_command_port_result logged_consume_prepare(
     enum fwlab_hif_command_port_result call = fake_consume_prepare(
         context, lease, publication_uid, token, state
     );
-    int written = state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED;
+    uint8_t write_mask =
+        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
+        C42_FAKE_EVENT_WRITE_VALUE | C42_FAKE_EVENT_WRITE_OBJECT : 0;
 
     log_command_event(
-        context, C42_FAKE_COMMAND_CONSUME_PREPARE, call,
-        state == NULL ? UINT32_MAX : (uint32_t)*state, written,
+        context, C42_FAKE_COMMAND_CONSUME_PREPARE,
+        C42_FAKE_CALL_START, call,
+        state == NULL ? UINT32_MAX : (uint32_t)*state, write_mask,
         fwlab_hif_completion_lease_valid(lease),
+        lease == NULL ? 0 : lease->lease_uid,
         token != NULL && fwlab_hif_consume_token_valid(token) ?
-            token->consume_uid : 0
+            token->consume_uid : 0,
+        (uint32_t)publication_uid,
+        lease == NULL ? 0 : lease->generation
     );
     return call;
 }
@@ -1350,11 +1580,13 @@ static enum fwlab_hif_command_port_result logged_consume_abort(
         fake_consume_abort(context, token, state);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_CONSUME_ABORT, call,
+        context, C42_FAKE_COMMAND_CONSUME_ABORT, C42_FAKE_CALL_START, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
+            C42_FAKE_EVENT_WRITE_VALUE : 0,
         fwlab_hif_consume_token_valid(token),
-        token == NULL ? 0 : token->consume_uid
+        token == NULL ? 0 : token->consume_uid, 0,
+        token == NULL ? 0 : token->generation, 0
     );
     return call;
 }
@@ -1368,11 +1600,13 @@ static enum fwlab_hif_command_port_result logged_consume_abort_query(
         fake_consume_abort_query(context, token, state);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_CONSUME_ABORT, call,
+        context, C42_FAKE_COMMAND_CONSUME_ABORT, C42_FAKE_CALL_QUERY, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
+            C42_FAKE_EVENT_WRITE_VALUE : 0,
         fwlab_hif_consume_token_valid(token),
-        token == NULL ? 0 : token->consume_uid
+        token == NULL ? 0 : token->consume_uid, 0,
+        token == NULL ? 0 : token->generation, 0
     );
     return call;
 }
@@ -1386,11 +1620,14 @@ static enum fwlab_hif_command_port_result logged_consume_commit(
         fake_consume_commit(context, token, state);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_CONSUME_COMMIT, call,
+        context, C42_FAKE_COMMAND_CONSUME_COMMIT,
+        C42_FAKE_CALL_START, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
+            C42_FAKE_EVENT_WRITE_VALUE : 0,
         fwlab_hif_consume_token_valid(token),
-        token == NULL ? 0 : token->consume_uid
+        token == NULL ? 0 : token->consume_uid, 0,
+        token == NULL ? 0 : token->generation, 0
     );
     return call;
 }
@@ -1404,11 +1641,13 @@ static enum fwlab_hif_command_port_result logged_consume_query(
         fake_consume_query(context, token, state);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_CONSUME_QUERY, call,
+        context, C42_FAKE_COMMAND_CONSUME_QUERY, C42_FAKE_CALL_QUERY, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
+            C42_FAKE_EVENT_WRITE_VALUE : 0,
         fwlab_hif_consume_token_valid(token),
-        token == NULL ? 0 : token->consume_uid
+        token == NULL ? 0 : token->consume_uid, 0,
+        token == NULL ? 0 : token->generation, 0
     );
     return call;
 }
@@ -1422,11 +1661,14 @@ static enum fwlab_hif_command_port_result logged_consume_retire(
         fake_consume_retire(context, token, state);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_CONSUME_RETIRE, call,
+        context, C42_FAKE_COMMAND_CONSUME_RETIRE,
+        C42_FAKE_CALL_ACTION, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
+            C42_FAKE_EVENT_WRITE_VALUE : 0,
         fwlab_hif_consume_token_valid(token),
-        token == NULL ? 0 : token->consume_uid
+        token == NULL ? 0 : token->consume_uid, 0,
+        token == NULL ? 0 : token->generation, 0
     );
     return call;
 }
@@ -1438,8 +1680,9 @@ static enum fwlab_hif_command_port_result logged_reset_begin(
         fake_reset_begin(context, instance_nonce, old_epoch);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_RESET_BEGIN, call, old_epoch, 1,
-        instance_nonce != 0, old_epoch
+        context, C42_FAKE_COMMAND_RESET_BEGIN, C42_FAKE_CALL_START,
+        call, old_epoch, 0,
+        instance_nonce != 0, instance_nonce, 0, old_epoch, 0
     );
     return call;
 }
@@ -1451,9 +1694,11 @@ static enum fwlab_hif_command_port_result logged_reset_quiescent(
         fake_reset_quiescent(context, instance_nonce, epoch, quiescent);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_RESET_QUIESCENT, call,
+        context, C42_FAKE_COMMAND_RESET_QUIESCENT, C42_FAKE_CALL_QUERY, call,
         quiescent != NULL && *quiescent ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK, instance_nonce != 0, epoch
+        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        instance_nonce != 0,
+        instance_nonce, 0, epoch, 0
     );
     return call;
 }
@@ -1465,8 +1710,9 @@ static enum fwlab_hif_command_port_result logged_teardown_begin(
         fake_teardown_begin(context, instance_nonce, old_epoch);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_TEARDOWN_BEGIN, call, old_epoch, 1,
-        instance_nonce != 0, old_epoch
+        context, C42_FAKE_COMMAND_TEARDOWN_BEGIN, C42_FAKE_CALL_START,
+        call, old_epoch, 0,
+        instance_nonce != 0, instance_nonce, 0, old_epoch, 0
     );
     return call;
 }
@@ -1478,9 +1724,12 @@ static enum fwlab_hif_command_port_result logged_teardown_quiescent(
         fake_teardown_quiescent(context, instance_nonce, epoch, quiescent);
 
     log_command_event(
-        context, C42_FAKE_COMMAND_TEARDOWN_QUIESCENT, call,
+        context, C42_FAKE_COMMAND_TEARDOWN_QUIESCENT,
+        C42_FAKE_CALL_QUERY, call,
         quiescent != NULL && *quiescent ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK, instance_nonce != 0, epoch
+        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        instance_nonce != 0,
+        instance_nonce, 0, epoch, 0
     );
     return call;
 }

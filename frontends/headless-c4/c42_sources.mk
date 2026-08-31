@@ -14,7 +14,9 @@ C42_HEADERS := hif/c42.h hif/c42_internal.h hif/c42_memory_port.h \
 C42_TEST_SOURCES := tests/test_c42_queue.c \
 	tests/test_c42_publication.c tests/test_c42_identity.c \
 	tests/test_c42_reset_delete.c tests/test_c42_remediation.c \
-	tests/test_c42_dut_replay.c tests/test_c42_public_abi.c \
+	tests/test_c42_provider_matrix.c tests/test_c42_phase_cuts.c \
+	tests/test_c42_dut_replay.c \
+	tests/test_c42_public_abi.c \
 	tests/test_c42_thread.c tests/fuzz_c42.c \
 	tests/c42_model.c tests/model_c42.c tests/broken_c42.c \
 	fakes/c42_fake_main.c

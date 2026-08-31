@@ -715,7 +715,7 @@ int main(int argc, char **argv)
     }
     printf("C4.2 DUT reference BFS: PASS families=%u states=%u "
            "transitions=%u comparisons=%u depth=%u successors=%u "
-           "caps=32768/262144/20/8 fresh-action-replay=yes\n",
+           "caps=32768/262144/20/9 fresh-action-replay=yes\n",
            summary.families, summary.states, summary.transitions,
            summary.comparisons, summary.maximum_depth,
            summary.maximum_successors);

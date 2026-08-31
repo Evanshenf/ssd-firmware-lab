@@ -12,6 +12,9 @@
 
 #define C42_FAKE_MEMORY_SCRIPT_MAX 128u
 #define C42_FAKE_MEMORY_DIRECT_MAX 128u
+#define C42_FAKE_MEMORY_TOKEN_EXACT 0u
+#define C42_FAKE_MEMORY_TOKEN_ZERO 1u
+#define C42_FAKE_MEMORY_TOKEN_MISMATCH 2u
 
 enum c42_fake_memory_operation {
     C42_FAKE_MEMORY_SCRUB = 1,
@@ -49,7 +52,7 @@ struct c42_fake_memory_direct_injection {
     uint8_t prefix;
     uint8_t committed;
     uint8_t quiescent;
-    uint8_t reserved;
+    uint8_t token_variant;
 };
 
 struct c42_fake_memory_mapping {
@@ -87,7 +90,15 @@ struct c42_fake_memory {
     uint32_t direct_index;
     uint8_t reset_active;
     uint8_t teardown_active;
-    uint8_t reserved[6];
+    uint8_t direct_event_active;
+    uint8_t direct_event_write_status;
+    uint8_t direct_event_apply_effect;
+    uint8_t direct_event_logical_effect;
+    uint8_t direct_event_applied_effect;
+    uint8_t direct_event_committed;
+    uint8_t direct_event_quiescent;
+    uint8_t direct_event_token_variant;
+    uint8_t reserved[2];
     struct c42_fake_memory_mapping sq_map[C42_MAX_QUEUE_PAIRS];
     struct c42_fake_memory_mapping cq_map[C42_MAX_QUEUE_PAIRS];
     struct c42_fake_memory_operation_record scrub[C42_MAX_QUEUE_PAIRS];

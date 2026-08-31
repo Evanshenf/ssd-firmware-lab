@@ -120,6 +120,7 @@ struct c42_fake_command {
     uint8_t injection_write_mask;
     uint8_t injection_flags;
     uint8_t injection_object_variant;
+    uint32_t injection_event_value;
     struct c42_fake_command_script script;
     struct c42_fake_command_injection
         injections[C42_FAKE_COMMAND_INJECTIONS];

@@ -13,7 +13,7 @@
 #define DUT_STATE_CAP 32768u
 #define DUT_TRANSITION_CAP 262144u
 #define DUT_DEPTH_CAP 20u
-#define DUT_SUCCESSOR_CAP 8u
+#define DUT_SUCCESSOR_CAP 9u
 #define DUT_FAMILY_NODE_CAP 256u
 
 struct dut_context {
@@ -113,12 +113,30 @@ static int dut_context_init(uint32_t family, struct dut_context *context)
         return 0;
     }
     reset_scenario_log(context->fixture);
-    if (family == C42_REF_F02_BATCH || family == C42_REF_F05_DELAYED ||
+    if (family == C42_REF_F01_CREATE) {
+        struct c42_fake_memory_outcome outcome = {0};
+
+        outcome.operation = C42_FAKE_MEMORY_SCRUB;
+        outcome.effect = C42_MEMORY_UNKNOWN;
+        outcome.committed = 1;
+        if (c42_fake_memory_script_push(
+                &context->fixture->memory, &outcome) != C42_OK) {
+            return 0;
+        }
+        outcome.effect = C42_MEMORY_FULL;
+        outcome.prefix = 4;
+        if (c42_fake_memory_script_push(
+                &context->fixture->memory, &outcome) != C42_OK) {
+            return 0;
+        }
+    } else if (family == C42_REF_F02_BATCH ||
+        family == C42_REF_F05_DELAYED ||
         family == C42_REF_F11_RESET) {
         script.poll_delay = 100;
         c42_fake_command_set_script(&context->fixture->command, &script);
     } else if (family == C42_REF_F03_CAPTURE) {
         script.prepare_backpressure = 1;
+        script.admit_delay = 1;
         c42_fake_command_set_script(&context->fixture->command, &script);
     } else if (family == C42_REF_F09_PUBLICATION) {
         struct c42_fake_memory_outcome outcome = {0};
@@ -329,7 +347,17 @@ static int execute_action(struct dut_context *context, uint8_t action)
             fixture->controller, &context->candidate
         );
         break;
+    case C42_REF_CREATE_UNKNOWN_COMMIT:
+        result = c42_candidate_commit(
+            fixture->controller, &context->candidate
+        );
+        break;
     case C42_REF_CREATE_PROGRESS:
+        result = c42_candidate_progress(
+            fixture->controller, &context->candidate, 1
+        );
+        break;
+    case C42_REF_CREATE_RECOVER:
         result = c42_candidate_progress(
             fixture->controller, &context->candidate, 1
         );
@@ -370,6 +398,7 @@ static int execute_action(struct dut_context *context, uint8_t action)
         result = step_one(fixture);
         break;
     case C42_REF_CAPTURE_PORT_RESERVED:
+    case C42_REF_CAPTURE_ADMIT_QUERY:
     case C42_REF_CAPTURE_PORT_COMMITTED:
     case C42_REF_CAPTURE_HIF_COMMITTED:
         result = step_one(fixture);
@@ -468,6 +497,22 @@ static int execute_action(struct dut_context *context, uint8_t action)
         result = c42_target_prepare(
             fixture->controller, 0, fixture->sq_cap[0].ring_generation,
             311, &context->target
+        );
+        break;
+    case C42_REF_IDENTITY_TARGET_ACTIVE: {
+        struct c42_fake_command_script script = {0};
+
+        script.poll_delay = 100;
+        c42_fake_command_set_script(&fixture->command, &script);
+        if (!c42_test_submit(fixture, 0, 0, 1, 333) ||
+            !run_to_active(fixture, 1, 1) ||
+            !cache_active_commands(context)) return 0;
+        break;
+    }
+    case C42_REF_IDENTITY_TARGET_ACQUIRE:
+        result = c42_target_prepare(
+            fixture->controller, 0, fixture->sq_cap[0].ring_generation,
+            333, &context->target
         );
         break;
     case C42_REF_IDENTITY_DUPLICATE:
@@ -932,6 +977,7 @@ static int normalize(
     }
     state->order_mask = provider_order_mask(&context->fixture->event_log);
     if (state->order_mask != UINT32_C(0x1ff)) state->order_mask = 0;
+    state->event_count = state->order_mask == UINT32_C(0x1ff) ? 9u : 0u;
     if (context->other != NULL) {
         struct c42_snapshot other = {0};
 
