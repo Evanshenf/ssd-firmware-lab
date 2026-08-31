@@ -234,12 +234,14 @@ check-c42: $(C42_CHECK_TARGETS)
 # C42_FROZEN_RULES_END
 
 check-clang:
-	$(MAKE) CC=$(CLANG) BUILD_DIR=build/clang check
+	$(MAKE) CC=$(CLANG) BUILD_DIR=build/clang \
+		check-c41 check-c42-local-determinism
 
 check-sanitize:
 	$(MAKE) CC=$(SAN_CC) BUILD_DIR=build/sanitize \
 		CFLAGS='-std=c11 -O1 -g -Wall -Wextra -Werror -Wpedantic -fno-common -fno-omit-frame-pointer -fsanitize=address,undefined' \
-		LDFLAGS='-fsanitize=address,undefined' check
+		LDFLAGS='-fsanitize=address,undefined' \
+		check-c41 check-c42-local-determinism
 
 check-thread:
 	$(MAKE) CC=$(TSAN_CC) BUILD_DIR=build/thread \
@@ -253,7 +255,7 @@ check-analysis:
 check-strict:
 	$(MAKE) BUILD_DIR=build/strict \
 		CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -fno-common' \
-		check
+		check-c41 check-c42-local-determinism
 
 check-determinism:
 	python3 ../../scripts/check_c4_determinism.py
@@ -273,7 +275,7 @@ $(C41_FAKE_OUTPUT): $(CORE_SOURCES) $(HIF_SOURCES) fakes/c41_fake_main.c
 
 fake-link-c41: $(C41_FAKE_OUTPUT)
 
-fake-link: check $(C42_FAKE_OUTPUT)
+fake-link: check-c41 check-c42-local-determinism $(C42_FAKE_OUTPUT)
 
 clean:
 	$(MAKE) -C ../../core/c4-nvme clean
