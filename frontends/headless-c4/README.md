@@ -64,8 +64,10 @@ requires 13 distinct, fresh ELF programs, their expected runtime markers and
 an exact receipt. Runtime markers are deliberately anchored at the beginning
 of one output line; arbitrary substrings are not accepted. The runner disables
 Python bytecode writes and verifies that guarded adjacent build/cache paths are
-unchanged. Direct Make targets remain useful defense-in-depth and developer
-workflows, but dry-run/touch/extra-makefile invocations are not evidence.
+unchanged. The transitive C4.1/C3.5 coexistence checker also builds into a
+private temporary directory and is part of the C4.2 input closure. Direct Make
+targets remain useful defense-in-depth and developer workflows, but
+dry-run/touch/extra-makefile invocations are not evidence.
 
 The C4.2 gate covers exact depths 2/3/4/32, 12 bounded-model families, 35
 production-source mutations, nine architecture mutations, 18 provider

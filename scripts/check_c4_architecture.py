@@ -134,16 +134,27 @@ def main() -> int:
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
         failures.append(f"architecture object audit failed: {error}")
 
-    c35 = run([
-        "make", "-C", str(ROOT / "frontends/headless-c35"),
-        "CC=cc", "AR=ar", "BUILD_DIR=build",
-        "CFLAGS=-std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic -fno-common",
-        "LDFLAGS=", "check-architecture",
-    ], timeout=300)
-    if c35.returncode:
-        failures.append(f"C3.5 coexistence regression failed:\n{c35.stdout}")
-    elif "archive=b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f" not in c35.stdout:
-        failures.append("C3.5 coexistence did not prove the frozen archive hash")
+    try:
+        with tempfile.TemporaryDirectory(
+                prefix="fwlab-c41-c35-architecture-") as directory:
+            c35 = run([
+                "make", "-C", str(ROOT / "frontends/headless-c35"),
+                "CC=cc", "AR=ar", f"BUILD_DIR={Path(directory) / 'build'}",
+                "CFLAGS=-std=c11 -O2 -g -Wall -Wextra -Werror "
+                "-Wpedantic -fno-common",
+                "LDFLAGS=", "check-architecture",
+            ], timeout=300)
+            if c35.returncode:
+                failures.append(
+                    f"C3.5 coexistence regression failed:\n{c35.stdout}"
+                )
+            elif "archive=b1f95f2787fe9a3d585f467d4ba72e6de32938c51273d4ad7f411dc1e644cf6f" \
+                    not in c35.stdout:
+                failures.append(
+                    "C3.5 coexistence did not prove the frozen archive hash"
+                )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        failures.append(f"C3.5 coexistence isolation failed: {error}")
 
     if failures:
         print("C4.1 architecture isolation failed:", file=sys.stderr)
