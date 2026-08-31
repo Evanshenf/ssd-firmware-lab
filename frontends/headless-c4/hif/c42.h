@@ -67,6 +67,7 @@ enum c42_candidate_state {
     C42_CANDIDATE_SCRUB_UNKNOWN = 2,
     C42_CANDIDATE_READY = 3,
     C42_CANDIDATE_ABORTING = 4,
+    /* Numeric compatibility only; v2 commits directly to retire states. */
     C42_CANDIDATE_COMMITTED = 5,
     C42_CANDIDATE_ABORTED = 6,
     C42_CANDIDATE_POISONED = 7,
@@ -88,6 +89,7 @@ enum c42_control_state {
     C42_CONTROL_STARTED = 1,
     C42_CONTROL_WAITING = 2,
     C42_CONTROL_COMMITTED = 3,
+    /* Numeric compatibility only; v2 has no transition into 4 or 5. */
     C42_CONTROL_CLEANUP_PENDING = 4,
     C42_CONTROL_RETIRED = 5,
     C42_CONTROL_POISONED = 6,

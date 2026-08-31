@@ -6,6 +6,15 @@ override .SHELLFLAGS := -eu -c
 override PATH := /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 
+ifneq ($(words $(MAKEFILE_LIST)),1)
+$(error C4.2 refuses preloaded or multiple primary Makefiles)
+endif
+ifneq ($(strip $(MAKEFILES)),)
+$(error C4.2 refuses inherited MAKEFILES)
+endif
+ifneq ($(strip $(-*-eval-flags-*-)),)
+$(error C4.2 refuses Make --eval/-E input)
+endif
 _FWLAB_FLAG_WORD := $(if $(findstring =,$(firstword $(MAKEFLAGS))),,$(firstword $(MAKEFLAGS)))
 ifneq ($(findstring i,$(_FWLAB_FLAG_WORD)),)
 $(error C4.2 refuses inherited Make ignore-error mode)
@@ -13,7 +22,7 @@ endif
 ifneq ($(filter --ignore-errors -i,$(MAKEFLAGS) $(MFLAGS)),)
 $(error C4.2 refuses inherited Make ignore-error mode)
 endif
-_FWLAB_UNSAFE_DIRECTIVE := $(shell /usr/bin/awk '/^[[:space:]]*\.IGNORE([[:space:]]|:)/ || /^[[:space:]]*(override[[:space:]]+)?(MAKEFLAGS|MFLAGS)[[:space:]]*[:+?]?=/ { print "unsafe"; exit }' $(firstword $(MAKEFILE_LIST)))
+_FWLAB_UNSAFE_DIRECTIVE := $(shell /usr/bin/awk '/^[[:space:]]*\.IGNORE([[:space:]]|:)/ || /^[[:space:]]*(override[[:space:]]+)?(MAKEFLAGS|MFLAGS|GNUMAKEFLAGS|MAKEFILES)[[:space:]]*[:+?]?=/ { print "unsafe"; exit }' $(MAKEFILE_LIST))
 ifneq ($(_FWLAB_UNSAFE_DIRECTIVE),)
 $(error C4.2 refuses .IGNORE or in-file MAKEFLAGS/MFLAGS assignments)
 endif
@@ -57,6 +66,14 @@ override HIF_SOURCES := c41_wire.c
 UNIT_BIN := $(BUILD_DIR)/c41_wire_tests
 FUZZ_BIN := $(BUILD_DIR)/c41_wire_fuzz
 include c42_sources.mk
+
+ifneq ($(words $(MAKEFILE_LIST)),2)
+$(error C4.2 refuses nested or unexpected included Makefiles)
+endif
+_FWLAB_INCLUDED_UNSAFE_DIRECTIVE := $(shell /usr/bin/awk '/^[[:space:]]*\.IGNORE([[:space:]]|:)/ || /^[[:space:]]*(override[[:space:]]+)?(MAKEFLAGS|MFLAGS|GNUMAKEFLAGS|MAKEFILES)[[:space:]]*[:+?]?=/ { print "unsafe"; exit }' $(MAKEFILE_LIST))
+ifneq ($(_FWLAB_INCLUDED_UNSAFE_DIRECTIVE),)
+$(error C4.2 refuses unsafe included Make semantics)
+endif
 
 .PHONY: all check-unit check-fuzz check-local-determinism check-architecture \
 	check-c41 check check-clang check-sanitize check-thread check-analysis \
@@ -122,7 +139,12 @@ C42_RECEIPT := $(BUILD_DIR)/c42_execution.receipt
 	check-c42-model check-c42-negative check-c42-fuzz check-c42-thread \
 	check-c42-architecture check-c42-remediation check-c42-build-closure \
 	check-c42-dynamic-mutations check-c42-replay \
-	check-c42-make-integrity check-c42-artifact-receipt
+	check-c42-provider-mutations check-c42-make-integrity \
+	check-c42-artifact-receipt
+
+.SECONDEXPANSION:
+_FWLAB_FINAL_PARSE_GUARD = $(if $(filter 2,$(words $(MAKEFILE_LIST))),,$(error C4.2 refuses late or multiple Makefile inputs))
+$(C42_CHECK_TARGETS) check-c42: $$(_FWLAB_FINAL_PARSE_GUARD)
 
 $(C42_QUEUE_BIN): $(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
 		$(C42_FAKE_SOURCES) $(C42_SUPPORT) $(C42_HEADERS) \
@@ -258,6 +280,9 @@ check-c42-architecture:
 
 check-c42-dynamic-mutations:
 	python3 ../../scripts/check_c42_dynamic_mutations.py
+
+check-c42-provider-mutations:
+	python3 ../../scripts/check_c42_provider_mutations.py
 
 check-c42-make-integrity:
 	python3 ../../scripts/check_c42_make_integrity.py

@@ -425,6 +425,18 @@ def main() -> int:
         failures.append("CQ publication context is derived from completion intent")
     if raw_in_trace(production_text):
         failures.append("raw SQ snapshot entered a default trace/output path")
+    for token in (
+        "C42_COMMAND_RELEASE_RECONCILE",
+        "C42_CANDIDATE_COMMITTED",
+        "C42_CONTROL_CLEANUP_PENDING",
+        "C42_CONTROL_RETIRED",
+    ):
+        if re.search(
+                rf"(?:->|\.)state\s*=\s*{token}\b",
+                production_text) is not None:
+            failures.append(
+                f"compatibility-only state gained a transition: {token}"
+            )
     if not arguments.no_mutation_selftests:
         failures.extend(check_source_mutations())
 

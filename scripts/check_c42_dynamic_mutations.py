@@ -231,6 +231,54 @@ def mutations() -> list[dict[str, object]]:
                     "            controller->candidates[index].state =\n"
                     "                C42_CANDIDATE_SUPERSEDED;\n"
                     "        }")]},
+        {"name": "BM_POISONED_NOT_SUPERSEDED",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        if (controller->candidates[index].in_use != 0) {\n"
+                    "            controller->candidates[index].state = C42_CANDIDATE_SUPERSEDED;\n"
+                    "        }",
+                    "        if (controller->candidates[index].in_use != 0 &&\n"
+                    "            controller->candidates[index].state !=\n"
+                    "                C42_CANDIDATE_POISONED) {\n"
+                    "            controller->candidates[index].state =\n"
+                    "                C42_CANDIDATE_SUPERSEDED;\n"
+                    "        }")]},
+        {"name": "BM_READY_NOTIFICATION_NOT_SUPPRESSED",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "            (notification->state == C42_NOTIFY_RESERVED ||\n"
+                    "             notification->state == C42_NOTIFY_READY ||\n"
+                    "             notification->state == C42_NOTIFY_ACQUIRED)) {",
+                    "            (notification->state == C42_NOTIFY_RESERVED ||\n"
+                    "             notification->state == C42_NOTIFY_ACQUIRED)) {")]},
+        {"name": "BM_TAKEOVER_ACCEPTS_RESET_BEGIN_IN_PROGRESS",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [
+             ("frontends/headless-c4/hif/c42_queue.c",
+              "            if (port_result == FWLAB_HIF_PORT_OK) {\n"
+              "                reset->port_started = 1;\n"
+              "            } else if (port_result != FWLAB_HIF_PORT_IN_PROGRESS) {\n"
+              "                record->state = C42_CONTROL_POISONED;\n"
+              "            }",
+              "            if (port_result == FWLAB_HIF_PORT_OK ||\n"
+              "                port_result == FWLAB_HIF_PORT_IN_PROGRESS) {\n"
+              "                reset->port_started = 1;\n"
+              "            } else {\n"
+              "                record->state = C42_CONTROL_POISONED;\n"
+              "            }"),
+             ("frontends/headless-c4/hif/c42_queue.c",
+              "            if (memory_result == C42_MEMORY_OK) {\n"
+              "                reset->memory_started = 1;\n"
+              "            } else if (memory_result != C42_MEMORY_IN_PROGRESS) {\n"
+              "                record->state = C42_CONTROL_POISONED;\n"
+              "            }",
+              "            if (memory_result == C42_MEMORY_OK ||\n"
+              "                memory_result == C42_MEMORY_IN_PROGRESS) {\n"
+              "                reset->memory_started = 1;\n"
+              "            } else {\n"
+              "                record->state = C42_CONTROL_POISONED;\n"
+              "            }")
+         ]},
     ]
 
 
@@ -351,6 +399,8 @@ def main() -> int:
     tracked = tracked_files()
     baseline_hashes = {name: sha256(ROOT / name) for name in tracked}
     total = 0
+    aggregate_binaries = 0
+    replay_mutants = 0
     try:
         selected = [
             mutation for mutation in mutations()
@@ -360,7 +410,10 @@ def main() -> int:
             raise RuntimeError(f"unknown mutation selection: {args.only}")
         for mutation in selected:
             name = str(mutation["name"])
-            family = MUTANT_FAMILY[name]
+            replay = bool(mutation.get("replay", True))
+            family = MUTANT_FAMILY.get(name)
+            if replay and family is None:
+                raise RuntimeError(f"missing replay family: {name}")
             allowed = {str(edit[0]) for edit in mutation["edits"]}
             with tempfile.TemporaryDirectory(
                     prefix=f"c42-mutant-{name.lower()}-") as directory:
@@ -387,11 +440,13 @@ def main() -> int:
                         mutant_root, compiler, str(mutation["target"]),
                         Path(directory) / f"build-{compiler}"
                     )
-                    replay_output = build_binary(
-                        mutant_root, compiler, "c42_dut_replay",
-                        Path(directory) / f"build-{compiler}",
-                        ("--family", family), family
-                    )
+                    replay_output = b""
+                    if replay:
+                        replay_output = build_binary(
+                            mutant_root, compiler, "c42_dut_replay",
+                            Path(directory) / f"build-{compiler}",
+                            ("--family", str(family)), str(family)
+                        )
                     outputs.append(selected_output + replay_output)
                 if outputs[0] != outputs[1]:
                     raise RuntimeError(
@@ -400,13 +455,16 @@ def main() -> int:
                         f"--- clang ---\n{outputs[1].decode(errors='replace')}"
                     )
                 total += 1
+                aggregate_binaries += 4 if replay else 2
+                replay_mutants += 1 if replay else 0
                 print(f"C4.2 production mutant {name}: PASS")
     except (OSError, RuntimeError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired) as error:
         print(f"C4.2 dynamic mutations: FAIL: {error}", file=sys.stderr)
         return 1
     print(f"C4.2 dynamic mutations: PASS mutants={total} compilers=2 "
-          f"oracles=unit+replay aggregate-binaries={total * 4}")
+          f"unit-plus-replay={replay_mutants} unit-specific="
+          f"{total - replay_mutants} aggregate-binaries={aggregate_binaries}")
     return 0
 
 

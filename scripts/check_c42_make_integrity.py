@@ -25,12 +25,13 @@ def unsafe_directive(text: str) -> str | None:
     if re.search(r"^[ \t]*\.IGNORE(?:[ \t]|:)", logical, re.MULTILINE):
         return ".IGNORE"
     if re.search(
-        r"^[ \t]*(?:override[ \t]+)?(?:MAKEFLAGS|MFLAGS)"
+        r"^[ \t]*(?:override[ \t]+)?"
+        r"(?:MAKEFLAGS|MFLAGS|GNUMAKEFLAGS|MAKEFILES)"
         r"[ \t]*[:+?]?=",
         logical,
         re.MULTILINE,
     ):
-        return "MAKEFLAGS/MFLAGS"
+        return "MAKEFLAGS/MFLAGS/GNUMAKEFLAGS/MAKEFILES"
     return None
 
 
@@ -81,6 +82,8 @@ def main() -> int:
     mutants = {
         ".IGNORE": "CC := /bin/false\n.IGNORE:\n",
         "MAKEFLAGS": "CC := /bin/false\nMAKEFLAGS += -i\n",
+        "GNUMAKEFLAGS": "GNUMAKEFLAGS += -i\n",
+        "MAKEFILES": "MAKEFILES := injected.mk\n",
     }
     for name, addition in mutants.items():
         mutant = source + "\n" + addition
@@ -90,6 +93,8 @@ def main() -> int:
             failures.append(f"executed {name} negative escaped")
 
     inherited = os.environ.copy()
+    inherited.pop("MAKEFILES", None)
+    inherited.pop("GNUMAKEFLAGS", None)
     inherited["MAKEFLAGS"] = "-i"
     ignored = run(
         ["make", "-C", str(FRONTEND), "-n", "check-c42-unit"],
@@ -99,6 +104,81 @@ def main() -> int:
         failures.append("inherited ignore-error mode escaped")
 
     inherited = os.environ.copy()
+    inherited.pop("MAKEFILES", None)
+    inherited.pop("GNUMAKEFLAGS", None)
+    inherited["MAKEFLAGS"] = "--eval=.IGNORE:"
+    evaluated = run(
+        ["make", "-C", str(FRONTEND), "-n", "check-c42-unit"],
+        env=inherited,
+    )
+    if evaluated.returncode == 0 or "C4.2 refuses" not in evaluated.stdout:
+        failures.append("inherited MAKEFLAGS --eval escaped")
+
+    inherited = os.environ.copy()
+    inherited.pop("MAKEFILES", None)
+    inherited.pop("MAKEFLAGS", None)
+    inherited["GNUMAKEFLAGS"] = "-E .IGNORE:"
+    evaluated = run(
+        ["make", "-C", str(FRONTEND), "-n", "check-c42-unit"],
+        env=inherited,
+    )
+    if evaluated.returncode == 0 or "C4.2 refuses" not in evaluated.stdout:
+        failures.append("inherited GNUMAKEFLAGS -E escaped")
+
+    with tempfile.TemporaryDirectory(prefix="c42-inherited-makefiles-") as name:
+        root = Path(name)
+        benign = root / "benign.mk"
+        ignored_file = root / "ignored.mk"
+        nested = root / "nested.mk"
+        benign.write_text("# benign inherited makefile\n", encoding="utf-8")
+        ignored_file.write_text(".IGNORE:\n", encoding="utf-8")
+        nested.write_text(
+            f"include {ignored_file}\n", encoding="utf-8"
+        )
+        neutralized = root / "neutralized.mk"
+        neutralized.write_text(
+            "MAKEFILES :=\ncheck-c42-unit: SHELL := /bin/true\n",
+            encoding="utf-8",
+        )
+        for label, makefiles in (
+            ("multiple", f"{benign} {ignored_file}"),
+            ("nested", str(nested)),
+            ("neutralized", str(neutralized)),
+        ):
+            inherited = os.environ.copy()
+            inherited.pop("MAKEFLAGS", None)
+            inherited.pop("GNUMAKEFLAGS", None)
+            inherited["MAKEFILES"] = makefiles
+            result = run(
+                ["make", "-C", str(FRONTEND), "-n", "check-c42-unit"],
+                env=inherited,
+            )
+            if result.returncode == 0 or \
+                    "C4.2 refuses" not in result.stdout:
+                failures.append(f"inherited {label} MAKEFILES escaped")
+
+        for label, makefiles in (
+            ("before", (benign, MAKEFILE)),
+            ("after", (MAKEFILE, benign)),
+            ("late-ignore", (MAKEFILE, ignored_file)),
+            ("late-target-shell", (MAKEFILE, neutralized)),
+        ):
+            result = run(
+                [
+                    "make", "-f", str(makefiles[0]), "-f",
+                    str(makefiles[1]), "-C", str(FRONTEND), "-n",
+                    "check-c42-unit",
+                ],
+            )
+            if result.returncode == 0 or \
+                    "C4.2 refuses" not in result.stdout:
+                failures.append(
+                    f"multiple -f primary Makefiles ({label}) escaped"
+                )
+
+    inherited = os.environ.copy()
+    inherited.pop("MAKEFILES", None)
+    inherited.pop("GNUMAKEFLAGS", None)
     inherited["MAKEFLAGS"] = "SHELL=/bin/true"
     shell = run(["make", "-C", str(FRONTEND), "-prRn"], env=inherited)
     if shell.returncode != 0 or "SHELL := /bin/sh" not in shell.stdout or \
@@ -124,7 +204,7 @@ def main() -> int:
         return 1
     print(
         "C4.2 Make integrity: PASS (.IGNORE/MAKEFLAGS exact negatives; "
-        "inherited flags/shell sanitized; broken compiler no artifact)"
+        "MAKEFILES/eval/flags/shell sanitized; broken compiler no artifact)"
     )
     return 0
 

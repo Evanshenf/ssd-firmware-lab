@@ -1382,31 +1382,10 @@ static void log_command_event(
         (uint8_t)(output_structural_valid != 0);
     event.output_record_match = (uint8_t)(output_record_match != 0);
     event.reported_effect = value;
+    event.output_write_mask = write_mask;
     if (command != NULL && command->injection_active != 0) {
-        event.output_value = command->injection_event_value;
-        event.reported_effect = command->injection_event_value;
         event.requested_effect = command->injection_requested_effect;
         event.applied_effect = command->injection_applied_effect;
-        event.output_write_mask = command->injection_write_mask;
-        if ((event.output_write_mask & C42_FAKE_EVENT_WRITE_VALUE) == 0) {
-            event.output_value = 0;
-        }
-        if ((event.output_write_mask & C42_FAKE_EVENT_WRITE_OBJECT) == 0) {
-            event.object_uid = 0;
-            event.output_structural_valid = 0;
-            event.output_record_match = 0;
-        } else if (command->injection_object_variant ==
-                   C42_FAKE_OBJECT_ZERO) {
-            event.output_structural_valid = 0;
-            event.output_record_match = 0;
-        } else {
-            event.output_structural_valid =
-                (uint8_t)(event.object_uid != 0);
-            if (command->injection_object_variant !=
-                C42_FAKE_OBJECT_EXACT) {
-                event.output_record_match = 0;
-            }
-        }
         if (command->injection_applied_effect !=
             C42_FAKE_COMMAND_EFFECT_NONE) {
             event.flags |= C42_FAKE_EVENT_EFFECT_APPLIED;
@@ -1415,14 +1394,16 @@ static void log_command_event(
                 event.flags |= C42_FAKE_EVENT_RESPONSE_LOST;
             }
         }
-    } else {
-        event.output_write_mask = write_mask;
     }
     if (event.output_write_mask == 0) {
         event.output_structural_valid = 0;
         event.output_record_match = 0;
         event.output_value = 0;
         event.object_uid = 0;
+    }
+    if ((event.output_write_mask & C42_FAKE_EVENT_WRITE_VALUE) == 0) {
+        event.output_value = 0;
+        event.reported_effect = C42_FAKE_COMMAND_EFFECT_NONE;
     }
     c42_fake_event_append(
         command == NULL ? NULL : command->event_log, &event
@@ -1440,25 +1421,60 @@ static void log_command_event(
     }
 }
 
+static int output_changed(
+    const void *before,
+    const void *after,
+    size_t size)
+{
+    return before != NULL && after != NULL &&
+           memcmp(before, after, size) != 0;
+}
+
+static int prepare_value_valid(const struct fwlab_hif_prepare_result *result)
+{
+    return result != NULL &&
+           result->version == FWLAB_HIF_COMMAND_PORT_VERSION &&
+           result->size == sizeof(*result) &&
+           result->disposition <= FWLAB_HIF_PREPARE_REJECTED;
+}
+
 static enum fwlab_hif_command_port_result logged_prepare_start(
     void *context,
     const struct fwlab_hif_prepare_key *key,
     struct fwlab_hif_prepare_result *result)
 {
-    enum fwlab_hif_command_port_result call =
-        fake_prepare_start(context, key, result);
+    struct fwlab_hif_prepare_result before = {0};
+    int have_output = result != NULL;
+    int input_match = context != NULL && key != NULL &&
+        find_prepare_key(context, key) != NULL;
+    enum fwlab_hif_command_port_result call;
+    uint8_t write_mask = 0;
+
+    if (have_output) before = *result;
+    call = fake_prepare_start(context, key, result);
+    if (have_output &&
+        (before.version != result->version ||
+         before.size != result->size ||
+         before.disposition != result->disposition)) {
+        write_mask |= C42_FAKE_EVENT_WRITE_VALUE;
+    }
+    if (have_output && output_changed(
+            &before.prepared, &result->prepared,
+            sizeof(result->prepared))) {
+        write_mask |= C42_FAKE_EVENT_WRITE_OBJECT;
+    }
 
     log_command_event(
         context, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_START, call,
         result == NULL ? UINT32_MAX : result->disposition,
-        result != NULL && result->version == FWLAB_HIF_COMMAND_PORT_VERSION ?
-            C42_FAKE_EVENT_WRITE_VALUE | C42_FAKE_EVENT_WRITE_OBJECT : 0,
+        write_mask,
         context != NULL && prepare_key_valid(context, key),
-        context != NULL && key != NULL &&
-            find_prepare_key(context, key) != NULL,
-        result != NULL &&
-            result->version == FWLAB_HIF_COMMAND_PORT_VERSION &&
-            result->size == sizeof(*result),
+        input_match,
+        (write_mask & C42_FAKE_EVENT_WRITE_VALUE) != 0 ?
+            prepare_value_valid(result) :
+            ((write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&
+             fwlab_hif_prepared_token_valid(
+                 result == NULL ? NULL : &result->prepared)),
         result != NULL &&
             context != NULL &&
             find_prepared(context, &result->prepared) != NULL,
@@ -1475,20 +1491,38 @@ static enum fwlab_hif_command_port_result logged_prepare_query(
     const struct fwlab_hif_prepare_key *key,
     struct fwlab_hif_prepare_result *result)
 {
-    enum fwlab_hif_command_port_result call =
-        fake_prepare_query(context, key, result);
+    struct fwlab_hif_prepare_result before = {0};
+    int have_output = result != NULL;
+    int input_match = context != NULL && key != NULL &&
+        find_prepare_key(context, key) != NULL;
+    enum fwlab_hif_command_port_result call;
+    uint8_t write_mask = 0;
+
+    if (have_output) before = *result;
+    call = fake_prepare_query(context, key, result);
+    if (have_output &&
+        (before.version != result->version ||
+         before.size != result->size ||
+         before.disposition != result->disposition)) {
+        write_mask |= C42_FAKE_EVENT_WRITE_VALUE;
+    }
+    if (have_output && output_changed(
+            &before.prepared, &result->prepared,
+            sizeof(result->prepared))) {
+        write_mask |= C42_FAKE_EVENT_WRITE_OBJECT;
+    }
 
     log_command_event(
         context, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_QUERY, call,
         result == NULL ? UINT32_MAX : result->disposition,
-        result != NULL && result->version == FWLAB_HIF_COMMAND_PORT_VERSION ?
-            C42_FAKE_EVENT_WRITE_VALUE | C42_FAKE_EVENT_WRITE_OBJECT : 0,
+        write_mask,
         context != NULL && prepare_key_valid(context, key),
-        context != NULL && key != NULL &&
-            find_prepare_key(context, key) != NULL,
-        result != NULL &&
-            result->version == FWLAB_HIF_COMMAND_PORT_VERSION &&
-            result->size == sizeof(*result),
+        input_match,
+        (write_mask & C42_FAKE_EVENT_WRITE_VALUE) != 0 ?
+            prepare_value_valid(result) :
+            ((write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&
+             fwlab_hif_prepared_token_valid(
+                 result == NULL ? NULL : &result->prepared)),
         result != NULL &&
             context != NULL &&
             find_prepared(context, &result->prepared) != NULL,
@@ -1505,17 +1539,21 @@ static enum fwlab_hif_command_port_result logged_prepare_abort(
     const struct fwlab_hif_prepared_token *prepared,
     bool *aborted)
 {
+    bool before = aborted == NULL ? false : *aborted;
+    int input_match = context != NULL && prepared != NULL &&
+        find_prepared(context, prepared) != NULL;
     enum fwlab_hif_command_port_result call =
         fake_prepare_abort(context, prepared, aborted);
+    uint8_t write_mask = aborted != NULL && *aborted != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_PREPARE_ABORT, C42_FAKE_CALL_START, call,
         aborted != NULL && *aborted ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         fwlab_hif_prepared_token_valid(prepared),
-        context != NULL && prepared != NULL &&
-            find_prepared(context, prepared) != NULL,
-        aborted != NULL,
+        input_match,
+        write_mask != 0,
         context != NULL && prepared != NULL && aborted != NULL &&
             find_prepared(context, prepared) != NULL &&
             find_prepared(context, prepared)->retired ==
@@ -1531,17 +1569,21 @@ static enum fwlab_hif_command_port_result logged_prepare_abort_query(
     const struct fwlab_hif_prepared_token *prepared,
     bool *aborted)
 {
+    bool before = aborted == NULL ? false : *aborted;
+    int input_match = context != NULL && prepared != NULL &&
+        find_prepared(context, prepared) != NULL;
     enum fwlab_hif_command_port_result call =
         fake_prepare_abort_query(context, prepared, aborted);
+    uint8_t write_mask = aborted != NULL && *aborted != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_PREPARE_ABORT, C42_FAKE_CALL_QUERY, call,
         aborted != NULL && *aborted ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         fwlab_hif_prepared_token_valid(prepared),
-        context != NULL && prepared != NULL &&
-            find_prepared(context, prepared) != NULL,
-        aborted != NULL,
+        input_match,
+        write_mask != 0,
         context != NULL && prepared != NULL && aborted != NULL &&
             find_prepared(context, prepared) != NULL &&
             find_prepared(context, prepared)->retired ==
@@ -1559,13 +1601,21 @@ static enum fwlab_hif_command_port_result logged_admit_start(
     enum fwlab_hif_admission_state *state,
     struct fwlab_hif_command_ticket *ticket)
 {
-    enum fwlab_hif_command_port_result call =
-        fake_admit_start(context, key, command, state, ticket);
-    uint8_t write_mask =
-        state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED ?
-        C42_FAKE_EVENT_WRITE_VALUE : 0;
+    enum fwlab_hif_admission_state before_state =
+        state == NULL ? FWLAB_HIF_ADMISSION_NOT_STARTED : *state;
+    struct fwlab_hif_command_ticket before_ticket = {0};
+    int input_match = context != NULL && key != NULL &&
+        find_prepared(context, &key->prepared) != NULL;
+    enum fwlab_hif_command_port_result call;
+    uint8_t write_mask = 0;
 
-    if (fwlab_hif_command_ticket_valid(ticket)) {
+    if (ticket != NULL) before_ticket = *ticket;
+    call = fake_admit_start(context, key, command, state, ticket);
+    if (state != NULL && *state != before_state) {
+        write_mask |= C42_FAKE_EVENT_WRITE_VALUE;
+    }
+    if (ticket != NULL && output_changed(
+            &before_ticket, ticket, sizeof(*ticket))) {
         write_mask |= C42_FAKE_EVENT_WRITE_OBJECT;
     }
 
@@ -1576,10 +1626,11 @@ static enum fwlab_hif_command_port_result logged_admit_start(
             fwlab_hif_prepared_token_valid(
                 key == NULL ? NULL : &key->prepared) &&
             fwlab_nvme_command_valid(command),
-        context != NULL && key != NULL &&
-            find_prepared(context, &key->prepared) != NULL,
-        state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED &&
-            (ticket == NULL || ticket->ticket_uid == 0 ||
+        input_match,
+        write_mask != 0 &&
+            (((write_mask & C42_FAKE_EVENT_WRITE_VALUE) == 0) ||
+             (state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED)) &&
+            (((write_mask & C42_FAKE_EVENT_WRITE_OBJECT) == 0) ||
              fwlab_hif_command_ticket_valid(ticket)),
         context != NULL && ticket != NULL &&
             find_ticket(context, ticket) != NULL,
@@ -1598,13 +1649,21 @@ static enum fwlab_hif_command_port_result logged_admit_query(
     enum fwlab_hif_admission_state *state,
     struct fwlab_hif_command_ticket *ticket)
 {
-    enum fwlab_hif_command_port_result call =
-        fake_admit_query(context, key, command, state, ticket);
-    uint8_t write_mask =
-        state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED ?
-        C42_FAKE_EVENT_WRITE_VALUE : 0;
+    enum fwlab_hif_admission_state before_state =
+        state == NULL ? FWLAB_HIF_ADMISSION_NOT_STARTED : *state;
+    struct fwlab_hif_command_ticket before_ticket = {0};
+    int input_match = context != NULL && key != NULL &&
+        find_prepared(context, &key->prepared) != NULL;
+    enum fwlab_hif_command_port_result call;
+    uint8_t write_mask = 0;
 
-    if (fwlab_hif_command_ticket_valid(ticket)) {
+    if (ticket != NULL) before_ticket = *ticket;
+    call = fake_admit_query(context, key, command, state, ticket);
+    if (state != NULL && *state != before_state) {
+        write_mask |= C42_FAKE_EVENT_WRITE_VALUE;
+    }
+    if (ticket != NULL && output_changed(
+            &before_ticket, ticket, sizeof(*ticket))) {
         write_mask |= C42_FAKE_EVENT_WRITE_OBJECT;
     }
 
@@ -1615,10 +1674,11 @@ static enum fwlab_hif_command_port_result logged_admit_query(
             fwlab_hif_prepared_token_valid(
                 key == NULL ? NULL : &key->prepared) &&
             fwlab_nvme_command_valid(command),
-        context != NULL && key != NULL &&
-            find_prepared(context, &key->prepared) != NULL,
-        state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED &&
-            (ticket == NULL || ticket->ticket_uid == 0 ||
+        input_match,
+        write_mask != 0 &&
+            (((write_mask & C42_FAKE_EVENT_WRITE_VALUE) == 0) ||
+             (state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED)) &&
+            (((write_mask & C42_FAKE_EVENT_WRITE_OBJECT) == 0) ||
              fwlab_hif_command_ticket_valid(ticket)),
         context != NULL && ticket != NULL &&
             find_ticket(context, ticket) != NULL,
@@ -1637,16 +1697,25 @@ static enum fwlab_hif_command_port_result logged_poll(
     uint32_t capacity,
     uint32_t *count)
 {
-    enum fwlab_hif_command_port_result call =
-        fake_poll(context, budget, events, capacity, count);
-    int written = count != NULL && *count <= capacity;
-    uint8_t write_mask = written ? C42_FAKE_EVENT_WRITE_VALUE : 0;
-    int valid = written && (*count == 0 ||
-                (events != NULL && events[0].sequence != 0));
+    uint32_t before_count = count == NULL ? 0 : *count;
+    struct fwlab_hif_ready_event before_event = {0};
+    enum fwlab_hif_command_port_result call;
+    int written;
+    uint8_t write_mask = 0;
+    int valid;
 
-    if (written && *count == 1 && events != NULL) {
+    if (events != NULL && capacity != 0) before_event = events[0];
+    call = fake_poll(context, budget, events, capacity, count);
+    written = count != NULL && *count <= capacity;
+    if (count != NULL && *count != before_count) {
+        write_mask |= C42_FAKE_EVENT_WRITE_VALUE;
+    }
+    if (events != NULL && capacity != 0 && output_changed(
+            &before_event, &events[0], sizeof(events[0]))) {
         write_mask |= C42_FAKE_EVENT_WRITE_OBJECT;
     }
+    valid = written && (*count == 0 ||
+                (events != NULL && events[0].sequence != 0));
 
     log_command_event(
         context, C42_FAKE_COMMAND_POLL, C42_FAKE_CALL_ACTION, call,
@@ -1672,12 +1741,19 @@ static enum fwlab_hif_command_port_result logged_completion_acquire(
     struct fwlab_nvme_completion_intent *intent,
     struct fwlab_hif_completion_lease *lease)
 {
-    enum fwlab_hif_command_port_result call = fake_completion_acquire(
-        context, ticket, intent, lease
-    );
-    uint8_t write_mask =
-        fwlab_hif_completion_lease_valid(lease) &&
-        fwlab_nvme_completion_valid(intent) ?
+    struct fwlab_nvme_completion_intent before_intent = {0};
+    struct fwlab_hif_completion_lease before_lease = {0};
+    int input_match = context != NULL && ticket != NULL &&
+        find_ticket(context, ticket) != NULL;
+    enum fwlab_hif_command_port_result call;
+    uint8_t write_mask;
+
+    if (intent != NULL) before_intent = *intent;
+    if (lease != NULL) before_lease = *lease;
+    call = fake_completion_acquire(context, ticket, intent, lease);
+    write_mask = (intent != NULL && lease != NULL &&
+        (output_changed(&before_intent, intent, sizeof(*intent)) ||
+         output_changed(&before_lease, lease, sizeof(*lease)))) ?
         C42_FAKE_EVENT_WRITE_OBJECT : 0;
 
     log_command_event(
@@ -1685,9 +1761,8 @@ static enum fwlab_hif_command_port_result logged_completion_acquire(
         C42_FAKE_CALL_ACTION, call,
         lease == NULL ? 0 : (uint32_t)lease->lease_uid, write_mask,
         fwlab_hif_command_ticket_valid(ticket),
-        context != NULL && ticket != NULL &&
-            find_ticket(context, ticket) != NULL,
-        fwlab_hif_completion_lease_valid(lease) &&
+        input_match,
+        write_mask != 0 && fwlab_hif_completion_lease_valid(lease) &&
             fwlab_nvme_completion_valid(intent),
         context != NULL && lease != NULL &&
             find_lease(context, lease) != NULL,
@@ -1705,18 +1780,22 @@ static enum fwlab_hif_command_port_result logged_completion_release_start(
     uint64_t client_uid,
     bool *released)
 {
+    bool before = released == NULL ? false : *released;
+    int input_match = context != NULL && lease != NULL &&
+        find_lease(context, lease) != NULL;
     enum fwlab_hif_command_port_result call =
         fake_completion_release_start(context, lease, client_uid, released);
+    uint8_t write_mask = released != NULL && *released != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_COMPLETION_RELEASE,
         C42_FAKE_CALL_START, call,
         released != NULL && *released ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         fwlab_hif_completion_lease_valid(lease),
-        context != NULL && lease != NULL &&
-            find_lease(context, lease) != NULL,
-        released != NULL,
+        input_match,
+        write_mask != 0,
         context != NULL && lease != NULL && released != NULL &&
             find_lease(context, lease) != NULL &&
             find_lease(context, lease)->released ==
@@ -1733,18 +1812,22 @@ static enum fwlab_hif_command_port_result logged_completion_release_query(
     uint64_t client_uid,
     bool *released)
 {
+    bool before = released == NULL ? false : *released;
+    int input_match = context != NULL && lease != NULL &&
+        find_lease(context, lease) != NULL;
     enum fwlab_hif_command_port_result call =
         fake_completion_release_query(context, lease, client_uid, released);
+    uint8_t write_mask = released != NULL && *released != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_COMPLETION_RELEASE,
         C42_FAKE_CALL_QUERY, call,
         released != NULL && *released ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         fwlab_hif_completion_lease_valid(lease),
-        context != NULL && lease != NULL &&
-            find_lease(context, lease) != NULL,
-        released != NULL,
+        input_match,
+        write_mask != 0,
         context != NULL && lease != NULL && released != NULL &&
             find_lease(context, lease) != NULL &&
             find_lease(context, lease)->released ==
@@ -1762,14 +1845,23 @@ static enum fwlab_hif_command_port_result logged_consume_prepare(
     struct fwlab_hif_consume_token *token,
     enum fwlab_hif_consume_state *state)
 {
-    enum fwlab_hif_command_port_result call = fake_consume_prepare(
+    struct fwlab_hif_consume_token before_token = {0};
+    enum fwlab_hif_consume_state before_state =
+        state == NULL ? FWLAB_HIF_CONSUME_NOT_STARTED : *state;
+    int input_match = context != NULL && lease != NULL &&
+        find_lease(context, lease) != NULL;
+    enum fwlab_hif_command_port_result call;
+    uint8_t write_mask = 0;
+
+    if (token != NULL) before_token = *token;
+    call = fake_consume_prepare(
         context, lease, publication_uid, token, state
     );
-    uint8_t write_mask =
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
-        C42_FAKE_EVENT_WRITE_VALUE : 0;
-
-    if (fwlab_hif_consume_token_valid(token)) {
+    if (state != NULL && *state != before_state) {
+        write_mask |= C42_FAKE_EVENT_WRITE_VALUE;
+    }
+    if (token != NULL && output_changed(
+            &before_token, token, sizeof(*token))) {
         write_mask |= C42_FAKE_EVENT_WRITE_OBJECT;
     }
 
@@ -1778,10 +1870,12 @@ static enum fwlab_hif_command_port_result logged_consume_prepare(
         C42_FAKE_CALL_START, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state, write_mask,
         fwlab_hif_completion_lease_valid(lease),
-        context != NULL && lease != NULL &&
-            find_lease(context, lease) != NULL,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED &&
-            token != NULL && fwlab_hif_consume_token_valid(token),
+        input_match,
+        write_mask != 0 &&
+            (((write_mask & C42_FAKE_EVENT_WRITE_VALUE) == 0) ||
+             (state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED)) &&
+            (((write_mask & C42_FAKE_EVENT_WRITE_OBJECT) == 0) ||
+             fwlab_hif_consume_token_valid(token)),
         context != NULL && token != NULL &&
             find_consume(context, token) != NULL,
         lease == NULL ? 0 : lease->lease_uid,
@@ -1798,18 +1892,23 @@ static enum fwlab_hif_command_port_result logged_consume_abort(
     const struct fwlab_hif_consume_token *token,
     enum fwlab_hif_consume_state *state)
 {
+    enum fwlab_hif_consume_state before =
+        state == NULL ? FWLAB_HIF_CONSUME_NOT_STARTED : *state;
+    int input_match = context != NULL && token != NULL &&
+        find_consume(context, token) != NULL;
     enum fwlab_hif_command_port_result call =
         fake_consume_abort(context, token, state);
+    uint8_t write_mask = state != NULL && *state != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_CONSUME_ABORT, C42_FAKE_CALL_START, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
-            C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         fwlab_hif_consume_token_valid(token),
-        context != NULL && token != NULL &&
-            find_consume(context, token) != NULL,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        input_match,
+        write_mask != 0 && state != NULL &&
+            *state <= FWLAB_HIF_CONSUME_POISONED,
         context != NULL && token != NULL && state != NULL &&
             find_consume(context, token) != NULL &&
             find_consume(context, token)->retired ==
@@ -1825,18 +1924,23 @@ static enum fwlab_hif_command_port_result logged_consume_abort_query(
     const struct fwlab_hif_consume_token *token,
     enum fwlab_hif_consume_state *state)
 {
+    enum fwlab_hif_consume_state before =
+        state == NULL ? FWLAB_HIF_CONSUME_NOT_STARTED : *state;
+    int input_match = context != NULL && token != NULL &&
+        find_consume(context, token) != NULL;
     enum fwlab_hif_command_port_result call =
         fake_consume_abort_query(context, token, state);
+    uint8_t write_mask = state != NULL && *state != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_CONSUME_ABORT, C42_FAKE_CALL_QUERY, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
-            C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         fwlab_hif_consume_token_valid(token),
-        context != NULL && token != NULL &&
-            find_consume(context, token) != NULL,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        input_match,
+        write_mask != 0 && state != NULL &&
+            *state <= FWLAB_HIF_CONSUME_POISONED,
         context != NULL && token != NULL && state != NULL &&
             find_consume(context, token) != NULL &&
             find_consume(context, token)->retired ==
@@ -1852,19 +1956,24 @@ static enum fwlab_hif_command_port_result logged_consume_commit(
     const struct fwlab_hif_consume_token *token,
     enum fwlab_hif_consume_state *state)
 {
+    enum fwlab_hif_consume_state before =
+        state == NULL ? FWLAB_HIF_CONSUME_NOT_STARTED : *state;
+    int input_match = context != NULL && token != NULL &&
+        find_consume(context, token) != NULL;
     enum fwlab_hif_command_port_result call =
         fake_consume_commit(context, token, state);
+    uint8_t write_mask = state != NULL && *state != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_CONSUME_COMMIT,
         C42_FAKE_CALL_START, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
-            C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         fwlab_hif_consume_token_valid(token),
-        context != NULL && token != NULL &&
-            find_consume(context, token) != NULL,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        input_match,
+        write_mask != 0 && state != NULL &&
+            *state <= FWLAB_HIF_CONSUME_POISONED,
         context != NULL && token != NULL && state != NULL &&
             find_consume(context, token) != NULL &&
             find_consume(context, token)->consume_committed ==
@@ -1881,18 +1990,23 @@ static enum fwlab_hif_command_port_result logged_consume_query(
     const struct fwlab_hif_consume_token *token,
     enum fwlab_hif_consume_state *state)
 {
+    enum fwlab_hif_consume_state before =
+        state == NULL ? FWLAB_HIF_CONSUME_NOT_STARTED : *state;
+    int input_match = context != NULL && token != NULL &&
+        find_consume(context, token) != NULL;
     enum fwlab_hif_command_port_result call =
         fake_consume_query(context, token, state);
+    uint8_t write_mask = state != NULL && *state != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_CONSUME_QUERY, C42_FAKE_CALL_QUERY, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
-            C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         fwlab_hif_consume_token_valid(token),
-        context != NULL && token != NULL &&
-            find_consume(context, token) != NULL,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        input_match,
+        write_mask != 0 && state != NULL &&
+            *state <= FWLAB_HIF_CONSUME_POISONED,
         context != NULL && token != NULL && state != NULL &&
             find_consume(context, token) != NULL &&
             find_consume(context, token)->consume_committed ==
@@ -1909,19 +2023,24 @@ static enum fwlab_hif_command_port_result logged_consume_retire(
     const struct fwlab_hif_consume_token *token,
     enum fwlab_hif_consume_state *state)
 {
+    enum fwlab_hif_consume_state before =
+        state == NULL ? FWLAB_HIF_CONSUME_NOT_STARTED : *state;
+    int input_match = context != NULL && token != NULL &&
+        find_consume(context, token) != NULL;
     enum fwlab_hif_command_port_result call =
         fake_consume_retire(context, token, state);
+    uint8_t write_mask = state != NULL && *state != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_CONSUME_RETIRE,
         C42_FAKE_CALL_ACTION, call,
         state == NULL ? UINT32_MAX : (uint32_t)*state,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED ?
-            C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         fwlab_hif_consume_token_valid(token),
-        context != NULL && token != NULL &&
-            find_consume(context, token) != NULL,
-        state != NULL && *state <= FWLAB_HIF_CONSUME_POISONED,
+        input_match,
+        write_mask != 0 && state != NULL &&
+            *state <= FWLAB_HIF_CONSUME_POISONED,
         context != NULL && token != NULL && state != NULL &&
             find_consume(context, token) != NULL &&
             find_consume(context, token)->retired ==
@@ -1935,6 +2054,10 @@ static enum fwlab_hif_command_port_result logged_consume_retire(
 static enum fwlab_hif_command_port_result logged_reset_begin(
     void *context, uint64_t instance_nonce, uint32_t old_epoch)
 {
+    int input_match = context != NULL &&
+        instance_nonce == ((struct c42_fake_command *)context)->instance_nonce &&
+        old_epoch == ((struct c42_fake_command *)context)->controller_epoch &&
+        old_epoch != UINT32_MAX;
     enum fwlab_hif_command_port_result call =
         fake_reset_begin(context, instance_nonce, old_epoch);
 
@@ -1942,10 +2065,7 @@ static enum fwlab_hif_command_port_result logged_reset_begin(
         context, C42_FAKE_COMMAND_RESET_BEGIN, C42_FAKE_CALL_START,
         call, old_epoch, 0,
         instance_nonce != 0,
-        context != NULL &&
-            instance_nonce == ((struct c42_fake_command *)context)->instance_nonce &&
-            ((struct c42_fake_command *)context)->reset_active != 0 &&
-            ((struct c42_fake_command *)context)->reset_old_epoch == old_epoch,
+        input_match,
         1, 1, instance_nonce, 0, old_epoch, 0
     );
     return call;
@@ -1954,19 +2074,23 @@ static enum fwlab_hif_command_port_result logged_reset_begin(
 static enum fwlab_hif_command_port_result logged_reset_quiescent(
     void *context, uint64_t instance_nonce, uint32_t epoch, bool *quiescent)
 {
+    bool before = quiescent == NULL ? false : *quiescent;
+    int input_match = context != NULL &&
+        instance_nonce == ((struct c42_fake_command *)context)->instance_nonce &&
+        ((struct c42_fake_command *)context)->reset_active != 0 &&
+        ((struct c42_fake_command *)context)->reset_old_epoch == epoch;
     enum fwlab_hif_command_port_result call =
         fake_reset_quiescent(context, instance_nonce, epoch, quiescent);
+    uint8_t write_mask = quiescent != NULL && *quiescent != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_RESET_QUIESCENT, C42_FAKE_CALL_QUERY, call,
         quiescent != NULL && *quiescent ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         instance_nonce != 0,
-        context != NULL &&
-            instance_nonce == ((struct c42_fake_command *)context)->instance_nonce &&
-            ((struct c42_fake_command *)context)->reset_active != 0 &&
-            ((struct c42_fake_command *)context)->reset_old_epoch == epoch,
-        quiescent != NULL,
+        input_match,
+        write_mask != 0,
         call == FWLAB_HIF_PORT_OK && quiescent != NULL && *quiescent,
         instance_nonce, 0, epoch, 0
     );
@@ -1976,6 +2100,9 @@ static enum fwlab_hif_command_port_result logged_reset_quiescent(
 static enum fwlab_hif_command_port_result logged_teardown_begin(
     void *context, uint64_t instance_nonce, uint32_t old_epoch)
 {
+    int input_match = context != NULL &&
+        instance_nonce == ((struct c42_fake_command *)context)->instance_nonce &&
+        old_epoch == ((struct c42_fake_command *)context)->controller_epoch;
     enum fwlab_hif_command_port_result call =
         fake_teardown_begin(context, instance_nonce, old_epoch);
 
@@ -1983,10 +2110,7 @@ static enum fwlab_hif_command_port_result logged_teardown_begin(
         context, C42_FAKE_COMMAND_TEARDOWN_BEGIN, C42_FAKE_CALL_START,
         call, old_epoch, 0,
         instance_nonce != 0,
-        context != NULL &&
-            instance_nonce == ((struct c42_fake_command *)context)->instance_nonce &&
-            ((struct c42_fake_command *)context)->teardown_active != 0 &&
-            ((struct c42_fake_command *)context)->teardown_old_epoch == old_epoch,
+        input_match,
         1, 1, instance_nonce, 0, old_epoch, 0
     );
     return call;
@@ -1995,20 +2119,24 @@ static enum fwlab_hif_command_port_result logged_teardown_begin(
 static enum fwlab_hif_command_port_result logged_teardown_quiescent(
     void *context, uint64_t instance_nonce, uint32_t epoch, bool *quiescent)
 {
+    bool before = quiescent == NULL ? false : *quiescent;
+    int input_match = context != NULL &&
+        instance_nonce == ((struct c42_fake_command *)context)->instance_nonce &&
+        ((struct c42_fake_command *)context)->teardown_active != 0 &&
+        ((struct c42_fake_command *)context)->teardown_old_epoch == epoch;
     enum fwlab_hif_command_port_result call =
         fake_teardown_quiescent(context, instance_nonce, epoch, quiescent);
+    uint8_t write_mask = quiescent != NULL && *quiescent != before ?
+        C42_FAKE_EVENT_WRITE_VALUE : 0;
 
     log_command_event(
         context, C42_FAKE_COMMAND_TEARDOWN_QUIESCENT,
         C42_FAKE_CALL_QUERY, call,
         quiescent != NULL && *quiescent ? 1u : 0u,
-        call == FWLAB_HIF_PORT_OK ? C42_FAKE_EVENT_WRITE_VALUE : 0,
+        write_mask,
         instance_nonce != 0,
-        context != NULL &&
-            instance_nonce == ((struct c42_fake_command *)context)->instance_nonce &&
-            ((struct c42_fake_command *)context)->teardown_active != 0 &&
-            ((struct c42_fake_command *)context)->teardown_old_epoch == epoch,
-        quiescent != NULL,
+        input_match,
+        write_mask != 0,
         call == FWLAB_HIF_PORT_OK && quiescent != NULL && *quiescent,
         instance_nonce, 0, epoch, 0
     );

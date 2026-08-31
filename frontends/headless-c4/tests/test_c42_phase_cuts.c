@@ -11,67 +11,10 @@ static uint32_t executions;
 static uint32_t requested_cut_count;
 static uint32_t distinct_cut_count;
 
-struct semantic_queue_key {
-    uint16_t host_index;
-    uint16_t device_index;
-    uint16_t pending;
-    uint16_t unacked;
-    uint16_t reserved;
-    uint8_t life;
-    uint8_t slot_state[C42_MAX_QUEUE_DEPTH];
-    uint8_t slot_phase[C42_MAX_QUEUE_DEPTH];
-    uint16_t slot_command_id[C42_MAX_QUEUE_DEPTH];
-};
-
-struct semantic_candidate_key {
-    uint32_t state;
-    uint8_t in_use;
-    uint8_t kind;
-    uint8_t scrub_started;
-    uint8_t retire_started;
-    uint8_t provider_retired;
-};
-
-struct semantic_command_key {
-    uint16_t command_id;
-    uint16_t sqhd_snapshot;
-    uint8_t state;
-    uint8_t prepared_origin_matches;
-    uint8_t ticket_identity_matches;
-    uint8_t ready_ticket_matches;
-    uint8_t lease_ticket_matches;
-    uint8_t consume_known;
-    uint8_t publication_in_use;
-    uint8_t body_prefix;
-    uint8_t body_started;
-    uint8_t marker_started;
-    uint8_t marker_visible;
-    uint8_t reconcile_in_use;
-    uint8_t reconcile_state;
-    uint8_t reconcile_consume_known;
-    uint8_t notification_in_use;
-    uint8_t notification_state;
-};
-
-struct semantic_control_key {
-    uint32_t state;
-    uint8_t in_use;
-    uint8_t kind;
-    uint8_t port_started;
-    uint8_t memory_started;
-};
-
 struct semantic_cut_key {
-    uint32_t phase;
-    uint32_t fault_cause;
+    struct c42_observer_v2 observer;
     uint8_t teardown;
-    uint8_t admission_paused;
-    uint8_t ready_poll_pending;
-    struct semantic_queue_key sq[C42_MAX_QUEUE_PAIRS];
-    struct semantic_queue_key cq[C42_MAX_QUEUE_PAIRS];
-    struct semantic_candidate_key candidates[C42_MAX_QUEUE_PAIRS * 2u];
-    struct semantic_command_key commands[C42_MAX_COMMANDS];
-    struct semantic_control_key controls[4];
+    uint8_t reserved[7];
 };
 
 static struct semantic_cut_key distinct_cut_keys[256];
@@ -84,86 +27,147 @@ static void check(int condition, const char *label)
     }
 }
 
+struct semantic_id_map {
+    uint64_t value[128];
+    uint32_t count;
+};
+
+static uint64_t semantic_id(
+    struct semantic_id_map *map,
+    uint64_t value)
+{
+    uint32_t index;
+
+    if (value == 0) {
+        return 0;
+    }
+    for (index = 0; index < map->count; ++index) {
+        if (map->value[index] == value) {
+            return index + 1u;
+        }
+    }
+    if (map->count >= sizeof(map->value) / sizeof(map->value[0])) {
+        check(0, "semantic alpha-renaming capacity");
+        return UINT64_MAX;
+    }
+    map->value[map->count++] = value;
+    return map->count;
+}
+
+static void semantic_operation_token(
+    struct c42_operation_token *token,
+    struct semantic_id_map *map)
+{
+    token->instance_nonce = 0;
+    token->uid = semantic_id(map, token->uid);
+}
+
+static void semantic_command_handle(
+    struct fwlab_nvme_command_handle *handle,
+    struct semantic_id_map *map)
+{
+    handle->instance_nonce = 0;
+    handle->command_uid = semantic_id(map, handle->command_uid);
+}
+
 static void semantic_cut_normalize(
     const struct c42_observer_v2 *observer,
     int teardown,
     struct semantic_cut_key *key)
 {
+    struct semantic_id_map publication_ids = {{0}, 0};
+    struct semantic_id_map notification_ids = {{0}, 0};
+    struct semantic_id_map operation_ids = {{0}, 0};
+    struct semantic_id_map command_ids = {{0}, 0};
+    struct semantic_id_map client_ids = {{0}, 0};
+    struct semantic_id_map memory_ids = {{0}, 0};
+    struct semantic_id_map consume_ids = {{0}, 0};
     uint32_t index;
 
+    /*
+     * Typed alpha-renaming quotient over the complete zero-filled public
+     * observer.  Every state, cursor, queue, generation, slot, wire and
+     * equality fact remains literal.  Only opaque 64-bit identity names are
+     * canonicalized; equality within each identity domain is preserved.
+     */
     memset(key, 0, sizeof(*key));
-    key->phase = observer->phase;
-    key->fault_cause = observer->fault_cause;
+    key->observer = *observer;
     key->teardown = (uint8_t)(teardown != 0);
-    key->admission_paused = observer->admission_paused;
-    key->ready_poll_pending = observer->ready_poll_pending;
+    key->observer.instance_nonce = 0;
     for (index = 0; index < C42_MAX_QUEUE_PAIRS; ++index) {
         uint32_t slot;
 
-        key->sq[index].life = observer->sq[index].life;
-        key->sq[index].host_index = observer->sq[index].host_index;
-        key->sq[index].device_index = observer->sq[index].device_index;
-        key->sq[index].pending = observer->sq[index].pending;
-        key->cq[index].life = observer->cq[index].life;
-        key->cq[index].host_index = observer->cq[index].host_index;
-        key->cq[index].device_index = observer->cq[index].device_index;
-        key->cq[index].unacked = observer->cq[index].unacked_count;
-        key->cq[index].reserved = observer->cq[index].reserved_count;
-        for (slot = 0; slot < observer->cq[index].depth; ++slot) {
-            key->cq[index].slot_state[slot] =
-                observer->cq[index].slots[slot].state;
-            key->cq[index].slot_phase[slot] =
-                observer->cq[index].slots[slot].phase;
-            key->cq[index].slot_command_id[slot] =
-                observer->cq[index].slots[slot].command_id;
+        for (slot = 0; slot < C42_MAX_QUEUE_DEPTH; ++slot) {
+            key->observer.cq[index].slots[slot].publication_uid = semantic_id(
+                &publication_ids,
+                key->observer.cq[index].slots[slot].publication_uid
+            );
+            key->observer.cq[index].slots[slot].notification_uid = semantic_id(
+                &notification_ids,
+                key->observer.cq[index].slots[slot].notification_uid
+            );
         }
     }
     for (index = 0; index < C42_MAX_QUEUE_PAIRS * 2u; ++index) {
-        key->candidates[index].in_use = observer->candidates[index].in_use;
-        key->candidates[index].state = observer->candidates[index].state;
-        key->candidates[index].kind = observer->candidates[index].kind;
-        key->candidates[index].scrub_started =
-            observer->candidates[index].scrub_started;
-        key->candidates[index].retire_started =
-            observer->candidates[index].retire_started;
-        key->candidates[index].provider_retired =
-            observer->candidates[index].provider_retired;
+        semantic_operation_token(
+            &key->observer.candidates[index].token, &operation_ids
+        );
     }
     for (index = 0; index < observer->command_capacity; ++index) {
-        struct semantic_command_key *command = &key->commands[index];
-
-        command->state = observer->commands[index].state;
-        command->command_id = observer->commands[index].command_id;
-        command->sqhd_snapshot = observer->commands[index].sqhd_snapshot;
-        command->prepared_origin_matches =
-            observer->commands[index].prepared_origin_matches;
-        command->ticket_identity_matches =
-            observer->commands[index].ticket_identity_matches;
-        command->ready_ticket_matches =
-            observer->commands[index].ready_ticket_matches;
-        command->lease_ticket_matches =
-            observer->commands[index].lease_ticket_matches;
-        command->consume_known = observer->commands[index].consume_known;
-        command->publication_in_use = observer->publications[index].in_use;
-        command->body_prefix = (uint8_t)observer->publications[index].body_prefix;
-        command->body_started = observer->publications[index].body_started;
-        command->marker_started = observer->publications[index].marker_started;
-        command->marker_visible = observer->publications[index].marker_visible;
-        command->reconcile_in_use = observer->reconciles[index].in_use;
-        command->reconcile_state = observer->reconciles[index].state;
-        command->reconcile_consume_known =
-            observer->reconciles[index].consume_known;
-        command->notification_in_use = observer->notifications[index].in_use;
-        command->notification_state = observer->notifications[index].state;
+        semantic_command_handle(
+            &key->observer.commands[index].handle, &command_ids
+        );
+        key->observer.commands[index].client_uid = semantic_id(
+            &client_ids, key->observer.commands[index].client_uid
+        );
+        key->observer.commands[index].publication_uid = semantic_id(
+            &publication_ids,
+            key->observer.commands[index].publication_uid
+        );
+        key->observer.commands[index].notification_uid = semantic_id(
+            &notification_ids,
+            key->observer.commands[index].notification_uid
+        );
+        key->observer.publications[index].publication_uid = semantic_id(
+            &publication_ids,
+            key->observer.publications[index].publication_uid
+        );
+        key->observer.publications[index].body_token_uid = semantic_id(
+            &memory_ids,
+            key->observer.publications[index].body_token_uid
+        );
+        key->observer.publications[index].marker_token_uid = semantic_id(
+            &memory_ids,
+            key->observer.publications[index].marker_token_uid
+        );
+        key->observer.reconciles[index].publication_uid = semantic_id(
+            &publication_ids,
+            key->observer.reconciles[index].publication_uid
+        );
+        key->observer.reconciles[index].consume_uid = semantic_id(
+            &consume_ids, key->observer.reconciles[index].consume_uid
+        );
+        semantic_operation_token(
+            &key->observer.notifications[index].token,
+            &notification_ids
+        );
+        key->observer.notifications[index].publication_uid = semantic_id(
+            &publication_ids,
+            key->observer.notifications[index].publication_uid
+        );
     }
     for (index = 0; index < 4; ++index) {
-        key->controls[index].in_use = observer->controls[index].in_use;
-        key->controls[index].kind = observer->controls[index].kind;
-        key->controls[index].state = observer->controls[index].state;
-        key->controls[index].port_started =
-            observer->controls[index].port_started;
-        key->controls[index].memory_started =
-            observer->controls[index].memory_started;
+        semantic_operation_token(
+            &key->observer.controls[index].token, &operation_ids
+        );
+    }
+    for (index = 0; index < observer->target_capacity; ++index) {
+        semantic_operation_token(
+            &key->observer.targets[index].token, &operation_ids
+        );
+        semantic_command_handle(
+            &key->observer.targets[index].handle, &command_ids
+        );
     }
 }
 
@@ -433,6 +437,26 @@ static void test_abnormal_command_cuts(uint32_t *command_mask)
         &fixture, command_mask, &unused, &unused, &unused, &unused
     );
     (void)register_semantic_cut(&fixture, 0, "consume-poison command cut");
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0x4400800000000004)),
+          "abort-reconcile cut fixture");
+    memset(&injection, 0, sizeof(injection));
+    injection.operation = C42_FAKE_COMMAND_ADMIT;
+    injection.result = FWLAB_HIF_PORT_OK;
+    injection.value = FWLAB_HIF_ADMISSION_ABORTED;
+    injection.write_mask = C42_FAKE_WRITE_VALUE;
+    check(c42_fake_command_injection_push(
+              &fixture.command, &injection) == C42_OK &&
+          c42_test_submit(&fixture, 0, 0, 1, 412) &&
+          run_until_command_state(
+              &fixture, C42_OBSERVER_COMMAND_ABORT_RECONCILE, 128),
+          "command ABORT_RECONCILE reached");
+    observe_masks(
+        &fixture, command_mask, &unused, &unused, &unused, &unused
+    );
+    (void)register_semantic_cut(&fixture, 0, "abort-reconcile command cut");
 }
 
 static void test_command_publication_cuts(
@@ -551,6 +575,125 @@ static void prepare_candidate_phase(
         check(c42_candidate_retire(
                   fixture->controller, candidate) == C42_IN_PROGRESS,
               "candidate retire-ready cut");
+    }
+}
+
+static void prepare_candidate_state(
+    struct c42_test_fixture *fixture,
+    uint32_t state,
+    struct c42_operation_token *candidate)
+{
+    struct c42_fake_memory_direct_injection direct = {0};
+
+    switch (state) {
+    case C42_CANDIDATE_PREPARED:
+        prepare_candidate_phase(fixture, 0, candidate);
+        break;
+    case C42_CANDIDATE_SCRUB_UNKNOWN:
+        prepare_candidate_phase(fixture, 1, candidate);
+        break;
+    case C42_CANDIDATE_READY:
+        prepare_candidate_phase(fixture, 2, candidate);
+        break;
+    case C42_CANDIDATE_COMMITTED_AWAIT_RETIRE:
+        prepare_candidate_phase(fixture, 3, candidate);
+        break;
+    case C42_CANDIDATE_RETIRE_UNKNOWN:
+        prepare_candidate_phase(fixture, 4, candidate);
+        break;
+    case C42_CANDIDATE_RETIRE_READY:
+        prepare_candidate_phase(fixture, 5, candidate);
+        break;
+    case C42_CANDIDATE_ABORTED:
+        prepare_candidate_phase(fixture, 0, candidate);
+        check(c42_candidate_abort(
+                  fixture->controller, candidate) == C42_OK,
+              "candidate post-LP ABORTED setup");
+        break;
+    case C42_CANDIDATE_ABORTING:
+        prepare_candidate_phase(fixture, 1, candidate);
+        check(c42_candidate_abort(
+                  fixture->controller, candidate) == C42_OK,
+              "candidate post-LP ABORTING setup");
+        break;
+    case C42_CANDIDATE_POISONED:
+        prepare_candidate_phase(fixture, 0, candidate);
+        direct.operation = C42_FAKE_MEMORY_SCRUB;
+        direct.result = C42_MEMORY_POISONED;
+        direct.omit_status = 1;
+        check(c42_fake_memory_direct_push(
+                  &fixture->memory, &direct) == C42_OK &&
+              c42_candidate_progress(
+                  fixture->controller, candidate, 1) == C42_POISONED,
+              "candidate post-LP POISONED setup");
+        break;
+    default:
+        check(0, "unknown candidate post-LP setup state");
+        break;
+    }
+}
+
+static void test_all_candidate_post_lp(void)
+{
+    static const uint32_t states[] = {
+        C42_CANDIDATE_PREPARED,
+        C42_CANDIDATE_SCRUB_UNKNOWN,
+        C42_CANDIDATE_READY,
+        C42_CANDIDATE_ABORTING,
+        C42_CANDIDATE_ABORTED,
+        C42_CANDIDATE_POISONED,
+        C42_CANDIDATE_COMMITTED_AWAIT_RETIRE,
+        C42_CANDIDATE_RETIRE_UNKNOWN,
+        C42_CANDIDATE_RETIRE_READY,
+    };
+    uint32_t mode;
+    uint32_t state_index;
+
+    for (mode = 0; mode < 2; ++mode) {
+        for (state_index = 0;
+             state_index < sizeof(states) / sizeof(states[0]);
+             ++state_index) {
+            struct c42_test_fixture fixture;
+            struct c42_operation_token candidate = {0};
+            struct c42_operation_token control = {0};
+            struct c42_candidate_status status = {0};
+            uint32_t provider_events;
+
+            executions++;
+            check(c42_test_fixture_init_with_nonce(
+                      &fixture, 4, 0,
+                      UINT64_C(0x4402700000000000) +
+                      (uint64_t)mode * 0x100u + state_index + 1u),
+                  "all-state candidate post-LP fixture");
+            prepare_candidate_state(
+                &fixture, states[state_index], &candidate
+            );
+            check(c42_candidate_query(
+                      fixture.controller, &candidate, &status) == C42_OK &&
+                  status.state == states[state_index],
+                  "candidate exact all-state pre-LP query");
+            provider_events = fixture.event_log.count;
+            check((mode == 0 ?
+                   c42_reset_start(fixture.controller, &control) :
+                   c42_teardown_start(fixture.controller, &control)) == C42_OK,
+                  "candidate all-state LP succeeds");
+            memset(&status, 0, sizeof(status));
+            check(c42_candidate_query(
+                      fixture.controller, &candidate, &status) == C42_OK &&
+                  status.state == C42_CANDIDATE_SUPERSEDED,
+                  "candidate all-state query immediately superseded");
+            check(c42_candidate_progress(
+                      fixture.controller, &candidate, 1) == C42_SUPERSEDED &&
+                  c42_candidate_commit(
+                      fixture.controller, &candidate) == C42_SUPERSEDED &&
+                  c42_candidate_abort(
+                      fixture.controller, &candidate) == C42_SUPERSEDED &&
+                  c42_candidate_retire(
+                      fixture.controller, &candidate) == C42_SUPERSEDED,
+                  "candidate all-state mutators reject after LP");
+            check(fixture.event_log.count == provider_events,
+                  "candidate all-state post-LP provider silence");
+        }
     }
 }
 
@@ -788,6 +931,106 @@ static void test_business_control_post_lp(uint32_t *control_mask)
     }
 }
 
+static void test_all_business_control_post_lp(void)
+{
+    static const uint32_t states[] = {
+        C42_CONTROL_STARTED,
+        C42_CONTROL_WAITING,
+        C42_CONTROL_COMMITTED,
+    };
+    uint32_t mode;
+    uint32_t state_index;
+
+    for (mode = 0; mode < 2; ++mode) {
+        for (state_index = 0;
+             state_index < sizeof(states) / sizeof(states[0]);
+             ++state_index) {
+            struct c42_test_fixture fixture;
+            struct c42_operation_token business = {0};
+            struct c42_operation_token epoch = {0};
+            struct c42_control_status status = {0};
+            uint32_t progress;
+            uint32_t provider_events;
+
+            executions++;
+            check(c42_test_fixture_init_with_nonce(
+                      &fixture, 4, 0,
+                      UINT64_C(0x4402910000000000) +
+                      (uint64_t)mode * 0x100u + state_index + 1u) &&
+                  c42_delete_start(
+                      fixture.controller, C42_QUEUE_SQ, 0,
+                      &business) == C42_OK,
+                  "business all-state post-LP fixture");
+            for (progress = C42_CONTROL_STARTED;
+                 progress < states[state_index];
+                 ++progress) {
+                check(c42_control_progress(
+                          fixture.controller, &business, 1) == C42_OK,
+                      "business all-state setup progress");
+            }
+            check(c42_control_query(
+                      fixture.controller, &business, &status) == C42_OK &&
+                  status.state == states[state_index],
+                  "business exact all-state pre-LP query");
+            provider_events = fixture.event_log.count;
+            check((mode == 0 ?
+                   c42_reset_start(fixture.controller, &epoch) :
+                   c42_teardown_start(fixture.controller, &epoch)) == C42_OK,
+                  "business all-state LP succeeds");
+            memset(&status, 0, sizeof(status));
+            check(c42_control_query(
+                      fixture.controller, &business, &status) == C42_OK &&
+                  status.state ==
+                      (states[state_index] == C42_CONTROL_COMMITTED ?
+                       C42_CONTROL_COMMITTED : C42_CONTROL_SUPERSEDED) &&
+                  c42_control_progress(
+                      fixture.controller, &business, 1) == C42_SUPERSEDED,
+                  "business all-state query/progress after LP");
+            check(fixture.event_log.count == provider_events &&
+                  c42_control_retire(
+                      fixture.controller, &business) == C42_OK,
+                  "business all-state post-LP provider-free retire");
+        }
+    }
+}
+
+static void test_poisoned_reset_takeover(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_fake_command_script script = {0};
+    struct c42_operation_token reset = {0};
+    struct c42_operation_token teardown = {0};
+    struct c42_control_status status = {0};
+    uint32_t provider_events;
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0x4402951000000001)),
+          "poisoned reset takeover fixture");
+    script.inject_operation = C42_FAKE_COMMAND_RESET_BEGIN;
+    script.inject_result = FWLAB_HIF_PORT_POISONED;
+    script.inject_count = 1;
+    script.inject_omit_outputs = 1;
+    c42_fake_command_set_script(&fixture.command, &script);
+    check(c42_reset_start(fixture.controller, &reset) == C42_OK &&
+          c42_control_progress(
+              fixture.controller, &reset, 1) == C42_POISONED &&
+          c42_control_query(
+              fixture.controller, &reset, &status) == C42_OK &&
+          status.state == C42_CONTROL_POISONED,
+          "poisoned reset exact pre-takeover state");
+    provider_events = fixture.event_log.count;
+    check(c42_teardown_start(
+              fixture.controller, &teardown) == C42_OK &&
+          c42_control_query(
+              fixture.controller, &reset, &status) == C42_OK &&
+          status.state == C42_CONTROL_SUPERSEDED &&
+          c42_control_progress(
+              fixture.controller, &reset, 1) == C42_SUPERSEDED &&
+          fixture.event_log.count == provider_events,
+          "poisoned reset public token superseded provider-free");
+}
+
 static void test_poisoned_control(uint32_t *control_mask)
 {
     struct c42_test_fixture fixture;
@@ -883,6 +1126,117 @@ static void test_notification_post_lp(void)
     }
 }
 
+static int observer_notification_token(
+    const struct c42_test_fixture *fixture,
+    uint8_t expected_state,
+    struct c42_operation_token *token)
+{
+    struct c42_observer_v2 observer;
+    uint32_t index;
+
+    if (c42_observer_read_v2(
+            fixture->controller, &observer) != C42_OK) {
+        return 0;
+    }
+    for (index = 0; index < observer.command_capacity; ++index) {
+        if (observer.notifications[index].in_use != 0 &&
+            observer.notifications[index].state == expected_state) {
+            *token = observer.notifications[index].token;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void prepare_notification_state(
+    struct c42_test_fixture *fixture,
+    uint8_t observer_state,
+    struct c42_operation_token *token)
+{
+    struct c42_fake_command_script script = {0};
+    struct c42_notification notification = {0};
+
+    if (observer_state == C42_OBSERVER_NOTIFY_RESERVED) {
+        script.poll_delay = 100;
+        c42_fake_command_set_script(&fixture->command, &script);
+        check(c42_test_submit(fixture, 0, 0, 1, 410) &&
+              run_until_command_state(
+                  fixture, C42_OBSERVER_COMMAND_HIF_COMMITTED, 128) &&
+              observer_notification_token(
+                  fixture, observer_state, token),
+              "notification RESERVED setup");
+        return;
+    }
+    check(c42_test_submit(fixture, 0, 0, 1, 411) &&
+          c42_test_run(fixture, 128, 4),
+          "notification READY/ACQUIRED setup");
+    if (observer_state == C42_OBSERVER_NOTIFY_ACQUIRED) {
+        check(c42_notification_acquire(
+                  fixture->controller, &notification) == C42_OK,
+              "notification ACQUIRED setup");
+        *token = notification.token;
+    } else {
+        check(observer_state == C42_OBSERVER_NOTIFY_READY &&
+              observer_notification_token(
+                  fixture, observer_state, token),
+              "notification READY setup");
+    }
+}
+
+static void test_all_notification_post_lp(void)
+{
+    static const uint8_t states[] = {
+        C42_OBSERVER_NOTIFY_RESERVED,
+        C42_OBSERVER_NOTIFY_READY,
+        C42_OBSERVER_NOTIFY_ACQUIRED,
+    };
+    uint32_t mode;
+    uint32_t state_index;
+
+    for (mode = 0; mode < 2; ++mode) {
+        for (state_index = 0;
+             state_index < sizeof(states) / sizeof(states[0]);
+             ++state_index) {
+            struct c42_test_fixture fixture;
+            struct c42_operation_token notification_token = {0};
+            struct c42_operation_token control = {0};
+            struct c42_notification queried = {0};
+            struct c42_notification unavailable = {0};
+            uint32_t provider_events;
+
+            executions++;
+            check(c42_test_fixture_init_with_nonce(
+                      &fixture, 4, 0,
+                      UINT64_C(0x4402a10000000000) +
+                      (uint64_t)mode * 0x100u + state_index + 1u),
+                  "all-state notification post-LP fixture");
+            prepare_notification_state(
+                &fixture, states[state_index], &notification_token
+            );
+            provider_events = fixture.event_log.count;
+            check((mode == 0 ?
+                   c42_reset_start(fixture.controller, &control) :
+                   c42_teardown_start(fixture.controller, &control)) == C42_OK,
+                  "notification all-state LP succeeds");
+            check(c42_notification_query(
+                      fixture.controller, &notification_token,
+                      &queried) == C42_OK &&
+                  queried.state == C42_NOTIFICATION_SUPPRESSED &&
+                  c42_notification_consume(
+                      fixture.controller, &notification_token) ==
+                      C42_SUPERSEDED,
+                  "notification all-state immediately suppressed");
+            check(c42_notification_acquire(
+                      fixture.controller, &unavailable) == C42_SUPERSEDED,
+                  "notification acquire unavailable after LP");
+            check(fixture.event_log.count == provider_events &&
+                  c42_notification_retire(
+                      fixture.controller, &notification_token) == C42_OK,
+                  "notification all-state post-LP provider-free retire");
+        }
+    }
+}
+
 static void test_target_post_lp(void)
 {
     uint32_t mode;
@@ -892,6 +1246,8 @@ static void test_target_post_lp(void)
         struct c42_fake_command_script script = {0};
         struct c42_target_ref target = {0};
         struct c42_operation_token control = {0};
+        uint8_t raw[C42_SQE_BYTES];
+        uint8_t sentinel[C42_SQE_BYTES];
         uint32_t provider_events;
 
         executions++;
@@ -908,15 +1264,27 @@ static void test_target_post_lp(void)
                   fixture.sq_cap[0].ring_generation, 406,
                   &target) == C42_OK,
               "target exact pre-LP state");
+        memset(raw, 0, sizeof(raw));
+        check(c42_raw_snapshot_copy(
+                  fixture.controller, &target.handle,
+                  &target.origin, raw) == C42_OK &&
+              raw[2] == (uint8_t)406,
+              "target raw snapshot exact before LP");
         provider_events = fixture.event_log.count;
         check((mode == 0 ?
                c42_reset_start(fixture.controller, &control) :
                c42_teardown_start(fixture.controller, &control)) == C42_OK,
               "target LP succeeds");
-        check(c42_target_release(
+        memset(raw, 0xa5, sizeof(raw));
+        memset(sentinel, 0xa5, sizeof(sentinel));
+        check(c42_raw_snapshot_copy(
+                  fixture.controller, &target.handle,
+                  &target.origin, raw) == C42_SUPERSEDED &&
+              memcmp(raw, sentinel, sizeof(raw)) == 0 &&
+              c42_target_release(
                   fixture.controller, &target.token) == C42_STALE &&
               fixture.event_log.count == provider_events,
-              "old target is revoked without provider call after LP");
+              "old target/raw-copy revoked without provider call after LP");
     }
 }
 
@@ -1013,6 +1381,118 @@ static void test_reset_teardown_takeover_cuts(uint32_t *control_mask)
               snapshot.phase == C42_CONTROLLER_DEAD,
               "teardown takeover terminal");
     }
+}
+
+static uint32_t provider_operation_count(
+    const struct c42_fake_event_log *log,
+    uint8_t provider,
+    uint32_t operation)
+{
+    uint32_t count = 0;
+    uint32_t index;
+
+    for (index = 0; index < log->count; ++index) {
+        if (log->events[index].provider == provider &&
+            log->events[index].operation == operation) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static void finish_takeover(
+    struct c42_test_fixture *fixture,
+    const struct c42_operation_token *teardown)
+{
+    struct c42_control_status status = {0};
+    uint32_t step;
+
+    for (step = 0; step < 512; ++step) {
+        enum c42_result result = c42_control_progress(
+            fixture->controller, teardown, 1
+        );
+
+        if (result != C42_OK && result != C42_IN_PROGRESS) {
+            check(0, "response-unknown takeover progress");
+            return;
+        }
+        if (c42_control_query(
+                fixture->controller, teardown, &status) == C42_OK &&
+            status.state == C42_CONTROL_COMMITTED) {
+            return;
+        }
+    }
+    check(0, "response-unknown takeover terminal");
+}
+
+static void test_reset_begin_response_unknown_takeover(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_fake_command_script script = {0};
+    struct c42_fake_memory_direct_injection direct = {0};
+    struct c42_operation_token reset = {0};
+    struct c42_operation_token teardown = {0};
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0x4403100000000001)),
+          "command reset-begin unknown takeover fixture");
+    script.inject_operation = C42_FAKE_COMMAND_RESET_BEGIN;
+    script.inject_result = FWLAB_HIF_PORT_IN_PROGRESS;
+    script.inject_count = 1;
+    script.inject_omit_outputs = 1;
+    c42_fake_command_set_script(&fixture.command, &script);
+    check(c42_reset_start(fixture.controller, &reset) == C42_OK &&
+          c42_teardown_start(
+              fixture.controller, &teardown) == C42_OK,
+          "command reset-begin unknown takeover start");
+    check(c42_control_progress(
+              fixture.controller, &teardown, 1) == C42_OK &&
+          provider_operation_count(
+              &fixture.event_log, C42_FAKE_EVENT_COMMAND,
+              C42_FAKE_COMMAND_RESET_BEGIN) == 1 &&
+          fixture.command.reset_active == 0,
+          "command reset-begin unknown remains unacknowledged");
+    check(c42_control_progress(
+              fixture.controller, &teardown, 1) == C42_OK &&
+          provider_operation_count(
+              &fixture.event_log, C42_FAKE_EVENT_COMMAND,
+              C42_FAKE_COMMAND_RESET_BEGIN) == 2 &&
+          fixture.command.reset_active == 1,
+          "command reset-begin retries same key before takeover");
+    finish_takeover(&fixture, &teardown);
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0x4403100000000002)),
+          "memory reset-begin unknown takeover fixture");
+    direct.operation = C42_FAKE_MEMORY_RESET_BEGIN;
+    direct.result = C42_MEMORY_IN_PROGRESS;
+    direct.omit_status = 1;
+    check(c42_fake_memory_direct_push(
+              &fixture.memory, &direct) == C42_OK &&
+          c42_reset_start(fixture.controller, &reset) == C42_OK &&
+          c42_teardown_start(
+              fixture.controller, &teardown) == C42_OK,
+          "memory reset-begin unknown takeover start");
+    check(c42_control_progress(
+              fixture.controller, &teardown, 1) == C42_OK,
+          "memory takeover bridges command begin first");
+    check(c42_control_progress(
+              fixture.controller, &teardown, 1) == C42_OK &&
+          provider_operation_count(
+              &fixture.event_log, C42_FAKE_EVENT_MEMORY,
+              C42_FAKE_MEMORY_RESET_BEGIN) == 1 &&
+          fixture.memory.reset_active == 0,
+          "memory reset-begin unknown remains unacknowledged");
+    check(c42_control_progress(
+              fixture.controller, &teardown, 1) == C42_OK &&
+          provider_operation_count(
+              &fixture.event_log, C42_FAKE_EVENT_MEMORY,
+              C42_FAKE_MEMORY_RESET_BEGIN) == 2 &&
+          fixture.memory.reset_active == 1,
+          "memory reset-begin retries same key before takeover");
+    finish_takeover(&fixture, &teardown);
 }
 
 static void test_notification_cuts(uint32_t *notification_mask)
@@ -1114,13 +1594,18 @@ int main(void)
     test_abnormal_command_cuts(&command_mask);
     test_candidate_cuts(&candidate_mask);
     test_abnormal_candidate_states(&candidate_mask);
+    test_all_candidate_post_lp();
     test_retire_unknown_post_lp();
     test_business_control_post_lp(&control_mask);
+    test_all_business_control_post_lp();
     test_poisoned_control(&control_mask);
+    test_poisoned_reset_takeover();
     test_committed_control(&control_mask);
     test_notification_post_lp();
+    test_all_notification_post_lp();
     test_target_post_lp();
     test_reset_teardown_takeover_cuts(&control_mask);
+    test_reset_begin_response_unknown_takeover();
     test_notification_cuts(&notification_mask);
     for (state = C42_OBSERVER_COMMAND_CAPTURED;
          state <= C42_OBSERVER_COMMAND_LEASED;
@@ -1131,11 +1616,19 @@ int main(void)
         (UINT32_C(1) << C42_OBSERVER_COMMAND_CONSUME_PREPARE) |
         (UINT32_C(1) << C42_OBSERVER_COMMAND_PUB_RESERVED) |
         (UINT32_C(1) << C42_OBSERVER_COMMAND_MARKER_RECONCILE) |
+        (UINT32_C(1) << C42_OBSERVER_COMMAND_ABORT_RECONCILE) |
         (UINT32_C(1) << C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD) |
         (UINT32_C(1) << C42_OBSERVER_COMMAND_CONSUME_POISON_HOLD);
     test_notification_suppressed_cut(&notification_mask);
+    check(requested_cut_count == 130,
+          "phase requested cut count is exact");
+    check(distinct_cut_count == 74,
+          "phase full-observer quotient count is exact");
     check((command_mask & required_command) == required_command,
           "all normal command/publication phases observed before cuts");
+    check((command_mask &
+           (UINT32_C(1) << C42_OBSERVER_COMMAND_RELEASE_RECONCILE)) == 0,
+          "compat-only release-reconcile state remains unreachable");
     check((reconcile_mask & UINT32_C(0x1f)) == UINT32_C(0x1f),
           "all reconcile phases observed before cuts");
     check((notification_mask & UINT32_C(0x1f)) == UINT32_C(0x1f),
@@ -1162,8 +1655,15 @@ int main(void)
 
         check((candidate_mask & required_candidate) == required_candidate,
               "candidate lifecycle phases observed before cuts");
+        check((candidate_mask &
+               (UINT32_C(1) << C42_CANDIDATE_COMMITTED)) == 0,
+              "compat-only candidate COMMITTED remains unreachable");
         check((control_mask & required_control) == required_control,
               "control/takeover phases observed before cuts");
+        check((control_mask &
+               ((UINT32_C(1) << C42_CONTROL_CLEANUP_PENDING) |
+                (UINT32_C(1) << C42_CONTROL_RETIRED))) == 0,
+              "compat-only control cleanup states remain unreachable");
     }
     if (failures != 0) {
         fprintf(stderr,

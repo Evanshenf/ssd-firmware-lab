@@ -164,13 +164,13 @@ static void test_memory_direct_fifo_and_events(void)
 
     push_memory_direct(&memory, C42_FAKE_MEMORY_VALIDATE,
         C42_MEMORY_STALE, 0, 0, C42_MEMORY_NO_EFFECT,
-        C42_MEMORY_NO_EFFECT, 0, 0, 0);
+        0, 0, 0, 0);
     push_memory_direct(&memory, C42_FAKE_MEMORY_CAPTURE,
-        C42_MEMORY_OK, 1, 0, C42_MEMORY_FULL,
-        C42_MEMORY_NO_EFFECT, 0, 0, 0);
+        C42_MEMORY_OK, 1, 1, C42_MEMORY_FULL,
+        C42_MEMORY_FULL, 0, 0, 0);
     push_memory_direct(&memory, C42_FAKE_MEMORY_SCRUB,
         C42_MEMORY_IN_PROGRESS, 0, 0, C42_MEMORY_IN_PROGRESS,
-        C42_MEMORY_NO_EFFECT, 0, 0, 0);
+        0, 0, 0, 0);
     push_memory_direct(&memory, C42_FAKE_MEMORY_SCRUB,
         C42_MEMORY_OK, 1, 1, C42_MEMORY_FULL,
         C42_MEMORY_FULL, 4, 1, 1);
@@ -179,16 +179,16 @@ static void test_memory_direct_fifo_and_events(void)
         C42_MEMORY_RETIRED, 4, 1, 1);
     push_memory_direct(&memory, C42_FAKE_MEMORY_SCRUB_RETIRE,
         C42_MEMORY_OK, 1, 0, C42_MEMORY_RETIRED,
-        C42_MEMORY_RETIRED, 4, 1, 1);
+        0, 4, 1, 1);
     push_memory_direct(&memory, C42_FAKE_MEMORY_BODY,
         C42_MEMORY_IN_PROGRESS, 0, 0, C42_MEMORY_IN_PROGRESS,
-        C42_MEMORY_NO_EFFECT, 0, 0, 0);
+        0, 0, 0, 0);
     push_memory_direct(&memory, C42_FAKE_MEMORY_BODY,
         C42_MEMORY_OK, 1, 1, C42_MEMORY_FULL,
         C42_MEMORY_FULL, 15, 1, 0);
     push_memory_direct(&memory, C42_FAKE_MEMORY_MARKER,
         C42_MEMORY_IN_PROGRESS, 0, 0, C42_MEMORY_IN_PROGRESS,
-        C42_MEMORY_NO_EFFECT, 0, 0, 0);
+        0, 0, 0, 0);
     push_memory_direct(&memory, C42_FAKE_MEMORY_MARKER,
         C42_MEMORY_OK, 1, 1, C42_MEMORY_FULL,
         C42_MEMORY_FULL, 0, 1, 0);
@@ -212,8 +212,8 @@ static void test_memory_direct_fifo_and_events(void)
     memset(sqe, 0xa5, sizeof(sqe));
     check(port.ops->capture(
               port.context, &sq, 0, sqe, sizeof(sqe)) == C42_MEMORY_OK &&
-          sqe[0] == 0x3c,
-          "memory capture explicit output mask");
+          sqe[0] == 0x3c && memory.capture_count == 1,
+          "memory capture explicit output and provider effect");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_start(
               port.context, &cq, 4, 0, &scrub,
@@ -223,14 +223,16 @@ static void test_memory_direct_fifo_and_events(void)
     check(port.ops->scrub_query(
               port.context, &cq, 4, 0, &scrub, &status) == C42_MEMORY_OK &&
           status.result == C42_MEMORY_FULL && status.committed == 1 &&
-          status.quiescent == 1,
-          "memory scrub query direct status");
+          status.quiescent == 1 && memory.scrub[0].active != 0 &&
+          memory.scrub[0].prefix == 4 && memory.scrub[0].committed != 0,
+          "memory scrub query direct status/provider record");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_retire_start(
               port.context, &cq, 4, 0, &scrub,
               &status) == C42_MEMORY_OK &&
-          status.result == C42_MEMORY_UNKNOWN,
-          "memory retire reported unknown after actual retire");
+          status.result == C42_MEMORY_UNKNOWN &&
+          memory.scrub[0].retired != 0,
+          "memory retire reported unknown after actual provider retire");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->scrub_retire_query(
               port.context, &cq, 4, 0, &scrub, &status) == C42_MEMORY_OK &&
@@ -244,8 +246,10 @@ static void test_memory_direct_fifo_and_events(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->body_query(
               port.context, &cq, 0, cqe, &body, &status) == C42_MEMORY_OK &&
-          status.result == C42_MEMORY_FULL && status.prefix == 15,
-          "memory body query status");
+          status.result == C42_MEMORY_FULL && status.prefix == 15 &&
+          memory.publication[0].active != 0 &&
+          memory.publication[0].prefix == 15,
+          "memory body query status/provider record");
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->marker_start(
               port.context, &cq, 0, 1, &marker,
@@ -254,12 +258,15 @@ static void test_memory_direct_fifo_and_events(void)
     memset(&status, 0xa5, sizeof(status));
     check(port.ops->marker_query(
               port.context, &cq, 0, 1, &marker, &status) == C42_MEMORY_OK &&
-          status.result == C42_MEMORY_FULL && status.committed == 1,
-          "memory marker query status");
+          status.result == C42_MEMORY_FULL && status.committed == 1 &&
+          memory.publication[0].committed != 0 &&
+          memory.publication[0].active == 0,
+          "memory marker query status/provider record");
     check(port.ops->reset_begin(
               port.context, memory.instance_nonce, 11) ==
-              C42_MEMORY_OK,
-          "memory reset begin applied result");
+              C42_MEMORY_OK && memory.reset_active != 0 &&
+          memory.controller_epoch == 12,
+          "memory reset begin applied provider effect");
     quiescent = false;
     check(port.ops->reset_quiescent(
               port.context, memory.instance_nonce, 11,
@@ -267,8 +274,9 @@ static void test_memory_direct_fifo_and_events(void)
           "memory reset quiescent output");
     check(port.ops->teardown_begin(
               port.context, memory.instance_nonce, 12) ==
-              C42_MEMORY_OK,
-          "memory teardown begin applied result");
+              C42_MEMORY_OK && memory.teardown_active != 0 &&
+          memory.teardown_old_epoch == 12 && memory.controller_epoch == 13,
+          "memory teardown begin applied provider effect");
     quiescent = false;
     check(port.ops->teardown_quiescent(
               port.context, memory.instance_nonce, 12,
@@ -324,14 +332,16 @@ static void test_memory_direct_fifo_and_events(void)
     }
     expected[0].token_uid = sq.memory_uid;
     expected[0].direct_result = C42_MEMORY_STALE;
-    expected[0].reported_effect = C42_MEMORY_NO_EFFECT;
+    expected[0].reported_effect = C42_MEMORY_STALE;
     expected[0].parameter0 = C42_MEMORY_SQ_READ;
     expected[0].parameter1 = sq.exact_bytes;
     expected[1].token_uid = sq.memory_uid;
-    expected[1].object_uid = sq.memory_uid;
     expected[1].direct_result = C42_MEMORY_OK;
-    expected[1].reported_effect = C42_MEMORY_FULL;
+    expected[1].reported_effect = C42_MEMORY_OK;
+    expected[1].requested_effect = C42_MEMORY_FULL;
+    expected[1].applied_effect = C42_MEMORY_FULL;
     expected[1].parameter1 = C42_SQE_BYTES;
+    expected[1].flags = C42_FAKE_EVENT_EFFECT_APPLIED;
     expected[2].token_uid = scrub.uid;
     expected[2].direct_result = C42_MEMORY_IN_PROGRESS;
     expected[2].reported_effect = C42_MEMORY_IN_PROGRESS;
@@ -399,7 +409,7 @@ static void test_memory_direct_fifo_and_events(void)
     expected[10].token_uid = 11;
     expected[10].direct_result = C42_MEMORY_OK;
     expected[10].requested_effect = C42_MEMORY_OK;
-    expected[10].reported_effect = C42_MEMORY_NO_EFFECT;
+    expected[10].reported_effect = C42_MEMORY_OK;
     expected[10].applied_effect = C42_MEMORY_OK;
     expected[10].parameter0 = 11;
     expected[10].flags = C42_FAKE_EVENT_EFFECT_APPLIED;
@@ -412,7 +422,7 @@ static void test_memory_direct_fifo_and_events(void)
     expected[12].token_uid = 12;
     expected[12].direct_result = C42_MEMORY_OK;
     expected[12].requested_effect = C42_MEMORY_OK;
-    expected[12].reported_effect = C42_MEMORY_NO_EFFECT;
+    expected[12].reported_effect = C42_MEMORY_OK;
     expected[12].applied_effect = C42_MEMORY_OK;
     expected[12].parameter0 = 12;
     expected[12].flags = C42_FAKE_EVENT_EFFECT_APPLIED;
@@ -460,6 +470,31 @@ static void test_memory_abort_event(void)
     check(c42_fake_memory_direct_push(&memory, &illegal) == C42_INVALID &&
           memory.direct_count == 0,
           "memory rejects direct in-progress hidden effect");
+    memset(&illegal, 0, sizeof(illegal));
+    illegal.operation = C42_FAKE_MEMORY_SCRUB;
+    illegal.result = C42_MEMORY_OK;
+    illegal.omit_status = 1;
+    illegal.apply_effect = 1;
+    illegal.logical_effect = C42_MEMORY_UNKNOWN;
+    illegal.applied_effect = C42_MEMORY_FULL;
+    check(c42_fake_memory_direct_push(&memory, &illegal) == C42_INVALID &&
+          memory.direct_count == 0,
+          "memory rejects transactional OK without exact status");
+    memset(&illegal, 0, sizeof(illegal));
+    illegal.operation = C42_FAKE_MEMORY_SCRUB;
+    illegal.result = C42_MEMORY_IN_PROGRESS;
+    illegal.omit_status = 1;
+    illegal.applied_effect = C42_MEMORY_RETIRED;
+    check(c42_fake_memory_direct_push(&memory, &illegal) == C42_INVALID &&
+          memory.direct_count == 0,
+          "memory rejects unused applied-effect metadata");
+    memset(&illegal, 0, sizeof(illegal));
+    illegal.operation = C42_FAKE_MEMORY_CAPTURE;
+    illegal.result = C42_MEMORY_OK;
+    illegal.omit_status = 1;
+    check(c42_fake_memory_direct_push(&memory, &illegal) == C42_INVALID &&
+          memory.direct_count == 0,
+          "memory rejects capture OK without output");
     check(c42_fake_memory_map(&memory, &cq, 4) == C42_OK &&
           port.ops->scrub_start(
               port.context, &cq, 4, 0, &scrub, &status) == C42_MEMORY_OK,
@@ -564,6 +599,227 @@ static void test_memory_abort_event(void)
           log.events[4].output_write_mask == 0,
           "memory zero input token is explicit");
     }
+}
+
+static void check_memory_mismatched_input_event(
+    const struct c42_fake_event_log *log,
+    uint32_t operation,
+    uint8_t call_kind,
+    uint32_t direct_result,
+    const char *label)
+{
+    const struct c42_fake_event *event =
+        log->count == 0 ? NULL : &log->events[log->count - 1u];
+
+    check(event != NULL && log->count == 1 &&
+          event->provider == C42_FAKE_EVENT_MEMORY &&
+          event->operation == operation &&
+          event->call_kind == call_kind &&
+          event->direct_result == direct_result &&
+          event->input_structural_valid == 1 &&
+          event->input_record_match == 0 &&
+          event->output_write_mask == 0,
+          label);
+}
+
+static void test_memory_input_match_sites(void)
+{
+    struct c42_fake_event_log log;
+    struct c42_fake_memory memory;
+    struct c42_memory_port port;
+    struct c42_queue_memory_cap cq;
+    struct c42_queue_memory_cap bad_cap;
+    struct c42_memory_token scrub;
+    struct c42_memory_token bad_scrub;
+    struct c42_memory_token body;
+    struct c42_memory_token bad_body;
+    struct c42_memory_token marker;
+    struct c42_memory_token bad_marker;
+    struct c42_memory_status status = {0};
+    struct c42_fake_memory_outcome delayed_marker = {0};
+    uint8_t expected[C42_CQE_BYTES] = {0};
+    uint8_t raw[C42_SQE_BYTES] = {0};
+    bool quiescent;
+
+    executions++;
+    c42_fake_memory_init(
+        &memory, UINT64_C(0x4200000000000021),
+        UINT64_C(0x4200000000000022), 41
+    );
+    port = c42_fake_memory_port(&memory);
+    cq = memory_cap(
+        memory.instance_nonce, memory.owner_epoch, 41, 0,
+        C42_MEMORY_CQ_PUBLISH, 4
+    );
+    check(c42_fake_memory_map(&memory, &cq, 4) == C42_OK,
+          "memory mismatch mapping setup");
+    scrub = memory_token(memory.instance_nonce, 7301, 1);
+    bad_scrub = scrub;
+    bad_scrub.uid++;
+    check(port.ops->scrub_start(
+              port.context, &cq, 4, 0, &scrub, &status) == C42_MEMORY_OK,
+          "memory mismatch scrub record setup");
+#define CHECK_BAD_MEMORY_SCRUB(call_name, operation_value, call_value, result_value, label_text) \
+    do { \
+        c42_fake_event_log_init(&log); \
+        c42_fake_memory_bind_event_log(&memory, &log); \
+        memset(&status, 0xa5, sizeof(status)); \
+        check(port.ops->call_name( \
+                  port.context, &cq, 4, 0, &bad_scrub, &status) == \
+                  result_value, \
+              "memory mismatch " label_text " call"); \
+        check_memory_mismatched_input_event( \
+            &log, operation_value, call_value, result_value, \
+            "memory mismatch " label_text " event" \
+        ); \
+    } while (0)
+    CHECK_BAD_MEMORY_SCRUB(
+        scrub_start, C42_FAKE_MEMORY_SCRUB, C42_FAKE_CALL_START,
+        C42_MEMORY_POISONED, "scrub-start"
+    );
+    CHECK_BAD_MEMORY_SCRUB(
+        scrub_query, C42_FAKE_MEMORY_SCRUB, C42_FAKE_CALL_QUERY,
+        C42_MEMORY_STALE, "scrub-query"
+    );
+    CHECK_BAD_MEMORY_SCRUB(
+        scrub_abort, C42_FAKE_MEMORY_SCRUB_ABORT, C42_FAKE_CALL_ACTION,
+        C42_MEMORY_STALE, "scrub-abort"
+    );
+    CHECK_BAD_MEMORY_SCRUB(
+        scrub_retire_start, C42_FAKE_MEMORY_SCRUB_RETIRE,
+        C42_FAKE_CALL_START, C42_MEMORY_STALE, "scrub-retire-start"
+    );
+    CHECK_BAD_MEMORY_SCRUB(
+        scrub_retire_query, C42_FAKE_MEMORY_SCRUB_RETIRE,
+        C42_FAKE_CALL_QUERY, C42_MEMORY_STALE, "scrub-retire-query"
+    );
+#undef CHECK_BAD_MEMORY_SCRUB
+
+    memset(&memory.publication[0], 0, sizeof(memory.publication[0]));
+    body = memory_token(memory.instance_nonce, 7302, 2);
+    bad_body = body;
+    bad_body.uid++;
+    expected[14] = 1;
+    check(port.ops->body_start(
+              port.context, &cq, 0, expected, &body,
+              &status) == C42_MEMORY_OK,
+          "memory mismatch body record setup");
+#define CHECK_BAD_MEMORY_BODY(call_name, call_value, result_value, label_text) \
+    do { \
+        c42_fake_event_log_init(&log); \
+        c42_fake_memory_bind_event_log(&memory, &log); \
+        memset(&status, 0xa5, sizeof(status)); \
+        check(port.ops->call_name( \
+                  port.context, &cq, 0, expected, &bad_body, &status) == \
+                  result_value, \
+              "memory mismatch " label_text " call"); \
+        check_memory_mismatched_input_event( \
+            &log, C42_FAKE_MEMORY_BODY, call_value, result_value, \
+            "memory mismatch " label_text " event" \
+        ); \
+    } while (0)
+    CHECK_BAD_MEMORY_BODY(
+        body_start, C42_FAKE_CALL_START,
+        C42_MEMORY_POISONED, "body-start"
+    );
+    CHECK_BAD_MEMORY_BODY(
+        body_query, C42_FAKE_CALL_QUERY,
+        C42_MEMORY_STALE, "body-query"
+    );
+#undef CHECK_BAD_MEMORY_BODY
+
+    marker = memory_token(memory.instance_nonce, 7303, 3);
+    bad_marker = marker;
+    bad_marker.uid++;
+    delayed_marker.operation = C42_FAKE_MEMORY_MARKER;
+    delayed_marker.effect = C42_MEMORY_IN_PROGRESS;
+    check(c42_fake_memory_script_push(
+              &memory, &delayed_marker) == C42_OK &&
+          port.ops->marker_start(
+              port.context, &cq, 0, 1, &marker,
+              &status) == C42_MEMORY_OK,
+          "memory mismatch marker record setup");
+    c42_fake_event_log_init(&log);
+    c42_fake_memory_bind_event_log(&memory, &log);
+    memset(&status, 0xa5, sizeof(status));
+    check(port.ops->marker_query(
+              port.context, &cq, 0, 1, &bad_marker,
+              &status) == C42_MEMORY_STALE,
+          "memory mismatch marker-query call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_MARKER, C42_FAKE_CALL_QUERY,
+        C42_MEMORY_STALE, "memory mismatch marker-query event"
+    );
+
+    bad_cap = cq;
+    bad_cap.memory_uid++;
+    c42_fake_event_log_init(&log);
+    c42_fake_memory_bind_event_log(&memory, &log);
+    check(port.ops->validate(
+              port.context, &bad_cap, C42_MEMORY_CQ_PUBLISH,
+              bad_cap.exact_bytes) == C42_MEMORY_STALE,
+          "memory mismatch validate call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_VALIDATE, C42_FAKE_CALL_ACTION,
+        C42_MEMORY_STALE, "memory mismatch validate event"
+    );
+    bad_cap.role = C42_MEMORY_SQ_READ;
+    bad_cap.exact_bytes = 4u * C42_SQE_BYTES;
+    c42_fake_event_log_init(&log);
+    c42_fake_memory_bind_event_log(&memory, &log);
+    check(port.ops->capture(
+              port.context, &bad_cap, 0, raw,
+              sizeof(raw)) == C42_MEMORY_STALE,
+          "memory mismatch capture call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_CAPTURE, C42_FAKE_CALL_ACTION,
+        C42_MEMORY_STALE, "memory mismatch capture event"
+    );
+
+    c42_fake_event_log_init(&log);
+    c42_fake_memory_bind_event_log(&memory, &log);
+    check(port.ops->reset_begin(
+              port.context, memory.instance_nonce, 40) == C42_MEMORY_INVALID,
+          "memory mismatch reset-begin call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_RESET_BEGIN, C42_FAKE_CALL_START,
+        C42_MEMORY_INVALID, "memory mismatch reset-begin event"
+    );
+    check(port.ops->reset_begin(
+              port.context, memory.instance_nonce, 41) == C42_MEMORY_OK,
+          "memory mismatch reset-query setup");
+    c42_fake_event_log_init(&log);
+    quiescent = false;
+    check(port.ops->reset_quiescent(
+              port.context, memory.instance_nonce, 40,
+              &quiescent) == C42_MEMORY_INVALID,
+          "memory mismatch reset-query call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_RESET_QUIESCENT, C42_FAKE_CALL_QUERY,
+        C42_MEMORY_INVALID, "memory mismatch reset-query event"
+    );
+
+    c42_fake_event_log_init(&log);
+    check(port.ops->teardown_begin(
+              port.context, memory.instance_nonce, 41) == C42_MEMORY_INVALID,
+          "memory mismatch teardown-begin call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_TEARDOWN_BEGIN, C42_FAKE_CALL_START,
+        C42_MEMORY_INVALID, "memory mismatch teardown-begin event"
+    );
+    check(port.ops->teardown_begin(
+              port.context, memory.instance_nonce, 42) == C42_MEMORY_OK,
+          "memory mismatch teardown-query setup");
+    c42_fake_event_log_init(&log);
+    quiescent = false;
+    check(port.ops->teardown_quiescent(
+              port.context, memory.instance_nonce, 41,
+              &quiescent) == C42_MEMORY_INVALID,
+          "memory mismatch teardown-query call");
+    check_memory_mismatched_input_event(
+        &log, C42_FAKE_MEMORY_TEARDOWN_QUIESCENT, C42_FAKE_CALL_QUERY,
+        C42_MEMORY_INVALID, "memory mismatch teardown-query event"
+    );
 }
 
 static struct fwlab_hif_prepare_key prepare_key(uint64_t instance_nonce)
@@ -673,6 +929,652 @@ static int command_consume(struct command_case *test)
         state == FWLAB_HIF_CONSUME_PREPARED;
 }
 
+static void push_command_effect(
+    struct c42_fake_command *command,
+    uint32_t operation,
+    uint32_t value,
+    uint8_t write_mask,
+    uint32_t effect,
+    uint8_t object_variant,
+    const char *label)
+{
+    struct c42_fake_command_injection injection = {0};
+
+    injection.operation = operation;
+    injection.result = FWLAB_HIF_PORT_OK;
+    injection.value = value;
+    injection.requested_effect = effect;
+    injection.write_mask = write_mask;
+    injection.flags = C42_FAKE_APPLY_EFFECT;
+    injection.object_variant = object_variant;
+    check(c42_fake_command_injection_push(
+              command, &injection) == C42_OK,
+          label);
+}
+
+static void check_effect_event(
+    const struct c42_fake_event_log *log,
+    uint32_t operation,
+    uint8_t call_kind,
+    uint32_t effect,
+    const char *label)
+{
+    const struct c42_fake_event *event =
+        log->count == 0 ? NULL : &log->events[log->count - 1u];
+
+    check(event != NULL && log->count == 1 &&
+          event->operation == operation &&
+          event->call_kind == call_kind &&
+          event->requested_effect == effect &&
+          event->applied_effect == effect &&
+          (event->flags & C42_FAKE_EVENT_EFFECT_APPLIED) != 0,
+          label);
+}
+
+static void test_command_effect_sites(void)
+{
+    struct c42_fake_event_log log;
+    struct command_case test;
+    struct c42_fake_command_script script = {0};
+    struct fwlab_hif_prepare_result prepare = {0};
+    struct fwlab_hif_ready_event ready = {0};
+    struct fwlab_nvme_completion_intent intent = {0};
+    struct fwlab_hif_command_ticket ticket = {0};
+    struct fwlab_hif_completion_lease lease = {0};
+    struct fwlab_hif_consume_token consume = {0};
+    enum fwlab_hif_admission_state admission_state;
+    enum fwlab_hif_consume_state consume_state;
+    bool boolean;
+    uint32_t count;
+    uint64_t nonce = UINT64_C(0x4300000000000300);
+
+    executions++;
+
+    command_case_init(&test, ++nonce);
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_PREPARE,
+        FWLAB_HIF_PREPARE_RESERVED, 3,
+        C42_FAKE_COMMAND_EFFECT_PREPARED, C42_FAKE_OBJECT_EXACT,
+        "effect PREPARE start injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    memset(&prepare, 0xa5, sizeof(prepare));
+    check(test.port.ops->prepare_start(
+              test.port.context, &test.key, &prepare) == FWLAB_HIF_PORT_OK &&
+          test.command.records[0].in_use != 0 &&
+          test.command.records[0].prepared.reservation_uid ==
+              prepare.prepared.reservation_uid,
+          "effect PREPARE start caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_START,
+        C42_FAKE_COMMAND_EFFECT_PREPARED, "effect PREPARE start event"
+    );
+
+    command_case_init(&test, ++nonce);
+    script.prepare_delay = 100;
+    c42_fake_command_set_script(&test.command, &script);
+    check(test.port.ops->prepare_start(
+              test.port.context, &test.key, &prepare) ==
+              FWLAB_HIF_PORT_IN_PROGRESS,
+          "effect PREPARE query setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_PREPARE,
+        FWLAB_HIF_PREPARE_RESERVED, 3,
+        C42_FAKE_COMMAND_EFFECT_PREPARED, C42_FAKE_OBJECT_EXACT,
+        "effect PREPARE query injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    memset(&prepare, 0xa5, sizeof(prepare));
+    check(test.port.ops->prepare_query(
+              test.port.context, &test.key, &prepare) == FWLAB_HIF_PORT_OK &&
+          test.command.records[0].in_use != 0 &&
+          test.command.records[0].prepared.reservation_uid ==
+              prepare.prepared.reservation_uid,
+          "effect PREPARE query caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_QUERY,
+        C42_FAKE_COMMAND_EFFECT_PREPARED, "effect PREPARE query event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_prepare(&test), "effect PREPARE_ABORT setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_PREPARE_ABORT, 1, 1,
+        C42_FAKE_COMMAND_EFFECT_PREPARE_ABORTED, C42_FAKE_OBJECT_EXACT,
+        "effect PREPARE_ABORT injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    boolean = false;
+    check(test.port.ops->prepare_abort(
+              test.port.context, &test.prepared,
+              &boolean) == FWLAB_HIF_PORT_OK && boolean &&
+          test.command.records[0].retired != 0,
+          "effect PREPARE_ABORT caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_PREPARE_ABORT, C42_FAKE_CALL_START,
+        C42_FAKE_COMMAND_EFFECT_PREPARE_ABORTED,
+        "effect PREPARE_ABORT event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_prepare(&test), "effect ADMIT setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_ADMIT,
+        FWLAB_HIF_ADMISSION_COMMITTED, 3,
+        C42_FAKE_COMMAND_EFFECT_ADMITTED, C42_FAKE_OBJECT_EXACT,
+        "effect ADMIT injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    admission_state = FWLAB_HIF_ADMISSION_NOT_STARTED;
+    check(test.port.ops->admit_start(
+              test.port.context, &test.admission, &test.canonical,
+              &admission_state, &ticket) == FWLAB_HIF_PORT_OK &&
+          test.command.records[0].admitted != 0 &&
+          test.command.records[0].ticket.ticket_uid == ticket.ticket_uid,
+          "effect ADMIT caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_START,
+        C42_FAKE_COMMAND_EFFECT_ADMITTED, "effect ADMIT event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_admit(&test), "effect POLL setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_POLL, 1, 3,
+        C42_FAKE_COMMAND_EFFECT_READY, C42_FAKE_OBJECT_EXACT,
+        "effect POLL injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    count = 0;
+    memset(&ready, 0, sizeof(ready));
+    check(test.port.ops->poll(
+              test.port.context, 1, &ready, 1,
+              &count) == FWLAB_HIF_PORT_OK && count == 1 &&
+          test.command.records[0].ready_sent != 0 &&
+          test.command.records[0].ticket.ticket_uid ==
+              ready.ticket.ticket_uid,
+          "effect POLL caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_POLL, C42_FAKE_CALL_ACTION,
+        C42_FAKE_COMMAND_EFFECT_READY, "effect POLL event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_ready(&test), "effect COMPLETION_ACQUIRE setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_COMPLETION_ACQUIRE, 0, 2,
+        C42_FAKE_COMMAND_EFFECT_LEASED, C42_FAKE_OBJECT_EXACT,
+        "effect COMPLETION_ACQUIRE injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    memset(&intent, 0, sizeof(intent));
+    memset(&lease, 0, sizeof(lease));
+    check(test.port.ops->completion_acquire(
+              test.port.context, &test.ticket,
+              &intent, &lease) == FWLAB_HIF_PORT_OK &&
+          test.command.records[0].leased != 0 &&
+          test.command.records[0].lease.lease_uid == lease.lease_uid &&
+          test.command.acquire_count == 1,
+          "effect COMPLETION_ACQUIRE caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_COMPLETION_ACQUIRE,
+        C42_FAKE_CALL_ACTION, C42_FAKE_COMMAND_EFFECT_LEASED,
+        "effect COMPLETION_ACQUIRE event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_lease(&test), "effect COMPLETION_RELEASE setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_COMPLETION_RELEASE, 1, 1,
+        C42_FAKE_COMMAND_EFFECT_RELEASED, C42_FAKE_OBJECT_EXACT,
+        "effect COMPLETION_RELEASE injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    boolean = false;
+    check(test.port.ops->completion_release_start(
+              test.port.context, &test.lease, 8101,
+              &boolean) == FWLAB_HIF_PORT_OK && boolean &&
+          test.command.records[0].released != 0,
+          "effect COMPLETION_RELEASE caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_COMPLETION_RELEASE,
+        C42_FAKE_CALL_START, C42_FAKE_COMMAND_EFFECT_RELEASED,
+        "effect COMPLETION_RELEASE event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_lease(&test), "effect CONSUME_PREPARE setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_CONSUME_PREPARE,
+        FWLAB_HIF_CONSUME_PREPARED, 3,
+        C42_FAKE_COMMAND_EFFECT_CONSUME_PREPARED,
+        C42_FAKE_OBJECT_EXACT, "effect CONSUME_PREPARE injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    consume_state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    memset(&consume, 0, sizeof(consume));
+    check(test.port.ops->consume_prepare(
+              test.port.context, &test.lease, 7101,
+              &consume, &consume_state) == FWLAB_HIF_PORT_OK &&
+          test.command.records[0].consume_prepared != 0 &&
+          test.command.records[0].consume.consume_uid == consume.consume_uid,
+          "effect CONSUME_PREPARE caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_CONSUME_PREPARE,
+        C42_FAKE_CALL_START, C42_FAKE_COMMAND_EFFECT_CONSUME_PREPARED,
+        "effect CONSUME_PREPARE event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_consume(&test), "effect CONSUME_ABORT setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_CONSUME_ABORT,
+        FWLAB_HIF_CONSUME_ABORTED, 1,
+        C42_FAKE_COMMAND_EFFECT_CONSUME_ABORTED, C42_FAKE_OBJECT_EXACT,
+        "effect CONSUME_ABORT injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    consume_state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    check(test.port.ops->consume_abort(
+              test.port.context, &test.consume,
+              &consume_state) == FWLAB_HIF_PORT_OK &&
+          test.command.records[0].retired != 0,
+          "effect CONSUME_ABORT caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_CONSUME_ABORT, C42_FAKE_CALL_START,
+        C42_FAKE_COMMAND_EFFECT_CONSUME_ABORTED,
+        "effect CONSUME_ABORT event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_consume(&test), "effect CONSUME_COMMIT setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_CONSUME_COMMIT,
+        FWLAB_HIF_CONSUME_COMMITTED, 1,
+        C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED,
+        C42_FAKE_OBJECT_EXACT, "effect CONSUME_COMMIT injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    consume_state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    check(test.port.ops->consume_commit(
+              test.port.context, &test.consume,
+              &consume_state) == FWLAB_HIF_PORT_OK &&
+          test.command.records[0].consume_committed != 0,
+          "effect CONSUME_COMMIT caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_CONSUME_COMMIT, C42_FAKE_CALL_START,
+        C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED,
+        "effect CONSUME_COMMIT event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_consume(&test), "effect CONSUME_QUERY setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_CONSUME_QUERY,
+        FWLAB_HIF_CONSUME_COMMITTED, 1,
+        C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED,
+        C42_FAKE_OBJECT_EXACT, "effect CONSUME_QUERY injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    consume_state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    check(test.port.ops->consume_query(
+              test.port.context, &test.consume,
+              &consume_state) == FWLAB_HIF_PORT_OK &&
+          test.command.records[0].consume_committed != 0,
+          "effect CONSUME_QUERY caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_CONSUME_QUERY, C42_FAKE_CALL_QUERY,
+        C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED,
+        "effect CONSUME_QUERY event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_consume(&test), "effect CONSUME_RETIRE setup");
+    consume_state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    check(test.port.ops->consume_commit(
+              test.port.context, &test.consume,
+              &consume_state) == FWLAB_HIF_PORT_OK,
+          "effect CONSUME_RETIRE committed setup");
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_CONSUME_RETIRE,
+        FWLAB_HIF_CONSUME_RETIRED, 1,
+        C42_FAKE_COMMAND_EFFECT_CONSUME_RETIRED,
+        C42_FAKE_OBJECT_EXACT, "effect CONSUME_RETIRE injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    consume_state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    check(test.port.ops->consume_retire(
+              test.port.context, &test.consume,
+              &consume_state) == FWLAB_HIF_PORT_OK &&
+          test.command.records[0].retired != 0,
+          "effect CONSUME_RETIRE caller/provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_CONSUME_RETIRE, C42_FAKE_CALL_ACTION,
+        C42_FAKE_COMMAND_EFFECT_CONSUME_RETIRED,
+        "effect CONSUME_RETIRE event"
+    );
+
+    command_case_init(&test, ++nonce);
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_RESET_BEGIN, 0, 0,
+        C42_FAKE_COMMAND_EFFECT_RESET_BEGUN, C42_FAKE_OBJECT_EXACT,
+        "effect RESET_BEGIN injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    check(test.port.ops->reset_begin(
+              test.port.context, test.command.instance_nonce,
+              31) == FWLAB_HIF_PORT_OK &&
+          test.command.reset_active != 0 &&
+          test.command.reset_old_epoch == 31 &&
+          test.command.controller_epoch == 32,
+          "effect RESET_BEGIN provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_RESET_BEGIN, C42_FAKE_CALL_START,
+        C42_FAKE_COMMAND_EFFECT_RESET_BEGUN, "effect RESET_BEGIN event"
+    );
+
+    command_case_init(&test, ++nonce);
+    push_command_effect(
+        &test.command, C42_FAKE_COMMAND_TEARDOWN_BEGIN, 0, 0,
+        C42_FAKE_COMMAND_EFFECT_TEARDOWN_BEGUN, C42_FAKE_OBJECT_EXACT,
+        "effect TEARDOWN_BEGIN injection"
+    );
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    check(test.port.ops->teardown_begin(
+              test.port.context, test.command.instance_nonce,
+              31) == FWLAB_HIF_PORT_OK &&
+          test.command.teardown_active != 0 &&
+          test.command.teardown_old_epoch == 31 &&
+          test.command.controller_epoch == 32,
+          "effect TEARDOWN_BEGIN provider state");
+    check_effect_event(
+        &log, C42_FAKE_COMMAND_TEARDOWN_BEGIN, C42_FAKE_CALL_START,
+        C42_FAKE_COMMAND_EFFECT_TEARDOWN_BEGUN,
+        "effect TEARDOWN_BEGIN event"
+    );
+}
+
+static void check_mismatched_input_event(
+    const struct c42_fake_event_log *log,
+    uint32_t operation,
+    uint8_t call_kind,
+    uint32_t direct_result,
+    const char *label)
+{
+    const struct c42_fake_event *event =
+        log->count == 0 ? NULL : &log->events[log->count - 1u];
+
+    if (!(event != NULL && log->count == 1 &&
+          event->operation == operation &&
+          event->call_kind == call_kind &&
+          event->direct_result == direct_result &&
+          event->input_structural_valid == 1 &&
+          event->input_record_match == 0 &&
+          event->output_write_mask == 0)) {
+        fprintf(stderr,
+            "mismatch event %s: count=%u op=%u call=%u result=%u "
+            "input=%u/%u mask=%u\n",
+            label, log->count, event == NULL ? 0 : event->operation,
+            event == NULL ? 0 : event->call_kind,
+            event == NULL ? 0 : event->direct_result,
+            event == NULL ? 0 : event->input_structural_valid,
+            event == NULL ? 0 : event->input_record_match,
+            event == NULL ? 0 : event->output_write_mask);
+    }
+    check(event != NULL && log->count == 1 &&
+          event->operation == operation &&
+          event->call_kind == call_kind &&
+          event->direct_result == direct_result &&
+          event->input_structural_valid == 1 &&
+          event->input_record_match == 0 &&
+          event->output_write_mask == 0,
+          label);
+}
+
+static void test_command_input_match_sites(void)
+{
+    struct c42_fake_event_log log;
+    struct command_case test;
+    struct fwlab_hif_prepare_key bad_key;
+    struct fwlab_hif_prepared_token bad_prepared;
+    struct fwlab_hif_admission_key bad_admission;
+    struct fwlab_hif_command_ticket bad_ticket;
+    struct fwlab_hif_completion_lease bad_lease;
+    struct fwlab_hif_consume_token bad_consume;
+    struct fwlab_hif_prepare_result prepare = {0};
+    struct fwlab_nvme_completion_intent intent = {0};
+    struct fwlab_hif_completion_lease lease = {0};
+    struct fwlab_hif_consume_token consume = {0};
+    enum fwlab_hif_admission_state admission_state;
+    enum fwlab_hif_consume_state consume_state;
+    bool boolean;
+    uint64_t nonce = UINT64_C(0x4300000000000400);
+
+    executions++;
+
+    command_case_init(&test, ++nonce);
+    check(command_prepare(&test), "mismatch prepare-query setup");
+    bad_key = test.key;
+    bad_key.client_uid++;
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    check(test.port.ops->prepare_query(
+              test.port.context, &bad_key,
+              &prepare) == FWLAB_HIF_PORT_STALE,
+          "mismatch prepare-query call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_QUERY,
+        FWLAB_HIF_PORT_STALE, "mismatch prepare-query event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_prepare(&test), "mismatch prepare-abort setup");
+    bad_prepared = test.prepared;
+    bad_prepared.reservation_uid++;
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    boolean = false;
+    check(test.port.ops->prepare_abort(
+              test.port.context, &bad_prepared,
+              &boolean) == FWLAB_HIF_PORT_STALE,
+          "mismatch prepare-abort call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_PREPARE_ABORT, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_STALE, "mismatch prepare-abort event"
+    );
+    c42_fake_event_log_init(&log);
+    check(test.port.ops->prepare_abort_query(
+              test.port.context, &bad_prepared,
+              &boolean) == FWLAB_HIF_PORT_STALE,
+          "mismatch prepare-abort-query call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_PREPARE_ABORT, C42_FAKE_CALL_QUERY,
+        FWLAB_HIF_PORT_STALE, "mismatch prepare-abort-query event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_prepare(&test), "mismatch admit setup");
+    bad_admission = test.admission;
+    bad_admission.prepared.reservation_uid++;
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    admission_state = FWLAB_HIF_ADMISSION_NOT_STARTED;
+    check(test.port.ops->admit_start(
+              test.port.context, &bad_admission, &test.canonical,
+              &admission_state, &test.ticket) == FWLAB_HIF_PORT_STALE,
+          "mismatch admit-start call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_STALE, "mismatch admit-start event"
+    );
+    c42_fake_event_log_init(&log);
+    admission_state = FWLAB_HIF_ADMISSION_NOT_STARTED;
+    check(test.port.ops->admit_query(
+              test.port.context, &bad_admission, &test.canonical,
+              &admission_state, &test.ticket) == FWLAB_HIF_PORT_STALE,
+          "mismatch admit-query call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_QUERY,
+        FWLAB_HIF_PORT_STALE, "mismatch admit-query event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_ready(&test), "mismatch completion-acquire setup");
+    bad_ticket = test.ticket;
+    bad_ticket.ticket_uid++;
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    check(test.port.ops->completion_acquire(
+              test.port.context, &bad_ticket, &intent,
+              &lease) == FWLAB_HIF_PORT_STALE,
+          "mismatch completion-acquire call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_COMPLETION_ACQUIRE, C42_FAKE_CALL_ACTION,
+        FWLAB_HIF_PORT_STALE, "mismatch completion-acquire event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_lease(&test), "mismatch lease setup");
+    bad_lease = test.lease;
+    bad_lease.lease_uid++;
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    boolean = false;
+    check(test.port.ops->completion_release_start(
+              test.port.context, &bad_lease, 8201,
+              &boolean) == FWLAB_HIF_PORT_STALE,
+          "mismatch release-start call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_COMPLETION_RELEASE, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_STALE, "mismatch release-start event"
+    );
+    c42_fake_event_log_init(&log);
+    check(test.port.ops->completion_release_query(
+              test.port.context, &bad_lease, 8201,
+              &boolean) == FWLAB_HIF_PORT_STALE,
+          "mismatch release-query call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_COMPLETION_RELEASE, C42_FAKE_CALL_QUERY,
+        FWLAB_HIF_PORT_STALE, "mismatch release-query event"
+    );
+    c42_fake_event_log_init(&log);
+    consume_state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    check(test.port.ops->consume_prepare(
+              test.port.context, &bad_lease, 7201,
+              &consume, &consume_state) == FWLAB_HIF_PORT_STALE,
+          "mismatch consume-prepare call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_CONSUME_PREPARE, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_STALE, "mismatch consume-prepare event"
+    );
+
+    command_case_init(&test, ++nonce);
+    check(command_consume(&test), "mismatch consume controls setup");
+    bad_consume = test.consume;
+    bad_consume.consume_uid++;
+#define CHECK_BAD_CONSUME(call_name, operation_value, call_value, label_text) \
+    do { \
+        c42_fake_event_log_init(&log); \
+        c42_fake_command_bind_event_log(&test.command, &log); \
+        consume_state = FWLAB_HIF_CONSUME_NOT_STARTED; \
+        check(test.port.ops->call_name( \
+                  test.port.context, &bad_consume, &consume_state) == \
+                  FWLAB_HIF_PORT_STALE, \
+              "mismatch " label_text " call"); \
+        check_mismatched_input_event( \
+            &log, operation_value, call_value, FWLAB_HIF_PORT_STALE, \
+            "mismatch " label_text " event" \
+        ); \
+    } while (0)
+    CHECK_BAD_CONSUME(
+        consume_abort, C42_FAKE_COMMAND_CONSUME_ABORT,
+        C42_FAKE_CALL_START, "consume-abort"
+    );
+    CHECK_BAD_CONSUME(
+        consume_abort_query, C42_FAKE_COMMAND_CONSUME_ABORT,
+        C42_FAKE_CALL_QUERY, "consume-abort-query"
+    );
+    CHECK_BAD_CONSUME(
+        consume_commit, C42_FAKE_COMMAND_CONSUME_COMMIT,
+        C42_FAKE_CALL_START, "consume-commit"
+    );
+    CHECK_BAD_CONSUME(
+        consume_query, C42_FAKE_COMMAND_CONSUME_QUERY,
+        C42_FAKE_CALL_QUERY, "consume-query"
+    );
+    CHECK_BAD_CONSUME(
+        consume_retire, C42_FAKE_COMMAND_CONSUME_RETIRE,
+        C42_FAKE_CALL_ACTION, "consume-retire"
+    );
+#undef CHECK_BAD_CONSUME
+
+    command_case_init(&test, ++nonce);
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    check(test.port.ops->reset_begin(
+              test.port.context, test.command.instance_nonce,
+              30) == FWLAB_HIF_PORT_INVALID,
+          "mismatch reset-begin call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_RESET_BEGIN, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_INVALID, "mismatch reset-begin event"
+    );
+    check(test.port.ops->reset_begin(
+              test.port.context, test.command.instance_nonce,
+              31) == FWLAB_HIF_PORT_OK,
+          "mismatch reset-query setup");
+    c42_fake_event_log_init(&log);
+    boolean = false;
+    check(test.port.ops->reset_quiescent(
+              test.port.context, test.command.instance_nonce,
+              30, &boolean) == FWLAB_HIF_PORT_INVALID,
+          "mismatch reset-query call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_RESET_QUIESCENT, C42_FAKE_CALL_QUERY,
+        FWLAB_HIF_PORT_INVALID, "mismatch reset-query event"
+    );
+
+    command_case_init(&test, ++nonce);
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    check(test.port.ops->teardown_begin(
+              test.port.context, test.command.instance_nonce,
+              30) == FWLAB_HIF_PORT_INVALID,
+          "mismatch teardown-begin call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_TEARDOWN_BEGIN, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_INVALID, "mismatch teardown-begin event"
+    );
+    check(test.port.ops->teardown_begin(
+              test.port.context, test.command.instance_nonce,
+              31) == FWLAB_HIF_PORT_OK,
+          "mismatch teardown-query setup");
+    c42_fake_event_log_init(&log);
+    boolean = false;
+    check(test.port.ops->teardown_quiescent(
+              test.port.context, test.command.instance_nonce,
+              30, &boolean) == FWLAB_HIF_PORT_INVALID,
+          "mismatch teardown-query call");
+    check_mismatched_input_event(
+        &log, C42_FAKE_COMMAND_TEARDOWN_QUIESCENT, C42_FAKE_CALL_QUERY,
+        FWLAB_HIF_PORT_INVALID, "mismatch teardown-query event"
+    );
+}
+
 static void expect_event(
     const struct c42_fake_event_log *log,
     const struct c42_fake_event *expected,
@@ -722,6 +1624,25 @@ static void expect_event(
             actual->requested_effect, actual->reported_effect,
             actual->applied_effect, actual->parameter0, actual->parameter1,
             actual->flags);
+        fprintf(stderr,
+            "provider expected %s: seq=%llu op=%u call=%u result=%u "
+            "mask=%u in=%u/%u out=%u/%u token=%llu object=%llu "
+            "value=%u req/report/apply=%u/%u/%u p=%u/%u flags=%u "
+            "commit/q=%u/%u actual-commit/q=%u/%u\n",
+            label, (unsigned long long)expected->sequence,
+            expected->operation, expected->call_kind,
+            expected->direct_result, expected->output_write_mask,
+            expected->input_structural_valid,
+            expected->input_record_match,
+            expected->output_structural_valid,
+            expected->output_record_match,
+            (unsigned long long)expected->token_uid,
+            (unsigned long long)expected->object_uid,
+            expected->output_value, expected->requested_effect,
+            expected->reported_effect, expected->applied_effect,
+            expected->parameter0, expected->parameter1, expected->flags,
+            expected->committed, expected->quiescent,
+            actual->committed, actual->quiescent);
         check(0, label);
     }
 }
@@ -789,7 +1710,7 @@ static void test_command_all_entrypoints(void)
           "invoke prepare_start");
     expected = command_expected(
         &log, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_START,
-        FWLAB_HIF_PORT_OK, FWLAB_HIF_PREPARE_RESERVED, 3, 1, 1, 1, 1,
+        FWLAB_HIF_PORT_OK, FWLAB_HIF_PREPARE_RESERVED, 3, 1, 0, 1, 1,
         test.key.client_uid, prepare.prepared.reservation_uid, 31, 1
     );
     expect_event(&log, &expected, "prepare_start exact event");
@@ -915,7 +1836,7 @@ static void test_command_all_entrypoints(void)
           "invoke completion_acquire");
     expected = command_expected(
         &log, C42_FAKE_COMMAND_COMPLETION_ACQUIRE, C42_FAKE_CALL_ACTION,
-        FWLAB_HIF_PORT_OK, (uint32_t)test.lease.lease_uid, 2, 1, 1, 1, 1,
+        FWLAB_HIF_PORT_OK, 0, 2, 1, 1, 1, 1,
         test.ticket.ticket_uid, test.lease.lease_uid,
         test.lease.generation, intent.result_dword0
     );
@@ -1076,7 +1997,6 @@ static void test_command_all_entrypoints(void)
         FWLAB_HIF_PORT_OK, 0, 0, 1, 1, 0, 0,
         test.command.instance_nonce, 0, 31, 0
     );
-    expected.reported_effect = 31;
     expect_event(&log, &expected, "reset_begin exact event");
 
     command_case_init(&test, ++nonce);
@@ -1108,7 +2028,6 @@ static void test_command_all_entrypoints(void)
         FWLAB_HIF_PORT_OK, 0, 0, 1, 1, 0, 0,
         test.command.instance_nonce, 0, 31, 0
     );
-    expected.reported_effect = 31;
     expect_event(&log, &expected, "teardown_begin exact event");
 
     command_case_init(&test, ++nonce);
@@ -1141,6 +2060,8 @@ static void test_command_injection_truth(void)
     struct c42_fake_command_injection injection = {0};
     struct fwlab_hif_prepare_result result;
     struct fwlab_hif_prepared_token mismatched;
+    struct fwlab_hif_consume_token mismatched_consume;
+    enum fwlab_hif_consume_state consume_state;
     bool aborted = false;
 
     executions++;
@@ -1162,11 +2083,11 @@ static void test_command_injection_truth(void)
           "command injected hidden prepare invoked");
     expected = command_expected(
         &log, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_START,
-        FWLAB_HIF_PORT_IN_PROGRESS, 0, 0, 1, 1, 0, 0,
+        FWLAB_HIF_PORT_IN_PROGRESS, 0, 0, 1, 0, 0, 0,
         test.key.client_uid, 0, 31, 1
     );
     expected.requested_effect = C42_FAKE_COMMAND_EFFECT_PREPARED;
-    expected.reported_effect = FWLAB_HIF_PREPARE_BACKPRESSURE;
+    expected.reported_effect = C42_FAKE_COMMAND_EFFECT_NONE;
     expected.applied_effect = C42_FAKE_COMMAND_EFFECT_PREPARED;
     expected.flags = C42_FAKE_EVENT_EFFECT_APPLIED |
                      C42_FAKE_EVENT_RESPONSE_LOST;
@@ -1208,11 +2129,11 @@ static void test_command_injection_truth(void)
           "command zero output injection invoked");
     expected = command_expected(
         &log, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_START,
-        FWLAB_HIF_PORT_OK, 0, 2, 1, 1, 0, 0,
+        FWLAB_HIF_PORT_OK, 0, 2, 1, 0, 0, 0,
         test.key.client_uid, 0, 31, 1
     );
     expected.requested_effect = C42_FAKE_COMMAND_EFFECT_PREPARED;
-    expected.reported_effect = FWLAB_HIF_PREPARE_RESERVED;
+    expected.reported_effect = C42_FAKE_COMMAND_EFFECT_NONE;
     expected.applied_effect = C42_FAKE_COMMAND_EFFECT_PREPARED;
     expected.flags = C42_FAKE_EVENT_EFFECT_APPLIED;
     expect_event(&log, &expected, "command zero output token exact event");
@@ -1230,11 +2151,11 @@ static void test_command_injection_truth(void)
           "command mismatch output injection invoked");
     expected = command_expected(
         &log, C42_FAKE_COMMAND_PREPARE, C42_FAKE_CALL_START,
-        FWLAB_HIF_PORT_OK, 0, 2, 1, 1, 1, 0,
+        FWLAB_HIF_PORT_OK, 0, 2, 1, 0, 1, 0,
         test.key.client_uid, result.prepared.reservation_uid, 31, 1
     );
     expected.requested_effect = C42_FAKE_COMMAND_EFFECT_PREPARED;
-    expected.reported_effect = FWLAB_HIF_PREPARE_RESERVED;
+    expected.reported_effect = C42_FAKE_COMMAND_EFFECT_NONE;
     expected.applied_effect = C42_FAKE_COMMAND_EFFECT_PREPARED;
     expected.flags = C42_FAKE_EVENT_EFFECT_APPLIED;
     expect_event(&log, &expected, "command mismatch output token exact event");
@@ -1251,14 +2172,70 @@ static void test_command_injection_truth(void)
         FWLAB_HIF_PORT_STALE, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     );
     expect_event(&log, &expected, "command zero input token exact event");
+
+    command_case_init(&test, UINT64_C(0x4300000000000204));
+    check(command_consume(&test), "consume effect event setup");
+    memset(&injection, 0, sizeof(injection));
+    injection.operation = C42_FAKE_COMMAND_CONSUME_COMMIT;
+    injection.result = FWLAB_HIF_PORT_OK;
+    injection.value = FWLAB_HIF_CONSUME_COMMITTED;
+    injection.write_mask = C42_FAKE_WRITE_VALUE;
+    injection.flags = C42_FAKE_APPLY_EFFECT;
+    injection.requested_effect =
+        C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED;
+    check(c42_fake_command_injection_push(
+              &test.command, &injection) == C42_OK,
+          "consume effect event injection accepted");
+    c42_fake_event_log_init(&log);
+    c42_fake_command_bind_event_log(&test.command, &log);
+    consume_state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    check(test.port.ops->consume_commit(
+              test.port.context, &test.consume,
+              &consume_state) == FWLAB_HIF_PORT_OK &&
+          consume_state == FWLAB_HIF_CONSUME_COMMITTED &&
+          test.command.records[0].consume_committed == 1,
+          "consume effect event injection invoked");
+    expected = command_expected(
+        &log, C42_FAKE_COMMAND_CONSUME_COMMIT, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_OK, FWLAB_HIF_CONSUME_COMMITTED,
+        C42_FAKE_EVENT_WRITE_VALUE, 1, 1, 1, 1,
+        test.consume.consume_uid, 0, test.consume.generation, 0
+    );
+    expected.requested_effect =
+        C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED;
+    expected.applied_effect =
+        C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED;
+    expected.flags = C42_FAKE_EVENT_EFFECT_APPLIED;
+    expect_event(&log, &expected,
+                 "consume caller output and applied effect exact");
+
+    mismatched_consume = test.consume;
+    mismatched_consume.consume_uid++;
+    c42_fake_event_log_init(&log);
+    consume_state = FWLAB_HIF_CONSUME_NOT_STARTED;
+    check(test.port.ops->consume_commit(
+              test.port.context, &mismatched_consume,
+              &consume_state) == FWLAB_HIF_PORT_STALE,
+          "mismatched consume input rejected");
+    expected = command_expected(
+        &log, C42_FAKE_COMMAND_CONSUME_COMMIT, C42_FAKE_CALL_START,
+        FWLAB_HIF_PORT_STALE, 0, 0, 1, 0, 0, 0,
+        mismatched_consume.consume_uid, 0,
+        mismatched_consume.generation, 0
+    );
+    expect_event(&log, &expected,
+                 "consume input structural/match facts separated");
 }
 
 int main(void)
 {
     test_memory_direct_fifo_and_events();
     test_memory_abort_event();
+    test_memory_input_match_sites();
     test_command_all_entrypoints();
     test_command_injection_truth();
+    test_command_effect_sites();
+    test_command_input_match_sites();
     if (failures != 0) {
         return 1;
     }

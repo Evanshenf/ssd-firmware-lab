@@ -19,11 +19,13 @@ override C42_TEST_SOURCES := tests/test_c42_queue.c \
 	tests/test_c42_public_abi.c \
 	tests/test_c42_thread.c tests/fuzz_c42.c \
 	tests/c42_model.c tests/model_c42.c tests/broken_c42.c \
-	fakes/c42_fake_main.c ../../scripts/check_c42_make_integrity.py
+	fakes/c42_fake_main.c ../../scripts/check_c42_make_integrity.py \
+	../../scripts/check_c42_provider_mutations.py
 override C42_ALL_INPUTS := $(C42_SOURCES) $(C42_FAKE_SOURCES) $(C42_SUPPORT) \
 	$(C42_REFERENCE) $(C42_TEST_SOURCES) $(C42_HEADERS)
 override C42_CHECK_TARGETS := check-c42-build-closure check-c42-unit \
 	check-c42-model check-c42-negative check-c42-fuzz \
 	check-c42-local-determinism check-c42-architecture \
 	check-c42-dynamic-mutations check-c42-replay \
-	check-c42-make-integrity check-c42-artifact-receipt
+	check-c42-provider-mutations check-c42-make-integrity \
+	check-c42-artifact-receipt
