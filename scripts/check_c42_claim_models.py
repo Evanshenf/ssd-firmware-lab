@@ -1314,8 +1314,8 @@ def self_test(model_dir: Path) -> int:
         (
             "build-cycle",
             "build-trust.toml",
-            'child_ids = ["authoritative_runner", "claim_validator"]',
-            'child_ids = ["workflow", "authoritative_runner", "claim_validator"]',
+            'child_ids = ["authoritative_runner", "claim_validator", "c42_make", "analysis", "determinism", "cross"]',
+            'child_ids = ["workflow", "authoritative_runner", "claim_validator", "c42_make", "analysis", "determinism", "cross"]',
             False,
         ),
         (

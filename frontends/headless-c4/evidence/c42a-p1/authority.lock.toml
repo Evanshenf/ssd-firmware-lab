@@ -4,9 +4,17 @@
 [authority]
 schema_version = 1
 profile_id = "C42A-P1"
-topology_sha256 = "7d05dd56c2cfc34ea86de25b0c9e37779f57e740fd394e03a83485d9393c99c0"
-node_count = 24
-identity_count = 34
+topology_sha256 = "a653f91c681aac574514515dab261f1a37f9639e0e798ea93c2e7dd5b594ef89"
+node_count = 27
+identity_count = 37
+
+[[identities]]
+node_id = "analysis"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_analysis.py"
+sha256 = "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a"
+mode = 420
 
 [[identities]]
 node_id = "architecture_checker"
@@ -77,7 +85,7 @@ node_id = "c42_sources"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/c42_sources.mk"
-sha256 = "014500239d761348fe920e6a571d8db6156f01fdb52529cc2c9df111c57e9407"
+sha256 = "c1f4846884e7ca25244346f9c5c0b2e1eb805bd2ff1db0566d1b37db45b2b037"
 mode = 420
 
 [[identities]]
@@ -93,7 +101,23 @@ node_id = "claim_validator"
 node_type = "checker"
 execution_mode = "direct"
 path = "scripts/check_c42_claim_models.py"
-sha256 = "41d4e2ff092a45785f3968f585a93c4a92a533895ee1a7d426f0618cf53886ec"
+sha256 = "dab38186bdc9990c1df97446d25d77c0c796d5532336969fb2fc8a5935dd737d"
+mode = 420
+
+[[identities]]
+node_id = "cross"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_cross.py"
+sha256 = "2d7fd5d1a696758585b9775ed2be1488bfdc58748e186a05b101f64e136b4934"
+mode = 420
+
+[[identities]]
+node_id = "determinism"
+node_type = "checker"
+execution_mode = "direct"
+path = "scripts/check_c42_determinism.py"
+sha256 = "2e03613288b90812fd064638a2aea23020397740f00a6f4571bf082dc96bb06a"
 mode = 420
 
 [[identities]]
@@ -109,7 +133,7 @@ node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/build-trust.toml"
-sha256 = "7d05dd56c2cfc34ea86de25b0c9e37779f57e740fd394e03a83485d9393c99c0"
+sha256 = "a653f91c681aac574514515dab261f1a37f9639e0e798ea93c2e7dd5b594ef89"
 mode = 420
 
 [[identities]]
@@ -125,7 +149,7 @@ node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/claims.toml"
-sha256 = "1f78f70e5a5cba9f92a7b91026b7b81d07b2822d0bef5c51d3a40d23e1d1004d"
+sha256 = "3db2dd4f798b6fe9ca30d855a91f1a405374c53178c910acbdf24dcbf91fc153"
 mode = 420
 
 [[identities]]
@@ -165,7 +189,7 @@ node_id = "evidence_models"
 node_type = "source_group"
 execution_mode = "data_only"
 path = "frontends/headless-c4/evidence/c42a-p1/obligations.lock.toml"
-sha256 = "d46164c902c0d2e5d274b1614e9eb7c73ced07ab25e0000217ff510951c77226"
+sha256 = "9ce798300df15b96c38d33fb9e3f50775269e4cebc55d9507d82d7159fcd9f23"
 mode = 420
 
 [[identities]]

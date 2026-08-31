@@ -5,7 +5,7 @@
 schema_version = 1
 profile_id = "C42A-P1"
 generator_version = 1
-input_digest = "67d2cebf930af3b5a95fb00149c6672b468e77deae6536ea1117a30b8afaeac8"
+input_digest = "b481407dd963cbda4cfd4be7321d0e9fb94db7190bdd0cfe19a1eb1cdd62923f"
 d_claim = 9
 d_structural_field = 291
 d_inventory = 643
@@ -13,14 +13,24 @@ d_field = 643
 d_entrypoint = 35
 d_edge = 22
 d_transition = 11
-d_build = 24
+d_build = 27
 d_effect = 5
-d_candidate = 3240
-d_fault = 3240
+d_candidate = 3246
+d_fault = 3246
 d_na = 0
-d_lane_candidate = 19158
-d_exec = 19158
+d_lane_candidate = 19182
+d_exec = 19182
 d_lane_na = 0
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/analysis/authority/build_checker_suppress/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/analysis/authority/build_runtime_substitute/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
 
 [[obligations]]
 id = "C42A-BUILD-AUTHORITY/build/architecture_checker/authority/build_checker_suppress/whole"
@@ -111,6 +121,26 @@ lane_ids = ["architecture_native", "model"]
 id = "C42A-BUILD-AUTHORITY/build/claim_validator/authority/build_runtime_substitute/whole"
 status = "open"
 lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/cross/authority/build_checker_suppress/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/cross/authority/build_runtime_substitute/whole"
+status = "open"
+lane_ids = ["architecture_native", "model"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/determinism/authority/build_checker_suppress/whole"
+status = "open"
+lane_ids = ["architecture_native", "model", "phase_clang", "phase_gcc", "provider_clang", "provider_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/determinism/authority/build_runtime_substitute/whole"
+status = "open"
+lane_ids = ["architecture_native", "model", "phase_clang", "phase_gcc", "provider_clang", "provider_gcc", "replay_clang", "replay_gcc"]
 
 [[obligations]]
 id = "C42A-BUILD-AUTHORITY/build/dynamic_mutations/authority/build_checker_suppress/whole"

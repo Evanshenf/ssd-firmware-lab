@@ -13,7 +13,7 @@ node_type = "runner"
 binding_kind = "exact_repository"
 repository_path = ".github/workflows/c4-portable.yml"
 execution_mode = "direct"
-child_ids = ["authoritative_runner", "claim_validator"]
+child_ids = ["authoritative_runner", "claim_validator", "c42_make", "analysis", "determinism", "cross"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["architecture_native"]
 
@@ -113,7 +113,7 @@ node_type = "recipe"
 binding_kind = "exact_repository"
 repository_path = "frontends/headless-c4/Makefile"
 execution_mode = "bound_recipe"
-child_ids = ["c42_sources", "provider_obligation_generator", "state_obligation_generator", "provider_executor", "phase_executor", "replay_executor", "c35_build"]
+child_ids = ["c42_sources", "provider_obligation_generator", "state_obligation_generator", "provider_executor", "phase_executor", "replay_executor", "analysis", "determinism", "cross", "c35_build"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["architecture_native"]
 
@@ -166,6 +166,36 @@ execution_mode = "direct"
 child_ids = ["c42_sources"]
 claim_ids = ["C42A-BUILD-AUTHORITY"]
 additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+
+[[nodes]]
+id = "analysis"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_analysis.py"
+execution_mode = "direct"
+child_ids = ["c42_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "determinism"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_determinism.py"
+execution_mode = "direct"
+child_ids = ["provider_obligation_generator", "state_obligation_generator", "c42_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native", "provider_gcc", "provider_clang", "phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
+
+[[nodes]]
+id = "cross"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_cross.py"
+execution_mode = "direct"
+child_ids = ["provider_obligation_generator", "state_obligation_generator", "c42_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
 
 [[nodes]]
 id = "architecture_checker"
