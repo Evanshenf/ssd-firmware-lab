@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "0da516ca732ea5bd8614bb3eec3f952775044eb3"
+EXPECTED_C4_2_CANDIDATE = "bd0195bd9764c234102b5d5b3eb4973069cd1d06"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     "docs/legal/c4-2-source-boundary-review.md",
     "docs/legal/c4-2a-source-boundary-review.md",
@@ -807,7 +807,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/test_c42_provider_matrix.c":
         "9ea7d421df120992e65908afc2ce984e313f7217355d479cb340a754283fda13",
     "frontends/headless-c4/tests/test_c42_phase_cuts.c":
-        "bcbe3d5f8dc106a33cc385d68d101a60f57994ff5ece78b6576e1cc41ecb3695",
+        "caf07fd53d694f6564ca17f8aa3e4c1a3bfd1bcb709cb27c92c29e87d3e2dcfe",
     "frontends/headless-c4/tests/test_c42_dut_replay.c":
         "ba22cf5ccef5839adbf9ea7643df8a93e81894e2f7b3ca1c0219274f9f5899fe",
     "frontends/headless-c4/tests/test_c42_public_abi.c":

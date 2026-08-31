@@ -469,7 +469,7 @@ allowed_unfrozen_names = []
 status = "transitional_review_hold"
 baseline_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
 historical_source_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
-candidate_implementation_commit = "0da516ca732ea5bd8614bb3eec3f952775044eb3"
+candidate_implementation_commit = "bd0195bd9764c234102b5d5b3eb4973069cd1d06"
 closed_build_input_roots = [
   "docs/legal/c4-2-source-boundary-review.md",
   "docs/legal/c4-2a-source-boundary-review.md",
@@ -554,7 +554,7 @@ allowed_unfrozen_names = []
 "frontends/headless-c4/tests/test_c42_reset_delete.c" = "f0e4bcfd2e7e3bc9f4ea88a60788eab104fdc0efcb3ed65d38e904146cd8744a"
 "frontends/headless-c4/tests/test_c42_remediation.c" = "b580298d4909d440251a601377a2a9201bf359948ea652665e881d4ba17a51a9"
 "frontends/headless-c4/tests/test_c42_provider_matrix.c" = "9ea7d421df120992e65908afc2ce984e313f7217355d479cb340a754283fda13"
-"frontends/headless-c4/tests/test_c42_phase_cuts.c" = "bcbe3d5f8dc106a33cc385d68d101a60f57994ff5ece78b6576e1cc41ecb3695"
+"frontends/headless-c4/tests/test_c42_phase_cuts.c" = "caf07fd53d694f6564ca17f8aa3e4c1a3bfd1bcb709cb27c92c29e87d3e2dcfe"
 "frontends/headless-c4/tests/test_c42_dut_replay.c" = "ba22cf5ccef5839adbf9ea7643df8a93e81894e2f7b3ca1c0219274f9f5899fe"
 "frontends/headless-c4/tests/test_c42_public_abi.c" = "faa1659379d29d328c86eb33a28cdeacde1759210dfc38d3997d059c114c834f"
 "frontends/headless-c4/tests/test_c42_thread.c" = "e61d683dcccce3416cc381f38060266985154baad88fb2764b6c217aa249a1e3"
