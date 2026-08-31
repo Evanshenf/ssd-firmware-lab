@@ -1,0 +1,216 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[operators]
+schema_version = 1
+profile_id = "C42A-P1"
+
+[[operator]]
+id = "field_corrupt"
+target_kind = "field"
+match_rule_kinds = ["exact", "conditional"]
+canonical_transform_kind = "canonical_nonzero_change"
+element_policy = "each_element"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_field_corrupt"
+
+[[operator]]
+id = "field_required_zero_violation"
+target_kind = "field"
+match_rule_kinds = ["required_zero"]
+canonical_transform_kind = "set_nonzero"
+element_policy = "each_element"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_required_zero"
+
+[[operator]]
+id = "field_required_omission"
+target_kind = "field"
+match_rule_kinds = ["exact", "conditional"]
+match_tags = ["identity_key"]
+canonical_transform_kind = "set_zero"
+element_policy = "each_element"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_required_omission"
+
+[[operator]]
+id = "field_stale_key"
+target_kind = "field"
+match_rule_kinds = ["exact", "conditional"]
+match_tags = ["generation"]
+canonical_transform_kind = "use_stale_value"
+element_policy = "each_element"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_stale_key"
+
+[[operator]]
+id = "field_invalid_enum"
+target_kind = "field"
+match_rule_kinds = ["exact", "conditional"]
+match_tags = ["enum"]
+canonical_transform_kind = "use_invalid_enum"
+element_policy = "each_element"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_invalid_enum"
+
+[[operator]]
+id = "entrypoint_call_kind_substitute"
+target_kind = "entrypoint"
+match_rule_kinds = ["start", "query", "action"]
+canonical_transform_kind = "substitute_call_kind"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_call_kind"
+
+[[operator]]
+id = "field_preserve_overwrite"
+target_kind = "field"
+match_rule_kinds = ["preserve"]
+canonical_transform_kind = "overwrite_prefill"
+element_policy = "each_element"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_preserve"
+
+[[operator]]
+id = "relation_split"
+target_kind = "relation"
+match_rule_kinds = ["equal", "derived_equal"]
+canonical_transform_kind = "split_right"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_relation_split"
+
+[[operator]]
+id = "relation_stall"
+target_kind = "relation"
+match_rule_kinds = ["strictly_monotonic"]
+canonical_transform_kind = "reuse_previous"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_monotonic_stall"
+
+[[operator]]
+id = "identity_edge_split"
+target_kind = "identity_edge"
+match_rule_kinds = ["equal", "derived_equal", "stable"]
+canonical_transform_kind = "split_right"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_identity_split"
+
+[[operator]]
+id = "identity_domain_collapse"
+target_kind = "identity_edge"
+match_rule_kinds = ["independent"]
+canonical_transform_kind = "collapse_domains"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_domain_collapse"
+
+[[operator]]
+id = "effect_skip"
+target_kind = "effect"
+match_rule_kinds = ["committed", "idempotent"]
+canonical_transform_kind = "skip_effect"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_effect_skip"
+
+[[operator]]
+id = "effect_duplicate"
+target_kind = "effect"
+match_rule_kinds = ["committed", "idempotent"]
+canonical_transform_kind = "duplicate_effect"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_effect_duplicate"
+
+[[operator]]
+id = "response_order_swap"
+target_kind = "response_order"
+match_rule_kinds = ["returned", "lost_before_effect", "lost_after_effect"]
+canonical_transform_kind = "swap_effect_response_order"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_response_order"
+
+[[operator]]
+id = "transition_skip"
+target_kind = "transition"
+match_rule_kinds = ["bounded_terminal", "bounded_service"]
+canonical_transform_kind = "skip_transition"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_transition_skip"
+
+[[operator]]
+id = "transition_stall"
+target_kind = "transition"
+match_rule_kinds = ["bounded_terminal", "bounded_service"]
+canonical_transform_kind = "stall_after_unit"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_transition_stall"
+
+[[operator]]
+id = "transition_duplicate"
+target_kind = "transition"
+match_rule_kinds = ["bounded_terminal"]
+canonical_transform_kind = "duplicate_provider_call"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_transition_duplicate"
+
+[[operator]]
+id = "transition_early_terminal"
+target_kind = "transition"
+match_rule_kinds = ["bounded_terminal"]
+canonical_transform_kind = "report_terminal_early"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_early_terminal"
+
+[[operator]]
+id = "transition_late_terminal"
+target_kind = "transition"
+match_rule_kinds = ["bounded_terminal"]
+canonical_transform_kind = "delay_terminal_after_zero_rank"
+element_policy = "whole"
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+fixed_canary_id = "canary_late_terminal"
+
+[[operator]]
+id = "build_checker_suppress"
+target_kind = "build_node"
+match_rule_kinds = ["checker"]
+canonical_transform_kind = "suppress_and_forge_marker"
+element_policy = "whole"
+additional_lane_ids = ["architecture_native"]
+fixed_canary_id = "canary_checker_suppress"
+
+[[operator]]
+id = "build_recipe_substitute"
+target_kind = "build_node"
+match_rule_kinds = ["recipe"]
+canonical_transform_kind = "replace_recipe"
+element_policy = "whole"
+additional_lane_ids = ["architecture_native"]
+fixed_canary_id = "canary_recipe_substitute"
+
+[[operator]]
+id = "build_child_omit"
+target_kind = "build_node"
+match_rule_kinds = ["runner", "source_group"]
+canonical_transform_kind = "omit_declared_child"
+element_policy = "whole"
+additional_lane_ids = ["architecture_native"]
+fixed_canary_id = "canary_child_omit"
+
+[[operator]]
+id = "build_runtime_substitute"
+target_kind = "build_node"
+match_rule_kinds = ["runner", "checker"]
+canonical_transform_kind = "substitute_argv_cwd_environment"
+element_policy = "whole"
+additional_lane_ids = ["architecture_native"]
+fixed_canary_id = "canary_runtime_substitute"

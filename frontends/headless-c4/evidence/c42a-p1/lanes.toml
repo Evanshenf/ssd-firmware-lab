@@ -1,0 +1,90 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[lanes]
+schema_version = 1
+profile_id = "C42A-P1"
+
+[[lane]]
+id = "inventory_clang"
+executor = "scripts/extract_c42_interface_inventory.py"
+tool_role = "clang-layout"
+run_mode = "check"
+authority_node_ids = ["inventory_extractor"]
+
+[[lane]]
+id = "inventory_gcc"
+executor = "scripts/extract_c42_interface_inventory.py"
+tool_role = "gcc-layout-probe"
+run_mode = "check"
+authority_node_ids = ["inventory_extractor"]
+
+[[lane]]
+id = "model"
+executor = "scripts/check_c42_claim_models.py"
+tool_role = "python-model"
+run_mode = "check"
+authority_node_ids = ["claim_validator", "obligation_generator"]
+
+[[lane]]
+id = "provider_gcc"
+executor = "c42_provider_matrix"
+tool_role = "gcc"
+run_mode = "baseline"
+authority_node_ids = ["provider_executor"]
+
+[[lane]]
+id = "provider_clang"
+executor = "c42_provider_matrix"
+tool_role = "clang"
+run_mode = "baseline"
+authority_node_ids = ["provider_executor"]
+
+[[lane]]
+id = "phase_gcc"
+executor = "c42_phase_cuts"
+tool_role = "gcc"
+run_mode = "baseline"
+authority_node_ids = ["phase_executor"]
+
+[[lane]]
+id = "phase_clang"
+executor = "c42_phase_cuts"
+tool_role = "clang"
+run_mode = "baseline"
+authority_node_ids = ["phase_executor"]
+
+[[lane]]
+id = "replay_gcc"
+executor = "c42_dut_replay"
+tool_role = "gcc"
+run_mode = "baseline"
+authority_node_ids = ["replay_executor"]
+
+[[lane]]
+id = "replay_clang"
+executor = "c42_dut_replay"
+tool_role = "clang"
+run_mode = "baseline"
+authority_node_ids = ["replay_executor"]
+
+[[lane]]
+id = "mutation_gcc"
+executor = "scripts/check_c42_dynamic_mutations.py"
+tool_role = "gcc"
+run_mode = "first-order-mutation"
+authority_node_ids = ["dynamic_mutations"]
+
+[[lane]]
+id = "mutation_clang"
+executor = "scripts/check_c42_dynamic_mutations.py"
+tool_role = "clang"
+run_mode = "first-order-mutation"
+authority_node_ids = ["dynamic_mutations"]
+
+[[lane]]
+id = "architecture_native"
+executor = "scripts/check_c42_architecture.py"
+tool_role = "native-build"
+run_mode = "authority"
+authority_node_ids = ["architecture_checker", "c35_checker"]

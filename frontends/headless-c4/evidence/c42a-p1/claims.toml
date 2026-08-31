@@ -1,0 +1,145 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[manifest]
+schema_version = 1
+profile_id = "C42A-P1"
+claim_version = 1
+
+[[witnesses]]
+id = "witness_inventory"
+executor = "scripts/extract_c42_interface_inventory.py"
+label = "compiler-derived structural inventory"
+lane_ids = ["inventory_clang", "inventory_gcc"]
+
+[[witnesses]]
+id = "witness_provider"
+executor = "c42_provider_matrix"
+label = "C4.2 provider matrix: PASS"
+lane_ids = ["provider_gcc", "provider_clang"]
+
+[[witnesses]]
+id = "witness_phase"
+executor = "c42_phase_cuts"
+label = "C4.2 phase cuts: PASS"
+lane_ids = ["phase_gcc", "phase_clang"]
+
+[[witnesses]]
+id = "witness_replay"
+executor = "c42_dut_replay"
+label = "C4.2 DUT reference BFS: PASS"
+lane_ids = ["replay_gcc", "replay_clang"]
+
+[[witnesses]]
+id = "witness_authority"
+executor = "scripts/run_c42_gate.py"
+label = "C4.2 authoritative runner: PASS"
+lane_ids = ["architecture_native"]
+
+[[claims]]
+id = "C42A-STRUCTURAL-INVENTORY"
+subject = "evidence"
+status = "active"
+normative_text = "Every in-profile provider, observer and step/control interface field is inventoried and classified exactly once."
+positive_witness_ids = ["witness_inventory"]
+minimum_lane_ids = ["inventory_clang", "inventory_gcc", "model"]
+provider_row_ids = ["provider_record_contracts"]
+identity_edge_ids = ["identity_record_contracts"]
+transition_ids = ["phase_record_contracts"]
+build_node_ids = ["claim_validator"]
+
+[[claims]]
+id = "C42A-PROVIDER-INPUT-EXACT"
+subject = "provider"
+status = "active"
+normative_text = "Every command and memory provider request is structural, stable-key exact and record-matched under its declared call mode."
+positive_witness_ids = ["witness_provider"]
+minimum_lane_ids = ["provider_gcc", "provider_clang"]
+provider_row_ids = ["provider_command_entrypoints", "provider_memory_entrypoints", "relation_fresh_admit_generation", "relation_scrub_key", "relation_body_key"]
+identity_edge_ids = []
+transition_ids = []
+build_node_ids = []
+
+[[claims]]
+id = "C42A-PROVIDER-OUTPUT-EXACT"
+subject = "provider"
+status = "active"
+normative_text = "Every caller-visible provider output field and write mask is exact, conditionally exact, zero or preserved as classified."
+positive_witness_ids = ["witness_provider"]
+minimum_lane_ids = ["provider_gcc", "provider_clang"]
+provider_row_ids = ["provider_record_contracts", "provider_scalar_contracts", "relation_poll_sequence"]
+identity_edge_ids = []
+transition_ids = []
+build_node_ids = []
+
+[[claims]]
+id = "C42A-PROVIDER-EFFECT-ORDER"
+subject = "provider"
+status = "active"
+normative_text = "Logical, reported and applied provider effects remain exact across returned and response-loss orderings."
+positive_witness_ids = ["witness_provider"]
+minimum_lane_ids = ["provider_gcc", "provider_clang"]
+provider_row_ids = ["effect_command", "effect_memory", "response_returned", "response_lost_before", "response_lost_after"]
+identity_edge_ids = []
+transition_ids = []
+build_node_ids = []
+
+[[claims]]
+id = "C42A-IDENTITY-GRAPH"
+subject = "observer"
+status = "active"
+normative_text = "Every declared command, publication, notification and target identity edge is reachable and exact within its lifetime."
+positive_witness_ids = ["witness_phase", "witness_replay"]
+minimum_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
+provider_row_ids = []
+identity_edge_ids = ["edge_publication_body", "edge_publication_marker", "edge_notification_command_slot", "edge_notification_command_record", "edge_command_target", "edge_command_notification_independent"]
+transition_ids = []
+build_node_ids = []
+
+[[claims]]
+id = "C42A-OBSERVER-EXACT"
+subject = "observer"
+status = "active"
+normative_text = "Every in-profile observer field is semantically classified and exact under its declared lifecycle guard."
+positive_witness_ids = ["witness_phase", "witness_replay"]
+minimum_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
+provider_row_ids = []
+identity_edge_ids = ["identity_record_contracts"]
+transition_ids = []
+build_node_ids = []
+
+[[claims]]
+id = "C42A-EPOCH-TERMINAL-PROGRESS"
+subject = "production"
+status = "active"
+normative_text = "Reset and teardown reach success or poison through exported c42_step within the profile delay-credit bound."
+positive_witness_ids = ["witness_phase"]
+minimum_lane_ids = ["phase_gcc", "phase_clang"]
+provider_row_ids = []
+identity_edge_ids = []
+transition_ids = ["reset_command_begin", "reset_memory_begin", "reset_quiescent", "reset_terminal", "teardown_reset_command", "teardown_reset_memory", "teardown_command_begin", "teardown_memory_begin", "teardown_quiescent", "teardown_terminal"]
+build_node_ids = []
+
+[[claims]]
+id = "C42A-READY-BOUNDED-SERVICE"
+subject = "production"
+status = "active"
+normative_text = "Eligible local and HIF poll work receives bounded service without claiming termination for a permanently non-ready provider."
+positive_witness_ids = ["witness_phase"]
+minimum_lane_ids = ["phase_gcc", "phase_clang"]
+provider_row_ids = []
+identity_edge_ids = []
+transition_ids = ["ready_poll_service"]
+build_node_ids = []
+
+[[claims]]
+id = "C42A-BUILD-AUTHORITY"
+subject = "build"
+status = "active"
+normative_text = "Every repository-controlled verdict input and checker invocation is declared by the finite build-trust DAG."
+positive_witness_ids = ["witness_authority"]
+minimum_lane_ids = ["model", "architecture_native"]
+provider_row_ids = []
+identity_edge_ids = []
+transition_ids = []
+build_node_ids = ["workflow", "authoritative_runner", "claim_validator", "obligation_generator", "inventory_extractor", "c42_make", "provider_executor", "phase_executor", "replay_executor", "c35_build", "c35_checker"]

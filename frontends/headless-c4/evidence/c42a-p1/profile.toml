@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[profile]
+schema_version = 1
+profile_id = "C42A-P1"
+profile_version = 1
+status = "gate1_model"
+caller_serialized = true
+source_candidate = "415a294d502a1fa37be6c77a40e243d41c8d3e37"
+policy_head = "dc05f50a857057d0630014dadd4da6c2230ff71f"
+claim_manifest = "claims.toml"
+interface_inventory = "interface-inventory.toml"
+
+[geometry]
+controller_count = 1
+namespace_count = 1
+admin_queue_pairs = 1
+io_queue_pairs = 1
+queue_depth_minimum = 2
+queue_depth_maximum = 32
+integration_queue_depth = 4
+sqe_bytes = 64
+cqe_bytes = 16
+
+[progress]
+epoch_delay_credit_maximum = 8
+reset_work_unit_bound = 11
+teardown_work_unit_bound = 11
+teardown_takeover_work_unit_bound = 13
+
+[scope]
+included = [
+  "raw SQ capture and queue/CQ identity",
+  "command and memory provider contracts",
+  "CQ phase-last publication and consume reconciliation",
+  "logical notification",
+  "reset and teardown exported-step progress",
+  "source-bound build and checker authority",
+]
+excluded = [
+  "PCI configuration and BAR/MMIO",
+  "DMA and MSI-X",
+  "QEMU, VFIO and vfio-user",
+  "same-instance concurrency and weak-memory schedules",
+  "NAND, NFC, FTL and raw media",
+  "power-loss media recovery",
+  "physical SSD transport",
+  "performance and hardware timing",
+]
+
+[authority_assumptions]
+digest = "SHA-256 collision resistance"
+compiler = "observed GCC and Clang behavior"
+runtime = "observed Linux process, filesystem and emulator behavior"
+isolation = "runner rejects undeclared repository-controlled verdict inputs"

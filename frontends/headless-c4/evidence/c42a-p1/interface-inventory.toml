@@ -1,0 +1,4932 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[inventory]
+schema_version = 1
+profile_id = "C42A-P1"
+generated = true
+generator_version = 1
+headers = ["include/fwlab/contracts/hif_command_port.h", "frontends/headless-c4/hif/c42.h", "frontends/headless-c4/hif/c42_memory_port.h", "frontends/headless-c4/fakes/c42_event.h"]
+
+[[records]]
+id = "nvme_origin_token"
+c_name = "fwlab_nvme_origin_token"
+header = "include/fwlab/portable/nvme_types.h"
+owner_model = "provider"
+semantic = true
+size = 16
+align = 8
+
+[[records]]
+id = "nvme_command_handle"
+c_name = "fwlab_nvme_command_handle"
+header = "include/fwlab/portable/nvme_types.h"
+owner_model = "provider"
+semantic = true
+size = 24
+align = 8
+
+[[records]]
+id = "nvme_command"
+c_name = "fwlab_nvme_command"
+header = "include/fwlab/portable/nvme_types.h"
+owner_model = "provider"
+semantic = true
+size = 128
+align = 8
+
+[[records]]
+id = "nvme_completion_intent"
+c_name = "fwlab_nvme_completion_intent"
+header = "include/fwlab/portable/nvme_types.h"
+owner_model = "provider"
+semantic = true
+size = 64
+align = 8
+
+[[records]]
+id = "command_prepare_key"
+c_name = "fwlab_hif_prepare_key"
+header = "include/fwlab/contracts/hif_command_port.h"
+owner_model = "provider"
+semantic = true
+size = 64
+align = 8
+
+[[records]]
+id = "command_prepared_token"
+c_name = "fwlab_hif_prepared_token"
+header = "include/fwlab/contracts/hif_command_port.h"
+owner_model = "provider"
+semantic = true
+size = 56
+align = 8
+
+[[records]]
+id = "command_prepare_result"
+c_name = "fwlab_hif_prepare_result"
+header = "include/fwlab/contracts/hif_command_port.h"
+owner_model = "provider"
+semantic = true
+size = 80
+align = 8
+
+[[records]]
+id = "command_admission_key"
+c_name = "fwlab_hif_admission_key"
+header = "include/fwlab/contracts/hif_command_port.h"
+owner_model = "provider"
+semantic = true
+size = 72
+align = 8
+
+[[records]]
+id = "command_ticket"
+c_name = "fwlab_hif_command_ticket"
+header = "include/fwlab/contracts/hif_command_port.h"
+owner_model = "provider"
+semantic = true
+size = 56
+align = 8
+
+[[records]]
+id = "command_ready_event"
+c_name = "fwlab_hif_ready_event"
+header = "include/fwlab/contracts/hif_command_port.h"
+owner_model = "provider"
+semantic = true
+size = 72
+align = 8
+
+[[records]]
+id = "command_completion_lease"
+c_name = "fwlab_hif_completion_lease"
+header = "include/fwlab/contracts/hif_command_port.h"
+owner_model = "provider"
+semantic = true
+size = 72
+align = 8
+
+[[records]]
+id = "command_consume_token"
+c_name = "fwlab_hif_consume_token"
+header = "include/fwlab/contracts/hif_command_port.h"
+owner_model = "provider"
+semantic = true
+size = 96
+align = 8
+
+[[records]]
+id = "command_port_ops"
+c_name = "fwlab_hif_command_port_ops"
+header = "include/fwlab/contracts/hif_command_port.h"
+owner_model = "provider"
+semantic = false
+size = 168
+align = 8
+
+[[records]]
+id = "memory_capability"
+c_name = "c42_queue_memory_cap"
+header = "frontends/headless-c4/hif/c42_memory_port.h"
+owner_model = "provider"
+semantic = true
+size = 48
+align = 8
+
+[[records]]
+id = "memory_token"
+c_name = "c42_memory_token"
+header = "frontends/headless-c4/hif/c42_memory_port.h"
+owner_model = "provider"
+semantic = true
+size = 24
+align = 8
+
+[[records]]
+id = "memory_status"
+c_name = "c42_memory_status"
+header = "frontends/headless-c4/hif/c42_memory_port.h"
+owner_model = "provider"
+semantic = true
+size = 40
+align = 8
+
+[[records]]
+id = "memory_ops"
+c_name = "c42_memory_ops"
+header = "frontends/headless-c4/hif/c42_memory_port.h"
+owner_model = "provider"
+semantic = false
+size = 128
+align = 8
+
+[[records]]
+id = "provider_event"
+c_name = "c42_fake_event"
+header = "frontends/headless-c4/fakes/c42_event.h"
+owner_model = "provider"
+semantic = true
+size = 72
+align = 8
+
+[[records]]
+id = "operation_token"
+c_name = "c42_operation_token"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 24
+align = 8
+
+[[records]]
+id = "control_status"
+c_name = "c42_control_status"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "phase"
+semantic = true
+size = 48
+align = 8
+
+[[records]]
+id = "step_result"
+c_name = "c42_step_result"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "phase"
+semantic = true
+size = 16
+align = 4
+
+[[records]]
+id = "observer_slot"
+c_name = "c42_observer_slot_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 64
+align = 8
+
+[[records]]
+id = "observer_queue"
+c_name = "c42_observer_queue_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 2104
+align = 8
+
+[[records]]
+id = "observer_command"
+c_name = "c42_observer_command_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 88
+align = 8
+
+[[records]]
+id = "observer_publication"
+c_name = "c42_observer_publication_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 40
+align = 8
+
+[[records]]
+id = "observer_reconcile"
+c_name = "c42_observer_reconcile_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 32
+align = 8
+
+[[records]]
+id = "observer_notification"
+c_name = "c42_observer_notification_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 56
+align = 8
+
+[[records]]
+id = "observer_candidate"
+c_name = "c42_observer_candidate_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 64
+align = 8
+
+[[records]]
+id = "observer_control"
+c_name = "c42_observer_control_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 56
+align = 8
+
+[[records]]
+id = "observer_target"
+c_name = "c42_observer_target_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 64
+align = 8
+
+[[records]]
+id = "observer_root"
+c_name = "c42_observer_v2"
+header = "frontends/headless-c4/hif/c42.h"
+owner_model = "identity"
+semantic = true
+size = 26888
+align = 8
+
+[[fields]]
+id = "command_admission_key.client_uid"
+record = "command_admission_key"
+name = "client_uid"
+c_type = "uint64_t"
+offset = 56
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_admission_key.generation"
+record = "command_admission_key"
+name = "generation"
+c_type = "uint32_t"
+offset = 64
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_admission_key.prepared"
+record = "command_admission_key"
+name = "prepared"
+c_type = "struct fwlab_hif_prepared_token"
+offset = 0
+size = 56
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_admission_key.reserved"
+record = "command_admission_key"
+name = "reserved"
+c_type = "uint32_t"
+offset = 68
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_completion_lease.generation"
+record = "command_completion_lease"
+name = "generation"
+c_type = "uint32_t"
+offset = 64
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_completion_lease.lease_uid"
+record = "command_completion_lease"
+name = "lease_uid"
+c_type = "uint64_t"
+offset = 56
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_completion_lease.reserved"
+record = "command_completion_lease"
+name = "reserved"
+c_type = "uint32_t"
+offset = 68
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_completion_lease.ticket"
+record = "command_completion_lease"
+name = "ticket"
+c_type = "struct fwlab_hif_command_ticket"
+offset = 0
+size = 56
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_consume_token.consume_uid"
+record = "command_consume_token"
+name = "consume_uid"
+c_type = "uint64_t"
+offset = 80
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_consume_token.generation"
+record = "command_consume_token"
+name = "generation"
+c_type = "uint32_t"
+offset = 88
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_consume_token.lease"
+record = "command_consume_token"
+name = "lease"
+c_type = "struct fwlab_hif_completion_lease"
+offset = 0
+size = 72
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_consume_token.publication_uid"
+record = "command_consume_token"
+name = "publication_uid"
+c_type = "uint64_t"
+offset = 72
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_consume_token.reserved"
+record = "command_consume_token"
+name = "reserved"
+c_type = "uint32_t"
+offset = 92
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.admit_query"
+record = "command_port_ops"
+name = "admit_query"
+c_type = "fwlab_hif_admit_fn"
+offset = 48
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.admit_start"
+record = "command_port_ops"
+name = "admit_start"
+c_type = "fwlab_hif_admit_fn"
+offset = 40
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.completion_acquire"
+record = "command_port_ops"
+name = "completion_acquire"
+c_type = "fwlab_hif_completion_acquire_fn"
+offset = 64
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.completion_release_query"
+record = "command_port_ops"
+name = "completion_release_query"
+c_type = "fwlab_hif_completion_release_fn"
+offset = 80
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.completion_release_start"
+record = "command_port_ops"
+name = "completion_release_start"
+c_type = "fwlab_hif_completion_release_fn"
+offset = 72
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.consume_abort"
+record = "command_port_ops"
+name = "consume_abort"
+c_type = "fwlab_hif_consume_control_fn"
+offset = 96
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.consume_abort_query"
+record = "command_port_ops"
+name = "consume_abort_query"
+c_type = "fwlab_hif_consume_control_fn"
+offset = 104
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.consume_commit"
+record = "command_port_ops"
+name = "consume_commit"
+c_type = "fwlab_hif_consume_control_fn"
+offset = 112
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.consume_prepare"
+record = "command_port_ops"
+name = "consume_prepare"
+c_type = "fwlab_hif_consume_prepare_fn"
+offset = 88
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.consume_query"
+record = "command_port_ops"
+name = "consume_query"
+c_type = "fwlab_hif_consume_control_fn"
+offset = 120
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.consume_retire"
+record = "command_port_ops"
+name = "consume_retire"
+c_type = "fwlab_hif_consume_control_fn"
+offset = 128
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.poll"
+record = "command_port_ops"
+name = "poll"
+c_type = "fwlab_hif_poll_fn"
+offset = 56
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.prepare_abort"
+record = "command_port_ops"
+name = "prepare_abort"
+c_type = "fwlab_hif_prepare_abort_fn"
+offset = 24
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.prepare_abort_query"
+record = "command_port_ops"
+name = "prepare_abort_query"
+c_type = "fwlab_hif_prepare_abort_fn"
+offset = 32
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.prepare_query"
+record = "command_port_ops"
+name = "prepare_query"
+c_type = "fwlab_hif_prepare_fn"
+offset = 16
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.prepare_start"
+record = "command_port_ops"
+name = "prepare_start"
+c_type = "fwlab_hif_prepare_fn"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.reserved"
+record = "command_port_ops"
+name = "reserved"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.reset_begin"
+record = "command_port_ops"
+name = "reset_begin"
+c_type = "fwlab_hif_epoch_begin_fn"
+offset = 136
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.reset_quiescent"
+record = "command_port_ops"
+name = "reset_quiescent"
+c_type = "fwlab_hif_quiescent_fn"
+offset = 144
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.size"
+record = "command_port_ops"
+name = "size"
+c_type = "uint16_t"
+offset = 2
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.teardown_begin"
+record = "command_port_ops"
+name = "teardown_begin"
+c_type = "fwlab_hif_epoch_begin_fn"
+offset = 152
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.teardown_quiescent"
+record = "command_port_ops"
+name = "teardown_quiescent"
+c_type = "fwlab_hif_quiescent_fn"
+offset = 160
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_port_ops.version"
+record = "command_port_ops"
+name = "version"
+c_type = "uint16_t"
+offset = 0
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.client_generation"
+record = "command_prepare_key"
+name = "client_generation"
+c_type = "uint32_t"
+offset = 44
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.client_uid"
+record = "command_prepare_key"
+name = "client_uid"
+c_type = "uint64_t"
+offset = 24
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.controller_epoch"
+record = "command_prepare_key"
+name = "controller_epoch"
+c_type = "uint32_t"
+offset = 40
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.instance_nonce"
+record = "command_prepare_key"
+name = "instance_nonce"
+c_type = "uint64_t"
+offset = 32
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.origin"
+record = "command_prepare_key"
+name = "origin"
+c_type = "struct fwlab_nvme_origin_token"
+offset = 8
+size = 16
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.queue_class"
+record = "command_prepare_key"
+name = "queue_class"
+c_type = "uint16_t"
+offset = 48
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.reserved0"
+record = "command_prepare_key"
+name = "reserved0"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.reserved1"
+record = "command_prepare_key"
+name = "reserved1"
+c_type = "uint32_t[2]"
+offset = 52
+size = 8
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.size"
+record = "command_prepare_key"
+name = "size"
+c_type = "uint16_t"
+offset = 2
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.version"
+record = "command_prepare_key"
+name = "version"
+c_type = "uint16_t"
+offset = 0
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_key.worst_case_actions"
+record = "command_prepare_key"
+name = "worst_case_actions"
+c_type = "uint16_t"
+offset = 50
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_result.disposition"
+record = "command_prepare_result"
+name = "disposition"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_result.fault_code"
+record = "command_prepare_result"
+name = "fault_code"
+c_type = "uint32_t"
+offset = 68
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_result.fault_domain"
+record = "command_prepare_result"
+name = "fault_domain"
+c_type = "uint32_t"
+offset = 64
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_result.prepared"
+record = "command_prepare_result"
+name = "prepared"
+c_type = "struct fwlab_hif_prepared_token"
+offset = 8
+size = 56
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_result.reserved"
+record = "command_prepare_result"
+name = "reserved"
+c_type = "uint32_t[2]"
+offset = 72
+size = 8
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_result.size"
+record = "command_prepare_result"
+name = "size"
+c_type = "uint16_t"
+offset = 2
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepare_result.version"
+record = "command_prepare_result"
+name = "version"
+c_type = "uint16_t"
+offset = 0
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepared_token.generation"
+record = "command_prepared_token"
+name = "generation"
+c_type = "uint32_t"
+offset = 48
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepared_token.handle"
+record = "command_prepared_token"
+name = "handle"
+c_type = "struct fwlab_nvme_command_handle"
+offset = 0
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepared_token.origin"
+record = "command_prepared_token"
+name = "origin"
+c_type = "struct fwlab_nvme_origin_token"
+offset = 24
+size = 16
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepared_token.reservation_uid"
+record = "command_prepared_token"
+name = "reservation_uid"
+c_type = "uint64_t"
+offset = 40
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_prepared_token.reserved"
+record = "command_prepared_token"
+name = "reserved"
+c_type = "uint32_t"
+offset = 52
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ready_event.reserved0"
+record = "command_ready_event"
+name = "reserved0"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ready_event.sequence"
+record = "command_ready_event"
+name = "sequence"
+c_type = "uint64_t"
+offset = 64
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ready_event.size"
+record = "command_ready_event"
+name = "size"
+c_type = "uint16_t"
+offset = 2
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ready_event.ticket"
+record = "command_ready_event"
+name = "ticket"
+c_type = "struct fwlab_hif_command_ticket"
+offset = 8
+size = 56
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ready_event.version"
+record = "command_ready_event"
+name = "version"
+c_type = "uint16_t"
+offset = 0
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ticket.generation"
+record = "command_ticket"
+name = "generation"
+c_type = "uint32_t"
+offset = 48
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ticket.handle"
+record = "command_ticket"
+name = "handle"
+c_type = "struct fwlab_nvme_command_handle"
+offset = 0
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ticket.origin"
+record = "command_ticket"
+name = "origin"
+c_type = "struct fwlab_nvme_origin_token"
+offset = 24
+size = 16
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ticket.reserved"
+record = "command_ticket"
+name = "reserved"
+c_type = "uint32_t"
+offset = 52
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "command_ticket.ticket_uid"
+record = "command_ticket"
+name = "ticket_uid"
+c_type = "uint64_t"
+offset = 40
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "control_status.cause"
+record = "control_status"
+name = "cause"
+c_type = "uint32_t"
+offset = 28
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "phase"
+
+[[fields]]
+id = "control_status.reserved"
+record = "control_status"
+name = "reserved"
+c_type = "uint32_t[3]"
+offset = 36
+size = 12
+element_count = 3
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "phase"
+
+[[fields]]
+id = "control_status.retry"
+record = "control_status"
+name = "retry"
+c_type = "uint32_t"
+offset = 32
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "phase"
+
+[[fields]]
+id = "control_status.state"
+record = "control_status"
+name = "state"
+c_type = "uint32_t"
+offset = 24
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "phase"
+
+[[fields]]
+id = "control_status.token"
+record = "control_status"
+name = "token"
+c_type = "struct c42_operation_token"
+offset = 0
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "phase"
+
+[[fields]]
+id = "memory_capability.controller_epoch"
+record = "memory_capability"
+name = "controller_epoch"
+c_type = "uint32_t"
+offset = 24
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_capability.exact_bytes"
+record = "memory_capability"
+name = "exact_bytes"
+c_type = "uint32_t"
+offset = 36
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_capability.instance_nonce"
+record = "memory_capability"
+name = "instance_nonce"
+c_type = "uint64_t"
+offset = 0
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_capability.mapping_generation"
+record = "memory_capability"
+name = "mapping_generation"
+c_type = "uint32_t"
+offset = 32
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_capability.memory_uid"
+record = "memory_capability"
+name = "memory_uid"
+c_type = "uint64_t"
+offset = 16
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_capability.owner_epoch"
+record = "memory_capability"
+name = "owner_epoch"
+c_type = "uint64_t"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_capability.queue_id"
+record = "memory_capability"
+name = "queue_id"
+c_type = "uint16_t"
+offset = 40
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_capability.reserved"
+record = "memory_capability"
+name = "reserved"
+c_type = "uint8_t"
+offset = 43
+size = 1
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_capability.ring_generation"
+record = "memory_capability"
+name = "ring_generation"
+c_type = "uint32_t"
+offset = 28
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_capability.role"
+record = "memory_capability"
+name = "role"
+c_type = "uint8_t"
+offset = 42
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.body_query"
+record = "memory_ops"
+name = "body_query"
+c_type = "c42_memory_body_fn"
+offset = 72
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.body_start"
+record = "memory_ops"
+name = "body_start"
+c_type = "c42_memory_body_fn"
+offset = 64
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.capture"
+record = "memory_ops"
+name = "capture"
+c_type = "c42_memory_capture_fn"
+offset = 16
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.marker_query"
+record = "memory_ops"
+name = "marker_query"
+c_type = "c42_memory_marker_fn"
+offset = 88
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.marker_start"
+record = "memory_ops"
+name = "marker_start"
+c_type = "c42_memory_marker_fn"
+offset = 80
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.reserved"
+record = "memory_ops"
+name = "reserved"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.reset_begin"
+record = "memory_ops"
+name = "reset_begin"
+c_type = "c42_memory_epoch_fn"
+offset = 96
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.reset_quiescent"
+record = "memory_ops"
+name = "reset_quiescent"
+c_type = "c42_memory_quiescent_fn"
+offset = 104
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.scrub_abort"
+record = "memory_ops"
+name = "scrub_abort"
+c_type = "c42_memory_scrub_fn"
+offset = 40
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.scrub_query"
+record = "memory_ops"
+name = "scrub_query"
+c_type = "c42_memory_scrub_fn"
+offset = 32
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.scrub_retire_query"
+record = "memory_ops"
+name = "scrub_retire_query"
+c_type = "c42_memory_scrub_fn"
+offset = 56
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.scrub_retire_start"
+record = "memory_ops"
+name = "scrub_retire_start"
+c_type = "c42_memory_scrub_fn"
+offset = 48
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.scrub_start"
+record = "memory_ops"
+name = "scrub_start"
+c_type = "c42_memory_scrub_fn"
+offset = 24
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.size"
+record = "memory_ops"
+name = "size"
+c_type = "uint16_t"
+offset = 2
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.teardown_begin"
+record = "memory_ops"
+name = "teardown_begin"
+c_type = "c42_memory_epoch_fn"
+offset = 112
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.teardown_quiescent"
+record = "memory_ops"
+name = "teardown_quiescent"
+c_type = "c42_memory_quiescent_fn"
+offset = 120
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.validate"
+record = "memory_ops"
+name = "validate"
+c_type = "c42_memory_validate_fn"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_ops.version"
+record = "memory_ops"
+name = "version"
+c_type = "uint16_t"
+offset = 0
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = false
+owner_model = "provider"
+
+[[fields]]
+id = "memory_status.committed"
+record = "memory_status"
+name = "committed"
+c_type = "uint8_t"
+offset = 32
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_status.prefix"
+record = "memory_status"
+name = "prefix"
+c_type = "uint32_t"
+offset = 28
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_status.quiescent"
+record = "memory_status"
+name = "quiescent"
+c_type = "uint8_t"
+offset = 33
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_status.reserved"
+record = "memory_status"
+name = "reserved"
+c_type = "uint8_t[6]"
+offset = 34
+size = 6
+element_count = 6
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_status.result"
+record = "memory_status"
+name = "result"
+c_type = "uint32_t"
+offset = 24
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_status.token"
+record = "memory_status"
+name = "token"
+c_type = "struct c42_memory_token"
+offset = 0
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_token.generation"
+record = "memory_token"
+name = "generation"
+c_type = "uint32_t"
+offset = 16
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_token.instance_nonce"
+record = "memory_token"
+name = "instance_nonce"
+c_type = "uint64_t"
+offset = 0
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_token.kind"
+record = "memory_token"
+name = "kind"
+c_type = "uint16_t"
+offset = 20
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_token.reserved"
+record = "memory_token"
+name = "reserved"
+c_type = "uint16_t"
+offset = 22
+size = 2
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "memory_token.uid"
+record = "memory_token"
+name = "uid"
+c_type = "uint64_t"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.command_dword10_15"
+record = "nvme_command"
+name = "command_dword10_15"
+c_type = "uint32_t[6]"
+offset = 72
+size = 24
+element_count = 6
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.command_dword2"
+record = "nvme_command"
+name = "command_dword2"
+c_type = "uint32_t"
+offset = 64
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.command_dword3"
+record = "nvme_command"
+name = "command_dword3"
+c_type = "uint32_t"
+offset = 68
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.command_flags_reserved"
+record = "nvme_command"
+name = "command_flags_reserved"
+c_type = "uint8_t"
+offset = 106
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.data_address_present"
+record = "nvme_command"
+name = "data_address_present"
+c_type = "uint8_t"
+offset = 104
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.data_pointer_format"
+record = "nvme_command"
+name = "data_pointer_format"
+c_type = "uint8_t"
+offset = 103
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.fuse"
+record = "nvme_command"
+name = "fuse"
+c_type = "uint8_t"
+offset = 102
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.handle"
+record = "nvme_command"
+name = "handle"
+c_type = "struct fwlab_nvme_command_handle"
+offset = 8
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.metadata_address_present"
+record = "nvme_command"
+name = "metadata_address_present"
+c_type = "uint8_t"
+offset = 105
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.namespace_id"
+record = "nvme_command"
+name = "namespace_id"
+c_type = "uint32_t"
+offset = 60
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.opcode"
+record = "nvme_command"
+name = "opcode"
+c_type = "uint8_t"
+offset = 100
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.origin"
+record = "nvme_command"
+name = "origin"
+c_type = "struct fwlab_nvme_origin_token"
+offset = 32
+size = 16
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.queue_class"
+record = "nvme_command"
+name = "queue_class"
+c_type = "uint8_t"
+offset = 101
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.reserved0"
+record = "nvme_command"
+name = "reserved0"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.reserved1"
+record = "nvme_command"
+name = "reserved1"
+c_type = "uint8_t"
+offset = 107
+size = 1
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.reserved2"
+record = "nvme_command"
+name = "reserved2"
+c_type = "uint32_t[5]"
+offset = 108
+size = 20
+element_count = 5
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.safety_generation"
+record = "nvme_command"
+name = "safety_generation"
+c_type = "uint32_t"
+offset = 56
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.size"
+record = "nvme_command"
+name = "size"
+c_type = "uint16_t"
+offset = 2
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.trace_cookie"
+record = "nvme_command"
+name = "trace_cookie"
+c_type = "uint64_t"
+offset = 48
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.transport_fault"
+record = "nvme_command"
+name = "transport_fault"
+c_type = "uint32_t"
+offset = 96
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command.version"
+record = "nvme_command"
+name = "version"
+c_type = "uint16_t"
+offset = 0
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command_handle.command_uid"
+record = "nvme_command_handle"
+name = "command_uid"
+c_type = "uint64_t"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command_handle.controller_epoch"
+record = "nvme_command_handle"
+name = "controller_epoch"
+c_type = "uint32_t"
+offset = 16
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command_handle.generation"
+record = "nvme_command_handle"
+name = "generation"
+c_type = "uint32_t"
+offset = 20
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_command_handle.instance_nonce"
+record = "nvme_command_handle"
+name = "instance_nonce"
+c_type = "uint64_t"
+offset = 0
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.actual_length"
+record = "nvme_completion_intent"
+name = "actual_length"
+c_type = "uint32_t"
+offset = 52
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.command_retry_delay"
+record = "nvme_completion_intent"
+name = "command_retry_delay"
+c_type = "uint8_t"
+offset = 59
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.do_not_retry"
+record = "nvme_completion_intent"
+name = "do_not_retry"
+c_type = "uint8_t"
+offset = 61
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.effect_class"
+record = "nvme_completion_intent"
+name = "effect_class"
+c_type = "uint8_t"
+offset = 62
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.handle"
+record = "nvme_completion_intent"
+name = "handle"
+c_type = "struct fwlab_nvme_command_handle"
+offset = 8
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.more"
+record = "nvme_completion_intent"
+name = "more"
+c_type = "uint8_t"
+offset = 60
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.origin"
+record = "nvme_completion_intent"
+name = "origin"
+c_type = "struct fwlab_nvme_origin_token"
+offset = 32
+size = 16
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.reserved0"
+record = "nvme_completion_intent"
+name = "reserved0"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.reserved1"
+record = "nvme_completion_intent"
+name = "reserved1"
+c_type = "uint8_t"
+offset = 63
+size = 1
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.result_dword0"
+record = "nvme_completion_intent"
+name = "result_dword0"
+c_type = "uint32_t"
+offset = 48
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.size"
+record = "nvme_completion_intent"
+name = "size"
+c_type = "uint16_t"
+offset = 2
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.status_code"
+record = "nvme_completion_intent"
+name = "status_code"
+c_type = "uint16_t"
+offset = 56
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.status_code_type"
+record = "nvme_completion_intent"
+name = "status_code_type"
+c_type = "uint8_t"
+offset = 58
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_completion_intent.version"
+record = "nvme_completion_intent"
+name = "version"
+c_type = "uint16_t"
+offset = 0
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "nvme_origin_token.word"
+record = "nvme_origin_token"
+name = "word"
+c_type = "uint64_t[2]"
+offset = 0
+size = 16
+element_count = 2
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "observer_candidate.associated_cq_id"
+record = "observer_candidate"
+name = "associated_cq_id"
+c_type = "uint16_t"
+offset = 42
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.associated_cq_mapping_generation"
+record = "observer_candidate"
+name = "associated_cq_mapping_generation"
+c_type = "uint32_t"
+offset = 36
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.associated_cq_ring_generation"
+record = "observer_candidate"
+name = "associated_cq_ring_generation"
+c_type = "uint32_t"
+offset = 32
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.controller_epoch"
+record = "observer_candidate"
+name = "controller_epoch"
+c_type = "uint32_t"
+offset = 24
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.in_use"
+record = "observer_candidate"
+name = "in_use"
+c_type = "uint8_t"
+offset = 44
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.kind"
+record = "observer_candidate"
+name = "kind"
+c_type = "uint8_t"
+offset = 45
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.provider_retired"
+record = "observer_candidate"
+name = "provider_retired"
+c_type = "uint8_t"
+offset = 48
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.queue_id"
+record = "observer_candidate"
+name = "queue_id"
+c_type = "uint16_t"
+offset = 40
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.reserved"
+record = "observer_candidate"
+name = "reserved"
+c_type = "uint32_t[3]"
+offset = 52
+size = 12
+element_count = 3
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.reserved0"
+record = "observer_candidate"
+name = "reserved0"
+c_type = "uint8_t[3]"
+offset = 49
+size = 3
+element_count = 3
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.retire_started"
+record = "observer_candidate"
+name = "retire_started"
+c_type = "uint8_t"
+offset = 47
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.scrub_started"
+record = "observer_candidate"
+name = "scrub_started"
+c_type = "uint8_t"
+offset = 46
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.state"
+record = "observer_candidate"
+name = "state"
+c_type = "uint32_t"
+offset = 28
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_candidate.token"
+record = "observer_candidate"
+name = "token"
+c_type = "struct c42_operation_token"
+offset = 0
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.active_generation"
+record = "observer_command"
+name = "active_generation"
+c_type = "uint32_t"
+offset = 52
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.client_uid"
+record = "observer_command"
+name = "client_uid"
+c_type = "uint64_t"
+offset = 24
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.command_id"
+record = "observer_command"
+name = "command_id"
+c_type = "uint16_t"
+offset = 56
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.consume_known"
+record = "observer_command"
+name = "consume_known"
+c_type = "uint8_t"
+offset = 72
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.cq_index"
+record = "observer_command"
+name = "cq_index"
+c_type = "uint16_t"
+offset = 60
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.cq_slot"
+record = "observer_command"
+name = "cq_slot"
+c_type = "uint16_t"
+offset = 62
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.handle"
+record = "observer_command"
+name = "handle"
+c_type = "struct fwlab_nvme_command_handle"
+offset = 0
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.lease_ticket_matches"
+record = "observer_command"
+name = "lease_ticket_matches"
+c_type = "uint8_t"
+offset = 71
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.notification_uid"
+record = "observer_command"
+name = "notification_uid"
+c_type = "uint64_t"
+offset = 40
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.prepared_origin_matches"
+record = "observer_command"
+name = "prepared_origin_matches"
+c_type = "uint8_t"
+offset = 68
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.publication_uid"
+record = "observer_command"
+name = "publication_uid"
+c_type = "uint64_t"
+offset = 32
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.queue_class"
+record = "observer_command"
+name = "queue_class"
+c_type = "uint8_t"
+offset = 67
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.ready_ticket_matches"
+record = "observer_command"
+name = "ready_ticket_matches"
+c_type = "uint8_t"
+offset = 70
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.reserved"
+record = "observer_command"
+name = "reserved"
+c_type = "uint32_t[3]"
+offset = 76
+size = 12
+element_count = 3
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.reserved0"
+record = "observer_command"
+name = "reserved0"
+c_type = "uint8_t"
+offset = 73
+size = 1
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.reserved1"
+record = "observer_command"
+name = "reserved1"
+c_type = "uint8_t[2]"
+offset = 74
+size = 2
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.sq_index"
+record = "observer_command"
+name = "sq_index"
+c_type = "uint16_t"
+offset = 58
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.sq_ring_generation"
+record = "observer_command"
+name = "sq_ring_generation"
+c_type = "uint32_t"
+offset = 48
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.sqhd_snapshot"
+record = "observer_command"
+name = "sqhd_snapshot"
+c_type = "uint16_t"
+offset = 64
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.state"
+record = "observer_command"
+name = "state"
+c_type = "uint8_t"
+offset = 66
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_command.ticket_identity_matches"
+record = "observer_command"
+name = "ticket_identity_matches"
+c_type = "uint8_t"
+offset = 69
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.controller_epoch"
+record = "observer_control"
+name = "controller_epoch"
+c_type = "uint32_t"
+offset = 24
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.in_use"
+record = "observer_control"
+name = "in_use"
+c_type = "uint8_t"
+offset = 38
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.kind"
+record = "observer_control"
+name = "kind"
+c_type = "uint8_t"
+offset = 39
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.memory_started"
+record = "observer_control"
+name = "memory_started"
+c_type = "uint8_t"
+offset = 41
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.old_epoch"
+record = "observer_control"
+name = "old_epoch"
+c_type = "uint32_t"
+offset = 28
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.port_started"
+record = "observer_control"
+name = "port_started"
+c_type = "uint8_t"
+offset = 40
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.queue_id"
+record = "observer_control"
+name = "queue_id"
+c_type = "uint16_t"
+offset = 36
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.reserved"
+record = "observer_control"
+name = "reserved"
+c_type = "uint32_t[3]"
+offset = 44
+size = 12
+element_count = 3
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.reserved0"
+record = "observer_control"
+name = "reserved0"
+c_type = "uint8_t[2]"
+offset = 42
+size = 2
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.state"
+record = "observer_control"
+name = "state"
+c_type = "uint32_t"
+offset = 32
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_control.token"
+record = "observer_control"
+name = "token"
+c_type = "struct c42_operation_token"
+offset = 0
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.completion_queue_id"
+record = "observer_notification"
+name = "completion_queue_id"
+c_type = "uint16_t"
+offset = 40
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.controller_epoch"
+record = "observer_notification"
+name = "controller_epoch"
+c_type = "uint32_t"
+offset = 36
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.cq_ring_generation"
+record = "observer_notification"
+name = "cq_ring_generation"
+c_type = "uint32_t"
+offset = 32
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.current_epoch"
+record = "observer_notification"
+name = "current_epoch"
+c_type = "uint8_t"
+offset = 46
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.in_use"
+record = "observer_notification"
+name = "in_use"
+c_type = "uint8_t"
+offset = 44
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.publication_uid"
+record = "observer_notification"
+name = "publication_uid"
+c_type = "uint64_t"
+offset = 24
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.reserved"
+record = "observer_notification"
+name = "reserved"
+c_type = "uint32_t[2]"
+offset = 48
+size = 8
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.reserved0"
+record = "observer_notification"
+name = "reserved0"
+c_type = "uint8_t"
+offset = 47
+size = 1
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.slot_ordinal"
+record = "observer_notification"
+name = "slot_ordinal"
+c_type = "uint16_t"
+offset = 42
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.state"
+record = "observer_notification"
+name = "state"
+c_type = "uint8_t"
+offset = 45
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_notification.token"
+record = "observer_notification"
+name = "token"
+c_type = "struct c42_operation_token"
+offset = 0
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.body_prefix"
+record = "observer_publication"
+name = "body_prefix"
+c_type = "uint16_t"
+offset = 26
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.body_started"
+record = "observer_publication"
+name = "body_started"
+c_type = "uint8_t"
+offset = 29
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.body_token_uid"
+record = "observer_publication"
+name = "body_token_uid"
+c_type = "uint64_t"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.command_index"
+record = "observer_publication"
+name = "command_index"
+c_type = "uint16_t"
+offset = 24
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.in_use"
+record = "observer_publication"
+name = "in_use"
+c_type = "uint8_t"
+offset = 28
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.marker_started"
+record = "observer_publication"
+name = "marker_started"
+c_type = "uint8_t"
+offset = 30
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.marker_token_uid"
+record = "observer_publication"
+name = "marker_token_uid"
+c_type = "uint64_t"
+offset = 16
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.marker_visible"
+record = "observer_publication"
+name = "marker_visible"
+c_type = "uint8_t"
+offset = 31
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.publication_uid"
+record = "observer_publication"
+name = "publication_uid"
+c_type = "uint64_t"
+offset = 0
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_publication.reserved"
+record = "observer_publication"
+name = "reserved"
+c_type = "uint32_t[2]"
+offset = 32
+size = 8
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.associated_cq_id"
+record = "observer_queue"
+name = "associated_cq_id"
+c_type = "uint16_t"
+offset = 22
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.create_scrub_retired"
+record = "observer_queue"
+name = "create_scrub_retired"
+c_type = "uint8_t"
+offset = 46
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.depth"
+record = "observer_queue"
+name = "depth"
+c_type = "uint16_t"
+offset = 24
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.device_index"
+record = "observer_queue"
+name = "device_index"
+c_type = "uint16_t"
+offset = 28
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.frozen_tail"
+record = "observer_queue"
+name = "frozen_tail"
+c_type = "uint16_t"
+offset = 32
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.host_index"
+record = "observer_queue"
+name = "host_index"
+c_type = "uint16_t"
+offset = 26
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.kind"
+record = "observer_queue"
+name = "kind"
+c_type = "uint8_t"
+offset = 42
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.last_mapping_generation"
+record = "observer_queue"
+name = "last_mapping_generation"
+c_type = "uint32_t"
+offset = 12
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.last_ring_generation"
+record = "observer_queue"
+name = "last_ring_generation"
+c_type = "uint32_t"
+offset = 8
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.life"
+record = "observer_queue"
+name = "life"
+c_type = "uint8_t"
+offset = 44
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.mapping_generation"
+record = "observer_queue"
+name = "mapping_generation"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.next_slot_generation"
+record = "observer_queue"
+name = "next_slot_generation"
+c_type = "uint32_t"
+offset = 16
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.pending"
+record = "observer_queue"
+name = "pending"
+c_type = "uint16_t"
+offset = 30
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.pending_ack_delta"
+record = "observer_queue"
+name = "pending_ack_delta"
+c_type = "uint16_t"
+offset = 40
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.pending_ack_head"
+record = "observer_queue"
+name = "pending_ack_head"
+c_type = "uint16_t"
+offset = 38
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.pending_ack_valid"
+record = "observer_queue"
+name = "pending_ack_valid"
+c_type = "uint8_t"
+offset = 47
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.phase"
+record = "observer_queue"
+name = "phase"
+c_type = "uint8_t"
+offset = 45
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.queue_class"
+record = "observer_queue"
+name = "queue_class"
+c_type = "uint8_t"
+offset = 43
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.queue_id"
+record = "observer_queue"
+name = "queue_id"
+c_type = "uint16_t"
+offset = 20
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.reserved0"
+record = "observer_queue"
+name = "reserved0"
+c_type = "uint8_t[8]"
+offset = 48
+size = 8
+element_count = 8
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.reserved_count"
+record = "observer_queue"
+name = "reserved_count"
+c_type = "uint16_t"
+offset = 36
+size = 2
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.ring_generation"
+record = "observer_queue"
+name = "ring_generation"
+c_type = "uint32_t"
+offset = 0
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.slots"
+record = "observer_queue"
+name = "slots"
+c_type = "struct c42_observer_slot_v2[32]"
+offset = 56
+size = 2048
+element_count = 32
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_queue.unacked_count"
+record = "observer_queue"
+name = "unacked_count"
+c_type = "uint16_t"
+offset = 34
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_reconcile.command_index"
+record = "observer_reconcile"
+name = "command_index"
+c_type = "uint16_t"
+offset = 16
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_reconcile.consume_known"
+record = "observer_reconcile"
+name = "consume_known"
+c_type = "uint8_t"
+offset = 20
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_reconcile.consume_uid"
+record = "observer_reconcile"
+name = "consume_uid"
+c_type = "uint64_t"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_reconcile.in_use"
+record = "observer_reconcile"
+name = "in_use"
+c_type = "uint8_t"
+offset = 18
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_reconcile.lease_matches_command"
+record = "observer_reconcile"
+name = "lease_matches_command"
+c_type = "uint8_t"
+offset = 21
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_reconcile.publication_uid"
+record = "observer_reconcile"
+name = "publication_uid"
+c_type = "uint64_t"
+offset = 0
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_reconcile.reserved"
+record = "observer_reconcile"
+name = "reserved"
+c_type = "uint32_t[2]"
+offset = 24
+size = 8
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_reconcile.reserved0"
+record = "observer_reconcile"
+name = "reserved0"
+c_type = "uint8_t[2]"
+offset = 22
+size = 2
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_reconcile.state"
+record = "observer_reconcile"
+name = "state"
+c_type = "uint8_t"
+offset = 19
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.admission_cursor"
+record = "observer_root"
+name = "admission_cursor"
+c_type = "uint8_t"
+offset = 30
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.admission_paused"
+record = "observer_root"
+name = "admission_paused"
+c_type = "uint8_t"
+offset = 28
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.candidates"
+record = "observer_root"
+name = "candidates"
+c_type = "struct c42_observer_candidate_v2[4]"
+offset = 8456
+size = 256
+element_count = 4
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.command_capacity"
+record = "observer_root"
+name = "command_capacity"
+c_type = "uint16_t"
+offset = 24
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.commands"
+record = "observer_root"
+name = "commands"
+c_type = "struct c42_observer_command_v2[64]"
+offset = 8712
+size = 5632
+element_count = 64
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.controller_epoch"
+record = "observer_root"
+name = "controller_epoch"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.controls"
+record = "observer_root"
+name = "controls"
+c_type = "struct c42_observer_control_v2[4]"
+offset = 26632
+size = 224
+element_count = 4
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.cq"
+record = "observer_root"
+name = "cq"
+c_type = "struct c42_observer_queue_v2[2]"
+offset = 4248
+size = 4208
+element_count = 2
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.fault_cause"
+record = "observer_root"
+name = "fault_cause"
+c_type = "uint32_t"
+offset = 20
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.instance_nonce"
+record = "observer_root"
+name = "instance_nonce"
+c_type = "uint64_t"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.notifications"
+record = "observer_root"
+name = "notifications"
+c_type = "struct c42_observer_notification_v2[64]"
+offset = 18952
+size = 3584
+element_count = 64
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.phase"
+record = "observer_root"
+name = "phase"
+c_type = "uint32_t"
+offset = 16
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.publication_cursor"
+record = "observer_root"
+name = "publication_cursor"
+c_type = "uint8_t"
+offset = 31
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.publications"
+record = "observer_root"
+name = "publications"
+c_type = "struct c42_observer_publication_v2[64]"
+offset = 14344
+size = 2560
+element_count = 64
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.ready_cursor"
+record = "observer_root"
+name = "ready_cursor"
+c_type = "uint8_t"
+offset = 34
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.ready_poll_pending"
+record = "observer_root"
+name = "ready_poll_pending"
+c_type = "uint8_t"
+offset = 35
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.reconcile_cursor"
+record = "observer_root"
+name = "reconcile_cursor"
+c_type = "uint8_t"
+offset = 32
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.reconciles"
+record = "observer_root"
+name = "reconciles"
+c_type = "struct c42_observer_reconcile_v2[64]"
+offset = 16904
+size = 2048
+element_count = 64
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.reserved"
+record = "observer_root"
+name = "reserved"
+c_type = "uint32_t[8]"
+offset = 26856
+size = 32
+element_count = 8
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.reserved0"
+record = "observer_root"
+name = "reserved0"
+c_type = "uint8_t[4]"
+offset = 36
+size = 4
+element_count = 4
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.scheduler_cursor"
+record = "observer_root"
+name = "scheduler_cursor"
+c_type = "uint8_t"
+offset = 29
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.size"
+record = "observer_root"
+name = "size"
+c_type = "uint16_t"
+offset = 2
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.sq"
+record = "observer_root"
+name = "sq"
+c_type = "struct c42_observer_queue_v2[2]"
+offset = 40
+size = 4208
+element_count = 2
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.sq_cursor"
+record = "observer_root"
+name = "sq_cursor"
+c_type = "uint8_t"
+offset = 33
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.target_capacity"
+record = "observer_root"
+name = "target_capacity"
+c_type = "uint16_t"
+offset = 26
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.targets"
+record = "observer_root"
+name = "targets"
+c_type = "struct c42_observer_target_v2[64]"
+offset = 22536
+size = 4096
+element_count = 64
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_root.version"
+record = "observer_root"
+name = "version"
+c_type = "uint16_t"
+offset = 0
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.command_id"
+record = "observer_slot"
+name = "command_id"
+c_type = "uint16_t"
+offset = 30
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.cq_ring_generation"
+record = "observer_slot"
+name = "cq_ring_generation"
+c_type = "uint32_t"
+offset = 16
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.notification_uid"
+record = "observer_slot"
+name = "notification_uid"
+c_type = "uint64_t"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.ordinal"
+record = "observer_slot"
+name = "ordinal"
+c_type = "uint16_t"
+offset = 34
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.origin_matches_owner"
+record = "observer_slot"
+name = "origin_matches_owner"
+c_type = "uint8_t"
+offset = 39
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.owner_present"
+record = "observer_slot"
+name = "owner_present"
+c_type = "uint8_t"
+offset = 38
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.phase"
+record = "observer_slot"
+name = "phase"
+c_type = "uint8_t"
+offset = 36
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.publication_uid"
+record = "observer_slot"
+name = "publication_uid"
+c_type = "uint64_t"
+offset = 0
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.reserved"
+record = "observer_slot"
+name = "reserved"
+c_type = "uint32_t[2]"
+offset = 56
+size = 8
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.slot_generation"
+record = "observer_slot"
+name = "slot_generation"
+c_type = "uint32_t"
+offset = 24
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.source_sq_generation"
+record = "observer_slot"
+name = "source_sq_generation"
+c_type = "uint32_t"
+offset = 20
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.source_sq_id"
+record = "observer_slot"
+name = "source_sq_id"
+c_type = "uint16_t"
+offset = 28
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.state"
+record = "observer_slot"
+name = "state"
+c_type = "uint8_t"
+offset = 37
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.submission_queue_head"
+record = "observer_slot"
+name = "submission_queue_head"
+c_type = "uint16_t"
+offset = 32
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_slot.wire"
+record = "observer_slot"
+name = "wire"
+c_type = "uint8_t[16]"
+offset = 40
+size = 16
+element_count = 16
+reserved = false
+semantic_tags = ["array"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_target.handle"
+record = "observer_target"
+name = "handle"
+c_type = "struct fwlab_nvme_command_handle"
+offset = 24
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_target.identity_matches_active"
+record = "observer_target"
+name = "identity_matches_active"
+c_type = "uint8_t"
+offset = 55
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_target.in_use"
+record = "observer_target"
+name = "in_use"
+c_type = "uint8_t"
+offset = 54
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_target.reserved"
+record = "observer_target"
+name = "reserved"
+c_type = "uint32_t[2]"
+offset = 56
+size = 8
+element_count = 2
+reserved = true
+semantic_tags = ["array", "reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_target.sq_index"
+record = "observer_target"
+name = "sq_index"
+c_type = "uint16_t"
+offset = 52
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_target.sq_ring_generation"
+record = "observer_target"
+name = "sq_ring_generation"
+c_type = "uint32_t"
+offset = 48
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "observer_target.token"
+record = "observer_target"
+name = "token"
+c_type = "struct c42_operation_token"
+offset = 0
+size = 24
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "operation_token.generation"
+record = "operation_token"
+name = "generation"
+c_type = "uint32_t"
+offset = 16
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["generation"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "operation_token.instance_nonce"
+record = "operation_token"
+name = "instance_nonce"
+c_type = "uint64_t"
+offset = 0
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "operation_token.kind"
+record = "operation_token"
+name = "kind"
+c_type = "uint16_t"
+offset = 20
+size = 2
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "operation_token.reserved"
+record = "operation_token"
+name = "reserved"
+c_type = "uint16_t"
+offset = 22
+size = 2
+element_count = 1
+reserved = true
+semantic_tags = ["reserved"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "operation_token.uid"
+record = "operation_token"
+name = "uid"
+c_type = "uint64_t"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "identity"
+
+[[fields]]
+id = "provider_event.applied_effect"
+record = "provider_event"
+name = "applied_effect"
+c_type = "uint32_t"
+offset = 44
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.call_kind"
+record = "provider_event"
+name = "call_kind"
+c_type = "uint8_t"
+offset = 57
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.committed"
+record = "provider_event"
+name = "committed"
+c_type = "uint8_t"
+offset = 63
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.direct_result"
+record = "provider_event"
+name = "direct_result"
+c_type = "uint32_t"
+offset = 28
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.flags"
+record = "provider_event"
+name = "flags"
+c_type = "uint8_t"
+offset = 65
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.input_record_match"
+record = "provider_event"
+name = "input_record_match"
+c_type = "uint8_t"
+offset = 60
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.input_structural_valid"
+record = "provider_event"
+name = "input_structural_valid"
+c_type = "uint8_t"
+offset = 59
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.object_uid"
+record = "provider_event"
+name = "object_uid"
+c_type = "uint64_t"
+offset = 16
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.operation"
+record = "provider_event"
+name = "operation"
+c_type = "uint32_t"
+offset = 24
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.output_record_match"
+record = "provider_event"
+name = "output_record_match"
+c_type = "uint8_t"
+offset = 62
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.output_structural_valid"
+record = "provider_event"
+name = "output_structural_valid"
+c_type = "uint8_t"
+offset = 61
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.output_value"
+record = "provider_event"
+name = "output_value"
+c_type = "uint32_t"
+offset = 32
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.output_write_mask"
+record = "provider_event"
+name = "output_write_mask"
+c_type = "uint8_t"
+offset = 58
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.parameter0"
+record = "provider_event"
+name = "parameter0"
+c_type = "uint32_t"
+offset = 48
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.parameter1"
+record = "provider_event"
+name = "parameter1"
+c_type = "uint32_t"
+offset = 52
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.provider"
+record = "provider_event"
+name = "provider"
+c_type = "uint8_t"
+offset = 56
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = ["enum"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.quiescent"
+record = "provider_event"
+name = "quiescent"
+c_type = "uint8_t"
+offset = 64
+size = 1
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.reported_effect"
+record = "provider_event"
+name = "reported_effect"
+c_type = "uint32_t"
+offset = 40
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.requested_effect"
+record = "provider_event"
+name = "requested_effect"
+c_type = "uint32_t"
+offset = 36
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.sequence"
+record = "provider_event"
+name = "sequence"
+c_type = "uint64_t"
+offset = 0
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "provider_event.token_uid"
+record = "provider_event"
+name = "token_uid"
+c_type = "uint64_t"
+offset = 8
+size = 8
+element_count = 1
+reserved = false
+semantic_tags = ["identity_key"]
+semantic = true
+owner_model = "provider"
+
+[[fields]]
+id = "step_result.notifications_ready"
+record = "step_result"
+name = "notifications_ready"
+c_type = "uint32_t"
+offset = 12
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "phase"
+
+[[fields]]
+id = "step_result.requested_budget"
+record = "step_result"
+name = "requested_budget"
+c_type = "uint32_t"
+offset = 0
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "phase"
+
+[[fields]]
+id = "step_result.transitions"
+record = "step_result"
+name = "transitions"
+c_type = "uint32_t"
+offset = 8
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "phase"
+
+[[fields]]
+id = "step_result.units_executed"
+record = "step_result"
+name = "units_executed"
+c_type = "uint32_t"
+offset = 4
+size = 4
+element_count = 1
+reserved = false
+semantic_tags = []
+semantic = true
+owner_model = "phase"
+
+[[entrypoints]]
+id = "command_prepare_start"
+provider = "command"
+ops_record = "command_port_ops"
+member = "prepare_start"
+mode = "start"
+input_records = ["command_prepare_key"]
+output_records = ["command_prepare_result"]
+
+[[entrypoints]]
+id = "command_prepare_query"
+provider = "command"
+ops_record = "command_port_ops"
+member = "prepare_query"
+mode = "query"
+input_records = ["command_prepare_key"]
+output_records = ["command_prepare_result"]
+
+[[entrypoints]]
+id = "command_prepare_abort"
+provider = "command"
+ops_record = "command_port_ops"
+member = "prepare_abort"
+mode = "action"
+input_records = ["command_prepared_token"]
+output_scalars = ["aborted"]
+
+[[entrypoints]]
+id = "command_prepare_abort_query"
+provider = "command"
+ops_record = "command_port_ops"
+member = "prepare_abort_query"
+mode = "query"
+input_records = ["command_prepared_token"]
+output_scalars = ["aborted"]
+
+[[entrypoints]]
+id = "command_admit_start"
+provider = "command"
+ops_record = "command_port_ops"
+member = "admit_start"
+mode = "start"
+input_records = ["command_admission_key", "nvme_command"]
+output_records = ["command_ticket"]
+output_scalars = ["admission_state"]
+
+[[entrypoints]]
+id = "command_admit_query"
+provider = "command"
+ops_record = "command_port_ops"
+member = "admit_query"
+mode = "query"
+input_records = ["command_admission_key", "nvme_command"]
+output_records = ["command_ticket"]
+output_scalars = ["admission_state"]
+
+[[entrypoints]]
+id = "command_poll"
+provider = "command"
+ops_record = "command_port_ops"
+member = "poll"
+mode = "action"
+output_records = ["command_ready_event"]
+input_scalars = ["budget", "capacity"]
+output_scalars = ["count"]
+
+[[entrypoints]]
+id = "command_completion_acquire"
+provider = "command"
+ops_record = "command_port_ops"
+member = "completion_acquire"
+mode = "action"
+input_records = ["command_ticket"]
+output_records = ["nvme_completion_intent", "command_completion_lease"]
+
+[[entrypoints]]
+id = "command_completion_release_start"
+provider = "command"
+ops_record = "command_port_ops"
+member = "completion_release_start"
+mode = "start"
+input_records = ["command_completion_lease"]
+input_scalars = ["client_uid"]
+output_scalars = ["released"]
+
+[[entrypoints]]
+id = "command_completion_release_query"
+provider = "command"
+ops_record = "command_port_ops"
+member = "completion_release_query"
+mode = "query"
+input_records = ["command_completion_lease"]
+input_scalars = ["client_uid"]
+output_scalars = ["released"]
+
+[[entrypoints]]
+id = "command_consume_prepare"
+provider = "command"
+ops_record = "command_port_ops"
+member = "consume_prepare"
+mode = "start"
+input_records = ["command_completion_lease"]
+output_records = ["command_consume_token"]
+input_scalars = ["publication_uid"]
+output_scalars = ["consume_state"]
+
+[[entrypoints]]
+id = "command_consume_abort"
+provider = "command"
+ops_record = "command_port_ops"
+member = "consume_abort"
+mode = "action"
+input_records = ["command_consume_token"]
+output_scalars = ["consume_state"]
+
+[[entrypoints]]
+id = "command_consume_abort_query"
+provider = "command"
+ops_record = "command_port_ops"
+member = "consume_abort_query"
+mode = "query"
+input_records = ["command_consume_token"]
+output_scalars = ["consume_state"]
+
+[[entrypoints]]
+id = "command_consume_commit"
+provider = "command"
+ops_record = "command_port_ops"
+member = "consume_commit"
+mode = "action"
+input_records = ["command_consume_token"]
+output_scalars = ["consume_state"]
+
+[[entrypoints]]
+id = "command_consume_query"
+provider = "command"
+ops_record = "command_port_ops"
+member = "consume_query"
+mode = "query"
+input_records = ["command_consume_token"]
+output_scalars = ["consume_state"]
+
+[[entrypoints]]
+id = "command_consume_retire"
+provider = "command"
+ops_record = "command_port_ops"
+member = "consume_retire"
+mode = "action"
+input_records = ["command_consume_token"]
+output_scalars = ["consume_state"]
+
+[[entrypoints]]
+id = "command_reset_begin"
+provider = "command"
+ops_record = "command_port_ops"
+member = "reset_begin"
+mode = "start"
+input_scalars = ["instance_nonce", "old_epoch"]
+
+[[entrypoints]]
+id = "command_reset_quiescent"
+provider = "command"
+ops_record = "command_port_ops"
+member = "reset_quiescent"
+mode = "query"
+input_scalars = ["instance_nonce", "epoch"]
+output_scalars = ["quiescent"]
+
+[[entrypoints]]
+id = "command_teardown_begin"
+provider = "command"
+ops_record = "command_port_ops"
+member = "teardown_begin"
+mode = "start"
+input_scalars = ["instance_nonce", "old_epoch"]
+
+[[entrypoints]]
+id = "command_teardown_quiescent"
+provider = "command"
+ops_record = "command_port_ops"
+member = "teardown_quiescent"
+mode = "query"
+input_scalars = ["instance_nonce", "epoch"]
+output_scalars = ["quiescent"]
+
+[[entrypoints]]
+id = "memory_validate"
+provider = "memory"
+ops_record = "memory_ops"
+member = "validate"
+mode = "action"
+input_records = ["memory_capability"]
+input_scalars = ["role", "exact_bytes"]
+
+[[entrypoints]]
+id = "memory_capture"
+provider = "memory"
+ops_record = "memory_ops"
+member = "capture"
+mode = "action"
+input_records = ["memory_capability"]
+input_scalars = ["slot", "output_size"]
+output_bytes = 64
+
+[[entrypoints]]
+id = "memory_scrub_start"
+provider = "memory"
+ops_record = "memory_ops"
+member = "scrub_start"
+mode = "start"
+input_records = ["memory_capability", "memory_token"]
+output_records = ["memory_status"]
+input_scalars = ["depth", "inverse_phase"]
+
+[[entrypoints]]
+id = "memory_scrub_query"
+provider = "memory"
+ops_record = "memory_ops"
+member = "scrub_query"
+mode = "query"
+input_records = ["memory_capability", "memory_token"]
+output_records = ["memory_status"]
+input_scalars = ["depth", "inverse_phase"]
+
+[[entrypoints]]
+id = "memory_scrub_abort"
+provider = "memory"
+ops_record = "memory_ops"
+member = "scrub_abort"
+mode = "action"
+input_records = ["memory_capability", "memory_token"]
+output_records = ["memory_status"]
+input_scalars = ["depth", "inverse_phase"]
+
+[[entrypoints]]
+id = "memory_scrub_retire_start"
+provider = "memory"
+ops_record = "memory_ops"
+member = "scrub_retire_start"
+mode = "start"
+input_records = ["memory_capability", "memory_token"]
+output_records = ["memory_status"]
+input_scalars = ["depth", "inverse_phase"]
+
+[[entrypoints]]
+id = "memory_scrub_retire_query"
+provider = "memory"
+ops_record = "memory_ops"
+member = "scrub_retire_query"
+mode = "query"
+input_records = ["memory_capability", "memory_token"]
+output_records = ["memory_status"]
+input_scalars = ["depth", "inverse_phase"]
+
+[[entrypoints]]
+id = "memory_body_start"
+provider = "memory"
+ops_record = "memory_ops"
+member = "body_start"
+mode = "start"
+input_records = ["memory_capability", "memory_token"]
+output_records = ["memory_status"]
+input_scalars = ["slot", "expected_16_bytes"]
+
+[[entrypoints]]
+id = "memory_body_query"
+provider = "memory"
+ops_record = "memory_ops"
+member = "body_query"
+mode = "query"
+input_records = ["memory_capability", "memory_token"]
+output_records = ["memory_status"]
+input_scalars = ["slot", "expected_16_bytes"]
+
+[[entrypoints]]
+id = "memory_marker_start"
+provider = "memory"
+ops_record = "memory_ops"
+member = "marker_start"
+mode = "start"
+input_records = ["memory_capability", "memory_token"]
+output_records = ["memory_status"]
+input_scalars = ["slot", "marker"]
+
+[[entrypoints]]
+id = "memory_marker_query"
+provider = "memory"
+ops_record = "memory_ops"
+member = "marker_query"
+mode = "query"
+input_records = ["memory_capability", "memory_token"]
+output_records = ["memory_status"]
+input_scalars = ["slot", "marker"]
+
+[[entrypoints]]
+id = "memory_reset_begin"
+provider = "memory"
+ops_record = "memory_ops"
+member = "reset_begin"
+mode = "start"
+input_scalars = ["instance_nonce", "old_epoch"]
+
+[[entrypoints]]
+id = "memory_reset_quiescent"
+provider = "memory"
+ops_record = "memory_ops"
+member = "reset_quiescent"
+mode = "query"
+input_scalars = ["instance_nonce", "epoch"]
+output_scalars = ["quiescent"]
+
+[[entrypoints]]
+id = "memory_teardown_begin"
+provider = "memory"
+ops_record = "memory_ops"
+member = "teardown_begin"
+mode = "start"
+input_scalars = ["instance_nonce", "old_epoch"]
+
+[[entrypoints]]
+id = "memory_teardown_quiescent"
+provider = "memory"
+ops_record = "memory_ops"
+member = "teardown_quiescent"
+mode = "query"
+input_scalars = ["instance_nonce", "epoch"]
+output_scalars = ["quiescent"]

@@ -1,0 +1,193 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[model]
+schema_version = 1
+profile_id = "C42A-P1"
+model_id = "phase"
+epoch_delay_credit_maximum = 8
+
+[[record_rules]]
+id = "phase_record_contracts"
+records = ["control_status", "step_result"]
+default_rule = "exact"
+reserved_rule = "required_zero"
+case_id = "control_episode"
+claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-EPOCH-TERMINAL-PROGRESS"]
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "reset_command_begin"
+law_id = "phase.reset_command_begin"
+owner_model = "phase"
+prestate = "reset_started_port_not_started"
+action = "c42_step_budget_1"
+provider_call = "command.reset_begin"
+poststate = "reset_port_started_or_waiting_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "reset"
+rank_rule = "decrease_macro_phase_or_delay_credit"
+maximum_work_units = 11
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "reset_memory_begin"
+law_id = "phase.reset_memory_begin"
+owner_model = "phase"
+prestate = "reset_port_started_memory_not_started"
+action = "c42_step_budget_1"
+provider_call = "memory.reset_begin"
+poststate = "reset_memory_started_or_waiting_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "reset"
+rank_rule = "decrease_macro_phase_or_delay_credit"
+maximum_work_units = 11
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "reset_quiescent"
+law_id = "phase.reset_quiescent"
+owner_model = "phase"
+prestate = "reset_providers_started"
+action = "c42_step_budget_1"
+provider_call = "command_and_memory.reset_quiescent"
+poststate = "reset_waiting_or_terminal_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "reset"
+rank_rule = "decrease_macro_phase_or_delay_credit"
+maximum_work_units = 11
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "reset_terminal"
+law_id = "phase.reset_terminal"
+owner_model = "phase"
+prestate = "reset_global_quiescent"
+action = "c42_step_budget_1"
+provider_call = "none_after_terminal"
+poststate = "cold_no_queues_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "reset"
+rank_rule = "terminal_zero"
+maximum_work_units = 11
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "teardown_reset_command"
+law_id = "phase.teardown_reset_command"
+owner_model = "phase"
+prestate = "teardown_owns_unstarted_reset_port"
+action = "c42_step_budget_1"
+provider_call = "command.reset_begin"
+poststate = "old_reset_port_started_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "teardown_takeover"
+rank_rule = "decrease_macro_phase_or_delay_credit"
+maximum_work_units = 13
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "teardown_reset_memory"
+law_id = "phase.teardown_reset_memory"
+owner_model = "phase"
+prestate = "teardown_owns_unstarted_reset_memory"
+action = "c42_step_budget_1"
+provider_call = "memory.reset_begin"
+poststate = "old_reset_memory_started_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "teardown_takeover"
+rank_rule = "decrease_macro_phase_or_delay_credit"
+maximum_work_units = 13
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "teardown_command_begin"
+law_id = "phase.teardown_command_begin"
+owner_model = "phase"
+prestate = "teardown_port_not_started"
+action = "c42_step_budget_1"
+provider_call = "command.teardown_begin"
+poststate = "teardown_port_started_or_waiting_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "teardown"
+rank_rule = "decrease_macro_phase_or_delay_credit"
+maximum_work_units = 13
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "teardown_memory_begin"
+law_id = "phase.teardown_memory_begin"
+owner_model = "phase"
+prestate = "teardown_port_started_memory_not_started"
+action = "c42_step_budget_1"
+provider_call = "memory.teardown_begin"
+poststate = "teardown_memory_started_or_waiting_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "teardown"
+rank_rule = "decrease_macro_phase_or_delay_credit"
+maximum_work_units = 13
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "teardown_quiescent"
+law_id = "phase.teardown_quiescent"
+owner_model = "phase"
+prestate = "teardown_providers_started"
+action = "c42_step_budget_1"
+provider_call = "command_and_memory.teardown_quiescent"
+poststate = "teardown_waiting_or_terminal_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "teardown"
+rank_rule = "decrease_macro_phase_or_delay_credit"
+maximum_work_units = 13
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "teardown_terminal"
+law_id = "phase.teardown_terminal"
+owner_model = "phase"
+prestate = "teardown_global_quiescent"
+action = "c42_step_budget_1"
+provider_call = "none_after_terminal"
+poststate = "dead_or_poisoned"
+progress_kind = "bounded_terminal"
+episode = "teardown"
+rank_rule = "terminal_zero"
+maximum_work_units = 13
+claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[transitions]]
+id = "ready_poll_service"
+law_id = "phase.ready_poll_service"
+owner_model = "phase"
+prestate = "eligible_local_or_hif_poll_work"
+action = "c42_step_budget_1"
+provider_call = "command.poll_or_local_lane"
+poststate = "service_cursor_advanced"
+progress_kind = "bounded_service"
+episode = "ready_service"
+rank_rule = "service_gap_at_most_2"
+maximum_work_units = 2
+claim_ids = ["C42A-READY-BOUNDED-SERVICE"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang"]

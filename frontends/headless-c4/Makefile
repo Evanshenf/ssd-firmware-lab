@@ -150,6 +150,7 @@ C42_RECEIPT := $(BUILD_DIR)/c42_execution.receipt
 	check-c42-dynamic-mutations check-c42-replay \
 	check-c42-provider-mutations check-c42-make-integrity \
 	check-c42-runner-integrity \
+	check-c42-claim-models \
 	check-c42-artifact-receipt
 
 .SECONDEXPANSION:
@@ -299,6 +300,16 @@ check-c42-make-integrity:
 
 check-c42-runner-integrity:
 	python3 ../../scripts/check_c42_runner_integrity.py
+
+check-c42-claim-models:
+	PYTHONDONTWRITEBYTECODE=1 python3 \
+		../../scripts/extract_c42_interface_inventory.py --check --cc clang
+	PYTHONDONTWRITEBYTECODE=1 python3 \
+		../../scripts/extract_c42_interface_inventory.py --check --cc gcc
+	PYTHONDONTWRITEBYTECODE=1 python3 \
+		../../scripts/gen_c42_obligations.py --check
+	PYTHONDONTWRITEBYTECODE=1 python3 \
+		../../scripts/check_c42_claim_models.py --self-test
 
 check-c42-artifact-receipt: $(C42_QUEUE_BIN) $(C42_PUBLICATION_BIN) \
 		$(C42_IDENTITY_BIN) $(C42_RESET_DELETE_BIN) $(C42_REMEDIATION_BIN) \

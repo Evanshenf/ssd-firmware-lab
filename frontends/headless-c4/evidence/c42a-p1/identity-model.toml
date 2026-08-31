@@ -1,0 +1,157 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[model]
+schema_version = 1
+profile_id = "C42A-P1"
+model_id = "identity"
+
+[[record_rules]]
+id = "identity_record_contracts"
+records = ["operation_token", "observer_slot", "observer_queue", "observer_command", "observer_publication", "observer_reconcile", "observer_notification", "observer_candidate", "observer_control", "observer_target", "observer_root"]
+default_rule = "exact"
+reserved_rule = "required_zero"
+case_id = "lifecycle_guard"
+claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-OBSERVER-EXACT"]
+additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
+
+[[nodes]]
+id = "publication_uid"
+field = "observer_publication.publication_uid"
+domain_id = "publication"
+source_kind = "allocator"
+scope = "command_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+
+[[nodes]]
+id = "body_token_uid"
+field = "observer_publication.body_token_uid"
+domain_id = "publication"
+source_kind = "derivation"
+source_node_ids = ["publication_uid"]
+scope = "publication_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+
+[[nodes]]
+id = "marker_token_uid"
+field = "observer_publication.marker_token_uid"
+domain_id = "publication"
+source_kind = "derivation"
+source_node_ids = ["publication_uid"]
+scope = "publication_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+
+[[nodes]]
+id = "command_notification_uid"
+field = "observer_command.notification_uid"
+domain_id = "notification"
+source_kind = "allocator"
+scope = "command_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+
+[[nodes]]
+id = "slot_notification_uid"
+field = "observer_slot.notification_uid"
+domain_id = "notification"
+source_kind = "derivation"
+source_node_ids = ["command_notification_uid"]
+scope = "slot_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+
+[[nodes]]
+id = "notification_token"
+field = "observer_notification.token.uid"
+domain_id = "notification"
+source_kind = "derivation"
+source_node_ids = ["command_notification_uid"]
+scope = "notification_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+
+[[nodes]]
+id = "command_uid"
+field = "observer_command.handle.command_uid"
+domain_id = "command"
+source_kind = "allocator"
+scope = "command_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+
+[[nodes]]
+id = "target_command_uid"
+field = "observer_target.handle.command_uid"
+domain_id = "command"
+source_kind = "derivation"
+source_node_ids = ["command_uid"]
+scope = "target_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+
+[[edges]]
+id = "edge_publication_body"
+law_id = "identity.publication_body"
+owner_model = "identity"
+kind = "derived_equal"
+left_node = "publication_uid"
+right_node = "body_token_uid"
+scope = "publication_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
+
+[[edges]]
+id = "edge_publication_marker"
+law_id = "identity.publication_marker"
+owner_model = "identity"
+kind = "derived_equal"
+left_node = "publication_uid"
+right_node = "marker_token_uid"
+scope = "publication_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
+
+[[edges]]
+id = "edge_notification_command_slot"
+law_id = "identity.notification_command_slot"
+owner_model = "identity"
+kind = "derived_equal"
+left_node = "command_notification_uid"
+right_node = "slot_notification_uid"
+scope = "notification_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
+
+[[edges]]
+id = "edge_notification_command_record"
+law_id = "identity.notification_command_record"
+owner_model = "identity"
+kind = "derived_equal"
+left_node = "command_notification_uid"
+right_node = "notification_token"
+scope = "notification_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
+
+[[edges]]
+id = "edge_command_target"
+law_id = "identity.command_target"
+owner_model = "identity"
+kind = "derived_equal"
+left_node = "command_uid"
+right_node = "target_command_uid"
+scope = "target_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
+
+[[edges]]
+id = "edge_command_notification_independent"
+law_id = "identity.command_notification_independent"
+owner_model = "identity"
+kind = "independent"
+left_node = "command_uid"
+right_node = "command_notification_uid"
+scope = "command_lifetime"
+claim_ids = ["C42A-IDENTITY-GRAPH"]
+positive_witness_id = "witness_phase"
+additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]

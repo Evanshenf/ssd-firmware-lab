@@ -1,0 +1,144 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[model]
+schema_version = 1
+profile_id = "C42A-P1"
+model_id = "provider"
+
+[[record_rules]]
+id = "provider_record_contracts"
+records = ["nvme_origin_token", "nvme_command_handle", "nvme_command", "command_prepare_key", "command_prepared_token", "command_admission_key", "command_ticket", "command_ready_event", "command_completion_lease", "command_consume_token", "memory_capability", "memory_token", "provider_event"]
+default_rule = "exact"
+reserved_rule = "required_zero"
+case_id = "all"
+claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-PROVIDER-INPUT-EXACT", "C42A-PROVIDER-OUTPUT-EXACT"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[record_rules]]
+id = "provider_result_contracts"
+records = ["nvme_completion_intent", "command_prepare_result", "memory_status"]
+cases = [
+  { id = "success", default_rule = "conditional", reserved_rule = "required_zero" },
+  { id = "in_progress", default_rule = "preserve", reserved_rule = "preserve" },
+  { id = "failure", default_rule = "preserve", reserved_rule = "preserve" },
+]
+claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-PROVIDER-OUTPUT-EXACT"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[entrypoint_rules]]
+id = "provider_command_entrypoints"
+provider = "command"
+selector = "all"
+claim_ids = ["C42A-PROVIDER-INPUT-EXACT", "C42A-PROVIDER-OUTPUT-EXACT", "C42A-PROVIDER-EFFECT-ORDER"]
+positive_witness_id = "witness_provider"
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[entrypoint_rules]]
+id = "provider_memory_entrypoints"
+provider = "memory"
+selector = "all"
+claim_ids = ["C42A-PROVIDER-INPUT-EXACT", "C42A-PROVIDER-OUTPUT-EXACT", "C42A-PROVIDER-EFFECT-ORDER"]
+positive_witness_id = "witness_provider"
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[scalar_rules]]
+id = "provider_scalar_contracts"
+direction = "input"
+selector = "all"
+rule = "exact"
+case_id = "all"
+claim_ids = ["C42A-PROVIDER-INPUT-EXACT"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[scalar_rules]]
+id = "provider_scalar_outputs"
+direction = "output"
+selector = "all"
+cases = [
+  { id = "success", rule = "conditional" },
+  { id = "in_progress", rule = "preserve" },
+  { id = "failure", rule = "preserve" },
+]
+claim_ids = ["C42A-PROVIDER-OUTPUT-EXACT"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[relations]]
+id = "relation_fresh_admit_generation"
+law_id = "provider.fresh_admit_generation"
+owner_model = "provider"
+kind = "equal"
+left = "command_prepare_key.client_generation"
+right = "command_admission_key.generation"
+scope = "prepared_record_lifetime"
+claim_ids = ["C42A-PROVIDER-INPUT-EXACT"]
+positive_witness_id = "witness_provider"
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[relations]]
+id = "relation_poll_sequence"
+law_id = "provider.poll_ready_sequence"
+owner_model = "provider"
+kind = "strictly_monotonic"
+left = "provider_record.ready_sequence"
+right = "command_ready_event.sequence"
+scope = "provider_instance_controller_epoch"
+claim_ids = ["C42A-PROVIDER-OUTPUT-EXACT"]
+positive_witness_id = "witness_provider"
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[relations]]
+id = "relation_scrub_key"
+law_id = "provider.scrub_key_stable"
+owner_model = "provider"
+kind = "equal"
+left = "scrub_start.cap_depth_inverse_phase_token"
+right = "scrub_query.cap_depth_inverse_phase_token"
+scope = "memory_operation_lifetime"
+claim_ids = ["C42A-PROVIDER-INPUT-EXACT"]
+positive_witness_id = "witness_provider"
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[relations]]
+id = "relation_body_key"
+law_id = "provider.body_key_stable"
+owner_model = "provider"
+kind = "equal"
+left = "body_start.cap_slot_expected_16_token"
+right = "body_query.cap_slot_expected_16_token"
+scope = "memory_operation_lifetime"
+claim_ids = ["C42A-PROVIDER-INPUT-EXACT"]
+positive_witness_id = "witness_provider"
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[effects]]
+id = "effect_command"
+kind = "committed"
+provider = "command"
+claim_ids = ["C42A-PROVIDER-EFFECT-ORDER"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[effects]]
+id = "effect_memory"
+kind = "committed"
+provider = "memory"
+claim_ids = ["C42A-PROVIDER-EFFECT-ORDER"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[response_orders]]
+id = "response_returned"
+kind = "returned"
+claim_ids = ["C42A-PROVIDER-EFFECT-ORDER"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[response_orders]]
+id = "response_lost_before"
+kind = "lost_before_effect"
+claim_ids = ["C42A-PROVIDER-EFFECT-ORDER"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[response_orders]]
+id = "response_lost_after"
+kind = "lost_after_effect"
+claim_ids = ["C42A-PROVIDER-EFFECT-ORDER"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]

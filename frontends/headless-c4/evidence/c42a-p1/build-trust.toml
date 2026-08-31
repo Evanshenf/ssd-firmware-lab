@@ -1,0 +1,168 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+[model]
+schema_version = 1
+profile_id = "C42A-P1"
+model_id = "build"
+root_node_id = "workflow"
+
+[[nodes]]
+id = "workflow"
+node_type = "runner"
+binding_kind = "exact_repository"
+repository_path = ".github/workflows/c4-portable.yml"
+execution_mode = "direct"
+child_ids = ["authoritative_runner", "claim_validator"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "authoritative_runner"
+node_type = "runner"
+binding_kind = "exact_repository"
+repository_path = "scripts/run_c42_gate.py"
+execution_mode = "direct"
+child_ids = ["claim_validator", "c42_make", "c35_checker", "architecture_checker", "dynamic_mutations"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "claim_validator"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_claim_models.py"
+execution_mode = "direct"
+child_ids = ["inventory_extractor", "obligation_generator", "evidence_models"]
+claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["model"]
+
+[[nodes]]
+id = "inventory_extractor"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/extract_c42_interface_inventory.py"
+execution_mode = "direct"
+child_ids = ["evidence_models"]
+claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["inventory_clang", "inventory_gcc"]
+
+[[nodes]]
+id = "obligation_generator"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/gen_c42_obligations.py"
+execution_mode = "direct"
+child_ids = ["evidence_models"]
+claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["model"]
+
+[[nodes]]
+id = "evidence_models"
+node_type = "source_group"
+binding_kind = "exact_repository"
+repository_path = "frontends/headless-c4/evidence/c42a-p1"
+execution_mode = "data_only"
+child_ids = []
+claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["model"]
+
+[[nodes]]
+id = "c42_make"
+node_type = "recipe"
+binding_kind = "exact_repository"
+repository_path = "frontends/headless-c4/Makefile"
+execution_mode = "bound_recipe"
+child_ids = ["c42_sources", "provider_executor", "phase_executor", "replay_executor", "c35_build"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "c42_sources"
+node_type = "source_group"
+binding_kind = "exact_repository"
+repository_path = "frontends/headless-c4/c42_sources.mk"
+execution_mode = "data_only"
+child_ids = []
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "provider_executor"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "frontends/headless-c4/tests/test_c42_provider_matrix.c"
+execution_mode = "bound_recipe"
+child_ids = ["c42_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["provider_gcc", "provider_clang"]
+
+[[nodes]]
+id = "phase_executor"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "frontends/headless-c4/tests/test_c42_phase_cuts.c"
+execution_mode = "bound_recipe"
+child_ids = ["c42_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["phase_gcc", "phase_clang"]
+
+[[nodes]]
+id = "replay_executor"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "frontends/headless-c4/tests/test_c42_dut_replay.c"
+execution_mode = "bound_recipe"
+child_ids = ["c42_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["replay_gcc", "replay_clang"]
+
+[[nodes]]
+id = "dynamic_mutations"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_dynamic_mutations.py"
+execution_mode = "direct"
+child_ids = ["c42_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["mutation_gcc", "mutation_clang"]
+
+[[nodes]]
+id = "architecture_checker"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c42_architecture.py"
+execution_mode = "direct"
+child_ids = ["c42_sources", "c35_checker"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "c35_build"
+node_type = "recipe"
+binding_kind = "exact_repository"
+repository_path = "frontends/headless-c35/Makefile"
+execution_mode = "bound_recipe"
+child_ids = ["c35_reference_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "c35_checker"
+node_type = "checker"
+binding_kind = "exact_repository"
+repository_path = "scripts/check_c35_architecture.py"
+execution_mode = "direct"
+child_ids = ["c35_reference_sources"]
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
+
+[[nodes]]
+id = "c35_reference_sources"
+node_type = "source_group"
+binding_kind = "exact_repository"
+repository_path = "frontends/headless-c35"
+execution_mode = "data_only"
+child_ids = []
+claim_ids = ["C42A-BUILD-AUTHORITY"]
+additional_lane_ids = ["architecture_native"]
