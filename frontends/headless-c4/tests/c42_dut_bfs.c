@@ -22,6 +22,8 @@ struct dut_context {
     struct c42_operation_token candidate;
     struct c42_operation_token control;
     struct c42_target_ref target;
+    struct c42_target_ref old_target;
+    struct c42_target_ref new_target;
     struct c42_queue_memory_cap cap;
     struct c42_queue_descriptor descriptor;
     uint32_t family;
@@ -54,6 +56,24 @@ static int handle_equal(
            left->command_uid == right->command_uid &&
            left->controller_epoch == right->controller_epoch &&
            left->generation == right->generation;
+}
+
+static int origin_equal(
+    const struct fwlab_nvme_origin_token *left,
+    const struct fwlab_nvme_origin_token *right)
+{
+    return left->word[0] == right->word[0] &&
+           left->word[1] == right->word[1];
+}
+
+static int operation_token_equal(
+    const struct c42_operation_token *left,
+    const struct c42_operation_token *right)
+{
+    return left->instance_nonce == right->instance_nonce &&
+           left->uid == right->uid &&
+           left->generation == right->generation &&
+           left->kind == right->kind;
 }
 
 static struct c42_queue_memory_cap fresh_cq_cap(
@@ -136,7 +156,7 @@ static int dut_context_init(uint32_t family, struct dut_context *context)
         c42_fake_command_set_script(&context->fixture->command, &script);
     } else if (family == C42_REF_F03_CAPTURE) {
         script.prepare_backpressure = 1;
-        script.admit_delay = 1;
+        script.admit_delay = 2;
         c42_fake_command_set_script(&context->fixture->command, &script);
     } else if (family == C42_REF_F09_PUBLICATION) {
         struct c42_fake_memory_outcome outcome = {0};
@@ -493,6 +513,34 @@ static int execute_action(struct dut_context *context, uint8_t action)
             !run_to_command_state(
                 fixture, 311, C42_OBSERVER_COMMAND_MARKER_RECONCILE)) return 0;
         break;
+    case C42_REF_IDENTITY_OLD_ACTIVE: {
+        struct c42_fake_command_script script = {0};
+
+        script.poll_delay = 100;
+        c42_fake_command_set_script(&fixture->command, &script);
+        if (!c42_test_submit(fixture, 0, 0, 1, 311) ||
+            !run_to_active(fixture, 1, 1) ||
+            !cache_active_commands(context)) return 0;
+        break;
+    }
+    case C42_REF_IDENTITY_OLD_TARGET:
+        result = c42_target_prepare(
+            fixture->controller, 0, fixture->sq_cap[0].ring_generation,
+            311, &context->old_target
+        );
+        break;
+    case C42_REF_IDENTITY_DRIVE_MARKER: {
+        struct c42_fake_command_script script = {0};
+
+        c42_fake_command_set_script(&fixture->command, &script);
+        if (!run_to_command_state(
+                fixture, 311,
+                C42_OBSERVER_COMMAND_MARKER_RECONCILE)) return 0;
+        break;
+    }
+    case C42_REF_IDENTITY_REUSE_TAIL:
+        if (!c42_test_submit(fixture, 0, 1, 2, 311)) return 0;
+        break;
     case C42_REF_IDENTITY_TARGET:
         result = c42_target_prepare(
             fixture->controller, 0, fixture->sq_cap[0].ring_generation,
@@ -521,6 +569,31 @@ static int execute_action(struct dut_context *context, uint8_t action)
         break;
     case C42_REF_IDENTITY_CROSS_COMMIT:
         result = step_one(fixture);
+        break;
+    case C42_REF_IDENTITY_REUSE_ACTIVE: {
+        struct c42_fake_command_script script = {0};
+
+        script.poll_delay = 100;
+        c42_fake_command_set_script(&fixture->command, &script);
+        if (!run_to_active(fixture, 1, 2) ||
+            !cache_active_commands(context)) return 0;
+        break;
+    }
+    case C42_REF_IDENTITY_NEW_TARGET:
+        result = c42_target_prepare(
+            fixture->controller, 0, fixture->sq_cap[0].ring_generation,
+            311, &context->new_target
+        );
+        break;
+    case C42_REF_IDENTITY_RELEASE_OLD:
+        result = c42_target_release(
+            fixture->controller, &context->old_target.token
+        );
+        break;
+    case C42_REF_IDENTITY_RELEASE_NEW:
+        result = c42_target_release(
+            fixture->controller, &context->new_target.token
+        );
         break;
     case C42_REF_IDENTITY_TARGET_RELEASE:
         result = c42_target_release(
@@ -603,6 +676,41 @@ static int execute_action(struct dut_context *context, uint8_t action)
             status.state != C42_CONTROL_COMMITTED) return 0;
         break;
     }
+    case C42_REF_RESET_RETIRE_UNKNOWN: {
+        struct c42_fake_memory_direct_injection direct = {0};
+
+        context->cap = fresh_cq_cap(fixture, 1);
+        context->descriptor = cq_descriptor(fixture, &context->cap);
+        direct.operation = C42_FAKE_MEMORY_SCRUB_RETIRE;
+        direct.result = C42_MEMORY_OK;
+        direct.write_status = 1;
+        direct.apply_effect = 1;
+        direct.logical_effect = C42_MEMORY_UNKNOWN;
+        direct.applied_effect = C42_MEMORY_RETIRED;
+        direct.committed = 1;
+        direct.quiescent = 1;
+        if (c42_fake_memory_map(
+                &fixture->memory, &context->cap,
+                fixture->depth) != C42_OK ||
+            c42_candidate_prepare(
+                fixture->controller, &context->descriptor,
+                &context->candidate) != C42_OK ||
+            c42_candidate_progress(
+                fixture->controller, &context->candidate, 1) != C42_OK ||
+            c42_candidate_commit(
+                fixture->controller, &context->candidate) != C42_OK ||
+            c42_fake_memory_direct_push(
+                &fixture->memory, &direct) != C42_OK ||
+            c42_candidate_retire(
+                fixture->controller, &context->candidate) !=
+                C42_IN_PROGRESS) return 0;
+        break;
+    }
+    case C42_REF_RESET_CANDIDATE_LP:
+        result = c42_reset_start(
+            fixture->controller, &context->control
+        );
+        break;
     case C42_REF_ISOLATION_LEFT:
         if (!c42_test_submit(fixture, 0, 0, 1, 315) ||
             !run_to_active(fixture, 1, 1)) return 0;
@@ -948,6 +1056,27 @@ static int normalize(
             state->target_identity_ok |=
                 observer.targets[index].identity_matches_active;
         }
+    }
+    if (context->old_target.token.uid != 0 &&
+        context->new_target.token.uid != 0) {
+        state->target_tokens_distinct = (uint8_t)(
+            !operation_token_equal(
+                &context->old_target.token, &context->new_target.token)
+        );
+        state->target_handles_distinct = (uint8_t)(
+            !handle_equal(
+                &context->old_target.handle, &context->new_target.handle)
+        );
+        state->target_origins_distinct = (uint8_t)(
+            !origin_equal(
+                &context->old_target.origin, &context->new_target.origin)
+        );
+        state->target_generations_distinct = (uint8_t)(
+            context->old_target.token.generation !=
+                context->new_target.token.generation &&
+            context->old_target.handle.generation !=
+                context->new_target.handle.generation
+        );
     }
     for (index = 0; index < observer.command_capacity; ++index) {
         if (observer.notifications[index].in_use != 0) {

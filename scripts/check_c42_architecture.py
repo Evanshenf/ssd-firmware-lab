@@ -101,7 +101,8 @@ def origin_encodes_raw(text: str) -> bool:
         if match.group(2) is not None
     ]
     simple_assignment = re.compile(
-        r"(?<![.>\w])([A-Za-z_]\w*)\s*=\s*([^=;][^;]*);"
+        r"(?<![.>\w])([A-Za-z_]\w*)\s*"
+        r"(?:<<=|>>=|[+\-*/%&|^]=|=(?!=))\s*([^;]+);"
     )
     assignments.extend(
         (match.group(1), match.group(2))
@@ -232,6 +233,15 @@ def source_mutations() -> list[dict[str, object]]:
                        "    second_identity_value = first_identity_value;\n"
                        "    third_identity_value = second_identity_value;\n"
                        "    command->origin.word[1] = third_identity_value;")],
+        },
+        {
+            "name": "AM_ORIGIN_COMPOUND_ASSIGNMENT",
+            "needle": "HIF origin encodes a raw queue identity",
+            "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                       "command->origin.word[1] = origin_uid;",
+                       "uint64_t accumulated_identity = 0;\n\n"
+                       "    accumulated_identity += command->command_id;\n"
+                       "    command->origin.word[1] = accumulated_identity;")],
         },
         {
             "name": "AM_HIF_MINTS_GRAPH_HANDLE",
@@ -486,7 +496,7 @@ def main() -> int:
             print(f"  - {failure}", file=sys.stderr)
         return 1
     mutation_text = "source mutations skipped" if arguments.no_mutation_selftests \
-                    else "8 compile-valid full-source mutations killed"
+                    else "9 compile-valid full-source mutations killed"
     print("C4.2 architecture isolation: PASS (C4.1 freeze; "
           f"{mutation_text}; distinct queue/graph/action identities; "
           "C3 coexistence)")

@@ -10,7 +10,7 @@
 #define C42_REFERENCE_CQE_BYTES 16u
 #define C42_REFERENCE_SQE_BYTES 64u
 #define C42_REFERENCE_FAMILIES 12u
-#define C42_REFERENCE_MAX_ACTIONS 9u
+#define C42_REFERENCE_MAX_ACTIONS 12u
 
 enum c42_reference_family {
     C42_REF_F01_CREATE = 0,
@@ -104,7 +104,17 @@ enum c42_reference_action_id {
     C42_REF_CREATE_RECOVER,
     C42_REF_CAPTURE_ADMIT_QUERY,
     C42_REF_IDENTITY_TARGET_ACTIVE,
-    C42_REF_IDENTITY_TARGET_ACQUIRE
+    C42_REF_IDENTITY_TARGET_ACQUIRE,
+    C42_REF_RESET_RETIRE_UNKNOWN,
+    C42_REF_RESET_CANDIDATE_LP,
+    C42_REF_IDENTITY_OLD_ACTIVE,
+    C42_REF_IDENTITY_OLD_TARGET,
+    C42_REF_IDENTITY_DRIVE_MARKER,
+    C42_REF_IDENTITY_REUSE_TAIL,
+    C42_REF_IDENTITY_REUSE_ACTIVE,
+    C42_REF_IDENTITY_NEW_TARGET,
+    C42_REF_IDENTITY_RELEASE_OLD,
+    C42_REF_IDENTITY_RELEASE_NEW
 };
 
 struct c42_reference_action {
@@ -158,6 +168,10 @@ struct c42_reference_state {
     uint8_t reconcile_state[2];
     uint8_t target_count;
     uint8_t target_identity_ok;
+    uint8_t target_tokens_distinct;
+    uint8_t target_handles_distinct;
+    uint8_t target_origins_distinct;
+    uint8_t target_generations_distinct;
     uint8_t notification_count;
     uint8_t notification_state;
     uint8_t port_records;

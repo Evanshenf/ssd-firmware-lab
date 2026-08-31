@@ -108,11 +108,13 @@ static const struct c42_reference_action ref_f03[] = {
                C42_REF_CAPTURE_PORT_RESERVED),
     REF_ACTION("admit-query", REF_BIT(4), 0, C42_REF_PORT_STEP,
                C42_REF_CAPTURE_ADMIT_QUERY),
-    REF_ACTION("admit-committed", REF_BIT(5), 0, C42_REF_PORT_STEP,
+    REF_ACTION("admit-query-retry", REF_BIT(5), 0, C42_REF_PORT_STEP,
+               C42_REF_CAPTURE_ADMIT_QUERY),
+    REF_ACTION("admit-committed", REF_BIT(6), 0, C42_REF_PORT_STEP,
                C42_REF_CAPTURE_PORT_COMMITTED),
-    REF_ACTION("hif-head-active", REF_BIT(6), 0, C42_REF_PORT_STEP,
+    REF_ACTION("hif-head-active", REF_BIT(7), 0, C42_REF_PORT_STEP,
                C42_REF_CAPTURE_HIF_COMMITTED),
-    REF_ACTION("publish-stable", REF_BIT(7), 0, C42_REF_PUBLICATION_STEP,
+    REF_ACTION("publish-stable", REF_BIT(8), 0, C42_REF_PUBLICATION_STEP,
                C42_REF_CAPTURE_PUBLISH),
 };
 static const struct c42_reference_action ref_f04[] = {
@@ -166,28 +168,30 @@ static const struct c42_reference_action ref_f07[] = {
                C42_REF_FULL_ACK_RESUME),
 };
 static const struct c42_reference_action ref_f08[] = {
-    REF_ACTION("marker-visible", 0, REF_BIT(4) | REF_BIT(5),
+    REF_ACTION("old-active", 0, REF_BIT(9), C42_REF_PORT_STEP,
+               C42_REF_IDENTITY_OLD_ACTIVE),
+    REF_ACTION("old-target", REF_BIT(0), 0, C42_REF_TARGET_STEP,
+               C42_REF_IDENTITY_OLD_TARGET),
+    REF_ACTION("drive-marker", REF_BIT(1), 0,
                C42_REF_PUBLICATION_STEP,
-               C42_REF_IDENTITY_MARKER),
-    REF_ACTION("target", REF_BIT(0), REF_BIT(3), C42_REF_TARGET_STEP,
-               C42_REF_IDENTITY_TARGET),
-    REF_ACTION("same-cid-tail", REF_BIT(0), REF_BIT(3),
-               C42_REF_CAPTURE_STEP, C42_REF_IDENTITY_DUPLICATE),
-    REF_ACTION("cross-commit", REF_BIT(0), REF_BIT(2),
-               C42_REF_PUBLICATION_STEP,
-               C42_REF_IDENTITY_CROSS_COMMIT),
+               C42_REF_IDENTITY_DRIVE_MARKER),
+    REF_ACTION("cross-commit", REF_BIT(2), 0,
+               C42_REF_PUBLICATION_STEP, C42_REF_IDENTITY_CROSS_COMMIT),
+    REF_ACTION("same-cid-tail", REF_BIT(3), 0,
+               C42_REF_HOST_SQ_EVENT, C42_REF_IDENTITY_REUSE_TAIL),
+    REF_ACTION("same-cid-new-active", REF_BIT(4), 0,
+               C42_REF_PORT_STEP, C42_REF_IDENTITY_REUSE_ACTIVE),
+    REF_ACTION("new-target", REF_BIT(5), 0, C42_REF_TARGET_STEP,
+               C42_REF_IDENTITY_NEW_TARGET),
+    REF_ACTION("release-old", REF_BIT(6), 0, C42_REF_TARGET_STEP,
+               C42_REF_IDENTITY_RELEASE_OLD),
+    REF_ACTION("release-new", REF_BIT(7), 0, C42_REF_TARGET_STEP,
+               C42_REF_IDENTITY_RELEASE_NEW),
     REF_ACTION("generation-mismatch", 0,
                REF_BIT(0) | REF_BIT(1) | REF_BIT(2) | REF_BIT(3) |
-               REF_BIT(5),
+               REF_BIT(4) | REF_BIT(5) | REF_BIT(6) | REF_BIT(7) |
+               REF_BIT(8),
                C42_REF_TARGET_STEP, C42_REF_TARGET_GENERATION_MISMATCH),
-    REF_ACTION("target-active", 0,
-               REF_BIT(0) | REF_BIT(1) | REF_BIT(2) | REF_BIT(3) |
-               REF_BIT(4),
-               C42_REF_TARGET_STEP, C42_REF_IDENTITY_TARGET_ACTIVE),
-    REF_ACTION("target-acquire", REF_BIT(5), 0, C42_REF_TARGET_STEP,
-               C42_REF_IDENTITY_TARGET_ACQUIRE),
-    REF_ACTION("target-release", REF_BIT(6), 0, C42_REF_TARGET_STEP,
-               C42_REF_IDENTITY_TARGET_RELEASE),
 };
 static const struct c42_reference_action ref_f09[] = {
     REF_ACTION("reserve", 0, 0, C42_REF_CQ_RESERVE,
@@ -220,12 +224,18 @@ static const struct c42_reference_action ref_f10[] = {
                C42_REF_QUEUE_CONTROL_STEP, C42_REF_DELETE_PENDING_PROBE),
 };
 static const struct c42_reference_action ref_f11[] = {
-    REF_ACTION("active", 0, 0, C42_REF_PORT_STEP,
+    REF_ACTION("active", 0, REF_BIT(3) | REF_BIT(4), C42_REF_PORT_STEP,
                C42_REF_RESET_ACTIVE),
     REF_ACTION("reset-lp", REF_BIT(0), 0, C42_REF_RESET_STEP,
                C42_REF_RESET_START),
     REF_ACTION("reset-cold", REF_BIT(1), 0, C42_REF_RESET_STEP,
                C42_REF_RESET_COLD),
+    REF_ACTION("retire-unknown", 0,
+               REF_BIT(0) | REF_BIT(1) | REF_BIT(2), C42_REF_MAP_EVENT,
+               C42_REF_RESET_RETIRE_UNKNOWN),
+    REF_ACTION("candidate-reset-lp", REF_BIT(3),
+               REF_BIT(0) | REF_BIT(1) | REF_BIT(2), C42_REF_RESET_STEP,
+               C42_REF_RESET_CANDIDATE_LP),
 };
 static const struct c42_reference_action ref_f12[] = {
     REF_ACTION("left-active", 0, 0, C42_REF_PORT_STEP,
@@ -696,6 +706,41 @@ int c42_reference_transition(
         reference_cqe(after, 0, 311, 1, 1);
         reference_media_full(after, 0);
         break;
+    case C42_REF_IDENTITY_OLD_ACTIVE:
+        after->sq_host_tail[0] = 1;
+        after->sq_device_head[0] = 1;
+        after->capture_count = 1;
+        after->command_count = 1;
+        after->active_identity_count = 1;
+        after->notification_count = 1;
+        reference_command(after, 0, 311, 6);
+        reference_raw(after, 0, 311);
+        after->port_records = 1;
+        after->port_admitted = 1;
+        break;
+    case C42_REF_IDENTITY_OLD_TARGET:
+        after->target_count = 1;
+        after->target_identity_ok = 1;
+        break;
+    case C42_REF_IDENTITY_DRIVE_MARKER:
+        after->acquire_count = 1;
+        after->command_state[0] = 11;
+        after->command_sqhd[0] = 1;
+        after->cq_reserved[0] = 1;
+        after->slot_state[0] = 11;
+        after->body_prefix[0] = 15;
+        after->marker_visible[0] = 1;
+        after->reconcile_state[0] = 1;
+        after->port_ready = 1;
+        after->port_leased = 1;
+        after->port_consume_prepared = 1;
+        reference_cqe(after, 0, 311, 1, 1);
+        reference_media_full(after, 0);
+        break;
+    case C42_REF_IDENTITY_REUSE_TAIL:
+        after->sq_host_tail[0] = 2;
+        after->sq_pending[0] = 1;
+        break;
     case C42_REF_IDENTITY_TARGET:
         after->last_result = 8;
         break;
@@ -736,6 +781,39 @@ int c42_reference_transition(
         after->target_identity_ok = 0;
         after->port_consume_committed = 1;
         after->order_mask = UINT32_C(0x1ff);
+        break;
+    case C42_REF_IDENTITY_REUSE_ACTIVE:
+        after->sq_device_head[0] = 2;
+        after->sq_pending[0] = 0;
+        after->capture_count = 2;
+        after->command_count = 1;
+        after->active_identity_count = 1;
+        after->notification_count = 2;
+        reference_command(after, 0, 311, 6);
+        reference_raw(after, 0, 311);
+        after->port_records = 1;
+        after->port_admitted = 1;
+        after->port_ready = 0;
+        after->port_leased = 0;
+        after->port_consume_prepared = 0;
+        after->port_consume_committed = 0;
+        after->port_retired = 0;
+        break;
+    case C42_REF_IDENTITY_NEW_TARGET:
+        after->target_count = 2;
+        after->target_identity_ok = 1;
+        after->target_tokens_distinct = 1;
+        after->target_handles_distinct = 1;
+        after->target_origins_distinct = 1;
+        after->target_generations_distinct = 1;
+        break;
+    case C42_REF_IDENTITY_RELEASE_OLD:
+        after->target_count = 1;
+        after->target_identity_ok = 1;
+        break;
+    case C42_REF_IDENTITY_RELEASE_NEW:
+        after->target_count = 0;
+        after->target_identity_ok = 0;
         break;
     case C42_REF_IDENTITY_TARGET_RELEASE:
         after->target_count = 0;
@@ -855,6 +933,19 @@ int c42_reference_transition(
         after->port_records = 1;
         after->port_admitted = 1;
         after->port_retired = 1;
+        break;
+    case C42_REF_RESET_RETIRE_UNKNOWN:
+        after->cq_life[1] = 2;
+        after->cq_ring_generation[1] = 1;
+        after->cq_mapping_generation[1] = 1;
+        after->cq_phase[1] = 1;
+        after->candidate_state = 10;
+        break;
+    case C42_REF_RESET_CANDIDATE_LP:
+        after->phase = 2;
+        after->controller_epoch = 12;
+        after->control_state = 1;
+        after->candidate_state = 8;
         break;
     case C42_REF_ISOLATION_LEFT:
         after->sq_host_tail[0] = 1;

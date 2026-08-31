@@ -310,6 +310,8 @@ static C42_TEST_NOINLINE void test_exact_object_malformed_states(void)
     injection.value = FWLAB_HIF_CONSUME_POISONED + 1u;
     injection.write_mask = C42_FAKE_WRITE_VALUE | C42_FAKE_WRITE_OBJECT;
     injection.flags = C42_FAKE_APPLY_EFFECT;
+    injection.requested_effect =
+        C42_FAKE_COMMAND_EFFECT_CONSUME_PREPARED;
     injection.object_variant = C42_FAKE_OBJECT_EXACT;
     check(c42_fake_command_injection_push(
               &fixture.command, &injection) == C42_OK &&

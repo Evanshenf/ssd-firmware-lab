@@ -219,6 +219,18 @@ def mutations() -> list[dict[str, object]]:
                     "            (controller->sq[index].device_head !=\n"
                     "                 controller->sq[index].frozen_tail ||\n"
                     "             controller->sq[index].pending != 0)) {")]},
+        {"name": "BM_RETIRE_UNKNOWN_NOT_SUPERSEDED",
+         "target": "c42_phase_cuts",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        if (controller->candidates[index].in_use != 0) {\n"
+                    "            controller->candidates[index].state = C42_CANDIDATE_SUPERSEDED;\n"
+                    "        }",
+                    "        if (controller->candidates[index].in_use != 0 &&\n"
+                    "            controller->candidates[index].state !=\n"
+                    "                C42_CANDIDATE_RETIRE_UNKNOWN) {\n"
+                    "            controller->candidates[index].state =\n"
+                    "                C42_CANDIDATE_SUPERSEDED;\n"
+                    "        }")]},
     ]
 
 
@@ -243,6 +255,7 @@ MUTANT_FAMILY = {
     "BM_RECREATE_BEFORE_TOMBSTONE_CLEAR": "F10-delete-tombstone",
     "BM_RESET_REOPEN_BEFORE_REVOKE": "F11-reset-teardown",
     "BM_DELETE_DROPS_DOORBELLED_SQE": "F10-delete-tombstone",
+    "BM_RETIRE_UNKNOWN_NOT_SUPERSEDED": "F11-reset-teardown",
 }
 
 

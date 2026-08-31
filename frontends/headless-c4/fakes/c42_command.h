@@ -18,6 +18,22 @@
 #define C42_FAKE_OBJECT_EXACT 1u
 #define C42_FAKE_OBJECT_MISMATCH 2u
 
+enum c42_fake_command_effect {
+    C42_FAKE_COMMAND_EFFECT_NONE = 0,
+    C42_FAKE_COMMAND_EFFECT_PREPARED = 1,
+    C42_FAKE_COMMAND_EFFECT_PREPARE_ABORTED = 2,
+    C42_FAKE_COMMAND_EFFECT_ADMITTED = 3,
+    C42_FAKE_COMMAND_EFFECT_READY = 4,
+    C42_FAKE_COMMAND_EFFECT_LEASED = 5,
+    C42_FAKE_COMMAND_EFFECT_RELEASED = 6,
+    C42_FAKE_COMMAND_EFFECT_CONSUME_PREPARED = 7,
+    C42_FAKE_COMMAND_EFFECT_CONSUME_ABORTED = 8,
+    C42_FAKE_COMMAND_EFFECT_CONSUME_COMMITTED = 9,
+    C42_FAKE_COMMAND_EFFECT_CONSUME_RETIRED = 10,
+    C42_FAKE_COMMAND_EFFECT_RESET_BEGUN = 11,
+    C42_FAKE_COMMAND_EFFECT_TEARDOWN_BEGUN = 12
+};
+
 enum c42_fake_command_operation {
     C42_FAKE_COMMAND_PREPARE = 1,
     C42_FAKE_COMMAND_PREPARE_ABORT = 2,
@@ -63,6 +79,7 @@ struct c42_fake_command_injection {
     uint32_t operation;
     uint32_t result;
     uint32_t value;
+    uint32_t requested_effect;
     uint8_t omit_outputs;
     uint8_t write_mask;
     uint8_t flags;
@@ -121,6 +138,8 @@ struct c42_fake_command {
     uint8_t injection_flags;
     uint8_t injection_object_variant;
     uint32_t injection_event_value;
+    uint32_t injection_requested_effect;
+    uint32_t injection_applied_effect;
     struct c42_fake_command_script script;
     struct c42_fake_command_injection
         injections[C42_FAKE_COMMAND_INJECTIONS];

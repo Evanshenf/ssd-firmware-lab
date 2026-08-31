@@ -1,6 +1,45 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
+override SHELL := /bin/sh
+override .SHELLFLAGS := -eu -c
+override PATH := /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+_FWLAB_FLAG_WORD := $(if $(findstring =,$(firstword $(MAKEFLAGS))),,$(firstword $(MAKEFLAGS)))
+ifneq ($(findstring i,$(_FWLAB_FLAG_WORD)),)
+$(error C4.2 refuses inherited Make ignore-error mode)
+endif
+ifneq ($(filter --ignore-errors -i,$(MAKEFLAGS) $(MFLAGS)),)
+$(error C4.2 refuses inherited Make ignore-error mode)
+endif
+_FWLAB_UNSAFE_DIRECTIVE := $(shell /usr/bin/awk '/^[[:space:]]*\.IGNORE([[:space:]]|:)/ || /^[[:space:]]*(override[[:space:]]+)?(MAKEFLAGS|MFLAGS)[[:space:]]*[:+?]?=/ { print "unsafe"; exit }' $(firstword $(MAKEFILE_LIST)))
+ifneq ($(_FWLAB_UNSAFE_DIRECTIVE),)
+$(error C4.2 refuses .IGNORE or in-file MAKEFLAGS/MFLAGS assignments)
+endif
+
+ifneq ($(filter environment%,$(origin CC)),)
+override CC := cc
+endif
+ifneq ($(filter environment%,$(origin CLANG)),)
+override CLANG := clang
+endif
+ifneq ($(filter environment%,$(origin SAN_CC)),)
+override SAN_CC := $(CC)
+endif
+ifneq ($(filter environment%,$(origin TSAN_CC)),)
+override TSAN_CC := $(CLANG)
+endif
+ifneq ($(filter environment%,$(origin BUILD_DIR)),)
+override BUILD_DIR := build
+endif
+ifneq ($(filter environment%,$(origin CFLAGS)),)
+override CFLAGS :=
+endif
+ifneq ($(filter environment%,$(origin LDFLAGS)),)
+override LDFLAGS :=
+endif
+
 CC ?= cc
 CLANG ?= clang
 SAN_CC ?= $(CC)
@@ -8,13 +47,13 @@ TSAN_CC ?= $(CLANG)
 BUILD_DIR ?= build
 C41_FAKE_OUTPUT := $(BUILD_DIR)/c41_headless_fake_link
 
-CPPFLAGS += -I../../include -I.
+override CPPFLAGS := -I../../include -I.
 BASE_CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic -fno-common
 CFLAGS ?= $(BASE_CFLAGS)
 
-CORE_SOURCES := ../../core/c4-nvme/c41_codec.c \
+override CORE_SOURCES := ../../core/c4-nvme/c41_codec.c \
 	../../core/c4-nvme/c41_profile.c ../../core/c4-nvme/c41_action.c
-HIF_SOURCES := c41_wire.c
+override HIF_SOURCES := c41_wire.c
 UNIT_BIN := $(BUILD_DIR)/c41_wire_tests
 FUZZ_BIN := $(BUILD_DIR)/c41_wire_fuzz
 include c42_sources.mk
@@ -77,11 +116,13 @@ C42_MODEL_BIN := $(BUILD_DIR)/c42_model
 C42_BROKEN_BIN := $(BUILD_DIR)/c42_broken
 C42_FUZZ_BIN := $(BUILD_DIR)/c42_fuzz
 C42_THREAD_BIN := $(BUILD_DIR)/c42_thread
+C42_RECEIPT := $(BUILD_DIR)/c42_execution.receipt
 
 .PHONY: check-c42-unit check-c42-local-determinism check-c42 fake-link-c42 \
 	check-c42-model check-c42-negative check-c42-fuzz check-c42-thread \
 	check-c42-architecture check-c42-remediation check-c42-build-closure \
-	check-c42-dynamic-mutations check-c42-replay
+	check-c42-dynamic-mutations check-c42-replay \
+	check-c42-make-integrity check-c42-artifact-receipt
 
 $(C42_QUEUE_BIN): $(CORE_SOURCES) $(HIF_SOURCES) $(C42_SOURCES) \
 		$(C42_FAKE_SOURCES) $(C42_SUPPORT) $(C42_HEADERS) \
@@ -218,6 +259,30 @@ check-c42-architecture:
 check-c42-dynamic-mutations:
 	python3 ../../scripts/check_c42_dynamic_mutations.py
 
+check-c42-make-integrity:
+	python3 ../../scripts/check_c42_make_integrity.py
+
+check-c42-artifact-receipt: $(C42_QUEUE_BIN) $(C42_PUBLICATION_BIN) \
+		$(C42_IDENTITY_BIN) $(C42_RESET_DELETE_BIN) $(C42_REMEDIATION_BIN) \
+		$(C42_PROVIDER_BIN) $(C42_CUTS_BIN) $(C42_REPLAY_BIN) \
+		$(C42_ABI_BIN) $(C42_MODEL_BIN) $(C42_BROKEN_BIN) $(C42_FUZZ_BIN) \
+		$(C42_FAKE_OUTPUT)
+	@set -eu; temporary='$(C42_RECEIPT).tmp'; \
+	trap 'rm -f "$$temporary"' EXIT; : >"$$temporary"; \
+	for binary in $(C42_QUEUE_BIN) $(C42_PUBLICATION_BIN) \
+		$(C42_IDENTITY_BIN) $(C42_RESET_DELETE_BIN) \
+		$(C42_REMEDIATION_BIN) $(C42_PROVIDER_BIN) $(C42_CUTS_BIN) \
+		$(C42_REPLAY_BIN) $(C42_ABI_BIN) $(C42_MODEL_BIN) \
+		$(C42_BROKEN_BIN) $(C42_FUZZ_BIN) $(C42_FAKE_OUTPUT); do \
+		test -f "$$binary" && test -x "$$binary"; \
+		output="$$($$binary)"; \
+		case "$$output" in *PASS*|c42-fake-v1*) ;; *) exit 1 ;; esac; \
+		/usr/bin/sha256sum "$$binary" >>"$$temporary"; \
+	done; \
+	test "$$(/usr/bin/wc -l <"$$temporary")" -eq 13; \
+	mv "$$temporary" '$(C42_RECEIPT)'; trap - EXIT; \
+	echo "C4.2 executed-artifact receipt: PASS binaries=13"
+
 check-c42-build-closure: $(C42_ALL_INPUTS)
 	@:
 
@@ -285,6 +350,7 @@ clean:
 	build/c42_identity_unit build/c42_reset_delete_unit \
 	build/c42_remediation_unit build/c42_provider_matrix build/c42_phase_cuts \
 		build/c42_dut_replay build/c42_public_abi \
+		build/c42_execution.receipt \
 		build/c42_model build/c42_broken build/c42_fuzz build/c42_thread \
 		build/c42_headless_fake_link \
 		build/core/c41_portable_tests build/core/c41_portable_model \
