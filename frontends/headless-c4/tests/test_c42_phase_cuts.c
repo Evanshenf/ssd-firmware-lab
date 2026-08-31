@@ -10,7 +10,71 @@ static int failures;
 static uint32_t executions;
 static uint32_t requested_cut_count;
 static uint32_t distinct_cut_count;
-static uint64_t distinct_cut_keys[256];
+
+struct semantic_queue_key {
+    uint16_t host_index;
+    uint16_t device_index;
+    uint16_t pending;
+    uint16_t unacked;
+    uint16_t reserved;
+    uint8_t life;
+    uint8_t slot_state[C42_MAX_QUEUE_DEPTH];
+    uint8_t slot_phase[C42_MAX_QUEUE_DEPTH];
+    uint16_t slot_command_id[C42_MAX_QUEUE_DEPTH];
+};
+
+struct semantic_candidate_key {
+    uint32_t state;
+    uint8_t in_use;
+    uint8_t kind;
+    uint8_t scrub_started;
+    uint8_t retire_started;
+    uint8_t provider_retired;
+};
+
+struct semantic_command_key {
+    uint16_t command_id;
+    uint16_t sqhd_snapshot;
+    uint8_t state;
+    uint8_t prepared_origin_matches;
+    uint8_t ticket_identity_matches;
+    uint8_t ready_ticket_matches;
+    uint8_t lease_ticket_matches;
+    uint8_t consume_known;
+    uint8_t publication_in_use;
+    uint8_t body_prefix;
+    uint8_t body_started;
+    uint8_t marker_started;
+    uint8_t marker_visible;
+    uint8_t reconcile_in_use;
+    uint8_t reconcile_state;
+    uint8_t reconcile_consume_known;
+    uint8_t notification_in_use;
+    uint8_t notification_state;
+};
+
+struct semantic_control_key {
+    uint32_t state;
+    uint8_t in_use;
+    uint8_t kind;
+    uint8_t port_started;
+    uint8_t memory_started;
+};
+
+struct semantic_cut_key {
+    uint32_t phase;
+    uint32_t fault_cause;
+    uint8_t teardown;
+    uint8_t admission_paused;
+    uint8_t ready_poll_pending;
+    struct semantic_queue_key sq[C42_MAX_QUEUE_PAIRS];
+    struct semantic_queue_key cq[C42_MAX_QUEUE_PAIRS];
+    struct semantic_candidate_key candidates[C42_MAX_QUEUE_PAIRS * 2u];
+    struct semantic_command_key commands[C42_MAX_COMMANDS];
+    struct semantic_control_key controls[4];
+};
+
+static struct semantic_cut_key distinct_cut_keys[256];
 
 static void check(int condition, const char *label)
 {
@@ -20,77 +84,87 @@ static void check(int condition, const char *label)
     }
 }
 
-static uint64_t observer_digest(
+static void semantic_cut_normalize(
     const struct c42_observer_v2 *observer,
-    int teardown)
+    int teardown,
+    struct semantic_cut_key *key)
 {
-    uint64_t value = teardown != 0 ?
-        UINT64_C(1469598103934665603) : UINT64_C(1099511628211);
     uint32_t index;
 
-#define MIX_SEMANTIC(field) do { \
-        value ^= (uint64_t)(field); \
-        value *= UINT64_C(1099511628211); \
-    } while (0)
-    MIX_SEMANTIC(observer->phase);
-    MIX_SEMANTIC(observer->fault_cause);
-    MIX_SEMANTIC(observer->admission_paused);
-    MIX_SEMANTIC(observer->ready_poll_pending);
+    memset(key, 0, sizeof(*key));
+    key->phase = observer->phase;
+    key->fault_cause = observer->fault_cause;
+    key->teardown = (uint8_t)(teardown != 0);
+    key->admission_paused = observer->admission_paused;
+    key->ready_poll_pending = observer->ready_poll_pending;
     for (index = 0; index < C42_MAX_QUEUE_PAIRS; ++index) {
         uint32_t slot;
 
-        MIX_SEMANTIC(observer->sq[index].life);
-        MIX_SEMANTIC(observer->sq[index].host_index);
-        MIX_SEMANTIC(observer->sq[index].device_index);
-        MIX_SEMANTIC(observer->sq[index].pending);
-        MIX_SEMANTIC(observer->cq[index].life);
-        MIX_SEMANTIC(observer->cq[index].host_index);
-        MIX_SEMANTIC(observer->cq[index].device_index);
-        MIX_SEMANTIC(observer->cq[index].unacked_count);
-        MIX_SEMANTIC(observer->cq[index].reserved_count);
+        key->sq[index].life = observer->sq[index].life;
+        key->sq[index].host_index = observer->sq[index].host_index;
+        key->sq[index].device_index = observer->sq[index].device_index;
+        key->sq[index].pending = observer->sq[index].pending;
+        key->cq[index].life = observer->cq[index].life;
+        key->cq[index].host_index = observer->cq[index].host_index;
+        key->cq[index].device_index = observer->cq[index].device_index;
+        key->cq[index].unacked = observer->cq[index].unacked_count;
+        key->cq[index].reserved = observer->cq[index].reserved_count;
         for (slot = 0; slot < observer->cq[index].depth; ++slot) {
-            MIX_SEMANTIC(observer->cq[index].slots[slot].state);
-            MIX_SEMANTIC(observer->cq[index].slots[slot].phase);
-            MIX_SEMANTIC(observer->cq[index].slots[slot].command_id);
+            key->cq[index].slot_state[slot] =
+                observer->cq[index].slots[slot].state;
+            key->cq[index].slot_phase[slot] =
+                observer->cq[index].slots[slot].phase;
+            key->cq[index].slot_command_id[slot] =
+                observer->cq[index].slots[slot].command_id;
         }
     }
     for (index = 0; index < C42_MAX_QUEUE_PAIRS * 2u; ++index) {
-        MIX_SEMANTIC(observer->candidates[index].in_use);
-        MIX_SEMANTIC(observer->candidates[index].state);
-        MIX_SEMANTIC(observer->candidates[index].kind);
-        MIX_SEMANTIC(observer->candidates[index].scrub_started);
-        MIX_SEMANTIC(observer->candidates[index].retire_started);
-        MIX_SEMANTIC(observer->candidates[index].provider_retired);
+        key->candidates[index].in_use = observer->candidates[index].in_use;
+        key->candidates[index].state = observer->candidates[index].state;
+        key->candidates[index].kind = observer->candidates[index].kind;
+        key->candidates[index].scrub_started =
+            observer->candidates[index].scrub_started;
+        key->candidates[index].retire_started =
+            observer->candidates[index].retire_started;
+        key->candidates[index].provider_retired =
+            observer->candidates[index].provider_retired;
     }
     for (index = 0; index < observer->command_capacity; ++index) {
-        MIX_SEMANTIC(observer->commands[index].state);
-        MIX_SEMANTIC(observer->commands[index].command_id);
-        MIX_SEMANTIC(observer->commands[index].sqhd_snapshot);
-        MIX_SEMANTIC(observer->commands[index].prepared_origin_matches);
-        MIX_SEMANTIC(observer->commands[index].ticket_identity_matches);
-        MIX_SEMANTIC(observer->commands[index].ready_ticket_matches);
-        MIX_SEMANTIC(observer->commands[index].lease_ticket_matches);
-        MIX_SEMANTIC(observer->commands[index].consume_known);
-        MIX_SEMANTIC(observer->publications[index].in_use);
-        MIX_SEMANTIC(observer->publications[index].body_prefix);
-        MIX_SEMANTIC(observer->publications[index].body_started);
-        MIX_SEMANTIC(observer->publications[index].marker_started);
-        MIX_SEMANTIC(observer->publications[index].marker_visible);
-        MIX_SEMANTIC(observer->reconciles[index].in_use);
-        MIX_SEMANTIC(observer->reconciles[index].state);
-        MIX_SEMANTIC(observer->reconciles[index].consume_known);
-        MIX_SEMANTIC(observer->notifications[index].in_use);
-        MIX_SEMANTIC(observer->notifications[index].state);
+        struct semantic_command_key *command = &key->commands[index];
+
+        command->state = observer->commands[index].state;
+        command->command_id = observer->commands[index].command_id;
+        command->sqhd_snapshot = observer->commands[index].sqhd_snapshot;
+        command->prepared_origin_matches =
+            observer->commands[index].prepared_origin_matches;
+        command->ticket_identity_matches =
+            observer->commands[index].ticket_identity_matches;
+        command->ready_ticket_matches =
+            observer->commands[index].ready_ticket_matches;
+        command->lease_ticket_matches =
+            observer->commands[index].lease_ticket_matches;
+        command->consume_known = observer->commands[index].consume_known;
+        command->publication_in_use = observer->publications[index].in_use;
+        command->body_prefix = (uint8_t)observer->publications[index].body_prefix;
+        command->body_started = observer->publications[index].body_started;
+        command->marker_started = observer->publications[index].marker_started;
+        command->marker_visible = observer->publications[index].marker_visible;
+        command->reconcile_in_use = observer->reconciles[index].in_use;
+        command->reconcile_state = observer->reconciles[index].state;
+        command->reconcile_consume_known =
+            observer->reconciles[index].consume_known;
+        command->notification_in_use = observer->notifications[index].in_use;
+        command->notification_state = observer->notifications[index].state;
     }
     for (index = 0; index < 4; ++index) {
-        MIX_SEMANTIC(observer->controls[index].in_use);
-        MIX_SEMANTIC(observer->controls[index].kind);
-        MIX_SEMANTIC(observer->controls[index].state);
-        MIX_SEMANTIC(observer->controls[index].port_started);
-        MIX_SEMANTIC(observer->controls[index].memory_started);
+        key->controls[index].in_use = observer->controls[index].in_use;
+        key->controls[index].kind = observer->controls[index].kind;
+        key->controls[index].state = observer->controls[index].state;
+        key->controls[index].port_started =
+            observer->controls[index].port_started;
+        key->controls[index].memory_started =
+            observer->controls[index].memory_started;
     }
-#undef MIX_SEMANTIC
-    return value == 0 ? 1 : value;
 }
 
 static int register_semantic_cut(
@@ -99,7 +173,7 @@ static int register_semantic_cut(
     const char *label)
 {
     struct c42_observer_v2 observer;
-    uint64_t key;
+    struct semantic_cut_key key;
     uint32_t index;
 
     requested_cut_count++;
@@ -107,9 +181,9 @@ static int register_semantic_cut(
         check(0, label);
         return 0;
     }
-    key = observer_digest(&observer, teardown);
+    semantic_cut_normalize(&observer, teardown, &key);
     for (index = 0; index < distinct_cut_count; ++index) {
-        if (distinct_cut_keys[index] == key) {
+        if (memcmp(&distinct_cut_keys[index], &key, sizeof(key)) == 0) {
             return 0;
         }
     }
