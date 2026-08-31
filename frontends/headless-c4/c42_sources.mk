@@ -10,7 +10,8 @@ override C42_REFERENCE := tests/c42_reference.c tests/c42_dut_bfs.c
 override C42_HEADERS := hif/c42.h hif/c42_internal.h hif/c42_memory_port.h \
 	fakes/c42_event.h fakes/c42_memory.h fakes/c42_command.h \
 	tests/c42_support.h tests/c42_reference.h tests/c42_dut_bfs.h \
-	tests/c42_model.h ../../include/fwlab/contracts/hif_command_port.h
+	tests/c42_model.h tests/c42_state_obligation_oracle.h \
+	../../include/fwlab/contracts/hif_command_port.h
 override C42_TEST_SOURCES := tests/test_c42_queue.c \
 	tests/test_c42_publication.c tests/test_c42_identity.c \
 	tests/test_c42_reset_delete.c tests/test_c42_remediation.c \
@@ -42,7 +43,8 @@ override C42_EVIDENCE_INPUTS := evidence/c42a-p1/profile.toml \
 	../../scripts/extract_c42_interface_inventory.py \
 	../../scripts/check_c42_claim_models.py \
 	../../scripts/gen_c42_obligations.py \
-	../../scripts/gen_c42_provider_obligations.py
+	../../scripts/gen_c42_provider_obligations.py \
+	../../scripts/gen_c42_state_obligations.py
 override C42_ALL_INPUTS := $(C42_SOURCES) $(C42_FAKE_SOURCES) $(C42_SUPPORT) \
 	$(C42_REFERENCE) $(C42_TEST_SOURCES) $(C42_HEADERS) \
 	$(C42_EVIDENCE_INPUTS)

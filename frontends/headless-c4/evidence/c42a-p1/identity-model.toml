@@ -1,157 +1,82 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
+record_rules = [
+  { id = "identity_record_contracts", records = ["operation_token", "observer_slot", "observer_queue", "observer_command", "observer_publication", "observer_reconcile", "observer_notification", "observer_candidate", "observer_control", "observer_target", "observer_root"], default_rule = "exact", reserved_rule = "required_zero", case_id = "lifecycle_guard", claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-OBSERVER-EXACT"], additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+]
+
+nodes = [
+  { id = "command_publication_uid", field = "observer_command.publication_uid", type = "u64", domain_id = "publication", source_kind = "allocator", source_node_ids = [], derivation_kind = "identity", scope = "command_lifetime", validity_rule = "nonzero_when_command_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "publication_uid", field = "observer_publication.publication_uid", type = "u64", domain_id = "publication", source_kind = "derivation", source_node_ids = ["command_publication_uid"], derivation_kind = "identity", scope = "publication_lifetime", validity_rule = "nonzero_when_publication_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "slot_publication_uid", field = "observer_slot.publication_uid", type = "u64", domain_id = "publication", source_kind = "derivation", source_node_ids = ["command_publication_uid"], derivation_kind = "identity", scope = "slot_lifetime", validity_rule = "nonzero_when_slot_owned", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "reconcile_publication_uid", field = "observer_reconcile.publication_uid", type = "u64", domain_id = "publication", source_kind = "derivation", source_node_ids = ["command_publication_uid"], derivation_kind = "identity", scope = "reconcile_lifetime", validity_rule = "nonzero_when_reconcile_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "notification_publication_uid", field = "observer_notification.publication_uid", type = "u64", domain_id = "publication", source_kind = "derivation", source_node_ids = ["command_publication_uid"], derivation_kind = "identity", scope = "notification_lifetime", validity_rule = "nonzero_when_notification_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "body_token_uid", field = "observer_publication.body_token_uid", type = "u64", domain_id = "publication", source_kind = "derivation", source_node_ids = ["publication_uid"], derivation_kind = "identity", scope = "publication_lifetime", validity_rule = "zero_before_body_else_publication_uid", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "marker_token_uid", field = "observer_publication.marker_token_uid", type = "u64", domain_id = "publication", source_kind = "derivation", source_node_ids = ["publication_uid"], derivation_kind = "identity", scope = "publication_lifetime", validity_rule = "zero_before_marker_else_publication_uid", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "command_notification_uid", field = "observer_command.notification_uid", type = "u64", domain_id = "notification", source_kind = "allocator", source_node_ids = [], derivation_kind = "identity", scope = "command_lifetime", validity_rule = "nonzero_when_command_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "slot_notification_uid", field = "observer_slot.notification_uid", type = "u64", domain_id = "notification", source_kind = "derivation", source_node_ids = ["command_notification_uid"], derivation_kind = "identity", scope = "slot_lifetime", validity_rule = "nonzero_when_slot_owned", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "notification_token", field = "observer_notification.token.uid", type = "u64", domain_id = "notification", source_kind = "derivation", source_node_ids = ["command_notification_uid"], derivation_kind = "identity", scope = "notification_lifetime", validity_rule = "nonzero_when_notification_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "command_uid", field = "observer_command.handle.command_uid", type = "u64", domain_id = "command", source_kind = "allocator", source_node_ids = [], derivation_kind = "provider_value", scope = "command_lifetime", validity_rule = "nonzero_when_command_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "target_command_uid", field = "observer_target.handle.command_uid", type = "u64", domain_id = "command", source_kind = "derivation", source_node_ids = ["command_uid"], derivation_kind = "identity", scope = "target_lifetime", validity_rule = "equal_when_target_matches_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "controller_instance", field = "observer_root.instance_nonce", type = "u64", domain_id = "controller_instance", source_kind = "allocator", source_node_ids = [], derivation_kind = "identity", scope = "provider_instance", validity_rule = "always_nonzero", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "command_instance", field = "observer_command.handle.instance_nonce", type = "u64", domain_id = "controller_instance", source_kind = "derivation", source_node_ids = ["controller_instance"], derivation_kind = "identity", scope = "command_lifetime", validity_rule = "equal_when_command_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "notification_instance", field = "observer_notification.token.instance_nonce", type = "u64", domain_id = "controller_instance", source_kind = "derivation", source_node_ids = ["controller_instance"], derivation_kind = "identity", scope = "notification_lifetime", validity_rule = "equal_when_notification_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "target_instance", field = "observer_target.handle.instance_nonce", type = "u64", domain_id = "controller_instance", source_kind = "derivation", source_node_ids = ["controller_instance"], derivation_kind = "identity", scope = "target_lifetime", validity_rule = "equal_when_target_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "controller_epoch", field = "observer_root.controller_epoch", type = "u32", domain_id = "controller_epoch", source_kind = "allocator", source_node_ids = [], derivation_kind = "identity", scope = "controller_epoch", validity_rule = "always_nonzero", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "command_controller_epoch", field = "observer_command.handle.controller_epoch", type = "u32", domain_id = "controller_epoch", source_kind = "derivation", source_node_ids = ["controller_epoch"], derivation_kind = "identity", scope = "command_lifetime", validity_rule = "equal_when_command_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "notification_controller_epoch", field = "observer_notification.controller_epoch", type = "u32", domain_id = "controller_epoch", source_kind = "derivation", source_node_ids = ["controller_epoch"], derivation_kind = "identity", scope = "notification_lifetime", validity_rule = "equal_when_notification_current", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "target_controller_epoch", field = "observer_target.handle.controller_epoch", type = "u32", domain_id = "controller_epoch", source_kind = "derivation", source_node_ids = ["controller_epoch"], derivation_kind = "identity", scope = "target_lifetime", validity_rule = "equal_when_target_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "queue_ring_generation", field = "observer_queue.ring_generation", type = "u32", domain_id = "queue", source_kind = "allocator", source_node_ids = [], derivation_kind = "identity", scope = "queue_lifetime", validity_rule = "nonzero_when_queue_present", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "candidate_uid", field = "observer_candidate.token.uid", type = "u64", domain_id = "candidate", source_kind = "allocator", source_node_ids = [], derivation_kind = "identity", scope = "candidate_lifetime", validity_rule = "nonzero_when_candidate_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "target_uid", field = "observer_target.token.uid", type = "u64", domain_id = "target", source_kind = "allocator", source_node_ids = [], derivation_kind = "identity", scope = "target_lifetime", validity_rule = "nonzero_when_target_active", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "reset_uid", field = "observer_control.token.uid", type = "u64", domain_id = "reset", source_kind = "allocator", source_node_ids = [], derivation_kind = "identity", scope = "reset_lifetime", validity_rule = "nonzero_when_control_kind_reset", guard = "observer_control.kind == reset", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "teardown_uid", field = "observer_control.token.uid", type = "u64", domain_id = "teardown", source_kind = "allocator", source_node_ids = [], derivation_kind = "identity", scope = "teardown_lifetime", validity_rule = "nonzero_when_control_kind_teardown", guard = "observer_control.kind == teardown", positive_witness_id = "witness_phase", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+  { id = "lease_uid", field = "command_completion_lease.lease_uid", type = "u64", domain_id = "lease", source_kind = "allocator", source_node_ids = [], derivation_kind = "provider_value", scope = "lease_lifetime", validity_rule = "nonzero_on_success", positive_witness_id = "witness_provider", claim_ids = ["C42A-IDENTITY-GRAPH"] },
+]
+
+domains = [
+  { id = "publication", type = "u64", source_kind = "allocator", scope = "command_and_publication_lifetime", node_ids = ["command_publication_uid", "publication_uid", "slot_publication_uid", "reconcile_publication_uid", "notification_publication_uid", "body_token_uid", "marker_token_uid"], positive_witness_id = "witness_phase" },
+  { id = "notification", type = "u64", source_kind = "allocator", scope = "command_and_notification_lifetime", node_ids = ["command_notification_uid", "slot_notification_uid", "notification_token"], positive_witness_id = "witness_phase" },
+  { id = "command", type = "u64", source_kind = "allocator", scope = "command_and_target_lifetime", node_ids = ["command_uid", "target_command_uid"], positive_witness_id = "witness_phase" },
+  { id = "controller_instance", type = "u64", source_kind = "allocator", scope = "provider_instance", node_ids = ["controller_instance", "command_instance", "notification_instance", "target_instance"], positive_witness_id = "witness_phase" },
+  { id = "controller_epoch", type = "u32", source_kind = "allocator", scope = "controller_epoch", node_ids = ["controller_epoch", "command_controller_epoch", "notification_controller_epoch", "target_controller_epoch"], positive_witness_id = "witness_phase" },
+  { id = "queue", type = "u32", source_kind = "allocator", scope = "queue_lifetime", node_ids = ["queue_ring_generation"], positive_witness_id = "witness_phase" },
+  { id = "candidate", type = "u64", source_kind = "allocator", scope = "candidate_lifetime", node_ids = ["candidate_uid"], positive_witness_id = "witness_phase" },
+  { id = "target", type = "u64", source_kind = "allocator", scope = "target_lifetime", node_ids = ["target_uid"], positive_witness_id = "witness_phase" },
+  { id = "reset", type = "u64", source_kind = "allocator", scope = "reset_lifetime", node_ids = ["reset_uid"], positive_witness_id = "witness_phase" },
+  { id = "teardown", type = "u64", source_kind = "allocator", scope = "teardown_lifetime", node_ids = ["teardown_uid"], positive_witness_id = "witness_phase" },
+  { id = "lease", type = "u64", source_kind = "allocator", scope = "lease_lifetime", node_ids = ["lease_uid"], positive_witness_id = "witness_provider" },
+]
+
+edges = [
+  { id = "edge_command_publication_record", law_id = "identity.command_publication_record", owner_model = "identity", kind = "derived_equal", left_node = "command_publication_uid", right_node = "publication_uid", scope = "publication_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity command-publication record", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_publication_body", law_id = "identity.publication_body", owner_model = "identity", kind = "derived_equal", left_node = "publication_uid", right_node = "body_token_uid", scope = "publication_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity publication-body token", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_publication_marker", law_id = "identity.publication_marker", owner_model = "identity", kind = "derived_equal", left_node = "publication_uid", right_node = "marker_token_uid", scope = "publication_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity publication-marker token", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_command_publication_slot", law_id = "identity.command_publication_slot", owner_model = "identity", kind = "derived_equal", left_node = "command_publication_uid", right_node = "slot_publication_uid", scope = "slot_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity command-publication slot", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_command_publication_reconcile", law_id = "identity.command_publication_reconcile", owner_model = "identity", kind = "derived_equal", left_node = "command_publication_uid", right_node = "reconcile_publication_uid", scope = "reconcile_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity command-publication reconcile", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_command_publication_notification", law_id = "identity.command_publication_notification", owner_model = "identity", kind = "derived_equal", left_node = "command_publication_uid", right_node = "notification_publication_uid", scope = "notification_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity command-publication notification", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_notification_command_slot", law_id = "identity.notification_command_slot", owner_model = "identity", kind = "derived_equal", left_node = "command_notification_uid", right_node = "slot_notification_uid", scope = "notification_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity notification-command-slot", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_notification_command_record", law_id = "identity.notification_command_record", owner_model = "identity", kind = "derived_equal", left_node = "command_notification_uid", right_node = "notification_token", scope = "notification_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity notification-command-record", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_command_target", law_id = "identity.command_target", owner_model = "identity", kind = "derived_equal", left_node = "command_uid", right_node = "target_command_uid", scope = "target_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity command-target handle", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_instance_command", law_id = "identity.instance_command", owner_model = "identity", kind = "derived_equal", left_node = "controller_instance", right_node = "command_instance", scope = "command_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity instance-command", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_instance_notification", law_id = "identity.instance_notification", owner_model = "identity", kind = "derived_equal", left_node = "controller_instance", right_node = "notification_instance", scope = "notification_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity instance-notification", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_instance_target", law_id = "identity.instance_target", owner_model = "identity", kind = "derived_equal", left_node = "controller_instance", right_node = "target_instance", scope = "target_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity instance-target", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_epoch_command", law_id = "identity.epoch_command", owner_model = "identity", kind = "derived_equal", left_node = "controller_epoch", right_node = "command_controller_epoch", scope = "command_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity epoch-command", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_epoch_notification", law_id = "identity.epoch_notification", owner_model = "identity", kind = "derived_equal", left_node = "controller_epoch", right_node = "notification_controller_epoch", scope = "notification_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity epoch-notification", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "edge_epoch_target", law_id = "identity.epoch_target", owner_model = "identity", kind = "derived_equal", left_node = "controller_epoch", right_node = "target_controller_epoch", scope = "target_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity epoch-target", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+]
+
+domain_relations = [
+  { id = "domain_command_notification", law_id = "identity.domain.command_notification", owner_model = "identity", kind = "independent", left_node = "command_uid", right_node = "command_notification_uid", scope = "command_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity domain command-notification", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "domain_command_publication", law_id = "identity.domain.command_publication", owner_model = "identity", kind = "independent", left_node = "command_uid", right_node = "command_publication_uid", scope = "command_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity domain command-publication", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "domain_notification_publication", law_id = "identity.domain.notification_publication", owner_model = "identity", kind = "independent", left_node = "command_notification_uid", right_node = "command_publication_uid", scope = "command_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity domain notification-publication", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "domain_queue_controller_epoch", law_id = "identity.domain.queue_controller_epoch", owner_model = "identity", kind = "independent", left_node = "queue_ring_generation", right_node = "controller_epoch", scope = "queue_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity domain queue-controller-epoch", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "domain_candidate_target", law_id = "identity.domain.candidate_target", owner_model = "identity", kind = "independent", left_node = "candidate_uid", right_node = "target_uid", scope = "controller_epoch", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity domain candidate-target", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "domain_reset_teardown", law_id = "identity.domain.reset_teardown", owner_model = "identity", kind = "independent", left_node = "reset_uid", right_node = "teardown_uid", scope = "takeover_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_phase", reachable_witness_id = "witness_phase", owner_assertion_id = "identity domain reset-teardown", additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"] },
+  { id = "domain_command_lease", law_id = "identity.domain.command_lease", owner_model = "identity", kind = "independent", left_node = "command_uid", right_node = "lease_uid", scope = "lease_lifetime", claim_ids = ["C42A-IDENTITY-GRAPH"], positive_witness_id = "witness_provider", reachable_witness_id = "witness_provider", owner_assertion_id = "identity domain command-lease", additional_lane_ids = ["provider_gcc", "provider_clang", "phase_gcc", "phase_clang"] },
+]
+
 [model]
-schema_version = 1
+schema_version = 2
 profile_id = "C42A-P1"
 model_id = "identity"
-
-[[record_rules]]
-id = "identity_record_contracts"
-records = ["operation_token", "observer_slot", "observer_queue", "observer_command", "observer_publication", "observer_reconcile", "observer_notification", "observer_candidate", "observer_control", "observer_target", "observer_root"]
-default_rule = "exact"
-reserved_rule = "required_zero"
-case_id = "lifecycle_guard"
-claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-OBSERVER-EXACT"]
-additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
-
-[[nodes]]
-id = "publication_uid"
-field = "observer_publication.publication_uid"
-domain_id = "publication"
-source_kind = "allocator"
-scope = "command_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-
-[[nodes]]
-id = "body_token_uid"
-field = "observer_publication.body_token_uid"
-domain_id = "publication"
-source_kind = "derivation"
-source_node_ids = ["publication_uid"]
-scope = "publication_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-
-[[nodes]]
-id = "marker_token_uid"
-field = "observer_publication.marker_token_uid"
-domain_id = "publication"
-source_kind = "derivation"
-source_node_ids = ["publication_uid"]
-scope = "publication_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-
-[[nodes]]
-id = "command_notification_uid"
-field = "observer_command.notification_uid"
-domain_id = "notification"
-source_kind = "allocator"
-scope = "command_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-
-[[nodes]]
-id = "slot_notification_uid"
-field = "observer_slot.notification_uid"
-domain_id = "notification"
-source_kind = "derivation"
-source_node_ids = ["command_notification_uid"]
-scope = "slot_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-
-[[nodes]]
-id = "notification_token"
-field = "observer_notification.token.uid"
-domain_id = "notification"
-source_kind = "derivation"
-source_node_ids = ["command_notification_uid"]
-scope = "notification_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-
-[[nodes]]
-id = "command_uid"
-field = "observer_command.handle.command_uid"
-domain_id = "command"
-source_kind = "allocator"
-scope = "command_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-
-[[nodes]]
-id = "target_command_uid"
-field = "observer_target.handle.command_uid"
-domain_id = "command"
-source_kind = "derivation"
-source_node_ids = ["command_uid"]
-scope = "target_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-
-[[edges]]
-id = "edge_publication_body"
-law_id = "identity.publication_body"
-owner_model = "identity"
-kind = "derived_equal"
-left_node = "publication_uid"
-right_node = "body_token_uid"
-scope = "publication_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
-
-[[edges]]
-id = "edge_publication_marker"
-law_id = "identity.publication_marker"
-owner_model = "identity"
-kind = "derived_equal"
-left_node = "publication_uid"
-right_node = "marker_token_uid"
-scope = "publication_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
-
-[[edges]]
-id = "edge_notification_command_slot"
-law_id = "identity.notification_command_slot"
-owner_model = "identity"
-kind = "derived_equal"
-left_node = "command_notification_uid"
-right_node = "slot_notification_uid"
-scope = "notification_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
-
-[[edges]]
-id = "edge_notification_command_record"
-law_id = "identity.notification_command_record"
-owner_model = "identity"
-kind = "derived_equal"
-left_node = "command_notification_uid"
-right_node = "notification_token"
-scope = "notification_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
-
-[[edges]]
-id = "edge_command_target"
-law_id = "identity.command_target"
-owner_model = "identity"
-kind = "derived_equal"
-left_node = "command_uid"
-right_node = "target_command_uid"
-scope = "target_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]
-
-[[edges]]
-id = "edge_command_notification_independent"
-law_id = "identity.command_notification_independent"
-owner_model = "identity"
-kind = "independent"
-left_node = "command_uid"
-right_node = "command_notification_uid"
-scope = "command_lifetime"
-claim_ids = ["C42A-IDENTITY-GRAPH"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang", "replay_gcc", "replay_clang"]

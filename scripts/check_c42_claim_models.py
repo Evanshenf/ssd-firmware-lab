@@ -601,12 +601,54 @@ def identity_nodes(
         base = ".".join(field_ref.split(".")[:2])
         if base not in fields:
             raise ModelError(f"identity node {identifier}: field base absent {base}")
+        if node.get("source_kind") not in {"allocator", "derivation"} or \
+                node.get("derivation_kind") not in {
+                    "identity", "canonicalize", "compose", "provider_value"
+                } or not isinstance(node.get("type"), str) or \
+                not node["type"] or not isinstance(node.get("domain_id"), str) or \
+                not node["domain_id"] or not isinstance(node.get("scope"), str) or \
+                not node["scope"] or not isinstance(
+                    node.get("validity_rule"), str) or \
+                not node["validity_rule"]:
+            raise ModelError(f"identity node {identifier}: semantics incomplete")
+        witness = node.get("positive_witness_id")
+        if witness not in witnesses:
+            raise ModelError(f"identity node {identifier}: witness absent")
         sources = string_list(node.get("source_node_ids", []), f"identity node {identifier}")
         ensure_references(sources, set(nodes_by_id), identifier)
+        if (node.get("source_kind") == "allocator" and sources) or \
+                (node.get("source_kind") == "derivation" and not sources):
+            raise ModelError(f"identity node {identifier}: source shape differs")
+
+    domains = unique_rows(
+        rows(document, "domains", "identity-model.toml"), "identity domain"
+    )
+    domain_nodes: set[str] = set()
+    for identifier, domain in domains.items():
+        if not isinstance(domain.get("type"), str) or not domain["type"] or \
+                domain.get("source_kind") not in {"allocator", "derivation"} or \
+                not isinstance(domain.get("scope"), str) or not domain["scope"] or \
+                domain.get("positive_witness_id") not in witnesses:
+            raise ModelError(f"identity domain {identifier}: semantics incomplete")
+        members = string_list(
+            domain.get("node_ids", []), f"identity domain {identifier} nodes"
+        )
+        if not members:
+            raise ModelError(f"identity domain {identifier}: nodes empty")
+        ensure_references(members, set(nodes_by_id), f"identity domain {identifier}")
+        if domain_nodes.intersection(members):
+            raise ModelError(f"identity domain {identifier}: node classified twice")
+        domain_nodes.update(members)
+        for member in members:
+            if nodes_by_id[member].get("domain_id") != identifier:
+                raise ModelError(f"identity domain {identifier}: member differs")
+    if domain_nodes != set(nodes_by_id):
+        raise ModelError("identity domain coverage differs from nodes")
 
     result: list[dict[str, Any]] = []
     edge_ids: set[str] = set()
     law_ids: set[str] = set()
+    equality_edges: list[tuple[str, str]] = []
     for edge in rows(document, "edges", "identity-model.toml"):
         identifier = str(edge.get("id", ""))
         if not identifier or identifier in edge_ids:
@@ -619,6 +661,14 @@ def identity_nodes(
             raise ModelError(f"identity edge law invalid: {identifier}")
         if edge.get("owner_model") != "identity":
             raise ModelError(f"identity edge owner invalid: {identifier}")
+        if edge.get("kind") not in {
+                "equal", "derived_equal", "stable", "unique",
+                "strictly_monotonic"}:
+            raise ModelError(f"identity edge kind invalid: {identifier}")
+        if edge.get("reachable_witness_id") not in witnesses or \
+                not isinstance(edge.get("owner_assertion_id"), str) or \
+                not edge["owner_assertion_id"]:
+            raise ModelError(f"identity edge witness invalid: {identifier}")
         law_ids.add(law_id)
         claim_ids, additional = verify_claims_and_lanes(
             edge, identifier, claims, lanes, witnesses
@@ -633,6 +683,78 @@ def identity_nodes(
             "additional_lane_ids": additional,
             "element_count": 1,
         })
+        if edge.get("kind") in {"equal", "derived_equal", "stable"}:
+            equality_edges.append((str(edge["left_node"]), str(edge["right_node"])))
+
+    parent = {identifier: identifier for identifier in nodes_by_id}
+
+    def find(identifier: str) -> str:
+        while parent[identifier] != identifier:
+            parent[identifier] = parent[parent[identifier]]
+            identifier = parent[identifier]
+        return identifier
+
+    def union(left: str, right: str) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    for left, right in equality_edges:
+        if nodes_by_id[left]["domain_id"] != nodes_by_id[right]["domain_id"]:
+            raise ModelError("identity equality crosses typed domains")
+        union(left, right)
+
+    for relation in rows(
+            document, "domain_relations", "identity-model.toml"):
+        identifier = str(relation.get("id", ""))
+        if not identifier or identifier in edge_ids:
+            raise ModelError(f"identity domain relation duplicate: {identifier}")
+        edge_ids.add(identifier)
+        left = relation.get("left_node")
+        right = relation.get("right_node")
+        if left not in nodes_by_id or right not in nodes_by_id or \
+                relation.get("kind") != "independent" or \
+                nodes_by_id[str(left)]["domain_id"] == \
+                    nodes_by_id[str(right)]["domain_id"] or \
+                find(str(left)) == find(str(right)):
+            raise ModelError(f"identity domain relation invalid: {identifier}")
+        law_id = relation.get("law_id")
+        if not isinstance(law_id, str) or not law_id or law_id in law_ids or \
+                relation.get("owner_model") != "identity":
+            raise ModelError(f"identity domain law invalid: {identifier}")
+        if relation.get("reachable_witness_id") not in witnesses or \
+                not isinstance(relation.get("owner_assertion_id"), str) or \
+                not relation["owner_assertion_id"]:
+            raise ModelError(f"identity domain witness invalid: {identifier}")
+        law_ids.add(law_id)
+        claim_ids, additional = verify_claims_and_lanes(
+            relation, identifier, claims, lanes, witnesses
+        )
+        result.append({
+            "id": identifier,
+            "model_kind": "identity",
+            "target_kind": "identity_domain",
+            "rule_kind": "independent",
+            "case_id": "lifetime",
+            "claim_ids": claim_ids,
+            "additional_lane_ids": additional,
+            "element_count": 1,
+        })
+
+    derived_edges = {
+        (str(edge.get("left_node")), str(edge.get("right_node")))
+        for edge in rows(document, "edges", "identity-model.toml")
+        if edge.get("kind") in {"equal", "derived_equal", "stable"}
+    }
+    for identifier, node in nodes_by_id.items():
+        if node.get("source_kind") != "derivation":
+            continue
+        for source in node.get("source_node_ids", []):
+            if (str(source), identifier) not in derived_edges:
+                raise ModelError(
+                    f"identity derivation lacks owned edge: {source}->{identifier}"
+                )
     return result, edge_ids, law_ids
 
 
@@ -650,7 +772,41 @@ def phase_nodes(
     )
     if delay_max != 8:
         raise ModelError("phase model delay credit differs from profile")
-    for transition in rows(document, "transitions", "phase-model.toml"):
+    episodes = unique_rows(rows(document, "episodes", "phase-model.toml"), "phase episode")
+    expected_episode_m = {
+        "reset": 3,
+        "teardown": 3,
+        "teardown_takeover": 5,
+    }
+    if set(episodes) != set(expected_episode_m):
+        raise ModelError("phase episode set differs from frozen profile")
+    readiness = "at_most_8_total_nonterminal_provider_units_then_success_or_poison"
+    for identifier, episode in episodes.items():
+        initial = episode.get("mandatory_phases_initial")
+        credit = episode.get("provider_delay_credit")
+        maximum = episode.get("maximum_work_units")
+        if initial != expected_episode_m[identifier] or credit != delay_max or \
+                maximum != int(initial) + int(credit) or \
+                episode.get("readiness_assumption") != readiness or \
+                episode.get("entry_action") not in {
+                    "c42_reset_start", "c42_teardown_start"
+                }:
+            raise ModelError(f"phase episode bound invalid: {identifier}")
+    transition_rows = rows(document, "transitions", "phase-model.toml")
+    expected_transition_ids = {
+        "reset_command_begin", "reset_memory_begin", "reset_quiescent",
+        "reset_terminal", "teardown_reset_command",
+        "teardown_reset_memory", "teardown_command_begin",
+        "teardown_memory_begin", "teardown_quiescent",
+        "teardown_terminal", "ready_poll_service",
+    }
+    if {str(row.get("id", "")) for row in transition_rows} != \
+            expected_transition_ids:
+        raise ModelError("phase transition set differs from frozen profile")
+    episode_transition_ids: dict[str, set[str]] = {
+        identifier: set() for identifier in episodes
+    }
+    for transition in transition_rows:
         identifier = str(transition.get("id", ""))
         if not identifier or identifier in transition_ids:
             raise ModelError(f"phase transition duplicate: {identifier}")
@@ -666,6 +822,44 @@ def phase_nodes(
             raise ModelError(f"phase transition law invalid: {identifier}")
         if transition.get("owner_model") != "phase":
             raise ModelError(f"phase transition owner invalid: {identifier}")
+        if transition.get("action") != "c42_step_budget_1" or \
+                not isinstance(transition.get("observable_output"), str) or \
+                not transition["observable_output"] or not isinstance(
+                    transition.get("observable_provider_delta"), str) or \
+                not transition["observable_provider_delta"]:
+            raise ModelError(f"phase transition executor binding invalid: {identifier}")
+        episode_ids = string_list(
+            transition.get("episode_ids", []), f"phase transition {identifier} episodes"
+        )
+        if progress == "bounded_terminal":
+            if not episode_ids:
+                raise ModelError(f"phase transition episodes absent: {identifier}")
+            ensure_references(episode_ids, set(episodes), identifier)
+            for episode_id in episode_ids:
+                episode_transition_ids[episode_id].add(identifier)
+            before = transition.get("rank_m_before")
+            after = transition.get("rank_m_after")
+            terminal = transition.get("terminal")
+            if not isinstance(before, int) or not isinstance(after, int) or \
+                    transition.get("provider_delay_credit") != delay_max or \
+                    transition.get("readiness_assumption") != readiness or \
+                    maximum != max(
+                        int(episodes[episode_id]["maximum_work_units"])
+                        for episode_id in episode_ids
+                    ) or not isinstance(terminal, bool):
+                raise ModelError(f"phase transition rank invalid: {identifier}")
+            if terminal:
+                if before != 0 or after != 0 or \
+                        transition.get("provider_call") != "none_after_terminal":
+                    raise ModelError(f"phase terminal row invalid: {identifier}")
+            elif before != after + 1:
+                raise ModelError(f"phase macro rank does not decrease: {identifier}")
+        elif progress == "bounded_service":
+            if episode_ids or transition.get("service_bound") != maximum or \
+                    transition.get("provider_delay_credit") != 0 or \
+                    transition.get("readiness_assumption") != \
+                        "eligible_work_remains" or transition.get("terminal") is not False:
+                raise ModelError(f"phase service bound invalid: {identifier}")
         law_ids.add(law_id)
         claim_ids, additional = verify_claims_and_lanes(
             transition, identifier, claims, lanes, witnesses
@@ -679,7 +873,37 @@ def phase_nodes(
             "claim_ids": claim_ids,
             "additional_lane_ids": additional,
             "element_count": 1,
+            "semantic_tags": (
+                [] if transition.get("terminal") is True else
+                ["provider_phase", "terminal_transition"]
+                if transition.get("rank_m_after") == 0 and
+                    progress == "bounded_terminal" else
+                ["provider_phase", "preterminal"]
+                if progress == "bounded_terminal" else
+                ["provider_phase"]
+            ),
+            "terminal_followup": transition.get("terminal") is True,
+            "rank_m_before": transition.get("rank_m_before", 2),
+            "rank_m_after": transition.get("rank_m_after", 1),
+            "maximum_work_units": maximum,
         })
+    expected_episode_transitions = {
+        "reset": {
+            "reset_command_begin", "reset_memory_begin", "reset_quiescent",
+            "reset_terminal",
+        },
+        "teardown": {
+            "teardown_command_begin", "teardown_memory_begin",
+            "teardown_quiescent", "teardown_terminal",
+        },
+        "teardown_takeover": {
+            "teardown_reset_command", "teardown_reset_memory",
+            "teardown_command_begin", "teardown_memory_begin",
+            "teardown_quiescent", "teardown_terminal",
+        },
+    }
+    if episode_transition_ids != expected_episode_transitions:
+        raise ModelError("phase episode transition coverage differs")
     return result, transition_ids, law_ids
 
 
@@ -1057,6 +1281,27 @@ def self_test(model_dir: Path) -> int:
             "identity-model.toml",
             'law_id = "identity.publication_marker"',
             'law_id = "identity.publication_body"',
+            False,
+        ),
+        (
+            "identity-domain-contradiction",
+            "identity-model.toml",
+            'right_node = "command_notification_uid", scope = "command_lifetime"',
+            'right_node = "target_command_uid", scope = "command_lifetime"',
+            False,
+        ),
+        (
+            "identity-edge-owner-missing",
+            "identity-model.toml",
+            'owner_assertion_id = "identity notification-command-record"',
+            'owner_assertion_id = ""',
+            False,
+        ),
+        (
+            "phase-rank-bound-drift",
+            "phase-model.toml",
+            'mandatory_phases_initial = 5, provider_delay_credit = 8',
+            'mandatory_phases_initial = 4, provider_delay_credit = 8',
             False,
         ),
         (

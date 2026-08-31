@@ -5,21 +5,21 @@
 schema_version = 1
 profile_id = "C42A-P1"
 generator_version = 1
-input_digest = "9057f17d64d1e8ac62dae6f0e2ac154801c171845adb0432690b723c7553519e"
+input_digest = "67d2cebf930af3b5a95fb00149c6672b468e77deae6536ea1117a30b8afaeac8"
 d_claim = 9
 d_structural_field = 291
 d_inventory = 643
 d_field = 643
 d_entrypoint = 35
-d_edge = 6
+d_edge = 22
 d_transition = 11
-d_build = 23
+d_build = 24
 d_effect = 5
 d_candidate = 3240
 d_fault = 3240
 d_na = 0
-d_lane_candidate = 19120
-d_exec = 19120
+d_lane_candidate = 19158
+d_exec = 19158
 d_lane_na = 0
 
 [[obligations]]
@@ -218,6 +218,16 @@ status = "open"
 lane_ids = ["architecture_native", "model"]
 
 [[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/state_obligation_generator/authority/build_checker_suppress/whole"
+status = "open"
+lane_ids = ["architecture_native", "model", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-BUILD-AUTHORITY/build/state_obligation_generator/authority/build_runtime_substitute/whole"
+status = "open"
+lane_ids = ["architecture_native", "model", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
 id = "C42A-BUILD-AUTHORITY/build/workflow/authority/build_child_omit/whole"
 status = "open"
 lane_ids = ["architecture_native", "model"]
@@ -283,11 +293,6 @@ status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_command_begin/reset/transition_late_terminal/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
 id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_command_begin/reset/transition_skip/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
@@ -308,11 +313,6 @@ status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_memory_begin/reset/transition_late_terminal/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
 id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_memory_begin/reset/transition_skip/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
@@ -328,11 +328,6 @@ status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_quiescent/reset/transition_early_terminal/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
 id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_quiescent/reset/transition_late_terminal/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
@@ -344,31 +339,6 @@ lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
 id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_quiescent/reset/transition_stall/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_terminal/reset/transition_duplicate/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_terminal/reset/transition_early_terminal/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_terminal/reset/transition_late_terminal/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_terminal/reset/transition_skip/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/reset_terminal/reset/transition_stall/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
@@ -403,11 +373,6 @@ status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_command_begin/teardown/transition_late_terminal/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
 id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_command_begin/teardown/transition_skip/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
@@ -428,11 +393,6 @@ status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_memory_begin/teardown/transition_late_terminal/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
 id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_memory_begin/teardown/transition_skip/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
@@ -444,11 +404,6 @@ lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
 id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_quiescent/teardown/transition_duplicate/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_quiescent/teardown/transition_early_terminal/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
@@ -478,11 +433,6 @@ status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_reset_command/teardown_takeover/transition_late_terminal/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
 id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_reset_command/teardown_takeover/transition_skip/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
@@ -503,11 +453,6 @@ status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_reset_memory/teardown_takeover/transition_late_terminal/whole"
-status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
-
-[[obligations]]
 id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_reset_memory/teardown_takeover/transition_skip/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
@@ -518,37 +463,92 @@ status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_terminal/teardown/transition_duplicate/whole"
+id = "C42A-IDENTITY-GRAPH/identity/domain_candidate_target/lifetime/identity_domain_collapse/whole"
 status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_terminal/teardown/transition_early_terminal/whole"
+id = "C42A-IDENTITY-GRAPH/identity/domain_command_lease/lifetime/identity_domain_collapse/whole"
 status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "provider_clang", "provider_gcc", "replay_clang", "replay_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_terminal/teardown/transition_late_terminal/whole"
+id = "C42A-IDENTITY-GRAPH/identity/domain_command_notification/lifetime/identity_domain_collapse/whole"
 status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_terminal/teardown/transition_skip/whole"
+id = "C42A-IDENTITY-GRAPH/identity/domain_command_publication/lifetime/identity_domain_collapse/whole"
 status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
 
 [[obligations]]
-id = "C42A-EPOCH-TERMINAL-PROGRESS/phase/teardown_terminal/teardown/transition_stall/whole"
+id = "C42A-IDENTITY-GRAPH/identity/domain_notification_publication/lifetime/identity_domain_collapse/whole"
 status = "open"
-lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc"]
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
 
 [[obligations]]
-id = "C42A-IDENTITY-GRAPH/identity/edge_command_notification_independent/lifetime/identity_domain_collapse/whole"
+id = "C42A-IDENTITY-GRAPH/identity/domain_queue_controller_epoch/lifetime/identity_domain_collapse/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/domain_reset_teardown/lifetime/identity_domain_collapse/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_command_publication_notification/lifetime/identity_edge_split/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_command_publication_reconcile/lifetime/identity_edge_split/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_command_publication_record/lifetime/identity_edge_split/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_command_publication_slot/lifetime/identity_edge_split/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
 
 [[obligations]]
 id = "C42A-IDENTITY-GRAPH/identity/edge_command_target/lifetime/identity_edge_split/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_epoch_command/lifetime/identity_edge_split/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_epoch_notification/lifetime/identity_edge_split/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_epoch_target/lifetime/identity_edge_split/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_instance_command/lifetime/identity_edge_split/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_instance_notification/lifetime/identity_edge_split/whole"
+status = "open"
+lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
+
+[[obligations]]
+id = "C42A-IDENTITY-GRAPH/identity/edge_instance_target/lifetime/identity_edge_split/whole"
 status = "open"
 lane_ids = ["mutation_clang", "mutation_gcc", "phase_clang", "phase_gcc", "replay_clang", "replay_gcc"]
 

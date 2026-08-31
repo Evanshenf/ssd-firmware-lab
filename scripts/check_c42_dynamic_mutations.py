@@ -15,6 +15,8 @@ import subprocess
 import sys
 import tempfile
 
+from check_c42_claim_models import ModelError, build_model
+
 
 ROOT = Path(__file__).resolve().parents[1]
 HIF = ROOT / "frontends/headless-c4"
@@ -358,6 +360,7 @@ def mutations() -> list[dict[str, object]]:
                     "    target->controller_epoch = source->controller_epoch;")]},
         {"name": "BM_OBSERVER_PUBLICATION_TOKEN_UID_MISMATCH",
          "target": "c42_phase_cuts", "replay": False,
+         "operator_ids": ["identity_edge_split"],
          "edits": [("frontends/headless-c4/hif/c42_runtime.c",
                     "    target->publication_uid = source->publication_uid;\n"
                     "    target->body_token_uid = source->body_token.uid;\n"
@@ -370,6 +373,20 @@ def mutations() -> list[dict[str, object]]:
                     "        target->body_token_uid++;\n"
                     "        target->marker_token_uid++;\n"
                     "    }")]},
+        {"name": "BM_OBSERVER_NOTIFICATION_UID_MISMATCH",
+         "target": "c42_phase_cuts", "replay": False,
+         "operator_ids": ["identity_edge_split"],
+         "expected_label": "identity notification command-slot-record exact",
+         "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                    "    target->publication_uid = source->publication_uid;\n"
+                    "    target->notification_uid = source->notification_uid;\n"
+                    "    target->sq_ring_generation = source->sq_ring_generation;",
+                    "    target->publication_uid = source->publication_uid;\n"
+                    "    target->notification_uid = source->notification_uid;\n"
+                    "    if (target->notification_uid != 0) {\n"
+                    "        target->notification_uid++;\n"
+                    "    }\n"
+                    "    target->sq_ring_generation = source->sq_ring_generation;")]},
         {"name": "BM_OBSERVER_TARGET_COMMAND_UID_MISMATCH",
          "target": "c42_phase_cuts", "replay": False,
          "edits": [("frontends/headless-c4/hif/c42_runtime.c",
@@ -384,6 +401,8 @@ def mutations() -> list[dict[str, object]]:
                     "    target->sq_ring_generation = source->sq_ring_generation;")]},
         {"name": "BM_STEP_SKIPS_EPOCH_CONTROL",
          "target": "c42_phase_cuts", "replay": False,
+         "operator_ids": ["transition_skip"],
+         "expected_label": "epoch one-unit exported step exact",
          "edits": [("frontends/headless-c4/hif/c42_runtime.c",
                     "        if (c42_progress_queue_controls(controller) != 0) {\n"
                     "            progressed = 1;\n"
@@ -405,6 +424,86 @@ def mutations() -> list[dict[str, object]]:
                     "        memset(notification, 0, sizeof(*notification));\n"
                     "        return C42_SUPERSEDED;\n"
                     "    }")]},
+        {"name": "BM_IDENTITY_DOMAIN_COLLAPSED",
+         "target": "c42_phase_cuts", "replay": False,
+         "operator_ids": ["identity_domain_collapse"],
+         "expected_label": "cross-domain numeric collisions do not affect quotient",
+         "edits": [
+                   ("frontends/headless-c4/tests/test_c42_phase_cuts.c",
+                    "        semantic_operation_token(\n"
+                    "            &key->observer.targets[index].token,\n"
+                    "            &instance_ids, &target_ids\n"
+                    "        );",
+                    "        semantic_operation_token(\n"
+                    "            &key->observer.targets[index].token,\n"
+                    "            &instance_ids, &candidate_ids\n"
+                    "        );"),
+                   ("frontends/headless-c4/tests/test_c42_phase_cuts.c",
+                    "    struct semantic_id_map target_ids = {{0}, 0};\n",
+                    "")
+         ]},
+        {"name": "BM_EPOCH_TRANSITION_STALLS",
+         "target": "c42_phase_cuts", "replay": False,
+         "operator_ids": ["transition_stall"],
+         "expected_label": "epoch one-unit exported step exact",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        } else {\n"
+                    "            record->state = C42_CONTROL_POISONED;\n"
+                    "        }\n"
+                    "        return 1;\n"
+                    "    }\n"
+                    "    if (record->memory_started == 0) {",
+                    "        } else {\n"
+                    "            record->state = C42_CONTROL_POISONED;\n"
+                    "        }\n"
+                    "        return record->port_started != 0;\n"
+                    "    }\n"
+                    "    if (record->memory_started == 0) {")]},
+        {"name": "BM_EPOCH_PROVIDER_CALL_DUPLICATED",
+         "target": "c42_phase_cuts", "replay": False,
+         "operator_ids": ["transition_duplicate"],
+         "expected_label": "epoch one-unit provider vector exact",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "    memory_result = teardown != 0 ?\n"
+                    "        controller->providers.memory.ops->teardown_quiescent(",
+                    "    (void)(teardown != 0 ?\n"
+                    "        controller->providers.command.ops->teardown_quiescent(\n"
+                    "            controller->providers.command.context,\n"
+                    "            controller->config.instance_nonce, record->old_epoch,\n"
+                    "            &port_quiescent) :\n"
+                    "        controller->providers.command.ops->reset_quiescent(\n"
+                    "            controller->providers.command.context,\n"
+                    "            controller->config.instance_nonce, record->old_epoch,\n"
+                    "            &port_quiescent));\n"
+                    "    memory_result = teardown != 0 ?\n"
+                    "        controller->providers.memory.ops->teardown_quiescent(")]},
+        {"name": "BM_EPOCH_TERMINATES_EARLY",
+         "target": "c42_phase_cuts", "replay": False,
+         "operator_ids": ["transition_early_terminal"],
+         "expected_label": "epoch mandatory rank decreases exactly",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        if (port_result == FWLAB_HIF_PORT_OK) {\n"
+                    "            record->port_started = 1;\n"
+                    "        } else if (port_result == FWLAB_HIF_PORT_IN_PROGRESS) {\n"
+                    "            record->state = C42_CONTROL_WAITING;",
+                    "        if (port_result == FWLAB_HIF_PORT_OK) {\n"
+                    "            record->port_started = 1;\n"
+                    "            record->memory_started = 1;\n"
+                    "            controller->phase = teardown != 0 ?\n"
+                    "                C42_CONTROLLER_DEAD :\n"
+                    "                C42_CONTROLLER_COLD_NO_QUEUES;\n"
+                    "            record->state = C42_CONTROL_COMMITTED;\n"
+                    "        } else if (port_result == FWLAB_HIF_PORT_IN_PROGRESS) {\n"
+                    "            record->state = C42_CONTROL_WAITING;")]},
+        {"name": "BM_EPOCH_TERMINATES_LATE",
+         "target": "c42_phase_cuts", "replay": False,
+         "operator_ids": ["transition_late_terminal"],
+         "expected_label": "epoch exact rank-derived bound reached",
+         "edits": [("frontends/headless-c4/hif/c42_queue.c",
+                    "        record->state = C42_CONTROL_COMMITTED;\n"
+                    "        if (teardown != 0) {",
+                    "        record->state = C42_CONTROL_WAITING;\n"
+                    "        if (teardown != 0) {")]},
     ]
 
 
@@ -461,6 +560,7 @@ def build_binary(
     output: Path,
     arguments: tuple[str, ...] = (),
     expected_family: str | None = None,
+    expected_label: str | None = None,
 ) -> bytes:
     make_target = output / target
     build = subprocess.run(
@@ -485,6 +585,11 @@ def build_binary(
         raise RuntimeError(
             f"mutant died without an oracle mismatch: {compiler}/{target}: "
             f"return={run.returncode}\n{run.stdout.decode(errors='replace')}"
+        )
+    if expected_label is not None and expected_label.encode() not in run.stdout:
+        raise RuntimeError(
+            f"{compiler}/{target} missed exact owner diagnostic "
+            f"{expected_label}:\n{run.stdout.decode(errors='replace')}"
         )
     if expected_family is not None:
         pattern = re.compile(
@@ -528,12 +633,29 @@ def main() -> int:
     aggregate_binaries = 0
     replay_mutants = 0
     try:
+        state_operator_ids = {
+            str(obligation["operator_id"])
+            for obligation in build_model()["obligations"]
+            if obligation.get("model_kind") in {"identity", "phase"} and
+            (str(obligation["operator_id"]).startswith("identity_") or
+             str(obligation["operator_id"]).startswith("transition_"))
+        }
         selected = [
             mutation for mutation in mutations()
             if args.only is None or mutation["name"] == args.only
         ]
         if not selected:
             raise RuntimeError(f"unknown mutation selection: {args.only}")
+        declared_operator_ids = {
+            str(operator_id)
+            for mutation in selected
+            for operator_id in mutation.get("operator_ids", [])
+        }
+        if args.only is None and declared_operator_ids != state_operator_ids:
+            raise RuntimeError(
+                "state operator canaries incomplete: "
+                + ",".join(sorted(state_operator_ids - declared_operator_ids))
+            )
         for mutation in selected:
             name = str(mutation["name"])
             replay = bool(mutation.get("replay", True))
@@ -564,7 +686,11 @@ def main() -> int:
                 for compiler in compilers:
                     selected_output = build_binary(
                         mutant_root, compiler, str(mutation["target"]),
-                        Path(directory) / f"build-{compiler}"
+                        Path(directory) / f"build-{compiler}",
+                        expected_label=(
+                            str(mutation["expected_label"])
+                            if mutation.get("expected_label") is not None else None
+                        ),
                     )
                     replay_output = b""
                     if replay:
@@ -585,12 +711,13 @@ def main() -> int:
                 replay_mutants += 1 if replay else 0
                 print(f"C4.2 production mutant {name}: PASS")
     except (OSError, RuntimeError, subprocess.CalledProcessError,
-            subprocess.TimeoutExpired) as error:
+            subprocess.TimeoutExpired, ModelError) as error:
         print(f"C4.2 dynamic mutations: FAIL: {error}", file=sys.stderr)
         return 1
     print(f"C4.2 dynamic mutations: PASS mutants={total} compilers=2 "
           f"unit-plus-replay={replay_mutants} unit-specific="
-          f"{total - replay_mutants} aggregate-binaries={aggregate_binaries}")
+          f"{total - replay_mutants} aggregate-binaries={aggregate_binaries} "
+          f"state-operator-canaries={len(declared_operator_ids)}")
     return 0
 
 

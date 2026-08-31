@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include "c42_support.h"
+#include "c42_state_obligation_oracle.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -16,6 +17,8 @@ static int failures;
 static uint32_t executions;
 static uint32_t requested_cut_count;
 static uint32_t distinct_cut_count;
+static uint32_t state_obligation_kills;
+static uint32_t epoch_assumption_failures;
 
 #define SEMANTIC_BUSINESS_CONTROLS 2u
 
@@ -1346,6 +1349,137 @@ static C42_TEST_NOINLINE void test_committed_control(uint32_t *control_mask)
     (void)register_semantic_cut(&fixture, 0, "committed control cut");
 }
 
+static C42_TEST_NOINLINE void test_identity_graph_witnesses(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_observer_v2 observer;
+    struct c42_fake_command_script script = {0};
+    struct c42_target_ref target_ref = {0};
+    const struct c42_observer_command_v2 *command = NULL;
+    const struct c42_observer_slot_v2 *slot = NULL;
+    const struct c42_observer_target_v2 *target = NULL;
+    uint32_t command_index = 0;
+    uint32_t index;
+
+    executions++;
+    check(c42_test_fixture_init_with_nonce(
+              &fixture, 4, 0, UINT64_C(0x4402900000000001)) &&
+          c42_test_submit(&fixture, 0, 0, 1, 404) &&
+          run_until_command_state(
+              &fixture, C42_OBSERVER_COMMAND_PUB_RESERVED, 128) &&
+          c42_observer_read_v2(fixture.controller, &observer) == C42_OK,
+          "identity graph fixture");
+    for (index = 0; index < observer.command_capacity; ++index) {
+        if (observer.commands[index].handle.command_uid != 0 &&
+            observer.commands[index].publication_uid != 0 &&
+            observer.commands[index].notification_uid != 0) {
+            command = &observer.commands[index];
+            command_index = index;
+            break;
+        }
+    }
+    if (command != NULL && command->cq_index < C42_MAX_QUEUE_PAIRS &&
+        command->cq_slot < C42_MAX_QUEUE_DEPTH) {
+        slot = &observer.cq[command->cq_index].slots[command->cq_slot];
+    }
+    for (index = 0; index < observer.target_capacity; ++index) {
+        if (observer.targets[index].in_use != 0 &&
+            command != NULL &&
+            observer.targets[index].handle.command_uid ==
+                command->handle.command_uid) {
+            target = &observer.targets[index];
+            break;
+        }
+    }
+    if (!(command != NULL && slot != NULL && slot->owner_present != 0 &&
+          observer.publications[command_index].in_use != 0 &&
+          observer.reconciles[command_index].in_use != 0 &&
+          observer.notifications[command_index].in_use != 0)) {
+        fprintf(stderr,
+                "identity reachability: command=%u slot=%u owner=%u "
+                "publication=%u reconcile=%u notification=%u target=%u\n",
+                command != NULL, slot != NULL,
+                slot == NULL ? 0 : slot->owner_present,
+                observer.publications[command_index].in_use,
+                observer.reconciles[command_index].in_use,
+                observer.notifications[command_index].in_use,
+                target != NULL);
+    }
+    check(command != NULL && slot != NULL && slot->owner_present != 0 &&
+          observer.publications[command_index].in_use != 0 &&
+          observer.reconciles[command_index].in_use != 0 &&
+          observer.notifications[command_index].in_use != 0,
+          "identity graph records reachable together");
+    if (command == NULL || slot == NULL) {
+        return;
+    }
+    check(command->publication_uid == slot->publication_uid &&
+          command->publication_uid ==
+              observer.publications[command_index].publication_uid &&
+          command->publication_uid ==
+              observer.reconciles[command_index].publication_uid &&
+          command->publication_uid ==
+              observer.notifications[command_index].publication_uid,
+          "identity publication fanout exact");
+    check((observer.publications[command_index].body_token_uid == 0 &&
+           observer.publications[command_index].marker_token_uid == 0) ||
+          (observer.publications[command_index].body_token_uid ==
+               command->publication_uid &&
+           observer.publications[command_index].marker_token_uid ==
+               command->publication_uid),
+          "identity publication memory-token derivation exact");
+    check(command->notification_uid != 0 &&
+          command->notification_uid == slot->notification_uid &&
+          command->notification_uid ==
+              observer.notifications[command_index].token.uid,
+          "identity notification command-slot-record exact");
+    check(command->handle.instance_nonce == observer.instance_nonce &&
+          observer.notifications[command_index].token.instance_nonce ==
+              observer.instance_nonce &&
+          command->handle.controller_epoch == observer.controller_epoch &&
+          observer.notifications[command_index].controller_epoch ==
+              observer.controller_epoch,
+          "identity instance and controller epoch exact");
+    command = NULL;
+    target = NULL;
+    script.poll_delay = 100;
+    if (!c42_test_fixture_init_with_nonce(
+            &fixture, 4, 0, UINT64_C(0x4402900000000002))) {
+        check(0, "identity command-target fixture init");
+        return;
+    }
+    c42_fake_command_set_script(&fixture.command, &script);
+    check(c42_test_submit(&fixture, 0, 0, 1, 405) &&
+          c42_test_run(&fixture, 32, 1) &&
+          c42_target_prepare(
+              fixture.controller, 0, fixture.sq_cap[0].ring_generation,
+              405, &target_ref) == C42_OK &&
+          c42_observer_read_v2(fixture.controller, &observer) == C42_OK,
+          "identity command-target fixture");
+    for (index = 0; index < observer.command_capacity; ++index) {
+        if (observer.commands[index].state ==
+                C42_OBSERVER_COMMAND_HIF_COMMITTED) {
+            command = &observer.commands[index];
+            break;
+        }
+    }
+    for (index = 0; index < observer.target_capacity; ++index) {
+        if (observer.targets[index].in_use != 0 && command != NULL &&
+            observer.targets[index].handle.command_uid ==
+                command->handle.command_uid) {
+            target = &observer.targets[index];
+            break;
+        }
+    }
+    check(command != NULL && target != NULL &&
+          target->identity_matches_active != 0 &&
+          target->handle.instance_nonce == command->handle.instance_nonce &&
+          target->handle.command_uid == command->handle.command_uid &&
+          target->handle.controller_epoch == command->handle.controller_epoch &&
+          target->handle.generation == command->handle.generation,
+          "identity command-target full handle exact");
+}
+
 static C42_TEST_NOINLINE void test_notification_post_lp(void)
 {
     uint32_t mode;
@@ -1927,6 +2061,268 @@ static C42_TEST_NOINLINE void test_reset_begin_response_unknown_takeover(void)
     finish_takeover(&fixture, &teardown);
 }
 
+enum epoch_trace_kind {
+    EPOCH_TRACE_RESET = 0,
+    EPOCH_TRACE_TEARDOWN = 1,
+    EPOCH_TRACE_TAKEOVER = 2
+};
+
+static int epoch_trace_start(
+    struct c42_test_fixture *fixture,
+    enum epoch_trace_kind kind,
+    uint64_t nonce,
+    uint32_t delay_count,
+    struct c42_operation_token *token)
+{
+    struct c42_fake_command_injection injection = {0};
+    struct c42_operation_token reset = {0};
+    uint32_t index;
+
+    if (!c42_test_fixture_init_with_nonce(fixture, 4, 0, nonce)) {
+        return 0;
+    }
+    injection.operation = kind == EPOCH_TRACE_TEARDOWN ?
+        C42_FAKE_COMMAND_TEARDOWN_BEGIN : C42_FAKE_COMMAND_RESET_BEGIN;
+    injection.result = FWLAB_HIF_PORT_IN_PROGRESS;
+    injection.omit_outputs = 1;
+    for (index = 0; index < delay_count; ++index) {
+        if (c42_fake_command_injection_push(
+                &fixture->command, &injection) != C42_OK) {
+            return 0;
+        }
+    }
+    if (kind == EPOCH_TRACE_RESET) {
+        return c42_reset_start(fixture->controller, token) == C42_OK;
+    }
+    if (kind == EPOCH_TRACE_TEARDOWN) {
+        return c42_teardown_start(fixture->controller, token) == C42_OK;
+    }
+    return c42_reset_start(fixture->controller, &reset) == C42_OK &&
+           c42_teardown_start(fixture->controller, token) == C42_OK;
+}
+
+static uint32_t epoch_rank_m(
+    const struct c42_test_fixture *fixture,
+    enum epoch_trace_kind kind)
+{
+    struct c42_observer_v2 observer;
+    const struct c42_observer_control_v2 *reset = NULL;
+    const struct c42_observer_control_v2 *teardown = NULL;
+    uint32_t index;
+
+    if (c42_observer_read_v2(fixture->controller, &observer) != C42_OK) {
+        check(0, "epoch rank observer");
+        return UINT32_MAX;
+    }
+    if ((kind == EPOCH_TRACE_RESET &&
+         observer.phase == C42_CONTROLLER_COLD_NO_QUEUES) ||
+        (kind != EPOCH_TRACE_RESET &&
+         observer.phase == C42_CONTROLLER_DEAD)) {
+        return 0;
+    }
+    for (index = 0; index < 4; ++index) {
+        if (observer.controls[index].in_use == 0) {
+            continue;
+        }
+        if (observer.controls[index].kind == C42_CONTROL_RESET) {
+            reset = &observer.controls[index];
+        } else if (observer.controls[index].kind == C42_CONTROL_TEARDOWN) {
+            teardown = &observer.controls[index];
+        }
+    }
+    if (kind == EPOCH_TRACE_RESET) {
+        if (reset == NULL) return UINT32_MAX;
+        if (reset->port_started == 0) return 3;
+        if (reset->memory_started == 0) return 2;
+        return 1;
+    }
+    if (kind == EPOCH_TRACE_TAKEOVER) {
+        if (reset == NULL) return UINT32_MAX;
+        if (reset->port_started == 0) return 5;
+        if (reset->memory_started == 0) return 4;
+    }
+    if (teardown == NULL) return UINT32_MAX;
+    if (teardown->port_started == 0) return 3;
+    if (teardown->memory_started == 0) return 2;
+    return 1;
+}
+
+static int event_logs_equal(
+    const struct c42_fake_event_log *left,
+    const struct c42_fake_event_log *right)
+{
+    return left->next_sequence == right->next_sequence &&
+           left->count == right->count && left->overflow == right->overflow &&
+           memcmp(left->events, right->events,
+                  left->count * sizeof(left->events[0])) == 0;
+}
+
+static C42_TEST_NOINLINE void test_epoch_rank_traces(void)
+{
+    static struct c42_test_fixture one;
+    static struct c42_test_fixture bulk;
+    uint32_t kind_value;
+
+    for (kind_value = EPOCH_TRACE_RESET;
+         kind_value <= EPOCH_TRACE_TAKEOVER; ++kind_value) {
+        enum epoch_trace_kind kind = (enum epoch_trace_kind)kind_value;
+        struct c42_operation_token one_token = {0};
+        struct c42_operation_token bulk_token = {0};
+        struct c42_control_status one_status = {0};
+        struct c42_control_status bulk_status = {0};
+        struct c42_step_result step_result = {0};
+        struct c42_step_result bulk_result = {0};
+        struct c42_snapshot one_snapshot = {0};
+        struct c42_snapshot bulk_snapshot = {0};
+        struct c42_observer_v2 one_observer = {0};
+        struct c42_observer_v2 bulk_observer = {0};
+        struct c42_snapshot follow_snapshot = {0};
+        struct c42_observer_v2 follow_observer = {0};
+        struct c42_control_status follow_status = {0};
+        uint32_t maximum = kind == EPOCH_TRACE_TAKEOVER ? 13 : 11;
+        uint32_t expected_m = kind == EPOCH_TRACE_TAKEOVER ? 5 : 3;
+        uint32_t credit = 8;
+        uint32_t units;
+
+        executions++;
+        check(epoch_trace_start(
+                  &one, kind,
+                  UINT64_C(0x4403200000000000) + kind_value,
+                  8,
+                  &one_token) &&
+              epoch_trace_start(
+                  &bulk, kind,
+                  UINT64_C(0x4403200000000000) + kind_value,
+                  8,
+                  &bulk_token),
+              "epoch rank fixtures");
+        check(epoch_rank_m(&one, kind) == expected_m,
+              "epoch initial mandatory rank exact");
+        for (units = 0; units < maximum; ++units) {
+            uint32_t before_m = epoch_rank_m(&one, kind);
+            uint32_t after_m;
+            uint32_t event_count = one.event_log.count;
+
+            memset(&step_result, 0, sizeof(step_result));
+            check(c42_step(one.controller, 1, &step_result) == C42_OK &&
+                  step_result.requested_budget == 1 &&
+                  step_result.units_executed == 1 &&
+                  step_result.transitions == 1,
+                  "epoch one-unit exported step exact");
+            check(one.event_log.count - event_count ==
+                      (before_m == 1 ? 2u : 1u),
+                  "epoch one-unit provider vector exact");
+            after_m = epoch_rank_m(&one, kind);
+            if (after_m == before_m) {
+                check(credit != 0, "epoch delay credit not exceeded");
+                if (credit != 0) credit--;
+            } else {
+                check(before_m == after_m + 1u,
+                      "epoch mandatory rank decreases exactly");
+            }
+            if (after_m == 0) {
+                credit = 0;
+            }
+            check(after_m < before_m || credit < 8,
+                  "epoch lexicographic rank decreases");
+            check(c42_control_query(
+                      one.controller, &one_token,
+                      &one_status) == C42_OK,
+                  "epoch one-unit control query");
+            if (one_status.state == C42_CONTROL_COMMITTED) {
+                units++;
+                break;
+            }
+        }
+        check(units == maximum && credit == 0 &&
+              one_status.state == C42_CONTROL_COMMITTED,
+              "epoch exact rank-derived bound reached");
+
+        check(c42_step(
+                  bulk.controller, maximum, &bulk_result) == C42_OK &&
+              bulk_result.requested_budget == maximum &&
+              bulk_result.units_executed == maximum &&
+              bulk_result.transitions == maximum &&
+              c42_control_query(
+                  bulk.controller, &bulk_token,
+                  &bulk_status) == C42_OK &&
+              bulk_status.state == C42_CONTROL_COMMITTED,
+              "epoch bulk exported step reaches exact bound");
+        check(c42_snapshot_read(one.controller, &one_snapshot) == C42_OK &&
+              c42_snapshot_read(bulk.controller, &bulk_snapshot) == C42_OK &&
+              c42_observer_read_v2(one.controller, &one_observer) == C42_OK &&
+              c42_observer_read_v2(bulk.controller, &bulk_observer) == C42_OK &&
+              memcmp(&one_snapshot, &bulk_snapshot,
+                     sizeof(one_snapshot)) == 0 &&
+              memcmp(&one_observer, &bulk_observer,
+                     sizeof(one_observer)) == 0 &&
+              memcmp(&one_status, &bulk_status,
+                     sizeof(one_status)) == 0 &&
+              event_logs_equal(&one.event_log, &bulk.event_log),
+              "epoch one-unit and bulk terminal states exact");
+
+        follow_snapshot = one_snapshot;
+        follow_observer = one_observer;
+        follow_status = one_status;
+        memset(&step_result, 0xa5, sizeof(step_result));
+        check(c42_step(one.controller, 1, &step_result) == C42_OK &&
+              step_result.requested_budget == 1 &&
+              step_result.units_executed == 0 &&
+              step_result.transitions == 0 &&
+              c42_snapshot_read(one.controller, &one_snapshot) == C42_OK &&
+              c42_observer_read_v2(one.controller, &one_observer) == C42_OK &&
+              c42_control_query(
+                  one.controller, &one_token,
+                  &one_status) == C42_OK &&
+              memcmp(&follow_snapshot, &one_snapshot,
+                     sizeof(one_snapshot)) == 0 &&
+              memcmp(&follow_observer, &one_observer,
+                     sizeof(one_observer)) == 0 &&
+              memcmp(&follow_status, &one_status,
+                     sizeof(one_status)) == 0 &&
+              event_logs_equal(&one.event_log, &bulk.event_log),
+              "epoch terminal follow-up is globally stable");
+    }
+}
+
+static C42_TEST_NOINLINE void test_epoch_credit_exhaustion_classification(void)
+{
+    struct c42_test_fixture fixture;
+    struct c42_operation_token token = {0};
+    struct c42_control_status status = {0};
+    struct c42_step_result step = {0};
+    uint32_t credit = 8;
+    uint32_t before_m;
+    uint32_t after_m;
+    uint32_t unit;
+
+    executions++;
+    check(epoch_trace_start(
+              &fixture, EPOCH_TRACE_RESET,
+              UINT64_C(0x4403200000000010), 9, &token),
+          "epoch exhausted-credit fixture");
+    for (unit = 0; unit < 9; ++unit) {
+        before_m = epoch_rank_m(&fixture, EPOCH_TRACE_RESET);
+        check(c42_step(fixture.controller, 1, &step) == C42_OK &&
+              step.units_executed == 1 && step.transitions == 1,
+              "epoch exhausted-credit step executes");
+        after_m = epoch_rank_m(&fixture, EPOCH_TRACE_RESET);
+        if (after_m == before_m && credit == 0) {
+            epoch_assumption_failures++;
+            break;
+        }
+        if (after_m == before_m && credit != 0) {
+            credit--;
+        }
+    }
+    check(unit == 8 && epoch_assumption_failures == 1 &&
+          c42_control_query(
+              fixture.controller, &token, &status) == C42_OK &&
+          status.state != C42_CONTROL_POISONED &&
+          status.state != C42_CONTROL_COMMITTED,
+          "ninth nonterminal unit is harness-assumption failure only");
+}
+
 static C42_TEST_NOINLINE void test_notification_cuts(uint32_t *notification_mask)
 {
     uint32_t phase;
@@ -2035,6 +2431,7 @@ int main(void)
     test_poisoned_control(&control_mask);
     test_poisoned_reset_takeover();
     test_committed_control(&control_mask);
+    test_identity_graph_witnesses();
     test_notification_post_lp();
     test_all_notification_post_lp();
     test_target_post_lp();
@@ -2042,6 +2439,8 @@ int main(void)
     test_step_drives_epoch_controls();
     test_reset_teardown_takeover_cuts(&control_mask);
     test_reset_begin_response_unknown_takeover();
+    test_epoch_rank_traces();
+    test_epoch_credit_exhaustion_classification();
     test_notification_cuts(&notification_mask);
     for (state = C42_OBSERVER_COMMAND_CAPTURED;
          state <= C42_OBSERVER_COMMAND_LEASED;
@@ -2056,6 +2455,11 @@ int main(void)
         (UINT32_C(1) << C42_OBSERVER_COMMAND_ADMIT_POISON_HOLD) |
         (UINT32_C(1) << C42_OBSERVER_COMMAND_CONSUME_POISON_HOLD);
     test_notification_suppressed_cut(&notification_mask);
+    if (failures == 0) {
+        check(c42_state_obligations_run(&state_obligation_kills) &&
+              state_obligation_kills == C42_STATE_OBLIGATION_COUNT,
+              "all generated state obligations own a kill");
+    }
     check(requested_cut_count == 130,
           "phase requested cut count is exact");
     check(distinct_cut_count == 74,
@@ -2112,10 +2516,14 @@ int main(void)
     printf(
         "C4.2 phase cuts: PASS executions=%u requested=%u distinct=%u "
         "command=%08x "
-        "reconcile=%08x notification=%08x candidate=%08x control=%08x\n",
+        "reconcile=%08x notification=%08x candidate=%08x control=%08x "
+        "obligations=%u probes=%u assumption_failures=%u set=%s model=%s\n",
         executions, requested_cut_count, distinct_cut_count,
         command_mask, reconcile_mask,
-        notification_mask, candidate_mask, control_mask
+        notification_mask, candidate_mask, control_mask,
+        state_obligation_kills, C42_STATE_PROBE_COUNT,
+        epoch_assumption_failures,
+        C42_STATE_OBLIGATION_SET_SHA256, C42_STATE_MODEL_INPUT_DIGEST
     );
     return 0;
 }

@@ -1,193 +1,32 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
+record_rules = [
+  { id = "phase_record_contracts", records = ["control_status", "step_result"], default_rule = "exact", reserved_rule = "required_zero", case_id = "control_episode", claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-EPOCH-TERMINAL-PROGRESS"], additional_lane_ids = ["phase_gcc", "phase_clang"] },
+]
+
+episodes = [
+  { id = "reset", entry_action = "c42_reset_start", mandatory_phases_initial = 3, provider_delay_credit = 8, maximum_work_units = 11, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison" },
+  { id = "teardown", entry_action = "c42_teardown_start", mandatory_phases_initial = 3, provider_delay_credit = 8, maximum_work_units = 11, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison" },
+  { id = "teardown_takeover", entry_action = "c42_teardown_start", mandatory_phases_initial = 5, provider_delay_credit = 8, maximum_work_units = 13, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison" },
+]
+
+transitions = [
+  { id = "reset_command_begin", law_id = "phase.reset_command_begin", owner_model = "phase", prestate = "reset_started_port_not_started", action = "c42_step_budget_1", provider_call = "command.reset_begin", observable_output = "one unit and one transition", observable_provider_delta = "one command begin event", poststate = "reset_port_started_or_waiting_or_poisoned", terminal = false, progress_kind = "bounded_terminal", episode = "reset", episode_ids = ["reset"], rank_rule = "decrease_macro_phase_or_delay_credit", rank_m_before = 3, rank_m_after = 2, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 11, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "reset_memory_begin", law_id = "phase.reset_memory_begin", owner_model = "phase", prestate = "reset_port_started_memory_not_started", action = "c42_step_budget_1", provider_call = "memory.reset_begin", observable_output = "one unit and one transition", observable_provider_delta = "one memory begin event", poststate = "reset_memory_started_or_waiting_or_poisoned", terminal = false, progress_kind = "bounded_terminal", episode = "reset", episode_ids = ["reset"], rank_rule = "decrease_macro_phase_or_delay_credit", rank_m_before = 2, rank_m_after = 1, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 11, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "reset_quiescent", law_id = "phase.reset_quiescent", owner_model = "phase", prestate = "reset_providers_started", action = "c42_step_budget_1", provider_call = "command_and_memory.reset_quiescent", observable_output = "one unit and one transition", observable_provider_delta = "one command and one memory quiescent event", poststate = "reset_waiting_or_terminal_or_poisoned", terminal = false, progress_kind = "bounded_terminal", episode = "reset", episode_ids = ["reset"], rank_rule = "decrease_macro_phase_or_delay_credit", rank_m_before = 1, rank_m_after = 0, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 11, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "reset_terminal", law_id = "phase.reset_terminal", owner_model = "phase", prestate = "cold_no_queues_or_poisoned", action = "c42_step_budget_1", provider_call = "none_after_terminal", observable_output = "zero units and zero transitions", observable_provider_delta = "no provider event", poststate = "terminal_stable", terminal = true, progress_kind = "bounded_terminal", episode = "reset", episode_ids = ["reset"], rank_rule = "terminal_zero", rank_m_before = 0, rank_m_after = 0, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 11, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "teardown_reset_command", law_id = "phase.teardown_reset_command", owner_model = "phase", prestate = "teardown_owns_unstarted_reset_port", action = "c42_step_budget_1", provider_call = "command.reset_begin", observable_output = "one unit and one transition", observable_provider_delta = "one old-reset command begin event", poststate = "old_reset_port_started_or_poisoned", terminal = false, progress_kind = "bounded_terminal", episode = "teardown_takeover", episode_ids = ["teardown_takeover"], rank_rule = "decrease_macro_phase_or_delay_credit", rank_m_before = 5, rank_m_after = 4, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 13, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "teardown_reset_memory", law_id = "phase.teardown_reset_memory", owner_model = "phase", prestate = "teardown_owns_unstarted_reset_memory", action = "c42_step_budget_1", provider_call = "memory.reset_begin", observable_output = "one unit and one transition", observable_provider_delta = "one old-reset memory begin event", poststate = "old_reset_memory_started_or_poisoned", terminal = false, progress_kind = "bounded_terminal", episode = "teardown_takeover", episode_ids = ["teardown_takeover"], rank_rule = "decrease_macro_phase_or_delay_credit", rank_m_before = 4, rank_m_after = 3, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 13, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "teardown_command_begin", law_id = "phase.teardown_command_begin", owner_model = "phase", prestate = "teardown_port_not_started", action = "c42_step_budget_1", provider_call = "command.teardown_begin", observable_output = "one unit and one transition", observable_provider_delta = "one command teardown-begin event", poststate = "teardown_port_started_or_waiting_or_poisoned", terminal = false, progress_kind = "bounded_terminal", episode = "teardown", episode_ids = ["teardown", "teardown_takeover"], rank_rule = "decrease_macro_phase_or_delay_credit", rank_m_before = 3, rank_m_after = 2, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 13, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "teardown_memory_begin", law_id = "phase.teardown_memory_begin", owner_model = "phase", prestate = "teardown_port_started_memory_not_started", action = "c42_step_budget_1", provider_call = "memory.teardown_begin", observable_output = "one unit and one transition", observable_provider_delta = "one memory teardown-begin event", poststate = "teardown_memory_started_or_waiting_or_poisoned", terminal = false, progress_kind = "bounded_terminal", episode = "teardown", episode_ids = ["teardown", "teardown_takeover"], rank_rule = "decrease_macro_phase_or_delay_credit", rank_m_before = 2, rank_m_after = 1, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 13, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "teardown_quiescent", law_id = "phase.teardown_quiescent", owner_model = "phase", prestate = "teardown_providers_started", action = "c42_step_budget_1", provider_call = "command_and_memory.teardown_quiescent", observable_output = "one unit and one transition", observable_provider_delta = "one command and one memory quiescent event", poststate = "teardown_waiting_or_terminal_or_poisoned", terminal = false, progress_kind = "bounded_terminal", episode = "teardown", episode_ids = ["teardown", "teardown_takeover"], rank_rule = "decrease_macro_phase_or_delay_credit", rank_m_before = 1, rank_m_after = 0, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 13, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "teardown_terminal", law_id = "phase.teardown_terminal", owner_model = "phase", prestate = "dead_or_poisoned", action = "c42_step_budget_1", provider_call = "none_after_terminal", observable_output = "zero units and zero transitions", observable_provider_delta = "no provider event", poststate = "terminal_stable", terminal = true, progress_kind = "bounded_terminal", episode = "teardown", episode_ids = ["teardown", "teardown_takeover"], rank_rule = "terminal_zero", rank_m_before = 0, rank_m_after = 0, provider_delay_credit = 8, readiness_assumption = "at_most_8_total_nonterminal_provider_units_then_success_or_poison", maximum_work_units = 13, claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+  { id = "ready_poll_service", law_id = "phase.ready_poll_service", owner_model = "phase", prestate = "eligible_local_or_hif_poll_work", action = "c42_step_budget_1", provider_call = "command.poll_or_local_lane", observable_output = "one productive unit within service gap", observable_provider_delta = "poll or local lane event", poststate = "service_cursor_advanced", terminal = false, progress_kind = "bounded_service", episode = "ready_service", episode_ids = [], rank_rule = "service_gap_at_most_2", service_bound = 2, provider_delay_credit = 0, readiness_assumption = "eligible_work_remains", maximum_work_units = 2, claim_ids = ["C42A-READY-BOUNDED-SERVICE"], positive_witness_id = "witness_phase", additional_lane_ids = ["phase_gcc", "phase_clang"] },
+]
+
 [model]
-schema_version = 1
+schema_version = 2
 profile_id = "C42A-P1"
 model_id = "phase"
 epoch_delay_credit_maximum = 8
-
-[[record_rules]]
-id = "phase_record_contracts"
-records = ["control_status", "step_result"]
-default_rule = "exact"
-reserved_rule = "required_zero"
-case_id = "control_episode"
-claim_ids = ["C42A-STRUCTURAL-INVENTORY", "C42A-EPOCH-TERMINAL-PROGRESS"]
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "reset_command_begin"
-law_id = "phase.reset_command_begin"
-owner_model = "phase"
-prestate = "reset_started_port_not_started"
-action = "c42_step_budget_1"
-provider_call = "command.reset_begin"
-poststate = "reset_port_started_or_waiting_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "reset"
-rank_rule = "decrease_macro_phase_or_delay_credit"
-maximum_work_units = 11
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "reset_memory_begin"
-law_id = "phase.reset_memory_begin"
-owner_model = "phase"
-prestate = "reset_port_started_memory_not_started"
-action = "c42_step_budget_1"
-provider_call = "memory.reset_begin"
-poststate = "reset_memory_started_or_waiting_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "reset"
-rank_rule = "decrease_macro_phase_or_delay_credit"
-maximum_work_units = 11
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "reset_quiescent"
-law_id = "phase.reset_quiescent"
-owner_model = "phase"
-prestate = "reset_providers_started"
-action = "c42_step_budget_1"
-provider_call = "command_and_memory.reset_quiescent"
-poststate = "reset_waiting_or_terminal_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "reset"
-rank_rule = "decrease_macro_phase_or_delay_credit"
-maximum_work_units = 11
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "reset_terminal"
-law_id = "phase.reset_terminal"
-owner_model = "phase"
-prestate = "reset_global_quiescent"
-action = "c42_step_budget_1"
-provider_call = "none_after_terminal"
-poststate = "cold_no_queues_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "reset"
-rank_rule = "terminal_zero"
-maximum_work_units = 11
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "teardown_reset_command"
-law_id = "phase.teardown_reset_command"
-owner_model = "phase"
-prestate = "teardown_owns_unstarted_reset_port"
-action = "c42_step_budget_1"
-provider_call = "command.reset_begin"
-poststate = "old_reset_port_started_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "teardown_takeover"
-rank_rule = "decrease_macro_phase_or_delay_credit"
-maximum_work_units = 13
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "teardown_reset_memory"
-law_id = "phase.teardown_reset_memory"
-owner_model = "phase"
-prestate = "teardown_owns_unstarted_reset_memory"
-action = "c42_step_budget_1"
-provider_call = "memory.reset_begin"
-poststate = "old_reset_memory_started_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "teardown_takeover"
-rank_rule = "decrease_macro_phase_or_delay_credit"
-maximum_work_units = 13
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "teardown_command_begin"
-law_id = "phase.teardown_command_begin"
-owner_model = "phase"
-prestate = "teardown_port_not_started"
-action = "c42_step_budget_1"
-provider_call = "command.teardown_begin"
-poststate = "teardown_port_started_or_waiting_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "teardown"
-rank_rule = "decrease_macro_phase_or_delay_credit"
-maximum_work_units = 13
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "teardown_memory_begin"
-law_id = "phase.teardown_memory_begin"
-owner_model = "phase"
-prestate = "teardown_port_started_memory_not_started"
-action = "c42_step_budget_1"
-provider_call = "memory.teardown_begin"
-poststate = "teardown_memory_started_or_waiting_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "teardown"
-rank_rule = "decrease_macro_phase_or_delay_credit"
-maximum_work_units = 13
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "teardown_quiescent"
-law_id = "phase.teardown_quiescent"
-owner_model = "phase"
-prestate = "teardown_providers_started"
-action = "c42_step_budget_1"
-provider_call = "command_and_memory.teardown_quiescent"
-poststate = "teardown_waiting_or_terminal_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "teardown"
-rank_rule = "decrease_macro_phase_or_delay_credit"
-maximum_work_units = 13
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "teardown_terminal"
-law_id = "phase.teardown_terminal"
-owner_model = "phase"
-prestate = "teardown_global_quiescent"
-action = "c42_step_budget_1"
-provider_call = "none_after_terminal"
-poststate = "dead_or_poisoned"
-progress_kind = "bounded_terminal"
-episode = "teardown"
-rank_rule = "terminal_zero"
-maximum_work_units = 13
-claim_ids = ["C42A-EPOCH-TERMINAL-PROGRESS"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]
-
-[[transitions]]
-id = "ready_poll_service"
-law_id = "phase.ready_poll_service"
-owner_model = "phase"
-prestate = "eligible_local_or_hif_poll_work"
-action = "c42_step_budget_1"
-provider_call = "command.poll_or_local_lane"
-poststate = "service_cursor_advanced"
-progress_kind = "bounded_service"
-episode = "ready_service"
-rank_rule = "service_gap_at_most_2"
-maximum_work_units = 2
-claim_ids = ["C42A-READY-BOUNDED-SERVICE"]
-positive_witness_id = "witness_phase"
-additional_lane_ids = ["phase_gcc", "phase_clang"]

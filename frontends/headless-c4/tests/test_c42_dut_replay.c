@@ -4,6 +4,7 @@
 #include "c42_reference.h"
 #include "c42_dut_bfs.h"
 #include "c42_support.h"
+#include "c42_state_obligation_oracle.h"
 
 #include <stdio.h>
 #include <setjmp.h>
@@ -16,6 +17,7 @@ static uint32_t comparisons;
 static uint32_t replay_paths;
 static uint32_t path_step;
 static uint32_t cut_limit = UINT32_MAX;
+static uint32_t state_obligation_kills;
 static jmp_buf cut_jump;
 
 static void verify(int condition, const char *name)
@@ -719,6 +721,13 @@ int main(int argc, char **argv)
            summary.families, summary.states, summary.transitions,
            summary.comparisons, summary.maximum_depth,
            summary.maximum_successors);
+    if (!c42_state_obligations_run(&state_obligation_kills)) {
+        return 1;
+    }
+    printf("C4.2 state obligation replay: PASS obligations=%u probes=%u "
+           "set=%s model=%s\n",
+           state_obligation_kills, C42_STATE_PROBE_COUNT,
+           C42_STATE_OBLIGATION_SET_SHA256, C42_STATE_MODEL_INPUT_DIGEST);
     if (only_family != NULL) {
         return 0;
     }
