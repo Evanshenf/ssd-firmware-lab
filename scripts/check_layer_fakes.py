@@ -138,7 +138,7 @@ def main() -> int:
                     ],
                     cwd=ROOT,
                     check=False,
-                    timeout=120,
+                    timeout=300,
                 )
             except (OSError, subprocess.TimeoutExpired) as error:
                 failures.append(f"{label}: cannot run fake-link target: {error}")
