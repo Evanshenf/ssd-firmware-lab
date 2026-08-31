@@ -469,7 +469,7 @@ allowed_unfrozen_names = []
 status = "transitional_review_hold"
 baseline_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
 historical_source_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
-candidate_implementation_commit = "6b873c4b944ead81dfe5896bdf9fd4345a3ee39a"
+candidate_implementation_commit = "c8d39540367bb3584837100fb56e83d659308dc3"
 closed_build_input_roots = [
   ".github/workflows/c4-portable.yml",
   "docs/legal/c4-2-source-boundary-review.md",
@@ -477,6 +477,8 @@ closed_build_input_roots = [
   "docs/results/2026-08-30-c4-2-headless-queue-hif.md",
   "docs/results/2026-08-30-c4-2-post-review-hold.md",
   "include/fwlab/contracts/hif_command_port.h",
+  "frontends/headless-c35/Makefile",
+  "frontends/headless-c4/Makefile",
   "frontends/headless-c4/c42_sources.mk",
   "frontends/headless-c4/evidence/c42a-p1",
   "frontends/headless-c4/hif/c42.h",
@@ -517,6 +519,7 @@ closed_build_input_roots = [
   "scripts/check_c4_architecture.py",
   "scripts/check_c35_architecture.py",
   "scripts/check_c42_architecture.py",
+  "scripts/check_c42_authority.py",
   "scripts/check_c42_analysis.py",
   "scripts/check_c42_claim_models.py",
   "scripts/check_c42_determinism.py",
@@ -525,6 +528,7 @@ closed_build_input_roots = [
   "scripts/check_c42_make_integrity.py",
   "scripts/check_c42_provider_mutations.py",
   "scripts/check_c42_runner_integrity.py",
+  "scripts/c42_authority.py",
   "scripts/extract_c42_interface_inventory.py",
   "scripts/gen_c42_obligations.py",
   "scripts/run_c42_gate.py",
@@ -538,14 +542,18 @@ allowed_unfrozen_names = []
 "docs/results/2026-08-30-c4-2-headless-queue-hif.md" = "dfd89d593b026d2d8722d54d768cc484be6f3b83ba065980de9c1aa62477fd28"
 "docs/results/2026-08-30-c4-2-post-review-hold.md" = "78228c749010e472f81b0ab32b403088ea5ff45b5b5e6145dbec0b5fc468898a"
 "include/fwlab/contracts/hif_command_port.h" = "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519"
-"frontends/headless-c4/c42_sources.mk" = "a11ef31ac85613f929668e7a41b59940af95e4ac61527f4024dfd246cc6f6fa0"
-"frontends/headless-c4/evidence/c42a-p1/build-trust.toml" = "66e4376fff4a2fc8ca0bd0ebbbb03a61466b53a392fe8a21b858edffb2e0d614"
-"frontends/headless-c4/evidence/c42a-p1/claims.toml" = "b378dea4dc1bf0c1cd733af630c17d241fdbbb601d04ef8634b49f79933694f7"
+"frontends/headless-c35/Makefile" = "7af3bbf41d0de37c41e1e0a20c1002109bfaceab435df576f97ccf54be0d0e62"
+"frontends/headless-c4/Makefile" = "bed72e86586beb4f13a85d2b74e6afce75b75b602cbde4804b49816828c564e5"
+"frontends/headless-c4/c42_sources.mk" = "3454ae17226f2468ea17f0bc689fa8aefa2d068741fd0ce5a886392740e4d5f7"
+"frontends/headless-c4/evidence/c42a-p1/authority.lock.toml" = "99073070d9dd8c397eebaaf8189097b5f871630241e1e8fef7f86749edfdee64"
+"frontends/headless-c4/evidence/c42a-p1/build-trust.toml" = "c314dee7e2596629bab9d87d0ac8e899b67d6be15ac51239cb6376c936266c6e"
+"frontends/headless-c4/evidence/c42a-p1/c35-reference.toml" = "6e642a96e2434687f61df7a0c5a36c676f0c330cbfe7c8b904a8f32359a1c04e"
+"frontends/headless-c4/evidence/c42a-p1/claims.toml" = "b0f2fcb053e5c21509bdaa6d7c3e9406d8ad1e060165170445cfeb5174c4cd10"
 "frontends/headless-c4/evidence/c42a-p1/fault-operators.toml" = "8bfeeeaa0e5da4fe051e57c70b4bd3b8150dd13784607d177a42c0c27cb32d26"
 "frontends/headless-c4/evidence/c42a-p1/identity-model.toml" = "b3d317e26f10ee3c731e6ca7cd51c635d2c2cbfedcd7f7a42cff279f0b5217e7"
 "frontends/headless-c4/evidence/c42a-p1/interface-inventory.toml" = "d7768a5fa88785bf63dd17eeed32fb3ad6c7d7702e3495e3a446b4b77b4f5099"
 "frontends/headless-c4/evidence/c42a-p1/lanes.toml" = "1ff1805751dfdcefc614fb7331bbf47f4eb4af08bb7facf58d07e578836d40c1"
-"frontends/headless-c4/evidence/c42a-p1/obligations.lock.toml" = "c8eb962c622e592e48c198efcddc1a9d1aca3d3a0e7a9e3886b27f6470a21880"
+"frontends/headless-c4/evidence/c42a-p1/obligations.lock.toml" = "f7f7d01fc8b2548e061d31edbf6aa743bf184aa8af102492450e1f49bde7de79"
 "frontends/headless-c4/evidence/c42a-p1/phase-model.toml" = "2b7c445a52a120b5c7f17e42f844708615d7ece2126db79f73f35ddef05e35d6"
 "frontends/headless-c4/evidence/c42a-p1/profile.toml" = "3b684cd437522561efab8860eec8a831d8fcee0c311a7276f8bd32aeadbe063f"
 "frontends/headless-c4/evidence/c42a-p1/provider-model.toml" = "7247f1cdd0c8a0425916a63200fc1f3e2ef9e0b4e0ff5d0dfee37641848e5bcf"
@@ -584,9 +592,10 @@ allowed_unfrozen_names = []
 "frontends/headless-c4/tests/model_c42.c" = "e7ccd0067e5f4674c4e91560b10015d4c337fb8e0e23816aad42f76dc64cf64f"
 "frontends/headless-c4/tests/broken_c42.c" = "fbcef3fcacf6fcfd2ddeb2a4fb5a12e16c8aad4e3c3189f3dc315720658571b8"
 "frontends/headless-c4/tests/fuzz_c42.c" = "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54"
-"scripts/check_c4_architecture.py" = "df41a40d0a79fd7f7ebb9d941f38c1d9b312acf0fa18701d506e61c3f95a387e"
+"scripts/check_c4_architecture.py" = "61a781d5b1ead09149cafd1456baddb685dd05abb8bdcf4787721c849f34f308"
 "scripts/check_c35_architecture.py" = "94eb3cb058fa5791e12464b58e3b381ad8f5e4c7572a074a1c8e2a070fc8d5b7"
-"scripts/check_c42_architecture.py" = "39ba8f39d02afcf3c019a26da9c7167dff4249bf8f75c449a2e44023a7967aab"
+"scripts/check_c42_architecture.py" = "b7753d8a6ee499970f5c8496f66d93cb2ffca67d00f99f5cd4b6fd322c8cf603"
+"scripts/check_c42_authority.py" = "79be08dd3b5e05fd8d23db224e5642d98484881fe476e7d07c5c8c610d17908f"
 "scripts/check_c42_analysis.py" = "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a"
 "scripts/check_c42_claim_models.py" = "2e4690a89439c43f35f2eac5952253c1056c77b60c5c42bd883cea7a6a610545"
 "scripts/check_c42_determinism.py" = "0f2ae7c5e63096ae8107886345cde4a94286ba162272a26f1a6cbcd086693a26"
@@ -595,9 +604,10 @@ allowed_unfrozen_names = []
 "scripts/check_c42_make_integrity.py" = "be08f2e4742ced60cbe1553f0138a827f49dc37b004bd7f8ae0a45830893352d"
 "scripts/check_c42_provider_mutations.py" = "89fb0c4b519792b4c9ca13dbf765c8de82e784acd2c53e03fb41ba180bebae6a"
 "scripts/check_c42_runner_integrity.py" = "dc3f3694f3153d43ec357e5f52d773225f0a6350a8515e1614dd6891ceed45bb"
+"scripts/c42_authority.py" = "98c3e13bb8f3eb79145b53d37d2c64b451c233ca5d2564edfda8e240cffde58e"
 "scripts/extract_c42_interface_inventory.py" = "113d61231db422f9a91138c540fe7e9ba6310a5a9a3b4e47cd4e5183fb25d5b5"
 "scripts/gen_c42_obligations.py" = "80a9fcafa5e9e1ccba506faa478a6d05bef5115bbb803664025afa44c274e942"
-"scripts/run_c42_gate.py" = "dc54decd65fc7ba1f57db2197dde41a56f8abede64e3de0890e9d2451afaa47e"
+"scripts/run_c42_gate.py" = "38f8bb01ebfe6d5a728a3fcb9df36236527945fc844cbf95e9a7e659d17b4b25"
 
 [layer_fakes]
 roots = ["core", "nfc", "media", "frontends"]

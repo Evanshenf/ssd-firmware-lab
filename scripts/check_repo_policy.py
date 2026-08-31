@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "6b873c4b944ead81dfe5896bdf9fd4345a3ee39a"
+EXPECTED_C4_2_CANDIDATE = "c8d39540367bb3584837100fb56e83d659308dc3"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -698,6 +698,8 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "docs/results/2026-08-30-c4-2-headless-queue-hif.md",
     "docs/results/2026-08-30-c4-2-post-review-hold.md",
     "include/fwlab/contracts/hif_command_port.h",
+    "frontends/headless-c35/Makefile",
+    "frontends/headless-c4/Makefile",
     "frontends/headless-c4/c42_sources.mk",
     "frontends/headless-c4/evidence/c42a-p1",
     "frontends/headless-c4/hif/c42.h",
@@ -738,6 +740,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "scripts/check_c4_architecture.py",
     "scripts/check_c35_architecture.py",
     "scripts/check_c42_architecture.py",
+    "scripts/check_c42_authority.py",
     "scripts/check_c42_analysis.py",
     "scripts/check_c42_claim_models.py",
     "scripts/check_c42_determinism.py",
@@ -746,6 +749,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "scripts/check_c42_make_integrity.py",
     "scripts/check_c42_provider_mutations.py",
     "scripts/check_c42_runner_integrity.py",
+    "scripts/c42_authority.py",
     "scripts/extract_c42_interface_inventory.py",
     "scripts/gen_c42_obligations.py",
     "scripts/run_c42_gate.py",
@@ -764,12 +768,20 @@ EXPECTED_C4_2_FILES = {
         "78228c749010e472f81b0ab32b403088ea5ff45b5b5e6145dbec0b5fc468898a",
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
+    "frontends/headless-c35/Makefile":
+        "7af3bbf41d0de37c41e1e0a20c1002109bfaceab435df576f97ccf54be0d0e62",
+    "frontends/headless-c4/Makefile":
+        "bed72e86586beb4f13a85d2b74e6afce75b75b602cbde4804b49816828c564e5",
     "frontends/headless-c4/c42_sources.mk":
-        "a11ef31ac85613f929668e7a41b59940af95e4ac61527f4024dfd246cc6f6fa0",
+        "3454ae17226f2468ea17f0bc689fa8aefa2d068741fd0ce5a886392740e4d5f7",
+    "frontends/headless-c4/evidence/c42a-p1/authority.lock.toml":
+        "99073070d9dd8c397eebaaf8189097b5f871630241e1e8fef7f86749edfdee64",
     "frontends/headless-c4/evidence/c42a-p1/build-trust.toml":
-        "66e4376fff4a2fc8ca0bd0ebbbb03a61466b53a392fe8a21b858edffb2e0d614",
+        "c314dee7e2596629bab9d87d0ac8e899b67d6be15ac51239cb6376c936266c6e",
+    "frontends/headless-c4/evidence/c42a-p1/c35-reference.toml":
+        "6e642a96e2434687f61df7a0c5a36c676f0c330cbfe7c8b904a8f32359a1c04e",
     "frontends/headless-c4/evidence/c42a-p1/claims.toml":
-        "b378dea4dc1bf0c1cd733af630c17d241fdbbb601d04ef8634b49f79933694f7",
+        "b0f2fcb053e5c21509bdaa6d7c3e9406d8ad1e060165170445cfeb5174c4cd10",
     "frontends/headless-c4/evidence/c42a-p1/fault-operators.toml":
         "8bfeeeaa0e5da4fe051e57c70b4bd3b8150dd13784607d177a42c0c27cb32d26",
     "frontends/headless-c4/evidence/c42a-p1/identity-model.toml":
@@ -779,7 +791,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/evidence/c42a-p1/lanes.toml":
         "1ff1805751dfdcefc614fb7331bbf47f4eb4af08bb7facf58d07e578836d40c1",
     "frontends/headless-c4/evidence/c42a-p1/obligations.lock.toml":
-        "c8eb962c622e592e48c198efcddc1a9d1aca3d3a0e7a9e3886b27f6470a21880",
+        "f7f7d01fc8b2548e061d31edbf6aa743bf184aa8af102492450e1f49bde7de79",
     "frontends/headless-c4/evidence/c42a-p1/phase-model.toml":
         "2b7c445a52a120b5c7f17e42f844708615d7ece2126db79f73f35ddef05e35d6",
     "frontends/headless-c4/evidence/c42a-p1/profile.toml":
@@ -857,11 +869,13 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/fuzz_c42.c":
         "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54",
     "scripts/check_c4_architecture.py":
-        "df41a40d0a79fd7f7ebb9d941f38c1d9b312acf0fa18701d506e61c3f95a387e",
+        "61a781d5b1ead09149cafd1456baddb685dd05abb8bdcf4787721c849f34f308",
     "scripts/check_c35_architecture.py":
         "94eb3cb058fa5791e12464b58e3b381ad8f5e4c7572a074a1c8e2a070fc8d5b7",
     "scripts/check_c42_architecture.py":
-        "39ba8f39d02afcf3c019a26da9c7167dff4249bf8f75c449a2e44023a7967aab",
+        "b7753d8a6ee499970f5c8496f66d93cb2ffca67d00f99f5cd4b6fd322c8cf603",
+    "scripts/check_c42_authority.py":
+        "79be08dd3b5e05fd8d23db224e5642d98484881fe476e7d07c5c8c610d17908f",
     "scripts/check_c42_analysis.py":
         "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a",
     "scripts/check_c42_claim_models.py":
@@ -878,12 +892,14 @@ EXPECTED_C4_2_FILES = {
         "89fb0c4b519792b4c9ca13dbf765c8de82e784acd2c53e03fb41ba180bebae6a",
     "scripts/check_c42_runner_integrity.py":
         "dc3f3694f3153d43ec357e5f52d773225f0a6350a8515e1614dd6891ceed45bb",
+    "scripts/c42_authority.py":
+        "98c3e13bb8f3eb79145b53d37d2c64b451c233ca5d2564edfda8e240cffde58e",
     "scripts/extract_c42_interface_inventory.py":
         "113d61231db422f9a91138c540fe7e9ba6310a5a9a3b4e47cd4e5183fb25d5b5",
     "scripts/gen_c42_obligations.py":
         "80a9fcafa5e9e1ccba506faa478a6d05bef5115bbb803664025afa44c274e942",
     "scripts/run_c42_gate.py":
-        "dc54decd65fc7ba1f57db2197dde41a56f8abede64e3de0890e9d2451afaa47e",
+        "38f8bb01ebfe6d5a728a3fcb9df36236527945fc844cbf95e9a7e659d17b4b25",
 }
 
 EXPECTED_FREEZES = {
@@ -1402,7 +1418,7 @@ def check_freezes(
 
 
 EXPECTED_C42_RULES_SHA256 = \
-    "3098dab6772d5241785f3be62e03bb7c05db42442a7f0c387181f431a65748a7"
+    "19376873f80a63769ca7afa9540a70c72857068db13efa77554c94c91dc89b49"
 EXPECTED_C42_GUARD_SHA256 = \
     "2412a8543cd7bfb1bead4b528f046e94851fc3febf5c996a3bf9032b0c2239fe"
 
@@ -1482,12 +1498,16 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "include c42_sources.mk", "$(C42_SOURCES)",
         "$(C42_FAKE_SOURCES)", "$(C42_SUPPORT)", "$(C42_REFERENCE)",
         "$(C42_HEADERS)", "$(C42_ALL_INPUTS)", "$(C42_CHECK_TARGETS)",
+        "$(C42_BUILD_TEST_TARGETS)",
         "check-c42-remediation", "check-c42-replay",
         "check-c42-dynamic-mutations", "check-c42-architecture",
         "check-c42-artifact-receipt", "C42_RECEIPT",
         "check-c42-make-integrity",
         "check-c42-provider-mutations",
         "check-c42-runner-integrity",
+        "check-c42-authority",
+        "check-c42-build-tests",
+        "scripts/check_c42_authority.py",
         "check-c42-claim-models",
         "scripts/check_c42_claim_models.py",
         "scripts/extract_c42_interface_inventory.py",
@@ -1503,7 +1523,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
         failures.append("C4.2 frozen source list is overridden in shared Makefile")
     if re.search(
             r"^C42_(?:HEADERS|TEST_SOURCES|EVIDENCE_INPUTS|"
-            r"ALL_INPUTS|CHECK_TARGETS)\s*[:+?]?=",
+            r"ALL_INPUTS|CHECK_TARGETS|BUILD_TEST_TARGETS)\s*[:+?]?=",
             makefile, re.MULTILINE):
         failures.append("C4.2 frozen build closure is overridden in shared Makefile")
     required_sources = (
@@ -1537,6 +1557,10 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "evidence/c42a-p1/fault-operators.toml",
         "evidence/c42a-p1/lanes.toml",
         "evidence/c42a-p1/obligations.lock.toml",
+        "evidence/c42a-p1/authority.lock.toml",
+        "evidence/c42a-p1/c35-reference.toml",
+        "../../scripts/c42_authority.py",
+        "../../scripts/check_c42_authority.py",
         "../../scripts/extract_c42_interface_inventory.py",
         "../../scripts/check_c42_claim_models.py",
         "../../scripts/gen_c42_obligations.py",
@@ -1580,12 +1604,20 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "check-c42-artifact-receipt",
         "check-c42-make-integrity",
         "check-c42-provider-mutations",
+        "check-c42-authority",
         "check-c42-runner-integrity",
     }
     expected_prerequisites = {
         "check-c42": expected_targets,
         "check-c42-build-closure": set(required_sources),
         "check-c42-claim-models": set(),
+        "check-c42-authority": set(),
+        "check-c42-build-tests": {
+            "check-c42-build-closure", "check-c42-unit",
+            "check-c42-model", "check-c42-negative", "check-c42-fuzz",
+            "check-c42-local-determinism", "check-c42-replay",
+            "check-c42-artifact-receipt",
+        },
         "check-c42-unit": {
             "build/c42_queue_unit", "build/c42_publication_unit",
             "build/c42_identity_unit", "build/c42_reset_delete_unit",
