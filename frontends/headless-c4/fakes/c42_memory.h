@@ -66,7 +66,9 @@ struct c42_fake_memory_operation_record {
     struct c42_memory_token token;
     struct c42_queue_memory_cap capability;
     uint16_t slot;
+    uint16_t depth;
     uint16_t prefix;
+    uint8_t inverse_phase;
     uint8_t kind;
     uint8_t active;
     uint8_t committed;

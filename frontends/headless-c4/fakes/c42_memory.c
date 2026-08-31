@@ -493,7 +493,13 @@ static enum c42_memory_result scrub_common(
     record = &memory->scrub[capability->queue_id];
     if (start != 0) {
         if (record->active != 0 &&
-            record->retired == 0 &&
+            token_equal(&record->token, client_token) &&
+            (!cap_equal(&record->capability, capability) ||
+             record->depth != depth ||
+             record->inverse_phase != inverse_phase)) {
+            return C42_MEMORY_POISONED;
+        }
+        if (record->active != 0 && record->retired == 0 &&
             !token_equal(&record->token, client_token)) {
             return C42_MEMORY_POISONED;
         }
@@ -505,10 +511,14 @@ static enum c42_memory_result scrub_common(
             record->kind = C42_FAKE_MEMORY_SCRUB;
             record->token = *client_token;
             record->capability = *capability;
+            record->depth = depth;
+            record->inverse_phase = inverse_phase;
         }
     } else if (record->active == 0 ||
                !token_equal(&record->token, client_token) ||
-               !cap_equal(&record->capability, capability)) {
+               !cap_equal(&record->capability, capability) ||
+               record->depth != depth ||
+               record->inverse_phase != inverse_phase) {
         return C42_MEMORY_STALE;
     }
     if (direct_result_take(
@@ -609,8 +619,6 @@ static enum c42_memory_result fake_scrub_abort(
     struct c42_fake_memory_outcome outcome;
     const struct c42_fake_memory_direct_injection *direct;
 
-    (void)depth;
-    (void)inverse_phase;
     if (memory == NULL || capability == NULL || client_token == NULL ||
         status == NULL || capability->queue_id >= C42_MAX_QUEUE_PAIRS) {
         return C42_MEMORY_INVALID;
@@ -618,7 +626,9 @@ static enum c42_memory_result fake_scrub_abort(
     record = &memory->scrub[capability->queue_id];
     if (record->active == 0 ||
         !token_equal(&record->token, client_token) ||
-        !cap_equal(&record->capability, capability)) {
+        !cap_equal(&record->capability, capability) ||
+        record->depth != depth ||
+        record->inverse_phase != inverse_phase) {
         return C42_MEMORY_STALE;
     }
     if (direct_result_take(
@@ -657,7 +667,6 @@ static enum c42_memory_result scrub_retire_common(
     struct c42_fake_memory_outcome outcome;
     const struct c42_fake_memory_direct_injection *direct;
 
-    (void)inverse_phase;
     if (memory == NULL || capability == NULL || client_token == NULL ||
         status == NULL || capability->queue_id >= C42_MAX_QUEUE_PAIRS ||
         depth != memory->cq_map[capability->queue_id].depth) {
@@ -667,6 +676,8 @@ static enum c42_memory_result scrub_retire_common(
     if (record->active == 0 ||
         !token_equal(&record->token, client_token) ||
         !cap_equal(&record->capability, capability) ||
+        record->depth != depth ||
+        record->inverse_phase != inverse_phase ||
         record->committed == 0) {
         return C42_MEMORY_STALE;
     }
@@ -767,7 +778,11 @@ static enum c42_memory_result body_common(
     record = &memory->publication[capability->queue_id];
     if (start != 0) {
         if (record->active != 0 &&
-            !token_equal(&record->token, client_token)) {
+            (!token_equal(&record->token, client_token) ||
+             record->kind != C42_FAKE_MEMORY_BODY ||
+             !cap_equal(&record->capability, capability) ||
+             record->slot != slot ||
+             memcmp(record->expected, expected, C42_CQE_BYTES) != 0)) {
             return C42_MEMORY_POISONED;
         }
         if (record->active == 0) {
@@ -1262,6 +1277,27 @@ static int capture_request_matches(
     return mapping != NULL && slot < mapping->depth;
 }
 
+static int capture_output_matches(
+    const struct c42_fake_memory *memory,
+    const struct c42_queue_memory_cap *capability,
+    uint16_t slot,
+    const uint8_t *output,
+    size_t output_size)
+{
+    const struct c42_fake_memory_mapping *mapping;
+
+    if (memory == NULL || capability == NULL || output == NULL ||
+        output_size != C42_SQE_BYTES ||
+        capability->role != C42_MEMORY_SQ_READ ||
+        capability->queue_id >= C42_MAX_QUEUE_PAIRS) {
+        return 0;
+    }
+    mapping = mapping_for_const(memory, capability);
+    return mapping != NULL && slot < mapping->depth &&
+           memcmp(output, memory->sq[capability->queue_id][slot],
+                  C42_SQE_BYTES) == 0;
+}
+
 static int status_request_structural_valid(
     const struct c42_queue_memory_cap *capability,
     const struct c42_memory_token *token)
@@ -1285,7 +1321,9 @@ static int scrub_request_matches(
         mapping_for_const(memory, capability);
 
     return memory_record_matches(record, capability, token) &&
-           mapping != NULL && mapping->depth == depth && inverse_phase <= 1 &&
+           mapping != NULL && mapping->depth == depth &&
+           record->depth == depth && record->inverse_phase == inverse_phase &&
+           inverse_phase <= 1 &&
            (require_committed == 0 || record->committed != 0);
 }
 
@@ -1391,8 +1429,13 @@ static enum c42_memory_result logged_capture(
             output_size == C42_SQE_BYTES && capability != NULL &&
             capability->role == C42_MEMORY_SQ_READ,
         input_match,
-        write_mask != 0,
-        write_mask != 0 && call == C42_MEMORY_OK,
+        (write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&
+            output != NULL && output_size == C42_SQE_BYTES,
+        (write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&
+            call == C42_MEMORY_OK &&
+            capture_output_matches(
+                context, capability, slot, output, output_size
+            ),
         capability == NULL ? 0 : capability->memory_uid,
         NULL, slot, (uint32_t)output_size
     );

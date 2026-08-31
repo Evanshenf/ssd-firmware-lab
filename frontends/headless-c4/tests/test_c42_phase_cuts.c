@@ -6,6 +6,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define C42_TEST_NOINLINE __attribute__((noinline))
+#else
+#define C42_TEST_NOINLINE
+#endif
+
 static int failures;
 static uint32_t executions;
 static uint32_t requested_cut_count;
@@ -93,7 +99,6 @@ static void semantic_cut_normalize(
     struct semantic_id_map teardown_ids = {{0}, 0};
     struct semantic_id_map command_ids = {{0}, 0};
     struct semantic_id_map client_ids = {{0}, 0};
-    struct semantic_id_map memory_ids = {{0}, 0};
     struct semantic_id_map consume_ids = {{0}, 0};
     uint32_t index;
 
@@ -150,11 +155,11 @@ static void semantic_cut_normalize(
             key->observer.publications[index].publication_uid
         );
         key->observer.publications[index].body_token_uid = semantic_id(
-            &memory_ids,
+            &publication_ids,
             key->observer.publications[index].body_token_uid
         );
         key->observer.publications[index].marker_token_uid = semantic_id(
-            &memory_ids,
+            &publication_ids,
             key->observer.publications[index].marker_token_uid
         );
         key->observer.reconciles[index].publication_uid = semantic_id(
@@ -199,7 +204,7 @@ static void semantic_cut_normalize(
     }
 }
 
-static void test_semantic_quotient_laws(void)
+static C42_TEST_NOINLINE void test_semantic_quotient_laws(void)
 {
     struct c42_observer_v2 left = {0};
     struct c42_observer_v2 right;
@@ -281,6 +286,30 @@ static void test_semantic_quotient_laws(void)
     semantic_cut_normalize(&right, 0, &right_key);
     check(memcmp(&left_key, &right_key, sizeof(left_key)) == 0,
           "cross-domain numeric collisions do not affect quotient");
+
+    right = left;
+    right.targets[0].handle.command_uid++;
+    semantic_cut_normalize(&left, 0, &left_key);
+    semantic_cut_normalize(&right, 0, &right_key);
+    check(memcmp(&left_key, &right_key, sizeof(left_key)) != 0,
+          "command and target handle equality mismatch changes quotient key");
+
+    memset(&left, 0, sizeof(left));
+    left.version = C42_OBSERVER_VERSION;
+    left.size = sizeof(left);
+    left.instance_nonce = 100;
+    left.command_capacity = 1;
+    left.commands[0].publication_uid = 80;
+    left.publications[0].publication_uid = 80;
+    left.publications[0].body_token_uid = 80;
+    left.publications[0].marker_token_uid = 80;
+    right = left;
+    right.publications[0].body_token_uid = 81;
+    right.publications[0].marker_token_uid = 81;
+    semantic_cut_normalize(&left, 0, &left_key);
+    semantic_cut_normalize(&right, 0, &right_key);
+    check(memcmp(&left_key, &right_key, sizeof(left_key)) != 0,
+          "publication and memory-token UID equality changes quotient key");
 }
 
 static int register_semantic_cut(
@@ -420,6 +449,16 @@ static void observe_masks(
             *reconcile_mask |= UINT32_C(1) <<
                                observer.reconciles[index].state;
         }
+        if (observer.publications[index].in_use != 0) {
+            check(observer.publications[index].publication_uid != 0 &&
+                      ((observer.publications[index].body_token_uid == 0 &&
+                        observer.publications[index].marker_token_uid == 0) ||
+                       (observer.publications[index].body_token_uid ==
+                            observer.publications[index].publication_uid &&
+                        observer.publications[index].marker_token_uid ==
+                            observer.publications[index].publication_uid)),
+                  "observer publication and memory tokens share UID identity");
+        }
         if (observer.notifications[index].in_use != 0 &&
             observer.notifications[index].state < 32) {
             check(observer.notifications[index].token.instance_nonce ==
@@ -449,11 +488,33 @@ static void observe_masks(
     }
     for (index = 0; index < observer.target_capacity; ++index) {
         if (observer.targets[index].in_use != 0) {
+            uint32_t command_index;
+            int command_match = 0;
+
+            for (command_index = 0;
+                 command_index < observer.command_capacity;
+                 ++command_index) {
+                const struct fwlab_nvme_command_handle *left =
+                    &observer.targets[index].handle;
+                const struct fwlab_nvme_command_handle *right =
+                    &observer.commands[command_index].handle;
+
+                if (left->instance_nonce == right->instance_nonce &&
+                    left->command_uid == right->command_uid &&
+                    left->controller_epoch == right->controller_epoch &&
+                    left->generation == right->generation) {
+                    command_match = 1;
+                    break;
+                }
+            }
             check(observer.targets[index].token.instance_nonce ==
                       observer.instance_nonce &&
                   observer.targets[index].handle.instance_nonce ==
                       observer.instance_nonce,
                   "observer target shares controller instance identity");
+            check(observer.targets[index].identity_matches_active == 0 ||
+                      command_match,
+                  "active observer target shares one complete command handle");
         }
     }
 }
@@ -514,7 +575,7 @@ static int run_until_command_state(
     return 0;
 }
 
-static void test_abnormal_command_cuts(uint32_t *command_mask)
+static C42_TEST_NOINLINE void test_abnormal_command_cuts(uint32_t *command_mask)
 {
     struct c42_test_fixture fixture;
     struct c42_fake_command_injection injection = {0};
@@ -604,7 +665,7 @@ static void test_abnormal_command_cuts(uint32_t *command_mask)
     (void)register_semantic_cut(&fixture, 0, "abort-reconcile command cut");
 }
 
-static void test_command_publication_cuts(
+static C42_TEST_NOINLINE void test_command_publication_cuts(
     uint32_t *command_mask,
     uint32_t *reconcile_mask,
     uint32_t *notification_mask)
@@ -778,7 +839,7 @@ static void prepare_candidate_state(
     }
 }
 
-static void test_all_candidate_post_lp(void)
+static C42_TEST_NOINLINE void test_all_candidate_post_lp(void)
 {
     static const uint32_t states[] = {
         C42_CANDIDATE_PREPARED,
@@ -842,7 +903,7 @@ static void test_all_candidate_post_lp(void)
     }
 }
 
-static void test_sq_ready_candidate_post_lp(void)
+static C42_TEST_NOINLINE void test_sq_ready_candidate_post_lp(void)
 {
     uint32_t mode;
 
@@ -896,7 +957,7 @@ static void test_sq_ready_candidate_post_lp(void)
     }
 }
 
-static void test_candidate_cuts(uint32_t *candidate_mask)
+static C42_TEST_NOINLINE void test_candidate_cuts(uint32_t *candidate_mask)
 {
     uint32_t phase;
     uint32_t mode;
@@ -941,7 +1002,7 @@ static void test_candidate_cuts(uint32_t *candidate_mask)
     }
 }
 
-static void test_retire_unknown_post_lp(void)
+static C42_TEST_NOINLINE void test_retire_unknown_post_lp(void)
 {
     uint32_t mode;
 
@@ -1004,7 +1065,7 @@ static void record_candidate_query_state(
     }
 }
 
-static void test_abnormal_candidate_states(uint32_t *candidate_mask)
+static C42_TEST_NOINLINE void test_abnormal_candidate_states(uint32_t *candidate_mask)
 {
     struct c42_test_fixture fixture;
     struct c42_operation_token candidate = {0};
@@ -1086,7 +1147,7 @@ static void test_abnormal_candidate_states(uint32_t *candidate_mask)
     (void)register_semantic_cut(&fixture, 0, "candidate retired cut");
 }
 
-static void test_business_control_post_lp(uint32_t *control_mask)
+static C42_TEST_NOINLINE void test_business_control_post_lp(uint32_t *control_mask)
 {
     uint32_t mode;
 
@@ -1130,7 +1191,7 @@ static void test_business_control_post_lp(uint32_t *control_mask)
     }
 }
 
-static void test_all_business_control_post_lp(void)
+static C42_TEST_NOINLINE void test_all_business_control_post_lp(void)
 {
     static const uint32_t states[] = {
         C42_CONTROL_STARTED,
@@ -1193,7 +1254,7 @@ static void test_all_business_control_post_lp(void)
     }
 }
 
-static void test_poisoned_reset_takeover(void)
+static C42_TEST_NOINLINE void test_poisoned_reset_takeover(void)
 {
     struct c42_test_fixture fixture;
     struct c42_fake_command_script script = {0};
@@ -1230,7 +1291,7 @@ static void test_poisoned_reset_takeover(void)
           "poisoned reset public token superseded provider-free");
 }
 
-static void test_poisoned_control(uint32_t *control_mask)
+static C42_TEST_NOINLINE void test_poisoned_control(uint32_t *control_mask)
 {
     struct c42_test_fixture fixture;
     struct c42_fake_command_script script = {0};
@@ -1257,7 +1318,7 @@ static void test_poisoned_control(uint32_t *control_mask)
     (void)register_semantic_cut(&fixture, 0, "poisoned control cut");
 }
 
-static void test_committed_control(uint32_t *control_mask)
+static C42_TEST_NOINLINE void test_committed_control(uint32_t *control_mask)
 {
     struct c42_test_fixture fixture;
     struct c42_operation_token reset = {0};
@@ -1285,7 +1346,7 @@ static void test_committed_control(uint32_t *control_mask)
     (void)register_semantic_cut(&fixture, 0, "committed control cut");
 }
 
-static void test_notification_post_lp(void)
+static C42_TEST_NOINLINE void test_notification_post_lp(void)
 {
     uint32_t mode;
 
@@ -1382,7 +1443,7 @@ static void prepare_notification_state(
     }
 }
 
-static void test_all_notification_post_lp(void)
+static C42_TEST_NOINLINE void test_all_notification_post_lp(void)
 {
     static const uint8_t states[] = {
         C42_OBSERVER_NOTIFY_RESERVED,
@@ -1400,7 +1461,8 @@ static void test_all_notification_post_lp(void)
             struct c42_operation_token notification_token = {0};
             struct c42_operation_token control = {0};
             struct c42_notification queried = {0};
-            struct c42_notification unavailable = {0};
+            struct c42_notification unavailable;
+            struct c42_notification unavailable_sentinel;
             uint32_t provider_events;
 
             executions++;
@@ -1425,9 +1487,13 @@ static void test_all_notification_post_lp(void)
                       fixture.controller, &notification_token) ==
                       C42_SUPERSEDED,
                   "notification all-state immediately suppressed");
+            memset(&unavailable, 0xa5, sizeof(unavailable));
+            unavailable_sentinel = unavailable;
             check(c42_notification_acquire(
-                      fixture.controller, &unavailable) == C42_SUPERSEDED,
-                  "notification acquire unavailable after LP");
+                      fixture.controller, &unavailable) == C42_SUPERSEDED &&
+                  memcmp(&unavailable, &unavailable_sentinel,
+                         sizeof(unavailable)) == 0,
+                  "notification acquire output unchanged after LP");
             check(fixture.event_log.count == provider_events &&
                   c42_notification_retire(
                       fixture.controller, &notification_token) == C42_OK,
@@ -1436,7 +1502,7 @@ static void test_all_notification_post_lp(void)
     }
 }
 
-static void test_target_post_lp(void)
+static C42_TEST_NOINLINE void test_target_post_lp(void)
 {
     uint32_t mode;
 
@@ -1450,6 +1516,7 @@ static void test_target_post_lp(void)
         uint8_t raw[C42_SQE_BYTES];
         uint8_t sentinel[C42_SQE_BYTES];
         uint32_t provider_events;
+        uint32_t unused = 0;
 
         executions++;
         check(c42_test_fixture_init_with_nonce(
@@ -1471,6 +1538,9 @@ static void test_target_post_lp(void)
                   &target.origin, raw) == C42_OK &&
               raw[2] == (uint8_t)406,
               "target raw snapshot exact before LP");
+        observe_masks(
+            &fixture, &unused, &unused, &unused, &unused, &unused
+        );
         provider_events = fixture.event_log.count;
         check((mode == 0 ?
                c42_reset_start(fixture.controller, &control) :
@@ -1497,7 +1567,7 @@ static void test_target_post_lp(void)
     }
 }
 
-static void test_new_entrypoints_post_lp(void)
+static C42_TEST_NOINLINE void test_new_entrypoints_post_lp(void)
 {
     uint32_t mode;
 
@@ -1606,7 +1676,51 @@ static void test_new_entrypoints_post_lp(void)
     }
 }
 
-static void test_reset_teardown_takeover_cuts(uint32_t *control_mask)
+static C42_TEST_NOINLINE void test_step_drives_epoch_controls(void)
+{
+    uint32_t mode;
+
+    for (mode = 0; mode < 2; ++mode) {
+        static struct c42_test_fixture fixture;
+        struct c42_operation_token control = {0};
+        struct c42_control_status status = {0};
+        struct c42_step_result step = {0};
+        const struct c42_fake_event *event;
+        uint32_t provider_events;
+        uint32_t operation = mode == 0 ?
+            C42_FAKE_COMMAND_RESET_BEGIN :
+            C42_FAKE_COMMAND_TEARDOWN_BEGIN;
+
+        executions++;
+        check(c42_test_fixture_init_with_nonce(
+                  &fixture, 4, 0,
+                  UINT64_C(0x4402d00000000000) + mode + 1u),
+              "epoch-control step fixture");
+        provider_events = fixture.event_log.count;
+        check((mode == 0 ?
+               c42_reset_start(fixture.controller, &control) :
+               c42_teardown_start(fixture.controller, &control)) == C42_OK,
+              "epoch-control step LP succeeds");
+        check(c42_step(fixture.controller, 1, &step) == C42_OK &&
+              step.requested_budget == 1 && step.units_executed == 1 &&
+              step.transitions == 1 &&
+              fixture.event_log.count == provider_events + 1u,
+              "c42_step drives one epoch-control provider unit");
+        event = fixture.event_log.count == 0 ? NULL :
+            &fixture.event_log.events[fixture.event_log.count - 1u];
+        check(event != NULL &&
+              event->provider == C42_FAKE_EVENT_COMMAND &&
+              event->operation == operation &&
+              event->call_kind == C42_FAKE_CALL_START &&
+              event->direct_result == FWLAB_HIF_PORT_OK &&
+              c42_control_query(
+                  fixture.controller, &control, &status) == C42_OK &&
+              status.state == C42_CONTROL_STARTED,
+              "c42_step epoch-control event and state exact");
+    }
+}
+
+static C42_TEST_NOINLINE void test_reset_teardown_takeover_cuts(uint32_t *control_mask)
 {
     uint32_t cut;
 
@@ -1743,7 +1857,7 @@ static void finish_takeover(
     check(0, "response-unknown takeover terminal");
 }
 
-static void test_reset_begin_response_unknown_takeover(void)
+static C42_TEST_NOINLINE void test_reset_begin_response_unknown_takeover(void)
 {
     struct c42_test_fixture fixture;
     struct c42_fake_command_script script = {0};
@@ -1813,7 +1927,7 @@ static void test_reset_begin_response_unknown_takeover(void)
     finish_takeover(&fixture, &teardown);
 }
 
-static void test_notification_cuts(uint32_t *notification_mask)
+static C42_TEST_NOINLINE void test_notification_cuts(uint32_t *notification_mask)
 {
     uint32_t phase;
     uint32_t mode;
@@ -1855,7 +1969,7 @@ static void test_notification_cuts(uint32_t *notification_mask)
     }
 }
 
-static void test_notification_suppressed_cut(uint32_t *notification_mask)
+static C42_TEST_NOINLINE void test_notification_suppressed_cut(uint32_t *notification_mask)
 {
     struct c42_test_fixture fixture;
     struct c42_notification notification = {0};
@@ -1925,6 +2039,7 @@ int main(void)
     test_all_notification_post_lp();
     test_target_post_lp();
     test_new_entrypoints_post_lp();
+    test_step_drives_epoch_controls();
     test_reset_teardown_takeover_cuts(&control_mask);
     test_reset_begin_response_unknown_takeover();
     test_notification_cuts(&notification_mask);

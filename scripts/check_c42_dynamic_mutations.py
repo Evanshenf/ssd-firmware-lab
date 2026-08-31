@@ -356,6 +356,55 @@ def mutations() -> list[dict[str, object]]:
                     "        target->token.instance_nonce ^= UINT64_C(1);\n"
                     "    }\n"
                     "    target->controller_epoch = source->controller_epoch;")]},
+        {"name": "BM_OBSERVER_PUBLICATION_TOKEN_UID_MISMATCH",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                    "    target->publication_uid = source->publication_uid;\n"
+                    "    target->body_token_uid = source->body_token.uid;\n"
+                    "    target->marker_token_uid = source->marker_token.uid;",
+                    "    target->publication_uid = source->publication_uid;\n"
+                    "    target->body_token_uid = source->body_token.uid;\n"
+                    "    target->marker_token_uid = source->marker_token.uid;\n"
+                    "    if (target->body_token_uid != 0 &&\n"
+                    "        target->marker_token_uid != 0) {\n"
+                    "        target->body_token_uid++;\n"
+                    "        target->marker_token_uid++;\n"
+                    "    }")]},
+        {"name": "BM_OBSERVER_TARGET_COMMAND_UID_MISMATCH",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                    "    target->token = source->value.token;\n"
+                    "    target->handle = source->value.handle;\n"
+                    "    target->sq_ring_generation = source->sq_ring_generation;",
+                    "    target->token = source->value.token;\n"
+                    "    target->handle = source->value.handle;\n"
+                    "    if (target->handle.command_uid != 0) {\n"
+                    "        target->handle.command_uid++;\n"
+                    "    }\n"
+                    "    target->sq_ring_generation = source->sq_ring_generation;")]},
+        {"name": "BM_STEP_SKIPS_EPOCH_CONTROL",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_runtime.c",
+                    "        if (c42_progress_queue_controls(controller) != 0) {\n"
+                    "            progressed = 1;\n"
+                    "        } else if (controller->phase == C42_CONTROLLER_RESETTING ||\n"
+                    "                   controller->phase == C42_CONTROLLER_TEARING_DOWN) {",
+                    "        if (controller->phase != C42_CONTROLLER_RESETTING &&\n"
+                    "            controller->phase != C42_CONTROLLER_TEARING_DOWN &&\n"
+                    "            c42_progress_queue_controls(controller) != 0) {\n"
+                    "            progressed = 1;\n"
+                    "        } else if (controller->phase == C42_CONTROLLER_RESETTING ||\n"
+                    "                   controller->phase == C42_CONTROLLER_TEARING_DOWN) {")]},
+        {"name": "BM_NOTIFICATION_FAILURE_CLOBBERS_OUTPUT",
+         "target": "c42_phase_cuts", "replay": False,
+         "edits": [("frontends/headless-c4/hif/c42_publication.c",
+                    "    if (controller->phase != C42_CONTROLLER_READY) {\n"
+                    "        return C42_SUPERSEDED;\n"
+                    "    }",
+                    "    if (controller->phase != C42_CONTROLLER_READY) {\n"
+                    "        memset(notification, 0, sizeof(*notification));\n"
+                    "        return C42_SUPERSEDED;\n"
+                    "    }")]},
     ]
 
 

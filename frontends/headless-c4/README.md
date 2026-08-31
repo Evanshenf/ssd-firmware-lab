@@ -61,12 +61,14 @@ make check-all
 `run_c42_gate.py` is the authoritative native C4.2 execution boundary. It
 invokes one fixed Makefile with a clean environment and then independently
 requires 13 distinct, fresh ELF programs, their expected runtime markers and
-an exact receipt. Direct Make targets remain useful defense-in-depth and
-developer workflows, but dry-run/touch/extra-makefile invocations are not
-evidence.
+an exact receipt. Runtime markers are deliberately anchored at the beginning
+of one output line; arbitrary substrings are not accepted. The runner disables
+Python bytecode writes and verifies that guarded adjacent build/cache paths are
+unchanged. Direct Make targets remain useful defense-in-depth and developer
+workflows, but dry-run/touch/extra-makefile invocations are not evidence.
 
-The C4.2 gate covers exact depths 2/3/4/32, 12 bounded-model families, 31
-production-source mutations, nine architecture mutations, 11 provider
+The C4.2 gate covers exact depths 2/3/4/32, 12 bounded-model families, 35
+production-source mutations, nine architecture mutations, 18 provider
 variations, 33 reset cut points, 64 deterministic fuzz executions and 64
 different-instance thread repeats.
 It does not implement NVMe command legality, Admin commands, PRP/data DMA,

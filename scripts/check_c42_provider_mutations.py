@@ -135,11 +135,48 @@ def variations() -> list[dict[str, object]]:
             "name": "PM_ADMIT_INPUT_MATCH_COLLAPSE",
             "label": "mismatch admit client event",
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
-                       "    return record != NULL &&\n"
-                       "           record->prepare_key.client_uid == key->client_uid &&\n"
-                       "           handle_equal(&command->handle, &record->prepared.handle) &&\n"
-                       "           origin_equal(&command->origin, &record->prepared.origin);",
-                       "    return record != NULL;")],
+                       "    if (record == NULL ||\n"
+                       "        record->prepare_key.client_uid != key->client_uid ||\n"
+                       "        !handle_equal(&command->handle, &record->prepared.handle) ||\n"
+                       "        !origin_equal(&command->origin, &record->prepared.origin)) {",
+                       "    if (record == NULL ||\n"
+                       "        (0 != 0 &&\n"
+                       "         record->prepare_key.client_uid != key->client_uid) ||\n"
+                       "        !handle_equal(&command->handle, &record->prepared.handle) ||\n"
+                       "        !origin_equal(&command->origin, &record->prepared.origin)) {")],
+        },
+        {
+            "name": "PM_ADMIT_GENERATION_IDENTITY_REMOVED",
+            "label": "mismatch admit generation query rejected unchanged",
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "           left->client_uid == right->client_uid &&\n"
+                       "           left->generation == right->generation &&\n"
+                       "           left->reserved == right->reserved;",
+                       "           left->client_uid == right->client_uid &&\n"
+                       "           left->reserved == right->reserved;")],
+        },
+        {
+            "name": "PM_ADMIT_CANONICAL_DWORD_IDENTITY_REMOVED",
+            "label": "mismatch complete canonical query rejected unchanged",
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "           memcmp(left->command_dword10_15, right->command_dword10_15,\n"
+                       "                  sizeof(left->command_dword10_15)) == 0 &&\n"
+                       "           left->transport_fault == right->transport_fault &&",
+                       "           left->transport_fault == right->transport_fault &&")],
+        },
+        {
+            "name": "PM_RELEASE_CLIENT_IDENTITY_REMOVED",
+            "label": "mismatch release client query rejected unchanged",
+            "edits": [
+                ("frontends/headless-c4/fakes/c42_command.c",
+                 "    if ((start == 0 && record->release_started == 0) ||\n"
+                 "        (record->release_started != 0 &&\n"
+                 "         record->release_client_uid != client_uid)) {",
+                 "    if (start == 0 && record->release_started == 0) {"),
+                ("frontends/headless-c4/fakes/c42_command.c",
+                 "    return record->release_client_uid == client_uid;",
+                 "    return 1;")
+            ],
         },
         {
             "name": "PM_ADMIT_OUTPUT_MATCH_COLLAPSE",
@@ -172,6 +209,36 @@ def variations() -> list[dict[str, object]]:
                        "        key == NULL ? 0 : key->client_uid,")],
         },
         {
+            "name": "PM_ADMIT_QUERY_OUTPUT_MATCH_COLLAPSE",
+            "label": "ADMIT query output variant event",
+            "edits": [("frontends/headless-c4/fakes/c42_command.c",
+                       "        context, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_QUERY, call,\n"
+                       "        state == NULL ? UINT32_MAX : (uint32_t)*state, write_mask,\n"
+                       "        admission_request_valid(key, command),\n"
+                       "        input_match,\n"
+                       "        write_mask != 0 &&\n"
+                       "            (((write_mask & C42_FAKE_EVENT_WRITE_VALUE) == 0) ||\n"
+                       "             (state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED)) &&\n"
+                       "            (((write_mask & C42_FAKE_EVENT_WRITE_OBJECT) == 0) ||\n"
+                       "             fwlab_hif_command_ticket_valid(ticket)),\n"
+                       "        (write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&\n"
+                       "            context != NULL && ticket != NULL &&\n"
+                       "            find_ticket(context, ticket) != NULL,\n"
+                       "        key == NULL ? 0 : key->client_uid,",
+                       "        context, C42_FAKE_COMMAND_ADMIT, C42_FAKE_CALL_QUERY, call,\n"
+                       "        state == NULL ? UINT32_MAX : (uint32_t)*state, write_mask,\n"
+                       "        admission_request_valid(key, command),\n"
+                       "        input_match,\n"
+                       "        write_mask != 0 &&\n"
+                       "            (((write_mask & C42_FAKE_EVENT_WRITE_VALUE) == 0) ||\n"
+                       "             (state != NULL && *state <= FWLAB_HIF_ADMISSION_POISONED)) &&\n"
+                       "            (((write_mask & C42_FAKE_EVENT_WRITE_OBJECT) == 0) ||\n"
+                       "             fwlab_hif_command_ticket_valid(ticket)),\n"
+                       "        (write_mask & C42_FAKE_EVENT_WRITE_OBJECT) != 0 &&\n"
+                       "            fwlab_hif_command_ticket_valid(ticket),\n"
+                       "        key == NULL ? 0 : key->client_uid,")],
+        },
+        {
             "name": "PM_ACQUIRE_OUTPUT_MATCH_COLLAPSE",
             "label": "acquire output variant event",
             "edits": [("frontends/headless-c4/fakes/c42_command.c",
@@ -189,6 +256,52 @@ def variations() -> list[dict[str, object]]:
                        "               record->slot != slot ||\n"
                        "               memcmp(record->expected, expected, C42_CQE_BYTES) != 0) {",
                        "               record->slot != slot) {")],
+        },
+        {
+            "name": "PM_SCRUB_INVERSE_IDENTITY_REMOVED",
+            "label": "memory mismatch scrub inverse-phase call",
+            "edits": [("frontends/headless-c4/fakes/c42_memory.c",
+                       "               record->depth != depth ||\n"
+                       "               record->inverse_phase != inverse_phase) {\n"
+                       "        return C42_MEMORY_STALE;\n"
+                       "    }\n"
+                       "    if (direct_result_take(\n"
+                       "            memory, C42_FAKE_MEMORY_SCRUB, &direct)) {",
+                       "               record->depth != depth) {\n"
+                       "        return C42_MEMORY_STALE;\n"
+                       "    }\n"
+                       "    if (direct_result_take(\n"
+                       "            memory, C42_FAKE_MEMORY_SCRUB, &direct)) {")],
+        },
+        {
+            "name": "PM_BODY_REPEAT_START_IDENTITY_REMOVED",
+            "label": "memory mismatch repeated body expected call",
+            "edits": [("frontends/headless-c4/fakes/c42_memory.c",
+                       "             !cap_equal(&record->capability, capability) ||\n"
+                       "             record->slot != slot ||\n"
+                       "             memcmp(record->expected, expected, C42_CQE_BYTES) != 0)) {\n"
+                       "            return C42_MEMORY_POISONED;",
+                       "             !cap_equal(&record->capability, capability) ||\n"
+                       "             record->slot != slot)) {\n"
+                       "            return C42_MEMORY_POISONED;")],
+        },
+        {
+            "name": "PM_CAPTURE_LAST_BYTE_CORRUPT",
+            "label": "memory capture exact 64-byte output and provider effect",
+            "edits": [("frontends/headless-c4/fakes/c42_memory.c",
+                       "            memcpy(\n"
+                       "                output, memory->sq[capability->queue_id][slot],\n"
+                       "                C42_SQE_BYTES\n"
+                       "            );\n"
+                       "        }\n"
+                       "        if (direct->apply_effect != 0) {",
+                       "            memcpy(\n"
+                       "                output, memory->sq[capability->queue_id][slot],\n"
+                       "                C42_SQE_BYTES\n"
+                       "            );\n"
+                       "            output[C42_SQE_BYTES - 1u] ^= UINT8_C(1);\n"
+                       "        }\n"
+                       "        if (direct->apply_effect != 0) {")],
         },
     ]
 

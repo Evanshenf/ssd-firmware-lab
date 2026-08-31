@@ -21,6 +21,10 @@ MAKEFILE = FRONTEND / "Makefile"
 MAKE = Path("/usr/bin/make")
 SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 TIMEOUT_SECONDS = 1200
+WORKSPACE_SIDE_EFFECT_PATHS = (
+    ROOT / "frontends/headless-c35/build",
+    ROOT / "scripts/__pycache__",
+)
 
 EXPECTED_BINARIES = (
     ("c42_queue_unit", "C4.2 queue unit: PASS"),
@@ -61,8 +65,17 @@ def clean_environment(home: Path) -> dict[str, str]:
         "LANG": "C",
         "LC_ALL": "C",
         "PATH": SAFE_PATH,
+        "PYTHONDONTWRITEBYTECODE": "1",
         "TZ": "UTC",
     }
+
+
+def output_has_marker(output: str, expected_marker: str) -> bool:
+    """Accept one deliberate marker line, never an arbitrary substring."""
+    return any(
+        line == expected_marker or line.startswith(expected_marker + " ")
+        for line in output.splitlines()
+    )
 
 
 def hostile_environment() -> list[str]:
@@ -74,6 +87,29 @@ def hostile_environment() -> list[str]:
                 name.startswith("_FWLAB_"):
             names.append(name)
     return sorted(names)
+
+
+def workspace_side_effect_state() -> tuple[tuple[object, ...], ...]:
+    state: list[tuple[object, ...]] = []
+
+    for root in WORKSPACE_SIDE_EFFECT_PATHS:
+        relative_root = root.relative_to(ROOT).as_posix()
+        if not root.exists() and not root.is_symlink():
+            state.append((relative_root, "absent"))
+            continue
+        for path in [root, *sorted(root.rglob("*"))]:
+            status = path.lstat()
+            relative = path.relative_to(ROOT).as_posix()
+            if path.is_symlink():
+                state.append((relative, "symlink", os.readlink(path)))
+            elif path.is_file():
+                state.append((
+                    relative, "file", status.st_mode, status.st_size,
+                    status.st_mtime_ns,
+                ))
+            else:
+                state.append((relative, "directory", status.st_mode))
+    return tuple(state)
 
 
 def validate_binary(
@@ -94,7 +130,8 @@ def validate_binary(
         text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         timeout=180,
     )
-    if run.returncode != 0 or expected_marker not in run.stdout:
+    if run.returncode != 0 or not output_has_marker(
+            run.stdout, expected_marker):
         raise RuntimeError(
             f"artifact execution mismatch: {path.name}: rc={run.returncode}"
         )
@@ -109,7 +146,10 @@ def validate_receipt(
 ) -> None:
     if receipt.is_symlink() or not receipt.is_file():
         raise RuntimeError("execution receipt is missing or non-regular")
-    lines = receipt.read_text(encoding="utf-8").splitlines()
+    try:
+        lines = receipt.read_text(encoding="utf-8").splitlines()
+    except UnicodeError as error:
+        raise RuntimeError("execution receipt is not valid UTF-8") from error
     if len(lines) != len(paths):
         raise RuntimeError("execution receipt line count differs")
     for index, line in enumerate(lines):
@@ -144,6 +184,7 @@ def main() -> int:
         return fail("fixed Make executable or Makefile is unavailable")
 
     try:
+        workspace_before = workspace_side_effect_state()
         with tempfile.TemporaryDirectory(prefix="c42-authoritative-") as name:
             temporary = Path(name)
             build = temporary / "build"
@@ -178,12 +219,15 @@ def main() -> int:
             validate_receipt(
                 build / "c42_execution.receipt", paths, digests
             )
+        if workspace_side_effect_state() != workspace_before:
+            raise RuntimeError("gate modified guarded source-workspace output")
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
         return fail(str(error))
 
     print(
         "C4.2 authoritative runner: PASS "
-        f"binaries={len(EXPECTED_BINARIES)} distinct=exact receipt=exact"
+        f"binaries={len(EXPECTED_BINARIES)} distinct=exact receipt=exact "
+        "workspace=unchanged"
     )
     return 0
 

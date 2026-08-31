@@ -89,12 +89,14 @@ struct c42_fake_command_injection {
 struct c42_fake_command_record {
     struct fwlab_hif_prepare_key prepare_key;
     struct fwlab_hif_prepared_token prepared;
+    struct fwlab_hif_admission_key admission_key;
     struct fwlab_nvme_command command;
     struct fwlab_hif_command_ticket ticket;
     struct fwlab_nvme_completion_intent intent;
     struct fwlab_hif_completion_lease lease;
     struct fwlab_hif_consume_token consume;
     uint64_t publication_uid;
+    uint64_t release_client_uid;
     uint32_t prepare_queries;
     uint32_t admit_queries;
     uint32_t poll_queries;
@@ -102,9 +104,11 @@ struct c42_fake_command_record {
     uint32_t consume_prepare_queries;
     uint32_t cleanup_queries;
     uint8_t in_use;
+    uint8_t admit_started;
     uint8_t admitted;
     uint8_t ready_sent;
     uint8_t leased;
+    uint8_t release_started;
     uint8_t released;
     uint8_t consume_prepared;
     uint8_t consume_committed;

@@ -78,6 +78,44 @@ static int prepare_key_equal(
            left->worst_case_actions == right->worst_case_actions;
 }
 
+static int admission_key_equal(
+    const struct fwlab_hif_admission_key *left,
+    const struct fwlab_hif_admission_key *right)
+{
+    return prepared_equal(&left->prepared, &right->prepared) &&
+           left->client_uid == right->client_uid &&
+           left->generation == right->generation &&
+           left->reserved == right->reserved;
+}
+
+static int canonical_command_equal(
+    const struct fwlab_nvme_command *left,
+    const struct fwlab_nvme_command *right)
+{
+    return left->version == right->version && left->size == right->size &&
+           left->reserved0 == right->reserved0 &&
+           handle_equal(&left->handle, &right->handle) &&
+           origin_equal(&left->origin, &right->origin) &&
+           left->trace_cookie == right->trace_cookie &&
+           left->safety_generation == right->safety_generation &&
+           left->namespace_id == right->namespace_id &&
+           left->command_dword2 == right->command_dword2 &&
+           left->command_dword3 == right->command_dword3 &&
+           memcmp(left->command_dword10_15, right->command_dword10_15,
+                  sizeof(left->command_dword10_15)) == 0 &&
+           left->transport_fault == right->transport_fault &&
+           left->opcode == right->opcode &&
+           left->queue_class == right->queue_class &&
+           left->fuse == right->fuse &&
+           left->data_pointer_format == right->data_pointer_format &&
+           left->data_address_present == right->data_address_present &&
+           left->metadata_address_present == right->metadata_address_present &&
+           left->command_flags_reserved == right->command_flags_reserved &&
+           left->reserved1 == right->reserved1 &&
+           memcmp(left->reserved2, right->reserved2,
+                  sizeof(left->reserved2)) == 0;
+}
+
 static uint32_t active_count(const struct c42_fake_command *command)
 {
     uint32_t count = 0;
@@ -640,7 +678,8 @@ static enum fwlab_hif_command_port_result admit_common(
     const struct fwlab_hif_admission_key *key,
     const struct fwlab_nvme_command *canonical,
     enum fwlab_hif_admission_state *state,
-    struct fwlab_hif_command_ticket *ticket)
+    struct fwlab_hif_command_ticket *ticket,
+    int start)
 {
     struct c42_fake_command *command = context;
     struct c42_fake_command_record *record;
@@ -659,11 +698,21 @@ static enum fwlab_hif_command_port_result admit_common(
         !origin_equal(&canonical->origin, &record->prepared.origin)) {
         return FWLAB_HIF_PORT_STALE;
     }
+    if ((start == 0 && record->admit_started == 0) ||
+        (record->admit_started != 0 &&
+         (!admission_key_equal(&record->admission_key, key) ||
+          !canonical_command_equal(&record->command, canonical)))) {
+        return FWLAB_HIF_PORT_STALE;
+    }
+    if (record->admit_started == 0) {
+        record->admission_key = *key;
+        record->command = *canonical;
+        record->admit_started = 1;
+    }
     if (injection_take(
             command, C42_FAKE_COMMAND_ADMIT, &injected, &value, &omit)) {
         if ((command->injection_flags & C42_FAKE_APPLY_EFFECT) != 0 &&
             record->admitted == 0) {
-            record->command = *canonical;
             record->ticket.handle = canonical->handle;
             record->ticket.origin = canonical->origin;
             record->ticket.ticket_uid = command->next_ticket_uid++;
@@ -712,7 +761,6 @@ static enum fwlab_hif_command_port_result admit_common(
         *state = FWLAB_HIF_ADMISSION_NOT_STARTED;
         return FWLAB_HIF_PORT_IN_PROGRESS;
     }
-    record->command = *canonical;
     record->ticket.handle = canonical->handle;
     record->ticket.origin = canonical->origin;
     record->ticket.ticket_uid = command->next_ticket_uid++;
@@ -733,7 +781,7 @@ static enum fwlab_hif_command_port_result fake_admit_start(
     enum fwlab_hif_admission_state *state,
     struct fwlab_hif_command_ticket *ticket)
 {
-    return admit_common(context, key, command, state, ticket);
+    return admit_common(context, key, command, state, ticket, 1);
 }
 
 static enum fwlab_hif_command_port_result fake_admit_query(
@@ -743,7 +791,7 @@ static enum fwlab_hif_command_port_result fake_admit_query(
     enum fwlab_hif_admission_state *state,
     struct fwlab_hif_command_ticket *ticket)
 {
-    return admit_common(context, key, command, state, ticket);
+    return admit_common(context, key, command, state, ticket, 0);
 }
 
 static int admission_request_valid(
@@ -759,7 +807,8 @@ static int admission_request_valid(
 static int admission_request_matches(
     struct c42_fake_command *provider,
     const struct fwlab_hif_admission_key *key,
-    const struct fwlab_nvme_command *command)
+    const struct fwlab_nvme_command *command,
+    int start)
 {
     struct c42_fake_command_record *record;
 
@@ -767,10 +816,17 @@ static int admission_request_matches(
         return 0;
     }
     record = find_prepared(provider, &key->prepared);
-    return record != NULL &&
-           record->prepare_key.client_uid == key->client_uid &&
-           handle_equal(&command->handle, &record->prepared.handle) &&
-           origin_equal(&command->origin, &record->prepared.origin);
+    if (record == NULL ||
+        record->prepare_key.client_uid != key->client_uid ||
+        !handle_equal(&command->handle, &record->prepared.handle) ||
+        !origin_equal(&command->origin, &record->prepared.origin)) {
+        return 0;
+    }
+    if (record->admit_started == 0) {
+        return start != 0;
+    }
+    return admission_key_equal(&record->admission_key, key) &&
+           canonical_command_equal(&record->command, command);
 }
 
 static enum fwlab_hif_command_port_result fake_poll(
@@ -969,7 +1025,8 @@ static enum fwlab_hif_command_port_result completion_release_common(
     void *context,
     const struct fwlab_hif_completion_lease *lease,
     uint64_t client_uid,
-    bool *released)
+    bool *released,
+    int start)
 {
     struct c42_fake_command *command = context;
     struct c42_fake_command_record *record;
@@ -984,6 +1041,15 @@ static enum fwlab_hif_command_port_result completion_release_common(
     record = find_lease(command, lease);
     if (record == NULL || record->consume_prepared != 0) {
         return FWLAB_HIF_PORT_STALE;
+    }
+    if ((start == 0 && record->release_started == 0) ||
+        (record->release_started != 0 &&
+         record->release_client_uid != client_uid)) {
+        return FWLAB_HIF_PORT_STALE;
+    }
+    if (record->release_started == 0) {
+        record->release_started = 1;
+        record->release_client_uid = client_uid;
     }
     if (injection_take(
             command, C42_FAKE_COMMAND_COMPLETION_RELEASE,
@@ -1013,7 +1079,9 @@ static enum fwlab_hif_command_port_result fake_completion_release_start(
     uint64_t client_uid,
     bool *released)
 {
-    return completion_release_common(context, lease, client_uid, released);
+    return completion_release_common(
+        context, lease, client_uid, released, 1
+    );
 }
 
 static enum fwlab_hif_command_port_result fake_completion_release_query(
@@ -1022,7 +1090,30 @@ static enum fwlab_hif_command_port_result fake_completion_release_query(
     uint64_t client_uid,
     bool *released)
 {
-    return completion_release_common(context, lease, client_uid, released);
+    return completion_release_common(
+        context, lease, client_uid, released, 0
+    );
+}
+
+static int completion_release_request_matches(
+    struct c42_fake_command *command,
+    const struct fwlab_hif_completion_lease *lease,
+    uint64_t client_uid,
+    int start)
+{
+    struct c42_fake_command_record *record;
+
+    if (command == NULL || lease == NULL || client_uid == 0) {
+        return 0;
+    }
+    record = find_lease(command, lease);
+    if (record == NULL || record->consume_prepared != 0) {
+        return 0;
+    }
+    if (record->release_started == 0) {
+        return start != 0;
+    }
+    return record->release_client_uid == client_uid;
 }
 
 static enum fwlab_hif_command_port_result fake_consume_prepare(
@@ -1689,7 +1780,7 @@ static enum fwlab_hif_command_port_result logged_admit_start(
     enum fwlab_hif_admission_state *state,
     struct fwlab_hif_command_ticket *ticket)
 {
-    int input_match = admission_request_matches(context, key, command);
+    int input_match = admission_request_matches(context, key, command, 1);
     enum fwlab_hif_command_port_result call;
     uint8_t write_mask;
 
@@ -1726,7 +1817,7 @@ static enum fwlab_hif_command_port_result logged_admit_query(
     enum fwlab_hif_admission_state *state,
     struct fwlab_hif_command_ticket *ticket)
 {
-    int input_match = admission_request_matches(context, key, command);
+    int input_match = admission_request_matches(context, key, command, 0);
     enum fwlab_hif_command_port_result call;
     uint8_t write_mask;
 
@@ -1839,8 +1930,9 @@ static enum fwlab_hif_command_port_result logged_completion_release_start(
     uint64_t client_uid,
     bool *released)
 {
-    int input_match = context != NULL && lease != NULL && client_uid != 0 &&
-        find_lease(context, lease) != NULL;
+    int input_match = completion_release_request_matches(
+        context, lease, client_uid, 1
+    );
     enum fwlab_hif_command_port_result call;
     uint8_t write_mask;
 
@@ -1875,8 +1967,9 @@ static enum fwlab_hif_command_port_result logged_completion_release_query(
     uint64_t client_uid,
     bool *released)
 {
-    int input_match = context != NULL && lease != NULL && client_uid != 0 &&
-        find_lease(context, lease) != NULL;
+    int input_match = completion_release_request_matches(
+        context, lease, client_uid, 0
+    );
     enum fwlab_hif_command_port_result call;
     uint8_t write_mask;
 
