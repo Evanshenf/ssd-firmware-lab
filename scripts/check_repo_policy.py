@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "415a294d502a1fa37be6c77a40e243d41c8d3e37"
+EXPECTED_C4_2_CANDIDATE = "6b873c4b944ead81dfe5896bdf9fd4345a3ee39a"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -699,6 +699,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "docs/results/2026-08-30-c4-2-post-review-hold.md",
     "include/fwlab/contracts/hif_command_port.h",
     "frontends/headless-c4/c42_sources.mk",
+    "frontends/headless-c4/evidence/c42a-p1",
     "frontends/headless-c4/hif/c42.h",
     "frontends/headless-c4/hif/c42_internal.h",
     "frontends/headless-c4/hif/c42_memory_port.h",
@@ -738,12 +739,15 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "scripts/check_c35_architecture.py",
     "scripts/check_c42_architecture.py",
     "scripts/check_c42_analysis.py",
+    "scripts/check_c42_claim_models.py",
     "scripts/check_c42_determinism.py",
     "scripts/check_c42_cross.py",
     "scripts/check_c42_dynamic_mutations.py",
     "scripts/check_c42_make_integrity.py",
     "scripts/check_c42_provider_mutations.py",
     "scripts/check_c42_runner_integrity.py",
+    "scripts/extract_c42_interface_inventory.py",
+    "scripts/gen_c42_obligations.py",
     "scripts/run_c42_gate.py",
 ]
 EXPECTED_C4_2_UNFROZEN_NAMES: list[str] = []
@@ -761,7 +765,27 @@ EXPECTED_C4_2_FILES = {
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/c42_sources.mk":
-        "1f866eccbf4cc61d759577dc9f6ba4f5502b419da9a18a82d5f99ecf6ca5700c",
+        "a11ef31ac85613f929668e7a41b59940af95e4ac61527f4024dfd246cc6f6fa0",
+    "frontends/headless-c4/evidence/c42a-p1/build-trust.toml":
+        "66e4376fff4a2fc8ca0bd0ebbbb03a61466b53a392fe8a21b858edffb2e0d614",
+    "frontends/headless-c4/evidence/c42a-p1/claims.toml":
+        "b378dea4dc1bf0c1cd733af630c17d241fdbbb601d04ef8634b49f79933694f7",
+    "frontends/headless-c4/evidence/c42a-p1/fault-operators.toml":
+        "8bfeeeaa0e5da4fe051e57c70b4bd3b8150dd13784607d177a42c0c27cb32d26",
+    "frontends/headless-c4/evidence/c42a-p1/identity-model.toml":
+        "b3d317e26f10ee3c731e6ca7cd51c635d2c2cbfedcd7f7a42cff279f0b5217e7",
+    "frontends/headless-c4/evidence/c42a-p1/interface-inventory.toml":
+        "d7768a5fa88785bf63dd17eeed32fb3ad6c7d7702e3495e3a446b4b77b4f5099",
+    "frontends/headless-c4/evidence/c42a-p1/lanes.toml":
+        "1ff1805751dfdcefc614fb7331bbf47f4eb4af08bb7facf58d07e578836d40c1",
+    "frontends/headless-c4/evidence/c42a-p1/obligations.lock.toml":
+        "c8eb962c622e592e48c198efcddc1a9d1aca3d3a0e7a9e3886b27f6470a21880",
+    "frontends/headless-c4/evidence/c42a-p1/phase-model.toml":
+        "2b7c445a52a120b5c7f17e42f844708615d7ece2126db79f73f35ddef05e35d6",
+    "frontends/headless-c4/evidence/c42a-p1/profile.toml":
+        "3b684cd437522561efab8860eec8a831d8fcee0c311a7276f8bd32aeadbe063f",
+    "frontends/headless-c4/evidence/c42a-p1/provider-model.toml":
+        "7247f1cdd0c8a0425916a63200fc1f3e2ef9e0b4e0ff5d0dfee37641848e5bcf",
     "frontends/headless-c4/hif/c42.h":
         "a6a0b681e91cb7299e085f645daeef95e124344a2c8d7207bd3a3a6b05042df6",
     "frontends/headless-c4/hif/c42_internal.h":
@@ -840,6 +864,8 @@ EXPECTED_C4_2_FILES = {
         "39ba8f39d02afcf3c019a26da9c7167dff4249bf8f75c449a2e44023a7967aab",
     "scripts/check_c42_analysis.py":
         "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a",
+    "scripts/check_c42_claim_models.py":
+        "2e4690a89439c43f35f2eac5952253c1056c77b60c5c42bd883cea7a6a610545",
     "scripts/check_c42_determinism.py":
         "0f2ae7c5e63096ae8107886345cde4a94286ba162272a26f1a6cbcd086693a26",
     "scripts/check_c42_cross.py":
@@ -852,6 +878,10 @@ EXPECTED_C4_2_FILES = {
         "89fb0c4b519792b4c9ca13dbf765c8de82e784acd2c53e03fb41ba180bebae6a",
     "scripts/check_c42_runner_integrity.py":
         "dc3f3694f3153d43ec357e5f52d773225f0a6350a8515e1614dd6891ceed45bb",
+    "scripts/extract_c42_interface_inventory.py":
+        "113d61231db422f9a91138c540fe7e9ba6310a5a9a3b4e47cd4e5183fb25d5b5",
+    "scripts/gen_c42_obligations.py":
+        "80a9fcafa5e9e1ccba506faa478a6d05bef5115bbb803664025afa44c274e942",
     "scripts/run_c42_gate.py":
         "dc54decd65fc7ba1f57db2197dde41a56f8abede64e3de0890e9d2451afaa47e",
 }
@@ -1372,7 +1402,7 @@ def check_freezes(
 
 
 EXPECTED_C42_RULES_SHA256 = \
-    "1510e36c75ee2208e407b125e4f84cfb066ad2300a1d5a4199af38890b5c289c"
+    "3098dab6772d5241785f3be62e03bb7c05db42442a7f0c387181f431a65748a7"
 EXPECTED_C42_GUARD_SHA256 = \
     "2412a8543cd7bfb1bead4b528f046e94851fc3febf5c996a3bf9032b0c2239fe"
 
@@ -1458,6 +1488,10 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "check-c42-make-integrity",
         "check-c42-provider-mutations",
         "check-c42-runner-integrity",
+        "check-c42-claim-models",
+        "scripts/check_c42_claim_models.py",
+        "scripts/extract_c42_interface_inventory.py",
+        "scripts/gen_c42_obligations.py",
         "scripts/run_c42_gate.py",
     )
     for token in required_make_tokens:
@@ -1468,7 +1502,8 @@ def check_c42_build_closure(failures: list[str]) -> None:
             makefile, re.MULTILINE):
         failures.append("C4.2 frozen source list is overridden in shared Makefile")
     if re.search(
-            r"^C42_(?:HEADERS|TEST_SOURCES|ALL_INPUTS|CHECK_TARGETS)\s*[:+?]?=",
+            r"^C42_(?:HEADERS|TEST_SOURCES|EVIDENCE_INPUTS|"
+            r"ALL_INPUTS|CHECK_TARGETS)\s*[:+?]?=",
             makefile, re.MULTILINE):
         failures.append("C4.2 frozen build closure is overridden in shared Makefile")
     required_sources = (
@@ -1492,6 +1527,19 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "../../scripts/check_c42_make_integrity.py",
         "../../scripts/check_c42_provider_mutations.py",
         "../../scripts/check_c42_runner_integrity.py",
+        "evidence/c42a-p1/profile.toml",
+        "evidence/c42a-p1/interface-inventory.toml",
+        "evidence/c42a-p1/claims.toml",
+        "evidence/c42a-p1/provider-model.toml",
+        "evidence/c42a-p1/identity-model.toml",
+        "evidence/c42a-p1/phase-model.toml",
+        "evidence/c42a-p1/build-trust.toml",
+        "evidence/c42a-p1/fault-operators.toml",
+        "evidence/c42a-p1/lanes.toml",
+        "evidence/c42a-p1/obligations.lock.toml",
+        "../../scripts/extract_c42_interface_inventory.py",
+        "../../scripts/check_c42_claim_models.py",
+        "../../scripts/gen_c42_obligations.py",
         "../../scripts/run_c42_gate.py",
         "../../include/fwlab/contracts/hif_command_port.h",
     )
@@ -1524,7 +1572,8 @@ def check_c42_build_closure(failures: list[str]) -> None:
         return matches[0] if len(matches) == 1 else None
 
     expected_targets = {
-        "check-c42-build-closure", "check-c42-unit", "check-c42-model",
+        "check-c42-build-closure", "check-c42-claim-models",
+        "check-c42-unit", "check-c42-model",
         "check-c42-negative", "check-c42-fuzz",
         "check-c42-local-determinism", "check-c42-architecture",
         "check-c42-dynamic-mutations", "check-c42-replay",
@@ -1536,6 +1585,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
     expected_prerequisites = {
         "check-c42": expected_targets,
         "check-c42-build-closure": set(required_sources),
+        "check-c42-claim-models": set(),
         "check-c42-unit": {
             "build/c42_queue_unit", "build/c42_publication_unit",
             "build/c42_identity_unit", "build/c42_reset_delete_unit",
