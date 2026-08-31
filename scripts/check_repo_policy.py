@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "bda2ecc0b54c5c17f7a4920ade5a40d4a398727b"
+EXPECTED_C4_2_CANDIDATE = "7f0c5a73a64e8e3ed89e9dcd829ef0a2a3820283"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -778,7 +778,7 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/c42_sources.mk":
         "c1f4846884e7ca25244346f9c5c0b2e1eb805bd2ff1db0566d1b37db45b2b037",
     "frontends/headless-c4/evidence/c42a-p1/authority.lock.toml":
-        "85b1c85bbddfd70803278f8e170ebd3ba0e6c973ea50fa0a56f30b51c18bbd77",
+        "5f8fdee0d0c8111988e2036b41eae380857bfa67af6d80a39a2327f54e7d82fd",
     "frontends/headless-c4/evidence/c42a-p1/build-trust.toml":
         "a653f91c681aac574514515dab261f1a37f9639e0e798ea93c2e7dd5b594ef89",
     "frontends/headless-c4/evidence/c42a-p1/c35-reference.toml":
@@ -884,7 +884,7 @@ EXPECTED_C4_2_FILES = {
     "scripts/check_c42_analysis.py":
         "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a",
     "scripts/check_c42_claim_models.py":
-        "dab38186bdc9990c1df97446d25d77c0c796d5532336969fb2fc8a5935dd737d",
+        "8008d1c5d193f4f217911928122c6cabdb44e668eae568346bf8484f8e45da3e",
     "scripts/check_c42_determinism.py":
         "2e03613288b90812fd064638a2aea23020397740f00a6f4571bf082dc96bb06a",
     "scripts/check_c42_cross.py":
@@ -898,9 +898,9 @@ EXPECTED_C4_2_FILES = {
     "scripts/check_c42_runner_integrity.py":
         "dc3f3694f3153d43ec357e5f52d773225f0a6350a8515e1614dd6891ceed45bb",
     "scripts/c42_authority.py":
-        "98c3e13bb8f3eb79145b53d37d2c64b451c233ca5d2564edfda8e240cffde58e",
+        "43b815350e42dad04dcf5fe8570b4d00e52781c31e690bab2ef172cc1959735b",
     "scripts/extract_c42_interface_inventory.py":
-        "113d61231db422f9a91138c540fe7e9ba6310a5a9a3b4e47cd4e5183fb25d5b5",
+        "f92ea059b9e039ac86bcb1daa9f447520cf91272c1a2db76c47d6eb6486d234f",
     "scripts/gen_c42_obligations.py":
         "80a9fcafa5e9e1ccba506faa478a6d05bef5115bbb803664025afa44c274e942",
     "scripts/gen_c42_provider_obligations.py":
