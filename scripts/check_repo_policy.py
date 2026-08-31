@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "98c3a72dd40f2d545caafc79293e37c92ba5d586"
+EXPECTED_C4_2_CANDIDATE = "d01956de5758f8042660ee36577db4f4ef70beea"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -734,6 +734,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "frontends/headless-c4/tests/model_c42.c",
     "frontends/headless-c4/tests/broken_c42.c",
     "frontends/headless-c4/tests/fuzz_c42.c",
+    "scripts/check_c4_architecture.py",
     "scripts/check_c42_architecture.py",
     "scripts/check_c42_analysis.py",
     "scripts/check_c42_determinism.py",
@@ -759,7 +760,7 @@ EXPECTED_C4_2_FILES = {
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/c42_sources.mk":
-        "6be371ab57c091c76ac35a634091fc0904821ff3e4359eedee5bc443fdbfadb5",
+        "d18537375560e055ee591ca2e77deae1213f9a817ca8fd6d502eb7d1ddf8a9ef",
     "frontends/headless-c4/hif/c42.h":
         "a6a0b681e91cb7299e085f645daeef95e124344a2c8d7207bd3a3a6b05042df6",
     "frontends/headless-c4/hif/c42_internal.h":
@@ -830,6 +831,8 @@ EXPECTED_C4_2_FILES = {
         "fbcef3fcacf6fcfd2ddeb2a4fb5a12e16c8aad4e3c3189f3dc315720658571b8",
     "frontends/headless-c4/tests/fuzz_c42.c":
         "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54",
+    "scripts/check_c4_architecture.py":
+        "5d31368a347df0c80880d1958ff3d154e33b6f6934ba8f00f04eb7a35b8db2e3",
     "scripts/check_c42_architecture.py":
         "39ba8f39d02afcf3c019a26da9c7167dff4249bf8f75c449a2e44023a7967aab",
     "scripts/check_c42_analysis.py":
@@ -1481,6 +1484,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "fakes/c42_event.h", "fakes/c42_memory.h", "fakes/c42_command.h",
         "tests/c42_support.h", "tests/c42_reference.h",
         "tests/c42_dut_bfs.h", "tests/c42_model.h",
+        "../../scripts/check_c4_architecture.py",
         "../../scripts/check_c42_make_integrity.py",
         "../../scripts/check_c42_provider_mutations.py",
         "../../scripts/check_c42_runner_integrity.py",
