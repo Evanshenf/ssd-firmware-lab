@@ -469,7 +469,7 @@ allowed_unfrozen_names = []
 status = "transitional_review_hold"
 baseline_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
 historical_source_commit = "905a01e9e140a7bda2810db92118f5693b196ac1"
-candidate_implementation_commit = "d01956de5758f8042660ee36577db4f4ef70beea"
+candidate_implementation_commit = "52fdf07a38cde61e5098d0c81dc5c14c48449475"
 closed_build_input_roots = [
   ".github/workflows/c4-portable.yml",
   "docs/legal/c4-2-source-boundary-review.md",
@@ -514,6 +514,7 @@ closed_build_input_roots = [
   "frontends/headless-c4/tests/broken_c42.c",
   "frontends/headless-c4/tests/fuzz_c42.c",
   "scripts/check_c4_architecture.py",
+  "scripts/check_c35_architecture.py",
   "scripts/check_c42_architecture.py",
   "scripts/check_c42_analysis.py",
   "scripts/check_c42_determinism.py",
@@ -533,7 +534,7 @@ allowed_unfrozen_names = []
 "docs/results/2026-08-30-c4-2-headless-queue-hif.md" = "dfd89d593b026d2d8722d54d768cc484be6f3b83ba065980de9c1aa62477fd28"
 "docs/results/2026-08-30-c4-2-post-review-hold.md" = "78228c749010e472f81b0ab32b403088ea5ff45b5b5e6145dbec0b5fc468898a"
 "include/fwlab/contracts/hif_command_port.h" = "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519"
-"frontends/headless-c4/c42_sources.mk" = "d18537375560e055ee591ca2e77deae1213f9a817ca8fd6d502eb7d1ddf8a9ef"
+"frontends/headless-c4/c42_sources.mk" = "1f866eccbf4cc61d759577dc9f6ba4f5502b419da9a18a82d5f99ecf6ca5700c"
 "frontends/headless-c4/hif/c42.h" = "a6a0b681e91cb7299e085f645daeef95e124344a2c8d7207bd3a3a6b05042df6"
 "frontends/headless-c4/hif/c42_internal.h" = "4c6bb8158a4adf0ae3eb8d90e9cbe1cd9fb70d9b197bdff517ab976b9c26e73c"
 "frontends/headless-c4/hif/c42_memory_port.h" = "e419f02bcf9c761ae23b9c447723f4d9b9fc5ce9027a573903a0cebac0ee64bd"
@@ -569,7 +570,8 @@ allowed_unfrozen_names = []
 "frontends/headless-c4/tests/model_c42.c" = "e7ccd0067e5f4674c4e91560b10015d4c337fb8e0e23816aad42f76dc64cf64f"
 "frontends/headless-c4/tests/broken_c42.c" = "fbcef3fcacf6fcfd2ddeb2a4fb5a12e16c8aad4e3c3189f3dc315720658571b8"
 "frontends/headless-c4/tests/fuzz_c42.c" = "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54"
-"scripts/check_c4_architecture.py" = "5d31368a347df0c80880d1958ff3d154e33b6f6934ba8f00f04eb7a35b8db2e3"
+"scripts/check_c4_architecture.py" = "df41a40d0a79fd7f7ebb9d941f38c1d9b312acf0fa18701d506e61c3f95a387e"
+"scripts/check_c35_architecture.py" = "94eb3cb058fa5791e12464b58e3b381ad8f5e4c7572a074a1c8e2a070fc8d5b7"
 "scripts/check_c42_architecture.py" = "39ba8f39d02afcf3c019a26da9c7167dff4249bf8f75c449a2e44023a7967aab"
 "scripts/check_c42_analysis.py" = "92c2cf399032910ad0978948df2fabf6a0a54c2a0fe7a04506fe8be4b057641a"
 "scripts/check_c42_determinism.py" = "0f2ae7c5e63096ae8107886345cde4a94286ba162272a26f1a6cbcd086693a26"

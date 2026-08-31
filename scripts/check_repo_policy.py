@@ -690,7 +690,7 @@ EXPECTED_C4_1_FILES = {
 EXPECTED_C4_2_BASELINE = "905a01e9e140a7bda2810db92118f5693b196ac1"
 EXPECTED_C4_2_STATUS = "transitional_review_hold"
 EXPECTED_C4_2_HISTORICAL_SOURCE = "905a01e9e140a7bda2810db92118f5693b196ac1"
-EXPECTED_C4_2_CANDIDATE = "d01956de5758f8042660ee36577db4f4ef70beea"
+EXPECTED_C4_2_CANDIDATE = "52fdf07a38cde61e5098d0c81dc5c14c48449475"
 EXPECTED_C4_2_CLOSED_ROOTS = [
     ".github/workflows/c4-portable.yml",
     "docs/legal/c4-2-source-boundary-review.md",
@@ -735,6 +735,7 @@ EXPECTED_C4_2_CLOSED_ROOTS = [
     "frontends/headless-c4/tests/broken_c42.c",
     "frontends/headless-c4/tests/fuzz_c42.c",
     "scripts/check_c4_architecture.py",
+    "scripts/check_c35_architecture.py",
     "scripts/check_c42_architecture.py",
     "scripts/check_c42_analysis.py",
     "scripts/check_c42_determinism.py",
@@ -760,7 +761,7 @@ EXPECTED_C4_2_FILES = {
     "include/fwlab/contracts/hif_command_port.h":
         "42670216147192d82e7edb4d154d2acd566731d2e6a7b031bcef6fafbef07519",
     "frontends/headless-c4/c42_sources.mk":
-        "d18537375560e055ee591ca2e77deae1213f9a817ca8fd6d502eb7d1ddf8a9ef",
+        "1f866eccbf4cc61d759577dc9f6ba4f5502b419da9a18a82d5f99ecf6ca5700c",
     "frontends/headless-c4/hif/c42.h":
         "a6a0b681e91cb7299e085f645daeef95e124344a2c8d7207bd3a3a6b05042df6",
     "frontends/headless-c4/hif/c42_internal.h":
@@ -832,7 +833,9 @@ EXPECTED_C4_2_FILES = {
     "frontends/headless-c4/tests/fuzz_c42.c":
         "2a7c36f63c000cff133b4e090b718a765d2d1842a574d2bf8944bf68bb254d54",
     "scripts/check_c4_architecture.py":
-        "5d31368a347df0c80880d1958ff3d154e33b6f6934ba8f00f04eb7a35b8db2e3",
+        "df41a40d0a79fd7f7ebb9d941f38c1d9b312acf0fa18701d506e61c3f95a387e",
+    "scripts/check_c35_architecture.py":
+        "94eb3cb058fa5791e12464b58e3b381ad8f5e4c7572a074a1c8e2a070fc8d5b7",
     "scripts/check_c42_architecture.py":
         "39ba8f39d02afcf3c019a26da9c7167dff4249bf8f75c449a2e44023a7967aab",
     "scripts/check_c42_analysis.py":
@@ -1485,6 +1488,7 @@ def check_c42_build_closure(failures: list[str]) -> None:
         "tests/c42_support.h", "tests/c42_reference.h",
         "tests/c42_dut_bfs.h", "tests/c42_model.h",
         "../../scripts/check_c4_architecture.py",
+        "../../scripts/check_c35_architecture.py",
         "../../scripts/check_c42_make_integrity.py",
         "../../scripts/check_c42_provider_mutations.py",
         "../../scripts/check_c42_runner_integrity.py",
