@@ -20,6 +20,7 @@ override C42_TEST_SOURCES := tests/test_c42_queue.c \
 	tests/test_c42_thread.c tests/fuzz_c42.c \
 	tests/c42_model.c tests/model_c42.c tests/broken_c42.c \
 	fakes/c42_fake_main.c ../../scripts/check_c4_architecture.py \
+	../../scripts/check_c35_architecture.py \
 	../../scripts/check_c42_make_integrity.py \
 	../../scripts/check_c42_provider_mutations.py \
 	../../scripts/check_c42_runner_integrity.py \

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -137,9 +138,16 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory(
                 prefix="fwlab-c41-c35-architecture-") as directory:
+            isolated_root = Path(directory) / "repo"
+            shutil.copytree(
+                ROOT, isolated_root,
+                ignore=shutil.ignore_patterns(
+                    ".git", "build", "__pycache__", "*.pyc", "*.o"
+                ),
+            )
             c35 = run([
-                "make", "-C", str(ROOT / "frontends/headless-c35"),
-                "CC=cc", "AR=ar", f"BUILD_DIR={Path(directory) / 'build'}",
+                "make", "-C", str(isolated_root / "frontends/headless-c35"),
+                "CC=cc", "AR=ar", "BUILD_DIR=build",
                 "CFLAGS=-std=c11 -O2 -g -Wall -Wextra -Werror "
                 "-Wpedantic -fno-common",
                 "LDFLAGS=", "check-architecture",
