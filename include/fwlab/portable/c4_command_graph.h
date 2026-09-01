@@ -76,6 +76,21 @@ enum fwlab_c43_provider_kind {
     FWLAB_C43_PROVIDER_TARGET = 4
 };
 
+enum fwlab_c43_reservation_credit_bit {
+    FWLAB_C43_CREDIT_POLICY_SCRATCH = 1u << 0,
+    FWLAB_C43_CREDIT_INTENT = 1u << 1,
+    FWLAB_C43_CREDIT_READY = 1u << 2,
+    FWLAB_C43_CREDIT_LEASE = 1u << 3,
+    FWLAB_C43_CREDIT_CONSUME = 1u << 4,
+    FWLAB_C43_CREDIT_FINALIZER = 1u << 5,
+    FWLAB_C43_CREDIT_ABORT = 1u << 6,
+    FWLAB_C43_CREDIT_TARGET = 1u << 7,
+    FWLAB_C43_CREDIT_QUEUE_TRANSACTION = 1u << 8,
+    FWLAB_C43_CREDIT_BLOCK_INTENT = 1u << 9
+};
+
+#define FWLAB_C43_CREDIT_ALL ((uint32_t)0x03ffu)
+
 struct fwlab_c43_counter_seed {
     uint64_t next;
     uint64_t maximum;
@@ -135,7 +150,9 @@ struct fwlab_c43_command_observer {
     uint8_t success_eligible;
     uint8_t provider_generation_current;
     uint8_t reserved0[3];
-    uint32_t reserved1[4];
+    uint32_t reservation_credit_mask;
+    uint64_t first_action_uid;
+    uint32_t action_generation;
     uint32_t reserved2;
 };
 
@@ -153,9 +170,16 @@ struct fwlab_c43_graph_observer {
     uint8_t resetting;
     uint8_t tearing_down;
     uint8_t dead;
-    uint32_t reserved0;
+    uint32_t reserved_intent_credits;
     struct fwlab_c43_command_observer commands[FWLAB_C43_MAX_COMMANDS];
-    uint32_t reserved[8];
+    uint32_t reserved_ready_credits;
+    uint32_t reserved_lease_credits;
+    uint32_t reserved_consume_credits;
+    uint32_t reserved_finalizer_credits;
+    uint32_t reserved_abort_credits;
+    uint32_t reserved_target_credits;
+    uint32_t reserved_queue_transaction_credits;
+    uint32_t reserved_block_intent_credits;
 };
 
 struct fwlab_c43_step_result {
@@ -188,6 +212,24 @@ enum fwlab_c43_graph_result fwlab_c43_graph_init(
     const struct fwlab_c43_graph_config *config,
     const struct fwlab_c43_graph_providers *providers,
     struct fwlab_c43_graph **graph
+);
+/*
+ * Caller-serialized direct reservation seam.  key/result must not overlap one
+ * another or the graph arena.  A non-OK graph result leaves caller outputs and
+ * graph state unchanged.  Capacity pressure is an OK call with a
+ * FWLAB_HIF_PREPARE_BACKPRESSURE result and also leaves graph state unchanged.
+ * An exact repeated start returns IN_PROGRESS; query recovers the original
+ * immutable prepared token without minting another identity.
+ */
+enum fwlab_c43_graph_result fwlab_c43_graph_prepare_start(
+    struct fwlab_c43_graph *graph,
+    const struct fwlab_hif_prepare_key *key,
+    struct fwlab_hif_prepare_result *result
+);
+enum fwlab_c43_graph_result fwlab_c43_graph_prepare_query(
+    const struct fwlab_c43_graph *graph,
+    const struct fwlab_hif_prepare_key *key,
+    struct fwlab_hif_prepare_result *result
 );
 enum fwlab_c43_graph_result fwlab_c43_graph_step(
     struct fwlab_c43_graph *graph,

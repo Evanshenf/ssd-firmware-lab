@@ -49,7 +49,7 @@ CORE_PATHS = [
     "core/c4-nvme/c43_internal.h",
     *PUBLIC_HEADERS,
 ]
-PHASE1_PATHS = sorted([
+CHECKPOINT_PATHS = sorted([
     "core/c4-nvme/Makefile",
     "core/c4-nvme/README.md",
     "core/c4-nvme/c43.mk",
@@ -59,6 +59,7 @@ PHASE1_PATHS = sorted([
     "core/c4-nvme/fakes/c43_fake_services.h",
     "core/c4-nvme/fakes/c43_phase1_fake_main.c",
     "core/c4-nvme/tests/test_c43_public_abi.c",
+    "core/c4-nvme/tests/test_c43_reservation.c",
     "docs/adr/0011-c4-command-graph-v1.md",
     "docs/adr/README.md",
     "docs/architecture.md",
@@ -123,10 +124,10 @@ def changed_paths() -> list[str]:
     paths = sorted(set(path for path in [*tracked, *untracked] if path))
     if len(paths) > 51:
         fail(f"changed-path cap exceeded: {len(paths)} > 51")
-    if paths != PHASE1_PATHS:
-        missing = sorted(set(PHASE1_PATHS) - set(paths))
-        extra = sorted(set(paths) - set(PHASE1_PATHS))
-        fail(f"phase-1 path manifest differs: missing={missing} extra={extra}")
+    if paths != CHECKPOINT_PATHS:
+        missing = sorted(set(CHECKPOINT_PATHS) - set(paths))
+        extra = sorted(set(paths) - set(CHECKPOINT_PATHS))
+        fail(f"checkpoint path manifest differs: missing={missing} extra={extra}")
     preexisting = []
     for path in paths:
         exists = subprocess.run(
@@ -192,12 +193,16 @@ def nm_text(path: Path, *options: str) -> str:
     return result.stdout
 
 
-def check_artifacts(archive: Path, abi: Path, fake: Path) -> None:
-    if os.path.samefile(archive, abi) or os.path.samefile(archive, fake) or \
-            os.path.samefile(abi, fake):
-        fail("archive, public ABI and fake-link artifacts must be distinct")
-    if not os.access(abi, os.X_OK) or not os.access(fake, os.X_OK):
-        fail("public ABI and fake-link artifacts must be executable")
+def check_artifacts(
+    archive: Path, abi: Path, fake: Path, reservation: Path
+) -> None:
+    artifacts = [archive, abi, fake, reservation]
+    for left in range(len(artifacts)):
+        for right in range(left):
+            if os.path.samefile(artifacts[left], artifacts[right]):
+                fail("C43 archive and ELF artifacts must be distinct")
+    if not all(os.access(path, os.X_OK) for path in (abi, fake, reservation)):
+        fail("C43 ELF artifacts must be executable")
 
     members = subprocess.run(
         ["ar", "t", str(archive)],
@@ -216,8 +221,15 @@ def check_artifacts(archive: Path, abi: Path, fake: Path) -> None:
         if not any(line.rstrip().endswith(f" {symbol}")
                    for line in fake_defined.splitlines()):
             fail(f"fake-link did not whole-link {member}:{symbol}")
+    reservation_defined = nm_text(reservation, "--defined-only")
+    if not any(line.rstrip().endswith(" fwlab_c43_graph_prepare_start")
+               for line in reservation_defined.splitlines()):
+        fail("reservation ELF does not link graph prepare authority")
 
-    provenance = (nm_text(archive, "-u") + "\n" + nm_text(fake, "-u")).lower()
+    provenance = (
+        nm_text(archive, "-u") + "\n" + nm_text(fake, "-u") + "\n" +
+        nm_text(reservation, "-u")
+    ).lower()
     for fragment in ("c42_", "c31_", "c35_", "vfio", "qemu", "pci_"):
         if fragment in provenance:
             fail(f"forbidden archive/fake symbol provenance: {fragment}")
@@ -230,6 +242,9 @@ def main() -> int:
     )
     parser.add_argument("--abi", default="build/c43/c43_public_abi")
     parser.add_argument("--fake", default="build/c43/c43_core_fake_link")
+    parser.add_argument(
+        "--reservation", default="build/c43/c43_reservation_unit"
+    )
     arguments = parser.parse_args()
 
     paths = changed_paths()
@@ -243,6 +258,7 @@ def main() -> int:
         "override C43_ARCHIVE_OBJECTS :=",
         "override C43_PUBLIC_ABI_BIN :=",
         "override C43_FAKE_OUTPUT :=",
+        "override C43_RESERVATION_BIN :=",
         "C43_FROZEN_HEADERS",
         "-Wl,--whole-archive $(C43_ARCHIVE) -Wl,--no-whole-archive",
         "rm -f --",
@@ -278,14 +294,17 @@ def main() -> int:
     archive = checked_artifact(arguments.archive, "libfwlab_c43.a")
     abi = checked_artifact(arguments.abi, "c43_public_abi")
     fake = checked_artifact(arguments.fake, "c43_core_fake_link")
-    check_artifacts(archive, abi, fake)
+    reservation = checked_artifact(
+        arguments.reservation, "c43_reservation_unit"
+    )
+    check_artifacts(archive, abi, fake, reservation)
 
     path_digest = hashlib.sha256(
         ("\n".join(paths) + "\n").encode("utf-8")
     ).hexdigest()
 
     print(
-        "C4.3 phase1 architecture: PASS "
+        "C4.3 checkpoint architecture: PASS "
         f"(archive_members={len(EXPECTED_SOURCES)} changed_paths={len(paths)} "
         f"path_manifest={path_digest})"
     )

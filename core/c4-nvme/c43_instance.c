@@ -12,6 +12,14 @@ static int counter_seed_valid(const struct fwlab_c43_counter_seed *seed)
            seed->next <= seed->maximum;
 }
 
+static void counter_cursor_init(
+    struct c43_counter_cursor *cursor,
+    const struct fwlab_c43_counter_seed *seed)
+{
+    cursor->next = seed->next;
+    cursor->maximum = seed->maximum;
+}
+
 int c43_bytes_zero(const void *value, size_t size)
 {
     const unsigned char *bytes = value;
@@ -152,7 +160,7 @@ static int providers_valid(const struct fwlab_c43_graph_providers *providers)
            c43_bytes_zero(providers->reserved, sizeof(providers->reserved));
 }
 
-static int ranges_overlap(
+int c43_ranges_overlap(
     const void *left,
     size_t left_size,
     const void *right,
@@ -180,15 +188,21 @@ static int providers_overlap_region(
     const void *region,
     size_t region_size)
 {
-    return ranges_overlap(providers->queue.ops,
-                          sizeof(*providers->queue.ops), region, region_size) ||
-           ranges_overlap(providers->target.ops,
-                          sizeof(*providers->target.ops), region, region_size) ||
-           ranges_overlap(providers->block.ops,
-                          sizeof(*providers->block.ops), region, region_size) ||
-           ranges_overlap(providers->queue.context, 1, region, region_size) ||
-           ranges_overlap(providers->target.context, 1, region, region_size) ||
-           ranges_overlap(providers->block.context, 1, region, region_size);
+    return c43_ranges_overlap(providers->queue.ops,
+                              sizeof(*providers->queue.ops), region,
+                              region_size) ||
+           c43_ranges_overlap(providers->target.ops,
+                              sizeof(*providers->target.ops), region,
+                              region_size) ||
+           c43_ranges_overlap(providers->block.ops,
+                              sizeof(*providers->block.ops), region,
+                              region_size) ||
+           c43_ranges_overlap(providers->queue.context, 1, region,
+                              region_size) ||
+           c43_ranges_overlap(providers->target.context, 1, region,
+                              region_size) ||
+           c43_ranges_overlap(providers->block.context, 1, region,
+                              region_size);
 }
 
 size_t fwlab_c43_graph_arena_size(
@@ -221,11 +235,13 @@ enum fwlab_c43_graph_result fwlab_c43_graph_init(
         !fwlab_c43_graph_config_valid(config) || !providers_valid(providers) ||
         arena_size != sizeof(*local) ||
         (uintptr_t)arena % fwlab_c43_graph_arena_alignment() != 0 ||
-        ranges_overlap(arena, arena_size, config, sizeof(*config)) ||
-        ranges_overlap(arena, arena_size, providers, sizeof(*providers)) ||
-        ranges_overlap(arena, arena_size, graph, sizeof(*graph)) ||
-        ranges_overlap(graph, sizeof(*graph), config, sizeof(*config)) ||
-        ranges_overlap(graph, sizeof(*graph), providers, sizeof(*providers)) ||
+        c43_ranges_overlap(arena, arena_size, config, sizeof(*config)) ||
+        c43_ranges_overlap(arena, arena_size, providers,
+                           sizeof(*providers)) ||
+        c43_ranges_overlap(arena, arena_size, graph, sizeof(*graph)) ||
+        c43_ranges_overlap(graph, sizeof(*graph), config, sizeof(*config)) ||
+        c43_ranges_overlap(graph, sizeof(*graph), providers,
+                           sizeof(*providers)) ||
         providers_overlap_region(providers, arena, arena_size) ||
         providers_overlap_region(providers, graph, sizeof(*graph))) {
         return FWLAB_C43_GRAPH_INVALID;
@@ -243,6 +259,13 @@ enum fwlab_c43_graph_result fwlab_c43_graph_init(
     local->providers.queue.ops = &local->queue_ops;
     local->providers.target.ops = &local->target_ops;
     local->providers.block.ops = &local->block_ops;
+    counter_cursor_init(&local->command_uid, &config_copy.command_uid);
+    counter_cursor_init(&local->action_uid, &config_copy.action_uid);
+    counter_cursor_init(&local->transaction_uid,
+                        &config_copy.transaction_uid);
+    counter_cursor_init(&local->lease_uid, &config_copy.lease_uid);
+    counter_cursor_init(&local->consume_uid, &config_copy.consume_uid);
+    counter_cursor_init(&local->finalizer_uid, &config_copy.finalizer_uid);
     local->observer.version = FWLAB_C43_GRAPH_VERSION;
     local->observer.size = sizeof(local->observer);
     local->observer.controller_epoch = config_copy.controller_epoch;
@@ -265,6 +288,7 @@ int c43_graph_valid(const struct fwlab_c43_graph *graph)
     return graph != NULL && graph->magic == FWLAB_C43_INTERNAL_MAGIC &&
            fwlab_c43_graph_config_valid(&graph->config) &&
            providers_valid(&graph->providers) &&
+           c43_reservation_state_valid(graph) &&
            fwlab_c43_graph_observer_valid(&graph->observer);
 }
 
@@ -273,6 +297,10 @@ enum fwlab_c43_graph_result fwlab_c43_graph_observer_read(
     struct fwlab_c43_graph_observer *observer)
 {
     if (!c43_graph_valid(graph) || observer == NULL) {
+        return FWLAB_C43_GRAPH_INVALID;
+    }
+    if (c43_ranges_overlap(graph, sizeof(*graph), observer,
+                           sizeof(*observer))) {
         return FWLAB_C43_GRAPH_INVALID;
     }
     *observer = graph->observer;

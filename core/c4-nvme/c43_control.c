@@ -21,6 +21,7 @@ int fwlab_c43_graph_observer_valid(
     uint32_t active_actions = 0;
     uint32_t ready_count = 0;
     uint32_t cleanup_count = 0;
+    uint32_t credit_count[10] = {0};
 
     if (observer == NULL || observer->version != FWLAB_C43_GRAPH_VERSION ||
         observer->size != sizeof(*observer) || observer->controller_epoch == 0 ||
@@ -31,8 +32,17 @@ int fwlab_c43_graph_observer_valid(
         observer->cleanup_count > FWLAB_C43_MAX_COMMANDS ||
         observer->admission_closed > 1 || observer->resetting > 1 ||
         observer->tearing_down > 1 || observer->dead > 1 ||
-        observer->reserved0 != 0 ||
-        !c43_bytes_zero(observer->reserved, sizeof(observer->reserved))) {
+        observer->reserved_intent_credits > FWLAB_C43_MAX_COMMANDS ||
+        observer->reserved_ready_credits > FWLAB_C43_MAX_COMMANDS ||
+        observer->reserved_lease_credits > FWLAB_C43_MAX_COMMANDS ||
+        observer->reserved_consume_credits > FWLAB_C43_MAX_COMMANDS ||
+        observer->reserved_finalizer_credits > FWLAB_C43_MAX_COMMANDS ||
+        observer->reserved_abort_credits > FWLAB_C43_MAX_COMMANDS ||
+        observer->reserved_target_credits > FWLAB_C43_MAX_COMMANDS ||
+        observer->reserved_queue_transaction_credits >
+            FWLAB_C43_MAX_COMMANDS ||
+        observer->reserved_block_intent_credits >
+            FWLAB_C43_MAX_COMMANDS) {
         return 0;
     }
     for (index = 0; index < 4; ++index) {
@@ -57,15 +67,23 @@ int fwlab_c43_graph_observer_valid(
             command->action_count > FWLAB_C43_ACTIONS_PER_COMMAND ||
             command->in_use > 1 || command->success_eligible > 1 ||
             command->provider_generation_current > 1 ||
+            (command->reservation_credit_mask &
+             ~FWLAB_C43_CREDIT_ALL) != 0 ||
+            ((command->action_count == 0) !=
+             (command->first_action_uid == 0)) ||
+            ((command->action_count == 0) !=
+             (command->action_generation == 0)) ||
+            (command->action_count != 0 &&
+             command->first_action_uid >
+                 UINT64_MAX - (command->action_count - 1)) ||
             !c43_bytes_zero(command->reserved0,
                             sizeof(command->reserved0)) ||
-            !c43_bytes_zero(command->reserved1,
-                            sizeof(command->reserved1)) ||
             command->reserved2 != 0) {
             return 0;
         }
         if (command->in_use) {
             uint32_t other;
+            uint32_t credit;
             const int witness_complete =
                 command->required_witness_mask != 0 &&
                 (command->satisfied_witness_mask &
@@ -73,6 +91,17 @@ int fwlab_c43_graph_observer_valid(
                     command->required_witness_mask;
 
             if (command->phase == FWLAB_C43_PHASE_FREE ||
+                (command->phase == FWLAB_C43_PHASE_PREPARED &&
+                 (command->action_count !=
+                      FWLAB_C43_ACTIONS_PER_COMMAND ||
+                  command->reservation_credit_mask != FWLAB_C43_CREDIT_ALL ||
+                  command->terminal_winner != FWLAB_C43_WINNER_NONE ||
+                  command->publication !=
+                      FWLAB_C43_PUBLICATION_ELIGIBLE ||
+                  command->required_witness_mask != 0 ||
+                  command->satisfied_witness_mask != 0 ||
+                  command->success_eligible != 0 ||
+                  command->provider_generation_current != 1)) ||
                 !c43_handle_valid(&command->handle) ||
                 !c43_origin_valid(&command->origin) ||
                 command->transaction_uid == 0 ||
@@ -98,9 +127,23 @@ int fwlab_c43_graph_observer_valid(
                      command->transaction_uid == prior->transaction_uid)) {
                     return 0;
                 }
+                if (prior->in_use && command->action_count != 0 &&
+                    prior->action_count != 0 &&
+                    command->first_action_uid <=
+                        prior->first_action_uid + prior->action_count - 1 &&
+                    prior->first_action_uid <=
+                        command->first_action_uid + command->action_count - 1) {
+                    return 0;
+                }
             }
             ++active_commands;
             active_actions += command->action_count;
+            for (credit = 0; credit < 10; ++credit) {
+                if ((command->reservation_credit_mask &
+                     (UINT32_C(1) << credit)) != 0) {
+                    ++credit_count[credit];
+                }
+            }
             if (command->phase == FWLAB_C43_PHASE_INTENT_READY) {
                 ++ready_count;
             }
@@ -118,6 +161,9 @@ int fwlab_c43_graph_observer_valid(
                 command->satisfied_witness_mask != 0 ||
                 command->success_eligible != 0 ||
                 command->provider_generation_current != 0 ||
+                command->reservation_credit_mask != 0 ||
+                command->first_action_uid != 0 ||
+                command->action_generation != 0 ||
                 command->publication != FWLAB_C43_PUBLICATION_ELIGIBLE) {
                 return 0;
             }
@@ -126,5 +172,15 @@ int fwlab_c43_graph_observer_valid(
     return observer->active_commands == active_commands &&
            observer->active_actions == active_actions &&
            observer->ready_count == ready_count &&
-           observer->cleanup_count == cleanup_count;
+           observer->cleanup_count == cleanup_count &&
+           credit_count[0] == active_commands &&
+           observer->reserved_intent_credits == credit_count[1] &&
+           observer->reserved_ready_credits == credit_count[2] &&
+           observer->reserved_lease_credits == credit_count[3] &&
+           observer->reserved_consume_credits == credit_count[4] &&
+           observer->reserved_finalizer_credits == credit_count[5] &&
+           observer->reserved_abort_credits == credit_count[6] &&
+           observer->reserved_target_credits == credit_count[7] &&
+           observer->reserved_queue_transaction_credits == credit_count[8] &&
+           observer->reserved_block_intent_credits == credit_count[9];
 }

@@ -15,6 +15,29 @@
     _Static_assert(offsetof(type, member) == (expected),                        \
                    #type "." #member " offset changed")
 
+_Static_assert(FWLAB_C43_CREDIT_POLICY_SCRATCH == (1u << 0),
+               "policy credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_INTENT == (1u << 1),
+               "intent credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_READY == (1u << 2),
+               "ready credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_LEASE == (1u << 3),
+               "lease credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_CONSUME == (1u << 4),
+               "consume credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_FINALIZER == (1u << 5),
+               "finalizer credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_ABORT == (1u << 6),
+               "abort credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_TARGET == (1u << 7),
+               "target credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_QUEUE_TRANSACTION == (1u << 8),
+               "queue-transaction credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_BLOCK_INTENT == (1u << 9),
+               "block-intent credit bit changed");
+_Static_assert(FWLAB_C43_CREDIT_ALL == 0x03ffu,
+               "credit mask changed");
+
 ABI_SIZE(struct fwlab_c43_policy_request, 128);
 ABI_FIELD(struct fwlab_c43_policy_request, version, 0);
 ABI_FIELD(struct fwlab_c43_policy_request, size, 2);
@@ -157,7 +180,9 @@ ABI_FIELD(struct fwlab_c43_command_observer, in_use, 70);
 ABI_FIELD(struct fwlab_c43_command_observer, success_eligible, 71);
 ABI_FIELD(struct fwlab_c43_command_observer, provider_generation_current, 72);
 ABI_FIELD(struct fwlab_c43_command_observer, reserved0, 73);
-ABI_FIELD(struct fwlab_c43_command_observer, reserved1, 76);
+ABI_FIELD(struct fwlab_c43_command_observer, reservation_credit_mask, 76);
+ABI_FIELD(struct fwlab_c43_command_observer, first_action_uid, 80);
+ABI_FIELD(struct fwlab_c43_command_observer, action_generation, 88);
 ABI_FIELD(struct fwlab_c43_command_observer, reserved2, 92);
 
 ABI_SIZE(struct fwlab_c43_graph_observer, 488);
@@ -172,9 +197,17 @@ ABI_FIELD(struct fwlab_c43_graph_observer, admission_closed, 64);
 ABI_FIELD(struct fwlab_c43_graph_observer, resetting, 65);
 ABI_FIELD(struct fwlab_c43_graph_observer, tearing_down, 66);
 ABI_FIELD(struct fwlab_c43_graph_observer, dead, 67);
-ABI_FIELD(struct fwlab_c43_graph_observer, reserved0, 68);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_intent_credits, 68);
 ABI_FIELD(struct fwlab_c43_graph_observer, commands, 72);
-ABI_FIELD(struct fwlab_c43_graph_observer, reserved, 456);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_ready_credits, 456);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_lease_credits, 460);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_consume_credits, 464);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_finalizer_credits, 468);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_abort_credits, 472);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_target_credits, 476);
+ABI_FIELD(struct fwlab_c43_graph_observer,
+          reserved_queue_transaction_credits, 480);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_block_intent_credits, 484);
 
 ABI_SIZE(struct fwlab_c43_step_result, 40);
 ABI_FIELD(struct fwlab_c43_step_result, requested_budget, 8);
@@ -645,11 +678,25 @@ static int check_graph_records(void)
     observer.active_commands = 1;
     CHECK(!fwlab_c43_graph_observer_valid(&observer));
     observer.active_commands = 1;
+    observer.active_actions = FWLAB_C43_ACTIONS_PER_COMMAND;
     observer.commands[0].handle = handle(1);
     observer.commands[0].origin = origin(1);
     observer.commands[0].transaction_uid = 1;
     observer.commands[0].phase = FWLAB_C43_PHASE_ADMITTED_POLICY;
+    observer.commands[0].action_count = FWLAB_C43_ACTIONS_PER_COMMAND;
     observer.commands[0].in_use = 1;
+    observer.commands[0].reservation_credit_mask = FWLAB_C43_CREDIT_ALL;
+    observer.commands[0].first_action_uid = 1;
+    observer.commands[0].action_generation = 1;
+    observer.reserved_intent_credits = 1;
+    observer.reserved_ready_credits = 1;
+    observer.reserved_lease_credits = 1;
+    observer.reserved_consume_credits = 1;
+    observer.reserved_finalizer_credits = 1;
+    observer.reserved_abort_credits = 1;
+    observer.reserved_target_credits = 1;
+    observer.reserved_queue_transaction_credits = 1;
+    observer.reserved_block_intent_credits = 1;
     observer.commands[0].satisfied_witness_mask =
         FWLAB_C43_WITNESS_VALIDATED_ONLY;
     observer.commands[0].success_eligible = 1;
