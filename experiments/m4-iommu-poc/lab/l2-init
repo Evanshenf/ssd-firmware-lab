@@ -1,0 +1,53 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+fail()
+{
+	echo "FWLAB-L2-NVME: FAIL: $*"
+	sync
+	poweroff -f
+	while :; do sleep 1; done
+}
+
+mount -t proc proc /proc || fail "mount proc"
+mount -t sysfs sysfs /sys || fail "mount sysfs"
+mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+
+cycle=0
+for argument in $(cat /proc/cmdline); do
+	case "$argument" in
+		fwlab_cycle=*) cycle=${argument#fwlab_cycle=} ;;
+	esac
+done
+case "$cycle" in
+	1|2) ;;
+	*) fail "invalid cycle $cycle" ;;
+esac
+
+for module in /modules/*.ko; do
+	insmod "$module" || fail "insmod $module"
+done
+
+remaining=200
+while [ "$remaining" -gt 0 ] && [ ! -b /dev/nvme0n1 ]; do
+	remaining=$((remaining - 1))
+	sleep 0.05
+done
+[ -b /dev/nvme0n1 ] || fail "native namespace did not appear"
+[ "$(cat /sys/block/nvme0n1/size)" = 2048 ] || fail "namespace size"
+
+seek=$((8 + cycle))
+yes "FWLAB-L2-P5-CYCLE-$cycle" | head -c 4096 > /tmp/expected ||
+	fail "pattern generation"
+dd if=/tmp/expected of=/dev/nvme0n1 bs=4096 count=1 seek="$seek" \
+	conv=fsync,notrunc 2>/dev/null || fail "namespace write"
+sync
+dd if=/dev/nvme0n1 of=/tmp/observed bs=4096 count=1 skip="$seek" \
+	2>/dev/null || fail "namespace read"
+cmp /tmp/expected /tmp/observed || fail "guest compare"
+
+echo "FWLAB-L2-NVME-CYCLE-$cycle: PASS"
+sync
+poweroff -f
+while :; do sleep 1; done

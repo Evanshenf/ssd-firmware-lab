@@ -30,3 +30,6 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 - [2026-08-30: C4.2 recorded queue/CQ/identity suite (superseded)](2026-08-30-c4-2-headless-queue-hif.md)
 - [2026-08-30: C4.2 post-review hold and C4.2a requirement](2026-08-30-c4-2-post-review-hold.md)
 - [2026-08-31: C4.2a reviewed fixed-profile evidence closure](2026-08-31-c4-2a-reviewed-evidence-closure.md)
+- [2026-08-31: M3 side-spike and M4/M5 transport-mechanism PoC](2026-08-31-m3-m5-transport-poc.md)
+- [2026-08-31: M4 software-IOMMU and upstream-vfio feasibility PoC](2026-08-31-m4-software-iommu-poc.md)
+- [2026-09-01: M4 transport/executor/media frontend-seam PoC](2026-09-01-m4-frontend-seam-poc.md)

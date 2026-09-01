@@ -7,6 +7,13 @@
 
 The repository currently freezes the architecture and contribution boundaries. It does **not** yet contain a working NVMe controller, production firmware, or benchmark result.
 
+> **Branch-only experiment:** `poc/m4-m5-profile-nested` also carries a
+> disposable transport fixture that once exposed a 1-MiB synthetic NVMe
+> namespace to native Host and nested-Guest Linux drivers. It is deliberately
+> not the portable firmware path and changes none of the statement above. See
+> [the Profile-Nested PoC boundary](POC_PROFILE_NESTED.md) before building or
+> running any privileged code.
+
 ## What we are building
 
 ```text
@@ -66,6 +73,7 @@ This independent project is not affiliated with, endorsed by, recognized by, or 
 - [Roadmap](docs/roadmap.md)
 - [Architecture decisions](docs/adr/README.md)
 - [Generic nested-KVM lab topology](docs/lab/pve-nested-kvm.md)
+- [Branch-only M4/M5 Profile-Nested transport PoC](POC_PROFILE_NESTED.md)
 - [Contribution and source-boundary rules](CONTRIBUTING.md)
 - [Security and raw-media warning](SECURITY.md)
 

@@ -1,0 +1,14 @@
+#!/bin/sh
+exec tail -n +3 $0
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+menuentry 'FWLab memmap diagnostic' --id fwlab-memmap-diagnostic {
+	recordfail
+	insmod gzio
+	insmod part_gpt
+	insmod ext2
+	search --no-floppy --fs-uuid --set=root a3b2debc-87ec-4b26-b394-ed18a26f093c
+	linux /vmlinuz-7.0.0-30-generic root=UUID=90d99162-58b5-439f-b459-a3d205abce11 ro console=tty1 console=ttyS0 memmap=16M\$0x70000000
+	initrd /initrd.img-7.0.0-30-generic
+}
