@@ -47,6 +47,12 @@ physical completion placement are not transport-neutral. The generalized
 remain unchanged regression references and are not a Cycle 04 runtime
 dependency. See [ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md).
 
+C4.3 implements that separation through sanitized typed requests and the sole
+`c4_command_graph_v1` outer lifecycle. Data-bearing commands remain held until
+their later-profile witness mask is complete; a validation-only fake cannot
+produce success. Queue/target integration uses a non-reentrant mailbox bridge
+to the frozen C4.2 HIF. See [ADR-0011](adr/0011-c4-command-graph-v1.md).
+
 ## Command identity and lifecycle
 
 ```text
@@ -109,4 +115,4 @@ Replaced by hardware: PCIe link/config/BAR, requester DMA, queue walkers, comple
 
 Platform-specific: boot, RTOS/runtime, linker map, interrupt controller, timers, cache/coherency and atomics.
 
-Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md), [ADR-0003](adr/0003-firmware-hardware-contract.md), [ADR-0004](adr/0004-kernel-baseline.md), [ADR-0005](adr/0005-synchronous-ioas-copy-gate.md), [ADR-0006](adr/0006-portable-command-lifecycle-contract.md), [ADR-0007](adr/0007-command-durability-and-persistence-policy.md), [ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md), [ADR-0009](adr/0009-upstream-vfio-route-and-milestones.md) and [ADR-0010](adr/0010-linux-hif-portable-executor-contract.md).
+Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md), [ADR-0003](adr/0003-firmware-hardware-contract.md), [ADR-0004](adr/0004-kernel-baseline.md), [ADR-0005](adr/0005-synchronous-ioas-copy-gate.md), [ADR-0006](adr/0006-portable-command-lifecycle-contract.md), [ADR-0007](adr/0007-command-durability-and-persistence-policy.md), [ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md), [ADR-0009](adr/0009-upstream-vfio-route-and-milestones.md), [ADR-0010](adr/0010-linux-hif-portable-executor-contract.md) and [ADR-0011](adr/0011-c4-command-graph-v1.md).

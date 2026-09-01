@@ -83,3 +83,5 @@ clean:
 		build/sanitize/c41_portable_tests build/sanitize/c41_portable_model \
 		build/thread/c41_portable_tests build/thread/c41_portable_model
 	@rmdir build/clang build/sanitize build/thread build 2>/dev/null || true
+
+include c43.mk

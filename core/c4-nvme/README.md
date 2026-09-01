@@ -9,6 +9,12 @@ only explicit byte codecs, fixed-profile validation and fake-adjacent checks.
 Protocol legality and the multi-action `c4_command_graph_v1` remain later C4
 gates.
 
+C4.3 design is now fixed by ADR-0011. Phase 1 adds only versioned typed
+contracts, the seven-member C43 archive skeleton, layout/reserved-zero checks
+and fake-adjacent linkage. Protocol and graph behavior remain later phase
+checkpoints; the phase-1 Identify encoder explicitly returns NOT_IMPLEMENTED
+without changing its output buffer.
+
 The portable values contain no queue identifier, command identifier, queue
 phase or Host/guest address. Native structures are not packed wire images; all
 byte boundaries use the explicit codecs in `c41_codec.c`.
@@ -21,6 +27,8 @@ oracle, not an advertised PCI controller profile.
 ```sh
 make check-c41
 make fake-link-c41
+make check-c43-phase1
+make fake-link-c43
 make check-all
 ```
 
