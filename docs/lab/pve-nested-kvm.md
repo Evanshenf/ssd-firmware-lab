@@ -10,10 +10,11 @@ L0 PVE host
 └── L1 development VM
     ├── /dev/sda  Linux system disk
     ├── /dev/sdb  exclusive, unmounted raw NAND medium
-    ├── M2: vfio-user presents synthetic NVMe directly to L2
+    ├── optional M2: vfio-user presents synthetic NVMe directly to L2
     │   └── L2 has its own VirtIO/SATA system disk
     └── M4/M5: synthetic NVMe is first owned by L1 Host,
-        then destructively reset and assigned to L2 through custom VFIO
+        then destructively reset and assigned through upstream
+        vfio-pci/IOMMUFD/QEMU to L2
 ```
 
 The L1 system disk, private NAND backing and exported synthetic namespace are three different objects. `/dev/sdb` contains only the project's physical media container. It is never mounted and is never passed through to L2. The synthetic NVMe is always a test data disk, never the L1 or L2 root disk.
@@ -28,11 +29,11 @@ Use the L1 distribution GA 7.0 kernel as the primary development baseline. Do no
 
 Use a stable virtual serial/by-id for the media disk, exclude it from backup/snapshot/replication/live migration, and set `backup=0` in the VM configuration. Do not assume a per-disk `snapshot=0` option makes a whole-VM snapshot safe: verify the actual hypervisor behavior. For a system-only snapshot, stop the VM, record the complete media-drive identity/options, safely detach (not delete) the raw-media volume, snapshot the system disk, then reattach the same volume. Pin cache mode, AIO and iothread settings. Before any power-failure durability claim, prove Flush/FUA propagation through L1 QEMU, the L0 storage layer and the physical device; otherwise report only daemon-crash consistency.
 
-## Two implementation phases
+## Owner profiles
 
-In M2, L1 runs the firmware lab and `vfio-user`, while L2 alone sees the synthetic test NVMe. L1 does not yet get a synthetic `/dev/nvmeXnY`.
+Optional M2 may run the firmware lab and `vfio-user` in L1 while only L2 sees the synthetic test NVMe. It is a deferred differential lane, not a prerequisite for the Host route.
 
-In M4/M5, the Host synthetic adapter creates the test NVMe in L1. After all L1 use is stopped, only that synthetic function is unbound and handed to L2. The private `/dev/sdb` medium remains exclusively in L1.
+In M4/M5, the Host synthetic adapter creates the test NVMe in L1. After all L1 use is stopped, only that synthetic function is unbound, reset, bound to upstream `vfio-pci` and assigned to L2. The private `/dev/sdb` medium remains exclusively in L1. M4 Host-native and M5 assignment have separate graduation gates; nested evidence graduates neither.
 
 ## Evidence label
 

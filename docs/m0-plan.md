@@ -23,9 +23,11 @@ For one explicit Host profile, account for every DMA address, mapping direction,
 
 At every stage—capture, DMA-in, firmware, NFC, DMA-out and publication—kill, hang, reset or revoke the runtime. Require bounded asynchronous behavior, `controller_epoch` change, zero stale DMA/completion/interrupt, and no use-after-free. Rebuilding the whole controller also changes `instance_nonce`.
 
-## M0-4: custom emulated VFIO
+## M0-4: historical custom emulated VFIO risk experiment
 
 Prototype standard QEMU consumption of a VFIO cdev/iommufd device with configuration/BAR regions, one interrupt mechanism, reset and baseline IOVA reads/writes. Do not add zero-copy until exact leases can be synchronously revoked. A standalone PoC can proceed independently; a full owner switch depends on a validated Host adapter and zero-reference proof.
+
+ADR-0009 supersedes this experiment as the implementation route: M5 uses the Host synthetic function with upstream `vfio-pci`, IOMMUFD and QEMU. The historical experiment remains evidence for its exact contracts and for rejected design risks; it does not authorize a project-owned VFIO ABI or satisfy M5.
 
 The platform-device V0 cdev/iommufd ownership and software-region sub-gate passed on `Profile-Nested`; see the [recorded result](results/2026-08-28-m0-vfio-cdev-v0-nested.md). PCI/QEMU, mmap/BAR, IRQ, IOVA access, pinning and owner-switch gates remain open.
 

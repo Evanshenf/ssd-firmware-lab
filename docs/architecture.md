@@ -32,9 +32,9 @@ The firmware source is portable C with explicit platform/HIF/NFC contracts. Nati
 
 ## Safety and protocol truth
 
-The trusted HIF retains raw submissions and all transport addresses. It validates only the maximum memory-safety envelope from a single machine-readable schema and issues command-scoped capabilities. The firmware receives an address-free canonical protocol descriptor and remains the sole authority for protocol legality, actual transfer length and completion status.
+The trusted HIF retains raw submissions and all transport addresses. Before portable policy it validates only a maximum structural memory-safety envelope; it does not yet mint the final data capability. The firmware receives an address-free canonical protocol descriptor and remains the sole authority for protocol legality, actual transfer length and completion status. After firmware returns the exact transfer shape, HIF resolves the same immutable address capture and issues the exact command-scoped capability.
 
-A capability binds exact range/direction plus controller instance, owner, reset, per-queue generation and command identity. Reset, unmap, queue recreation or owner change revokes it. Old events may release old resources but cannot DMA, publish a completion/interrupt or mutate new firmware state.
+A capability binds exact range/direction plus controller instance, owner, reset, per-queue generation and command identity. Reset, unmap, queue recreation or owner change revokes it. Effectful use of an old capability cannot DMA, publish a completion/interrupt or mutate new firmware state. Idempotent old-owner cleanup may only reduce its old ledger and release old resources; it cannot resolve reused identifiers into new-owner objects.
 
 The expanded owner/queue identity is HIF-private. Per ADR-0006, HIF binds it
 into an opaque origin token; portable firmware interprets only its own instance,
@@ -77,7 +77,7 @@ data visible → completion visible → interrupt visible
 
 ## Trust profiles
 
-- `Trusted-Monolithic`: `vfio-user`, HIF and firmware may share a process. This is a functional baseline and makes no daemon-containment claim.
+- `Trusted-Monolithic`: a headless or optional `vfio-user` HIF and firmware may share a process. This is a functional baseline and makes no daemon-containment claim.
 - `Isolated-B*`: kernel/HIF and firmware runtime are separate capability domains. Containment is claimable only after death, revoke, stale-event and bounds tests pass.
 
 ## Ownership transition
@@ -86,15 +86,16 @@ Normal Host-to-Guest transition:
 
 ```text
 stop application writes; Flush, unmount and close holders
-→ enter QUIESCING under a transition lock
-→ allow only bounded old-owner teardown/control operations
+→ under the transition lock, close ordinary admission/enqueue
+→ enter QUIESCING; owner_epoch++ makes old effect authority non-current
+→ allow only idempotent old-ledger teardown/control operations
 → request Host driver unbind and wait for remove/workqueue completion
-→ close all Host doorbell/MMIO entries; owner_epoch++
-→ mask interrupts and revoke capabilities
-→ prove every old ref, pin and command token is zero
 → controller_epoch++ at reset-begin
-→ force-cancel queues, perform destructive reset, receive reset-ack
-→ bind custom VFIO, create a fresh IOAS, publish Guest owner
+→ retire queue/map generations; close doorbells; mask interrupt sources
+→ revoke capabilities; cancel and drain DMA/commands/CQE/IRQ work
+→ clear old routes/PBA; prove every old ref, pin and token is zero
+→ perform destructive reset and receive reset-ack
+→ bind upstream vfio-pci, create a fresh IOMMUFD/IOAS, publish Guest owner
 → Guest enables controller and creates fresh queue generations
 ```
 
@@ -108,4 +109,4 @@ Replaced by hardware: PCIe link/config/BAR, requester DMA, queue walkers, comple
 
 Platform-specific: boot, RTOS/runtime, linker map, interrupt controller, timers, cache/coherency and atomics.
 
-Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md), [ADR-0003](adr/0003-firmware-hardware-contract.md), [ADR-0004](adr/0004-kernel-baseline.md), [ADR-0005](adr/0005-synchronous-ioas-copy-gate.md), [ADR-0006](adr/0006-portable-command-lifecycle-contract.md) and [ADR-0007](adr/0007-command-durability-and-persistence-policy.md).
+Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md), [ADR-0003](adr/0003-firmware-hardware-contract.md), [ADR-0004](adr/0004-kernel-baseline.md), [ADR-0005](adr/0005-synchronous-ioas-copy-gate.md), [ADR-0006](adr/0006-portable-command-lifecycle-contract.md), [ADR-0007](adr/0007-command-durability-and-persistence-policy.md), [ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md), [ADR-0009](adr/0009-upstream-vfio-route-and-milestones.md) and [ADR-0010](adr/0010-linux-hif-portable-executor-contract.md).

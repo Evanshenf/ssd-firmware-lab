@@ -8,15 +8,16 @@
 The v0.x release baseline must provide:
 
 1. a headless harness and portable firmware/NFC/media core;
-2. a `vfio-user` adapter for an unmodified Linux guest driver;
-3. persistent file and explicitly initialized raw-block media;
-4. deterministic trace/replay, fault injection and power-cut recovery tests;
-5. source provenance, license and unprivileged CI policy checks.
+2. persistent file and explicitly initialized raw-block media;
+3. deterministic trace/replay, fault injection and power-cut recovery tests;
+4. source provenance, license and unprivileged CI policy checks.
+
+A `vfio-user` adapter may later provide an unmodified Guest-driver differential lane. It is optional and does not block the v0.x baseline, M3, M4 or M5.
 
 The project-level success target additionally requires:
 
 1. a Host-enumerable synthetic PCI function backed by the same firmware core;
-2. a sequential Host-to-Guest-to-Host ownership switch through a custom VFIO adapter;
+2. a sequential Host-to-Guest-to-Host ownership switch of that function through upstream `vfio-pci`, IOMMUFD and QEMU;
 3. migration of the portable protocol/media core to a real FPGA or endpoint SoC.
 
 The v0.x baseline may ship while an experimental adapter is redesigned. That does not satisfy the longer-term project target.
@@ -35,14 +36,16 @@ The v0.x baseline may ship while an experimental adapter is redesigned. That doe
 ## Harness and adapters
 
 ```text
-                         portable firmware + NFC + media
-                    /             /             |             \
-          headless harness  vfio-user Guest  Host synthetic  real EPF
-                                                   │
-                                       custom VFIO owner adapter
+                          portable firmware + NFC + media
+                    /              /              |             \
+          headless harness  optional vfio-user  Host synthetic  real EPF
+                                                 /          \
+                                      Host native owner   Guest owner
+                                                         via upstream
+                                                   vfio-pci/IOMMUFD/QEMU
 ```
 
-Headless is a test harness rather than a PCI transport. Host synthetic and custom VFIO are sequential owner adapters for one logical controller, not parallel controllers and not simultaneous ownership.
+Headless is a test harness rather than a PCI transport. Host native `nvme` and upstream `vfio-pci` are sequential owners of one Host synthetic function, not parallel controllers and not simultaneous ownership. Upstream VFIO is infrastructure, not a project-owned protocol or media implementation.
 
 ## Evidence levels
 

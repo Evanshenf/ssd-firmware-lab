@@ -3,8 +3,17 @@
 
 # ADR-0001: System architecture
 
-- Status: Accepted architecture baseline; adapters remain to be validated
+- Status: Partially superseded by ADR-0009 and ADR-0010
 - Date: 2026-08-28
+
+Supersession note (2026-09-01): ADR-0009 makes `vfio-user` optional and replaces
+the project-owned custom-VFIO implementation route with upstream `vfio-pci`,
+IOMMUFD and QEMU. The historical decision text below is retained; ADR-0009 is
+authoritative for those clauses and preserves this ADR's owner-safety and
+graduation requirements. ADR-0010 supersedes only the ordering in the
+historical correctness-path diagram: the HIF may validate a maximum structural
+envelope before portable policy, but it mints the final exact data capability
+only after portable policy returns the exact transfer shape.
 
 ## Context
 

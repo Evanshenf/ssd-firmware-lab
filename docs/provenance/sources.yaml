@@ -48,6 +48,15 @@ sources:
     code_copied: false
     allowed_paths: [docs]
 
+  - id: qemu-v10.2.1-vfio-iommufd
+    title: QEMU v10.2.1
+    url: https://gitlab.com/qemu-project/qemu/-/tree/v10.2.1
+    revision: "v10.2.1 peeled commit 2d3df8abca265c9bcc9e438d691d561592060998"
+    license: GPL-2.0-only-and-component-specific-licenses
+    purpose: upstream VFIO PCI assignment and IOMMUFD integration behavior research; no source copied
+    code_copied: false
+    allowed_paths: [docs]
+
   - id: nvm-express-public-site
     title: NVM Express public information site
     url: https://nvmexpress.org/

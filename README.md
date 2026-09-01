@@ -28,13 +28,15 @@ persistent physical media
 page/OOB truth · wear/bad-block state · physical-operation WAL
 ```
 
-The v0.x release baseline is a headless test harness plus a `vfio-user` guest adapter and persistent file/raw-block media. The longer-term project target adds:
+The v0.x release baseline is a headless test harness, the portable firmware/NFC stack and persistent file/raw-block media. A `vfio-user` guest adapter is an optional, deferred differential frontend rather than a release prerequisite. The longer-term project target adds:
 
 - a host synthetic PCI function that the native Linux storage driver can use;
-- a destructive, sequential Host-to-Guest ownership switch through a custom VFIO adapter;
+- a destructive, sequential Host-to-Guest ownership switch of that same function through upstream `vfio-pci`, IOMMUFD and QEMU;
 - the same portable protocol/media firmware core running behind a real FPGA or endpoint-SoC adapter.
 
 Host and Guest never own the same controller concurrently. A Host-to-Guest transition must stop application writes, Flush/unmount/close holders, unbind the Host driver, revoke all old capabilities, prove references are zero, reset the controller, and only then publish a new Guest owner.
+
+The project does not implement a custom VFIO userspace ABI or a QEMU NVMe device model for this path. M4 Host-native operation and M5 upstream-VFIO assignment share one synthetic endpoint and trusted HIF, but remain separate graduation claims. See [ADR-0009](docs/adr/0009-upstream-vfio-route-and-milestones.md) and [ADR-0010](docs/adr/0010-linux-hif-portable-executor-contract.md).
 
 ## Storage separation
 

@@ -11,5 +11,7 @@
 - [ADR-0006: Portable headless command-lifecycle contract](0006-portable-command-lifecycle-contract.md)
 - [ADR-0007: Command durability and executable persistence policy](0007-command-durability-and-persistence-policy.md)
 - [ADR-0008: Generalized NVMe command-graph boundary](0008-generalized-nvme-command-graph-boundary.md)
+- [ADR-0009: Upstream VFIO route and M2/M4/M5 milestones](0009-upstream-vfio-route-and-milestones.md)
+- [ADR-0010: Linux HIF to portable executor contract](0010-linux-hif-portable-executor-contract.md)
 
 Accepted ADRs define the design baseline, not an assertion that the component is already implemented or validated. A superseding decision must link the prior ADR and describe migration and compatibility impact.
