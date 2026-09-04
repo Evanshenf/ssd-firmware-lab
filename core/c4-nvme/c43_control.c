@@ -28,6 +28,44 @@ static int queue_ref_equal(
            left->word[1] == right->word[1];
 }
 
+static int target_ref_nonzero(
+    const struct fwlab_c43_abort_target_ref *reference)
+{
+    return reference->word[0] != 0 || reference->word[1] != 0;
+}
+
+static int target_fields_zero(
+    const struct fwlab_c43_command_observer *command)
+{
+    return command->action_outcome == 0 && !command->target_pin_present &&
+           c43_bytes_zero(&command->target_ticket,
+                          sizeof(command->target_ticket)) &&
+           !target_ref_nonzero(&command->target_reference);
+}
+
+static int observer_ticket_matches_command(
+    const struct fwlab_hif_command_ticket *ticket,
+    const struct fwlab_c43_command_observer *command)
+{
+    return c43_ticket_valid(ticket) && command->in_use &&
+           command->phase >= FWLAB_C43_PHASE_ADMITTED_POLICY &&
+           c43_handle_equal(&ticket->handle, &command->handle) &&
+           c43_origin_equal(&ticket->origin, &command->origin) &&
+           ticket->ticket_uid == command->transaction_uid &&
+           ticket->generation == command->action_generation;
+}
+
+static int command_ticket_equal(
+    const struct fwlab_hif_command_ticket *left,
+    const struct fwlab_hif_command_ticket *right)
+{
+    return c43_handle_equal(&left->handle, &right->handle) &&
+           c43_origin_equal(&left->origin, &right->origin) &&
+           left->ticket_uid == right->ticket_uid &&
+           left->generation == right->generation &&
+           left->reserved == right->reserved;
+}
+
 static int queue_public_state_needs_owner(uint8_t state)
 {
     return (state >= FWLAB_C43_ACTION_STATE_SUBMIT_READY &&
@@ -59,6 +97,7 @@ static int queue_public_command_valid(
          ~FWLAB_C43_WITNESS_QUEUE_EFFECT_COMMITTED) != 0 ||
         (command->satisfied_witness_mask &
          ~FWLAB_C43_WITNESS_QUEUE_EFFECT_COMMITTED) != 0 ||
+        !target_fields_zero(command) || command->block_terminal_kind != 0 ||
         needs_owner != is_owner) {
         return 0;
     }
@@ -103,6 +142,144 @@ static int queue_public_command_valid(
             command->action_state == FWLAB_C43_ACTION_STATE_FAULT);
 }
 
+static int target_public_command_valid(
+    const struct fwlab_c43_graph_observer *observer,
+    uint32_t slot,
+    const struct fwlab_c43_command_observer *command,
+    uint16_t expected_incoming[FWLAB_C43_MAX_COMMANDS])
+{
+    uint32_t target_slot;
+    int found = 0;
+
+    if (command->action_domain != FWLAB_C43_ACTION_DOMAIN_TARGET) {
+        return 1;
+    }
+    if (command->terminal_winner != FWLAB_C43_WINNER_NONE ||
+        command->publication != FWLAB_C43_PUBLICATION_ELIGIBLE ||
+        command->required_witness_mask != 0 ||
+        command->satisfied_witness_mask != 0 ||
+        command->block_terminal_kind != 0 ||
+        (observer->queue_txn_active &&
+         observer->queue_owner_slot_plus_one == slot + 1)) {
+        return 0;
+    }
+    switch (command->action_state) {
+    case FWLAB_C43_ACTION_STATE_SUBMIT_READY:
+    case FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT:
+        return command->phase == FWLAB_C43_PHASE_RESOLVE_WAIT &&
+               !command->resolution_valid && !command->success_eligible &&
+               target_fields_zero(command);
+    case FWLAB_C43_ACTION_STATE_TERMINAL_HELD:
+        if (command->phase != FWLAB_C43_PHASE_ACTION_WAIT ||
+            !command->resolution_valid ||
+            command->resolved_status != FWLAB_C43_STATUS_SUCCESS ||
+            !command->success_eligible ||
+            command->action_outcome < FWLAB_C43_TARGET_FOUND ||
+            command->action_outcome > FWLAB_C43_TARGET_SUPERSEDED) {
+            return 0;
+        }
+        if (command->action_outcome != FWLAB_C43_TARGET_FOUND) {
+            return !command->target_pin_present &&
+                   c43_bytes_zero(&command->target_ticket,
+                                  sizeof(command->target_ticket)) &&
+                   !target_ref_nonzero(&command->target_reference);
+        }
+        if (!command->target_pin_present ||
+            !target_ref_nonzero(&command->target_reference)) {
+            return 0;
+        }
+        for (target_slot = 0; target_slot < FWLAB_C43_MAX_COMMANDS;
+             ++target_slot) {
+            if (target_slot != slot &&
+                observer_ticket_matches_command(
+                    &command->target_ticket,
+                    &observer->commands[target_slot])) {
+                if (found || expected_incoming[target_slot] != 0) {
+                    return 0;
+                }
+                found = 1;
+                expected_incoming[target_slot] = 1;
+            }
+        }
+        return found;
+    case FWLAB_C43_ACTION_STATE_FAULT:
+        return command->phase == FWLAB_C43_PHASE_ACTION_WAIT &&
+               command->resolution_valid &&
+               command->resolved_status ==
+                   FWLAB_C43_STATUS_INTERNAL_FAILURE &&
+               !command->success_eligible &&
+               (command->action_outcome == 0 ||
+                command->action_outcome == FWLAB_C43_TARGET_FAULT) &&
+               !command->target_pin_present &&
+               c43_bytes_zero(&command->target_ticket,
+                              sizeof(command->target_ticket)) &&
+               !target_ref_nonzero(&command->target_reference);
+    default:
+        return 0;
+    }
+}
+
+static int block_public_command_valid(
+    const struct fwlab_c43_graph_observer *observer,
+    uint32_t slot,
+    const struct fwlab_c43_command_observer *command)
+{
+    if (command->action_domain != FWLAB_C43_ACTION_DOMAIN_BLOCK) {
+        return 1;
+    }
+    if (command->terminal_winner != FWLAB_C43_WINNER_NONE ||
+        command->publication != FWLAB_C43_PUBLICATION_ELIGIBLE ||
+        command->required_witness_mask == 0 ||
+        (command->required_witness_mask &
+         FWLAB_C43_WITNESS_VALIDATED_ONLY) != 0 ||
+        (command->satisfied_witness_mask &
+         ~FWLAB_C43_WITNESS_VALIDATED_ONLY) != 0 ||
+        command->success_eligible || !target_fields_zero(command) ||
+        (observer->queue_txn_active &&
+         observer->queue_owner_slot_plus_one == slot + 1)) {
+        return 0;
+    }
+    switch (command->action_state) {
+    case FWLAB_C43_ACTION_STATE_SUBMIT_READY:
+    case FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT:
+        return command->phase == FWLAB_C43_PHASE_RESOLVE_WAIT &&
+               !command->resolution_valid &&
+               command->block_terminal_kind == 0 &&
+               command->satisfied_witness_mask == 0;
+    case FWLAB_C43_ACTION_STATE_TERMINAL_HELD:
+        if (command->phase != FWLAB_C43_PHASE_ACTION_WAIT ||
+            !command->resolution_valid) {
+            return 0;
+        }
+        if (command->block_terminal_kind ==
+            FWLAB_C43_BLOCK_VALIDATED_ONLY) {
+            return command->resolved_status == FWLAB_C43_STATUS_SUCCESS &&
+                   command->satisfied_witness_mask ==
+                       FWLAB_C43_WITNESS_VALIDATED_ONLY;
+        }
+        return command->block_terminal_kind ==
+                   FWLAB_C43_BLOCK_FAILED_NO_EFFECT &&
+               command->resolved_status == FWLAB_C43_STATUS_MEDIA_FAILURE &&
+               command->satisfied_witness_mask == 0;
+    case FWLAB_C43_ACTION_STATE_REJECTED_NO_EFFECT:
+        return command->phase == FWLAB_C43_PHASE_ACTION_WAIT &&
+               command->resolution_valid &&
+               command->resolved_status ==
+                   FWLAB_C43_STATUS_RESOURCE_FAILURE &&
+               command->block_terminal_kind == 0 &&
+               command->satisfied_witness_mask == 0;
+    case FWLAB_C43_ACTION_STATE_FAULT:
+        return command->phase == FWLAB_C43_PHASE_ACTION_WAIT &&
+               command->resolution_valid &&
+               command->resolved_status ==
+                   FWLAB_C43_STATUS_INTERNAL_FAILURE &&
+               command->block_terminal_kind == 0 &&
+               command->satisfied_witness_mask == 0;
+    default:
+        return 0;
+    }
+}
+
 int fwlab_c43_graph_observer_valid(
     const struct fwlab_c43_graph_observer *observer)
 {
@@ -112,6 +289,7 @@ int fwlab_c43_graph_observer_valid(
     uint32_t ready_count = 0;
     uint32_t cleanup_count = 0;
     uint32_t credit_count[10] = {0};
+    uint16_t expected_incoming[FWLAB_C43_MAX_COMMANDS] = {0};
 
     if (observer == NULL || observer->version != FWLAB_C43_GRAPH_VERSION ||
         observer->size != sizeof(*observer) || observer->controller_epoch == 0 ||
@@ -180,8 +358,19 @@ int fwlab_c43_graph_observer_valid(
             command->in_use > 1 || command->success_eligible > 1 ||
             command->provider_generation_current > 1 ||
             command->action_domain > FWLAB_C43_ACTION_DOMAIN_BLOCK ||
-            command->action_state > FWLAB_C43_ACTION_STATE_FAULT ||
+            command->action_state > FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT ||
             command->resolution_valid > 1 ||
+            command->action_outcome > FWLAB_C43_TARGET_RELEASED ||
+            command->block_terminal_kind > FWLAB_C43_BLOCK_COMPLETED ||
+            command->incoming_target_pins > 1 ||
+            command->target_pin_present > 1 ||
+            command->reserved_action_flags != 0 ||
+            !c43_bytes_zero(command->reserved_action,
+                            sizeof(command->reserved_action)) ||
+            (command->action_domain != FWLAB_C43_ACTION_DOMAIN_TARGET &&
+             !target_fields_zero(command)) ||
+            (command->action_domain != FWLAB_C43_ACTION_DOMAIN_BLOCK &&
+             command->block_terminal_kind != 0) ||
             (!command->resolution_valid && command->resolved_status != 0) ||
             (command->resolution_valid &&
              !c43_semantic_status_valid(command->resolved_status)) ||
@@ -251,6 +440,11 @@ int fwlab_c43_graph_observer_valid(
             if (!queue_public_command_valid(observer, index, command)) {
                 return 0;
             }
+            if (!target_public_command_valid(observer, index, command,
+                                             expected_incoming) ||
+                !block_public_command_valid(observer, index, command)) {
+                return 0;
+            }
             for (other = 0; other < index; ++other) {
                 const struct fwlab_c43_command_observer *prior =
                     &observer->commands[other];
@@ -301,9 +495,25 @@ int fwlab_c43_graph_observer_valid(
                 command->action_state != FWLAB_C43_ACTION_STATE_NONE ||
                 command->resolution_valid != 0 ||
                 command->resolved_status != 0 ||
+                command->action_outcome != 0 ||
+                command->block_terminal_kind != 0 ||
+                !c43_bytes_zero(&command->target_ticket,
+                                sizeof(command->target_ticket)) ||
+                target_ref_nonzero(&command->target_reference) ||
+                command->incoming_target_pins != 0 ||
+                command->target_pin_present != 0 ||
+                command->reserved_action_flags != 0 ||
+                !c43_bytes_zero(command->reserved_action,
+                                sizeof(command->reserved_action)) ||
                 command->publication != FWLAB_C43_PUBLICATION_ELIGIBLE) {
                 return 0;
             }
+        }
+    }
+    for (index = 0; index < FWLAB_C43_MAX_COMMANDS; ++index) {
+        if (observer->commands[index].incoming_target_pins !=
+            expected_incoming[index]) {
+            return 0;
         }
     }
     if (observer->queue_txn_active) {
@@ -660,11 +870,293 @@ static int queue_record_valid(
     }
 }
 
+_Static_assert(sizeof(struct c43_queue_txn_record) ==
+                   sizeof(struct c43_target_txn_record),
+               "target action storage must cover the full union");
+_Static_assert(sizeof(struct c43_queue_txn_record) ==
+                   sizeof(struct c43_block_txn_record),
+               "block action storage must cover the full union");
+
+static uint32_t target_public_action_state(uint32_t flow)
+{
+    switch (flow) {
+    case C43_TARGET_FLOW_SUBMIT_START:
+        return FWLAB_C43_ACTION_STATE_SUBMIT_READY;
+    case C43_TARGET_FLOW_QUERY:
+        return FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT;
+    case C43_TARGET_FLOW_DONE:
+        return FWLAB_C43_ACTION_STATE_TERMINAL_HELD;
+    case C43_TARGET_FLOW_FAULT:
+        return FWLAB_C43_ACTION_STATE_FAULT;
+    default:
+        return FWLAB_C43_ACTION_STATE_NONE;
+    }
+}
+
+static int target_find_slot(
+    const struct fwlab_c43_graph *graph,
+    uint32_t abort_slot,
+    const struct fwlab_hif_command_ticket *ticket,
+    uint32_t *target_slot)
+{
+    uint32_t slot;
+    int found = 0;
+
+    for (slot = 0; slot < FWLAB_C43_MAX_COMMANDS; ++slot) {
+        if (slot != abort_slot && graph->commands[slot].in_use &&
+            graph->commands[slot].state == C43_COMMAND_RECORD_ADMITTED &&
+            command_ticket_equal(ticket, &graph->commands[slot].ticket)) {
+            if (found) {
+                return 0;
+            }
+            *target_slot = slot;
+            found = 1;
+        }
+    }
+    return found;
+}
+
+static int target_record_valid(
+    const struct fwlab_c43_graph *graph,
+    uint32_t slot,
+    const struct c43_command_record *record,
+    const struct fwlab_c43_command_observer *observer)
+{
+    const struct c43_target_txn_record *target = &record->target_txn;
+    const int terminal_zero = c43_bytes_zero(
+        &target->terminal, sizeof(target->terminal));
+    uint32_t target_slot = 0;
+
+    if (target->flow == C43_TARGET_FLOW_NONE) {
+        return c43_bytes_zero(&record->queue_txn,
+                              sizeof(record->queue_txn)) &&
+               observer->action_domain == FWLAB_C43_ACTION_DOMAIN_NONE &&
+               observer->action_state == FWLAB_C43_ACTION_STATE_NONE &&
+               observer->resolution_valid == 0 &&
+               observer->resolved_status == 0;
+    }
+    if (record->request.kind != FWLAB_C43_REQUEST_ABORT ||
+        record->plan.kind != FWLAB_C43_PLAN_ABORT_RESOLVE ||
+        target->flow > C43_TARGET_FLOW_FAULT ||
+        target->outcome > FWLAB_C43_TARGET_FAULT ||
+        target->resolution_valid > 1 || target->provider_owned > 1 ||
+        target->pin_installed > 1 || target->reserved0 != 0 ||
+        target->reserved1 != 0 ||
+        !c43_bytes_zero(target->reserved2, sizeof(target->reserved2)) ||
+        !c43_bytes_zero(target->reserved_tail,
+                        sizeof(target->reserved_tail)) ||
+        (target->flow != C43_TARGET_FLOW_FAULT &&
+         target->fault_from_flow != C43_TARGET_FLOW_NONE) ||
+        (target->flow == C43_TARGET_FLOW_FAULT &&
+         (target->fault_from_flow < C43_TARGET_FLOW_SUBMIT_START ||
+          target->fault_from_flow > C43_TARGET_FLOW_QUERY)) ||
+        (!target->resolution_valid && target->resolved_status != 0) ||
+        (target->resolution_valid &&
+         !c43_semantic_status_valid(target->resolved_status)) ||
+        target->provider_generation != graph->providers.target.generation ||
+        !fwlab_c43_target_request_valid(&target->request) ||
+        !queue_token_matches_record(&target->request.common.token, record) ||
+        target->request.common.cookie != record->transaction_uid ||
+        target->request.common.dependency_ordinal != UINT32_MAX ||
+        !command_ticket_equal(&target->request.abort_command,
+                              &record->ticket) ||
+        observer->action_domain != FWLAB_C43_ACTION_DOMAIN_TARGET ||
+        observer->action_state != target_public_action_state(target->flow) ||
+        observer->resolution_valid != target->resolution_valid ||
+        observer->resolved_status != target->resolved_status ||
+        observer->action_outcome != target->outcome ||
+        observer->target_pin_present != target->pin_installed) {
+        return 0;
+    }
+    if (target->pin_installed) {
+        if (target->target_slot_plus_one == 0 ||
+            target->target_slot_plus_one > FWLAB_C43_MAX_COMMANDS ||
+            terminal_zero ||
+            !command_ticket_equal(&observer->target_ticket,
+                                  &target->terminal.target) ||
+            observer->target_reference.word[0] !=
+                target->terminal.reference.word[0] ||
+            observer->target_reference.word[1] !=
+                target->terminal.reference.word[1]) {
+            return 0;
+        }
+    } else if (target->target_slot_plus_one != 0 ||
+               !c43_bytes_zero(&observer->target_ticket,
+                               sizeof(observer->target_ticket)) ||
+               target_ref_nonzero(&observer->target_reference)) {
+        return 0;
+    }
+    switch (target->flow) {
+    case C43_TARGET_FLOW_SUBMIT_START:
+        return !target->resolution_valid && !target->provider_owned &&
+               !target->pin_installed && target->outcome == 0 &&
+               terminal_zero;
+    case C43_TARGET_FLOW_QUERY:
+        return !target->resolution_valid && target->provider_owned &&
+               !target->pin_installed && target->outcome == 0 &&
+               terminal_zero;
+    case C43_TARGET_FLOW_DONE:
+        if (!target->resolution_valid || !target->provider_owned ||
+            target->resolved_status != FWLAB_C43_STATUS_SUCCESS ||
+            !fwlab_c43_target_terminal_matches_request(
+                &target->request, &target->terminal) ||
+            target->outcome != target->terminal.outcome ||
+            target->outcome < FWLAB_C43_TARGET_FOUND ||
+            target->outcome > FWLAB_C43_TARGET_SUPERSEDED) {
+            return 0;
+        }
+        if (target->outcome != FWLAB_C43_TARGET_FOUND) {
+            return !target->pin_installed;
+        }
+        return target->pin_installed &&
+               target_find_slot(graph, slot, &target->terminal.target,
+                                &target_slot) &&
+               target->target_slot_plus_one == target_slot + 1 &&
+               graph->commands[target_slot].incoming_target_pins == 1;
+    case C43_TARGET_FLOW_FAULT:
+        return target->resolution_valid &&
+               target->resolved_status == FWLAB_C43_STATUS_INTERNAL_FAILURE &&
+               !target->pin_installed &&
+               (target->fault_from_flow == C43_TARGET_FLOW_SUBMIT_START ||
+                target->provider_owned) &&
+               ((terminal_zero && target->outcome == 0) ||
+                (fwlab_c43_target_terminal_matches_request(
+                     &target->request, &target->terminal) &&
+                 target->terminal.outcome == FWLAB_C43_TARGET_FAULT &&
+                 target->outcome == FWLAB_C43_TARGET_FAULT));
+    default:
+        return 0;
+    }
+}
+
+static uint32_t block_public_action_state(uint32_t flow)
+{
+    switch (flow) {
+    case C43_BLOCK_FLOW_SUBMIT_START:
+        return FWLAB_C43_ACTION_STATE_SUBMIT_READY;
+    case C43_BLOCK_FLOW_QUERY:
+        return FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT;
+    case C43_BLOCK_FLOW_DONE:
+        return FWLAB_C43_ACTION_STATE_TERMINAL_HELD;
+    case C43_BLOCK_FLOW_REJECTED_NO_EFFECT:
+        return FWLAB_C43_ACTION_STATE_REJECTED_NO_EFFECT;
+    case C43_BLOCK_FLOW_FAULT:
+        return FWLAB_C43_ACTION_STATE_FAULT;
+    default:
+        return FWLAB_C43_ACTION_STATE_NONE;
+    }
+}
+
+static int block_token_matches_record(
+    const struct fwlab_hif_action_token *token,
+    const struct c43_command_record *record)
+{
+    return c43_handle_equal(&token->command, &record->ticket.handle) &&
+           c43_origin_equal(&token->origin, &record->ticket.origin) &&
+           token->action_uid == record->actions[0].action_uid &&
+           token->generation == record->actions[0].generation &&
+           token->kind == FWLAB_HIF_ACTION_BLOCK && token->reserved == 0;
+}
+
+static int block_record_valid(
+    const struct fwlab_c43_graph *graph,
+    const struct c43_command_record *record,
+    const struct fwlab_c43_command_observer *observer)
+{
+    const struct c43_block_txn_record *block = &record->block_txn;
+    const int terminal_zero = c43_bytes_zero(
+        &block->terminal, sizeof(block->terminal));
+
+    if (block->flow == C43_BLOCK_FLOW_NONE) {
+        return c43_bytes_zero(&record->queue_txn,
+                              sizeof(record->queue_txn)) &&
+               observer->action_domain == FWLAB_C43_ACTION_DOMAIN_NONE &&
+               observer->action_state == FWLAB_C43_ACTION_STATE_NONE &&
+               observer->resolution_valid == 0 &&
+               observer->resolved_status == 0;
+    }
+    if (record->plan.kind != FWLAB_C43_PLAN_BLOCK ||
+        block->flow > C43_BLOCK_FLOW_FAULT ||
+        block->terminal_kind > FWLAB_C43_BLOCK_COMPLETED ||
+        block->resolution_valid > 1 || block->provider_owned > 1 ||
+        block->reserved0 != 0 || block->reserved1 != 0 ||
+        block->reserved_alignment != 0 ||
+        !c43_bytes_zero(block->reserved2, sizeof(block->reserved2)) ||
+        !c43_bytes_zero(block->reserved_tail,
+                        sizeof(block->reserved_tail)) ||
+        (block->flow != C43_BLOCK_FLOW_FAULT &&
+         block->fault_from_flow != C43_BLOCK_FLOW_NONE) ||
+        (block->flow == C43_BLOCK_FLOW_FAULT &&
+         (block->fault_from_flow < C43_BLOCK_FLOW_SUBMIT_START ||
+          block->fault_from_flow > C43_BLOCK_FLOW_QUERY)) ||
+        (!block->resolution_valid && block->resolved_status != 0) ||
+        (block->resolution_valid &&
+         !c43_semantic_status_valid(block->resolved_status)) ||
+        block->provider_generation != graph->providers.block.generation ||
+        !fwlab_c43_block_action_request_valid_for_port(
+            &block->request, &graph->providers.block) ||
+        !block_token_matches_record(&block->request.common.token, record) ||
+        block->request.common.cookie != record->transaction_uid ||
+        block->request.common.dependency_ordinal != UINT32_MAX ||
+        block->request.requested_witness_mask !=
+            FWLAB_C43_WITNESS_VALIDATED_ONLY ||
+        !c43_ref_zero(&block->request.predecessor) ||
+        memcmp(&block->request.intent, &record->plan.block,
+               sizeof(block->request.intent)) != 0 ||
+        observer->action_domain != FWLAB_C43_ACTION_DOMAIN_BLOCK ||
+        observer->action_state != block_public_action_state(block->flow) ||
+        observer->resolution_valid != block->resolution_valid ||
+        observer->resolved_status != block->resolved_status ||
+        observer->block_terminal_kind != block->terminal_kind) {
+        return 0;
+    }
+    switch (block->flow) {
+    case C43_BLOCK_FLOW_SUBMIT_START:
+        return !block->resolution_valid && !block->provider_owned &&
+               block->terminal_kind == 0 && terminal_zero;
+    case C43_BLOCK_FLOW_QUERY:
+        return !block->resolution_valid && block->provider_owned &&
+               block->terminal_kind == 0 && terminal_zero;
+    case C43_BLOCK_FLOW_DONE:
+        if (!block->resolution_valid || !block->provider_owned ||
+            !fwlab_c43_block_action_terminal_matches_request(
+                &block->request, &block->terminal,
+                &graph->providers.block) ||
+            block->terminal_kind != block->terminal.block_terminal_kind) {
+            return 0;
+        }
+        if (block->terminal_kind == FWLAB_C43_BLOCK_VALIDATED_ONLY) {
+            return block->resolved_status == FWLAB_C43_STATUS_SUCCESS &&
+                   observer->satisfied_witness_mask ==
+                       FWLAB_C43_WITNESS_VALIDATED_ONLY;
+        }
+        return block->terminal_kind ==
+                   FWLAB_C43_BLOCK_FAILED_NO_EFFECT &&
+               block->resolved_status == FWLAB_C43_STATUS_MEDIA_FAILURE &&
+               observer->satisfied_witness_mask == 0;
+    case C43_BLOCK_FLOW_REJECTED_NO_EFFECT:
+        return block->resolution_valid && !block->provider_owned &&
+               block->resolved_status == FWLAB_C43_STATUS_RESOURCE_FAILURE &&
+               block->terminal_kind == 0 && terminal_zero &&
+               observer->satisfied_witness_mask == 0;
+    case C43_BLOCK_FLOW_FAULT:
+        return block->resolution_valid &&
+               block->resolved_status == FWLAB_C43_STATUS_INTERNAL_FAILURE &&
+               block->terminal_kind == 0 && terminal_zero &&
+               observer->satisfied_witness_mask == 0 &&
+               (block->fault_from_flow == C43_BLOCK_FLOW_SUBMIT_START ||
+                block->provider_owned);
+    default:
+        return 0;
+    }
+}
+
 int c43_phase4_state_valid(const struct fwlab_c43_graph *graph)
 {
     uint32_t index;
     uint32_t owner_count = 0;
     uint32_t owner_slot_plus_one = 0;
+    uint16_t expected_incoming[FWLAB_C43_MAX_COMMANDS] = {0};
 
     if (graph == NULL || graph->next_service_slot >= FWLAB_C43_MAX_COMMANDS ||
         !c43_bytes_zero(graph->reserved_scheduler,
@@ -682,13 +1174,44 @@ int c43_phase4_state_valid(const struct fwlab_c43_graph *graph)
             }
             continue;
         }
-        if (!queue_record_valid(graph, record,
-                                &graph->observer.commands[index])) {
-            return 0;
+        if (record->state == C43_COMMAND_RECORD_ADMITTED &&
+            record->plan.kind == FWLAB_C43_PLAN_ABORT_RESOLVE) {
+            if (!target_record_valid(graph, index, record,
+                                     &graph->observer.commands[index])) {
+                return 0;
+            }
+            if (record->target_txn.flow == C43_TARGET_FLOW_DONE &&
+                record->target_txn.outcome == FWLAB_C43_TARGET_FOUND) {
+                const uint32_t target =
+                    record->target_txn.target_slot_plus_one - 1;
+
+                if (target >= FWLAB_C43_MAX_COMMANDS ||
+                    expected_incoming[target] != 0) {
+                    return 0;
+                }
+                expected_incoming[target] = 1;
+            }
+        } else if (record->state == C43_COMMAND_RECORD_ADMITTED &&
+                   record->plan.kind == FWLAB_C43_PLAN_BLOCK) {
+            if (!block_record_valid(graph, record,
+                                    &graph->observer.commands[index])) {
+                return 0;
+            }
+        } else {
+            if (!queue_record_valid(graph, record,
+                                    &graph->observer.commands[index])) {
+                return 0;
+            }
+            if (queue_flow_requires_owner(record->queue_txn.flow)) {
+                ++owner_count;
+                owner_slot_plus_one = index + 1;
+            }
         }
-        if (queue_flow_requires_owner(record->queue_txn.flow)) {
-            ++owner_count;
-            owner_slot_plus_one = index + 1;
+    }
+    for (index = 0; index < FWLAB_C43_MAX_COMMANDS; ++index) {
+        if (graph->commands[index].incoming_target_pins !=
+            expected_incoming[index]) {
+            return 0;
         }
     }
     return owner_count <= 1 &&
@@ -1376,6 +1899,453 @@ static int queue_record_step(
     }
 }
 
+static void target_record_sync(
+    struct c43_command_record *record,
+    struct fwlab_c43_command_observer *observer)
+{
+    const struct c43_target_txn_record *target = &record->target_txn;
+
+    observer->action_domain = FWLAB_C43_ACTION_DOMAIN_TARGET;
+    observer->action_state =
+        (uint8_t)target_public_action_state(target->flow);
+    observer->resolution_valid = target->resolution_valid;
+    observer->resolved_status = target->resolved_status;
+    observer->action_outcome = target->outcome;
+    observer->block_terminal_kind = 0;
+    observer->target_pin_present = target->pin_installed;
+    memset(&observer->target_ticket, 0, sizeof(observer->target_ticket));
+    memset(&observer->target_reference, 0,
+           sizeof(observer->target_reference));
+    if (target->pin_installed) {
+        observer->target_ticket = target->terminal.target;
+        observer->target_reference = target->terminal.reference;
+    }
+}
+
+static void target_fault(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot,
+    uint32_t outcome)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+    struct c43_target_txn_record *target = &record->target_txn;
+    struct fwlab_c43_command_observer *observer =
+        &graph->observer.commands[slot];
+
+    if (target->flow != C43_TARGET_FLOW_FAULT) {
+        target->fault_from_flow = (uint8_t)target->flow;
+    }
+    target->flow = C43_TARGET_FLOW_FAULT;
+    target->outcome = outcome;
+    target->resolution_valid = 1;
+    target->resolved_status = FWLAB_C43_STATUS_INTERNAL_FAILURE;
+    target->pin_installed = 0;
+    target->target_slot_plus_one = 0;
+    observer->phase = FWLAB_C43_PHASE_ACTION_WAIT;
+    observer->success_eligible = 0;
+    target_record_sync(record, observer);
+}
+
+static int target_request_build(
+    const struct c43_command_record *record,
+    struct fwlab_c43_target_request *request)
+{
+    memset(request, 0, sizeof(*request));
+    request->version = FWLAB_C43_TARGET_RESOLVER_PORT_VERSION;
+    request->size = sizeof(*request);
+    request->common.version = FWLAB_HIF_ACTION_VERSION;
+    request->common.size = sizeof(request->common);
+    queue_action_token(record, &request->common.token);
+    request->common.cookie = record->transaction_uid;
+    request->common.dependency_ordinal = UINT32_MAX;
+    request->common.requested_units = 1;
+    request->abort_command = record->ticket;
+    request->operation = FWLAB_C43_TARGET_RESOLVE_ABORT;
+    return fwlab_c43_target_request_valid(request);
+}
+
+static void target_begin(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+    struct c43_target_txn_record *target;
+    struct fwlab_c43_command_observer *observer =
+        &graph->observer.commands[slot];
+
+    memset(&record->queue_txn, 0, sizeof(record->queue_txn));
+    target = &record->target_txn;
+    target->flow = C43_TARGET_FLOW_SUBMIT_START;
+    target->provider_generation = graph->providers.target.generation;
+    observer->phase = FWLAB_C43_PHASE_RESOLVE_WAIT;
+    target_record_sync(record, observer);
+    if (!target_request_build(record, &target->request)) {
+        target_fault(graph, slot, 0);
+    }
+}
+
+static void target_submit_step(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot,
+    uint32_t *transitions)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+    struct c43_target_txn_record *target = &record->target_txn;
+    struct fwlab_hif_action_submit_result result;
+    enum fwlab_hif_action_disposition disposition;
+
+    memset(&result, 0xa5, sizeof(result));
+    disposition = graph->providers.target.ops->submit(
+        graph->providers.target.context, &target->request, &result);
+    if (disposition == FWLAB_HIF_ACTION_BACKPRESSURE) {
+        return;
+    }
+    if (disposition == FWLAB_HIF_ACTION_ACCEPTED) {
+        target->provider_owned = 1;
+    }
+    if (disposition != FWLAB_HIF_ACTION_ACCEPTED ||
+        !queue_submit_result_valid(&result,
+                                   &target->request.common.token)) {
+        target_fault(graph, slot, 0);
+        *transitions = 1;
+        return;
+    }
+    target->flow = C43_TARGET_FLOW_QUERY;
+    target_record_sync(record, &graph->observer.commands[slot]);
+    *transitions = 1;
+}
+
+static void target_query_step(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot,
+    uint32_t *transitions)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+    struct c43_target_txn_record *target = &record->target_txn;
+    struct fwlab_c43_target_terminal terminal;
+    struct fwlab_c43_command_observer *observer =
+        &graph->observer.commands[slot];
+    uint32_t target_slot = 0;
+    bool ready = true;
+    enum fwlab_c43_api_result result;
+
+    memset(&terminal, 0xa5, sizeof(terminal));
+    result = graph->providers.target.ops->query(
+        graph->providers.target.context, &target->request.common.token,
+        &terminal, &ready);
+    if (result == FWLAB_C43_API_IN_PROGRESS) {
+        if (!ready || !bytes_are(&terminal, sizeof(terminal), 0xa5)) {
+            target_fault(graph, slot, 0);
+            *transitions = 1;
+        }
+        return;
+    }
+    if (result != FWLAB_C43_API_OK) {
+        target_fault(graph, slot, 0);
+        *transitions = 1;
+        return;
+    }
+    if (!ready) {
+        if (!bytes_are(&terminal, sizeof(terminal), 0xa5)) {
+            target_fault(graph, slot, 0);
+            *transitions = 1;
+        }
+        return;
+    }
+    if (!fwlab_c43_target_terminal_matches_request(&target->request,
+                                                   &terminal)) {
+        target_fault(graph, slot, 0);
+        *transitions = 1;
+        return;
+    }
+    if (terminal.outcome == FWLAB_C43_TARGET_FOUND) {
+        if (!target_find_slot(graph, slot, &terminal.target, &target_slot) ||
+            graph->commands[target_slot].incoming_target_pins != 0) {
+            target_fault(graph, slot, 0);
+            *transitions = 1;
+            return;
+        }
+        target->terminal = terminal;
+        target->pin_installed = 1;
+        target->target_slot_plus_one = (uint16_t)(target_slot + 1);
+        graph->commands[target_slot].incoming_target_pins = 1;
+        graph->observer.commands[target_slot].incoming_target_pins = 1;
+    } else if (terminal.outcome >= FWLAB_C43_TARGET_NOT_FOUND &&
+               terminal.outcome <= FWLAB_C43_TARGET_SUPERSEDED) {
+        target->terminal = terminal;
+    } else if (terminal.outcome == FWLAB_C43_TARGET_FAULT) {
+        target->terminal = terminal;
+        target_fault(graph, slot, FWLAB_C43_TARGET_FAULT);
+        *transitions = 1;
+        return;
+    } else {
+        target_fault(graph, slot, 0);
+        *transitions = 1;
+        return;
+    }
+    target->flow = C43_TARGET_FLOW_DONE;
+    target->outcome = terminal.outcome;
+    target->resolution_valid = 1;
+    target->resolved_status = FWLAB_C43_STATUS_SUCCESS;
+    observer->phase = FWLAB_C43_PHASE_ACTION_WAIT;
+    observer->success_eligible = 1;
+    target_record_sync(record, observer);
+    *transitions = 1;
+}
+
+static int target_record_step(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot,
+    uint32_t *transitions)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+
+    *transitions = 0;
+    if (record->target_txn.flow == C43_TARGET_FLOW_NONE) {
+        target_begin(graph, slot);
+        *transitions = 1;
+        return 1;
+    }
+    if (record->target_txn.flow == C43_TARGET_FLOW_SUBMIT_START) {
+        target_submit_step(graph, slot, transitions);
+        return 1;
+    }
+    if (record->target_txn.flow == C43_TARGET_FLOW_QUERY) {
+        target_query_step(graph, slot, transitions);
+        return 1;
+    }
+    return 0;
+}
+
+static void block_record_sync(
+    struct c43_command_record *record,
+    struct fwlab_c43_command_observer *observer)
+{
+    const struct c43_block_txn_record *block = &record->block_txn;
+
+    observer->action_domain = FWLAB_C43_ACTION_DOMAIN_BLOCK;
+    observer->action_state =
+        (uint8_t)block_public_action_state(block->flow);
+    observer->resolution_valid = block->resolution_valid;
+    observer->resolved_status = block->resolved_status;
+    observer->action_outcome = 0;
+    observer->block_terminal_kind = block->terminal_kind;
+    observer->target_pin_present = 0;
+    memset(&observer->target_ticket, 0, sizeof(observer->target_ticket));
+    memset(&observer->target_reference, 0,
+           sizeof(observer->target_reference));
+}
+
+static void block_fault(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+    struct c43_block_txn_record *block = &record->block_txn;
+    struct fwlab_c43_command_observer *observer =
+        &graph->observer.commands[slot];
+
+    if (block->flow != C43_BLOCK_FLOW_FAULT) {
+        block->fault_from_flow = (uint8_t)block->flow;
+    }
+    block->flow = C43_BLOCK_FLOW_FAULT;
+    block->terminal_kind = 0;
+    block->resolution_valid = 1;
+    block->resolved_status = FWLAB_C43_STATUS_INTERNAL_FAILURE;
+    memset(&block->terminal, 0, sizeof(block->terminal));
+    observer->phase = FWLAB_C43_PHASE_ACTION_WAIT;
+    observer->satisfied_witness_mask = 0;
+    observer->success_eligible = 0;
+    block_record_sync(record, observer);
+}
+
+static void block_rejected(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+    struct c43_block_txn_record *block = &record->block_txn;
+    struct fwlab_c43_command_observer *observer =
+        &graph->observer.commands[slot];
+
+    block->flow = C43_BLOCK_FLOW_REJECTED_NO_EFFECT;
+    block->resolution_valid = 1;
+    block->resolved_status = FWLAB_C43_STATUS_RESOURCE_FAILURE;
+    block->provider_owned = 0;
+    observer->phase = FWLAB_C43_PHASE_ACTION_WAIT;
+    observer->satisfied_witness_mask = 0;
+    observer->success_eligible = 0;
+    block_record_sync(record, observer);
+}
+
+static int block_request_build(
+    const struct c43_command_record *record,
+    const struct fwlab_c43_block_action_port *port,
+    struct fwlab_c43_block_action_request *request)
+{
+    memset(request, 0, sizeof(*request));
+    request->version = FWLAB_C43_BLOCK_ACTION_PORT_VERSION;
+    request->size = sizeof(*request);
+    request->common.version = FWLAB_HIF_ACTION_VERSION;
+    request->common.size = sizeof(request->common);
+    queue_action_token(record, &request->common.token);
+    request->common.token.kind = FWLAB_HIF_ACTION_BLOCK;
+    request->common.cookie = record->transaction_uid;
+    request->common.dependency_ordinal = UINT32_MAX;
+    request->common.requested_units =
+        record->plan.block.lba_count == 0 ? 1 :
+                                            record->plan.block.lba_count;
+    request->intent = record->plan.block;
+    request->requested_witness_mask = FWLAB_C43_WITNESS_VALIDATED_ONLY;
+    return fwlab_c43_block_action_request_valid_for_port(request, port);
+}
+
+static void block_begin(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+    struct c43_block_txn_record *block;
+    struct fwlab_c43_command_observer *observer =
+        &graph->observer.commands[slot];
+
+    memset(&record->queue_txn, 0, sizeof(record->queue_txn));
+    block = &record->block_txn;
+    block->flow = C43_BLOCK_FLOW_SUBMIT_START;
+    block->provider_generation = graph->providers.block.generation;
+    observer->phase = FWLAB_C43_PHASE_RESOLVE_WAIT;
+    block_record_sync(record, observer);
+    if (!block_request_build(record, &graph->providers.block,
+                             &block->request)) {
+        block_fault(graph, slot);
+    }
+}
+
+static void block_submit_step(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot,
+    uint32_t *transitions)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+    struct c43_block_txn_record *block = &record->block_txn;
+    struct fwlab_hif_action_submit_result result;
+    enum fwlab_hif_action_disposition disposition;
+
+    memset(&result, 0xa5, sizeof(result));
+    disposition = graph->providers.block.ops->submit(
+        graph->providers.block.context, &block->request, &result);
+    if (disposition == FWLAB_HIF_ACTION_BACKPRESSURE) {
+        return;
+    }
+    if (disposition == FWLAB_HIF_ACTION_REJECTED) {
+        block_rejected(graph, slot);
+        *transitions = 1;
+        return;
+    }
+    if (disposition == FWLAB_HIF_ACTION_ACCEPTED) {
+        block->provider_owned = 1;
+    }
+    if (disposition != FWLAB_HIF_ACTION_ACCEPTED ||
+        !queue_submit_result_valid(&result,
+                                   &block->request.common.token)) {
+        block_fault(graph, slot);
+        *transitions = 1;
+        return;
+    }
+    block->flow = C43_BLOCK_FLOW_QUERY;
+    block_record_sync(record, &graph->observer.commands[slot]);
+    *transitions = 1;
+}
+
+static void block_query_step(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot,
+    uint32_t *transitions)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+    struct c43_block_txn_record *block = &record->block_txn;
+    struct fwlab_c43_block_action_terminal terminal;
+    struct fwlab_c43_command_observer *observer =
+        &graph->observer.commands[slot];
+    bool ready = true;
+    enum fwlab_c43_api_result result;
+
+    memset(&terminal, 0xa5, sizeof(terminal));
+    result = graph->providers.block.ops->query(
+        graph->providers.block.context, &block->request.common.token,
+        &terminal, &ready);
+    if (result == FWLAB_C43_API_IN_PROGRESS) {
+        if (!ready || !bytes_are(&terminal, sizeof(terminal), 0xa5)) {
+            block_fault(graph, slot);
+            *transitions = 1;
+        }
+        return;
+    }
+    if (result != FWLAB_C43_API_OK) {
+        block_fault(graph, slot);
+        *transitions = 1;
+        return;
+    }
+    if (!ready) {
+        if (!bytes_are(&terminal, sizeof(terminal), 0xa5)) {
+            block_fault(graph, slot);
+            *transitions = 1;
+        }
+        return;
+    }
+    if (!fwlab_c43_block_action_terminal_matches_request(
+            &block->request, &terminal, &graph->providers.block)) {
+        block_fault(graph, slot);
+        *transitions = 1;
+        return;
+    }
+    if (terminal.block_terminal_kind ==
+        FWLAB_C43_BLOCK_VALIDATED_ONLY) {
+        block->resolved_status = FWLAB_C43_STATUS_SUCCESS;
+        observer->satisfied_witness_mask |=
+            FWLAB_C43_WITNESS_VALIDATED_ONLY;
+    } else if (terminal.block_terminal_kind ==
+               FWLAB_C43_BLOCK_FAILED_NO_EFFECT) {
+        block->resolved_status = FWLAB_C43_STATUS_MEDIA_FAILURE;
+    } else {
+        block_fault(graph, slot);
+        *transitions = 1;
+        return;
+    }
+    block->terminal = terminal;
+    block->terminal_kind = terminal.block_terminal_kind;
+    block->resolution_valid = 1;
+    block->flow = C43_BLOCK_FLOW_DONE;
+    observer->phase = FWLAB_C43_PHASE_ACTION_WAIT;
+    observer->success_eligible = 0;
+    block_record_sync(record, observer);
+    *transitions = 1;
+}
+
+static int block_record_step(
+    struct fwlab_c43_graph *graph,
+    uint32_t slot,
+    uint32_t *transitions)
+{
+    struct c43_command_record *record = &graph->commands[slot];
+
+    *transitions = 0;
+    if (record->block_txn.flow == C43_BLOCK_FLOW_NONE) {
+        block_begin(graph, slot);
+        *transitions = 1;
+        return 1;
+    }
+    if (record->block_txn.flow == C43_BLOCK_FLOW_SUBMIT_START) {
+        block_submit_step(graph, slot, transitions);
+        return 1;
+    }
+    if (record->block_txn.flow == C43_BLOCK_FLOW_QUERY) {
+        block_query_step(graph, slot, transitions);
+        return 1;
+    }
+    return 0;
+}
+
 int c43_phase4_step(
     struct fwlab_c43_graph *graph,
     uint32_t *transitions)
@@ -1392,7 +2362,13 @@ int c43_phase4_step(
             record->state != C43_COMMAND_RECORD_ADMITTED) {
             continue;
         }
-        if (queue_record_step(graph, slot, transitions)) {
+        if ((record->plan.kind == FWLAB_C43_PLAN_ABORT_RESOLVE &&
+             target_record_step(graph, slot, transitions)) ||
+            (record->plan.kind == FWLAB_C43_PLAN_BLOCK &&
+             block_record_step(graph, slot, transitions)) ||
+            ((record->plan.kind != FWLAB_C43_PLAN_ABORT_RESOLVE &&
+              record->plan.kind != FWLAB_C43_PLAN_BLOCK) &&
+             queue_record_step(graph, slot, transitions))) {
             graph->next_service_slot =
                 (slot + 1) % FWLAB_C43_MAX_COMMANDS;
             return 1;

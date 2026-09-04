@@ -143,7 +143,7 @@ static int prepared_valid(
         record->lease_uid == 0 || record->consume_uid == 0 ||
         record->finalizer_uid == 0 ||
         record->reservation_credit_mask != FWLAB_C43_CREDIT_ALL ||
-        !c43_bytes_zero(record->reserved0, sizeof(record->reserved0)) ||
+        record->incoming_target_pins > 1 ||
         !c43_bytes_zero(record->reserved1, sizeof(record->reserved1))) {
         return 0;
     }
@@ -160,7 +160,8 @@ static int prepared_valid(
         }
     }
     if (record->state == C43_COMMAND_RECORD_PREPARED) {
-        return c43_bytes_zero(&record->ticket, sizeof(record->ticket)) &&
+        return record->incoming_target_pins == 0 &&
+               c43_bytes_zero(&record->ticket, sizeof(record->ticket)) &&
                c43_bytes_zero(&record->request, sizeof(record->request)) &&
                c43_bytes_zero(&record->plan, sizeof(record->plan));
     }
@@ -212,7 +213,9 @@ static int observer_matches_record(
                            record->actions[0].action_uid &&
                        observer->action_generation ==
                            record->actions[0].generation &&
-                       observer->provider_generation_current == 1;
+                       observer->provider_generation_current == 1 &&
+                       observer->incoming_target_pins ==
+                           record->incoming_target_pins;
 
     if (!common) {
         return 0;

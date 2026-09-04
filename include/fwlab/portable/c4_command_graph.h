@@ -111,7 +111,8 @@ enum fwlab_c43_action_state {
     FWLAB_C43_ACTION_STATE_RETIRE = 8,
     FWLAB_C43_ACTION_STATE_TERMINAL_HELD = 9,
     FWLAB_C43_ACTION_STATE_REJECTED_NO_EFFECT = 10,
-    FWLAB_C43_ACTION_STATE_FAULT = 11
+    FWLAB_C43_ACTION_STATE_FAULT = 11,
+    FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT = 12
 };
 
 enum fwlab_c43_nq_state {
@@ -184,6 +185,14 @@ struct fwlab_c43_command_observer {
     uint64_t first_action_uid;
     uint32_t action_generation;
     uint32_t resolved_status;
+    uint32_t action_outcome;
+    uint32_t block_terminal_kind;
+    struct fwlab_hif_command_ticket target_ticket;
+    struct fwlab_c43_abort_target_ref target_reference;
+    uint16_t incoming_target_pins;
+    uint8_t target_pin_present;
+    uint8_t reserved_action_flags;
+    uint32_t reserved_action[5];
 };
 
 struct fwlab_c43_graph_observer {

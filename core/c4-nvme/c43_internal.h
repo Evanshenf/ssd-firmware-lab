@@ -67,6 +67,58 @@ struct c43_queue_txn_record {
     uint32_t reserved1[4];
 };
 
+enum c43_target_flow {
+    C43_TARGET_FLOW_NONE = 0,
+    C43_TARGET_FLOW_SUBMIT_START = 1,
+    C43_TARGET_FLOW_QUERY = 2,
+    C43_TARGET_FLOW_DONE = 3,
+    C43_TARGET_FLOW_FAULT = 4
+};
+
+struct c43_target_txn_record {
+    uint32_t flow;
+    uint32_t outcome;
+    uint32_t resolved_status;
+    uint8_t resolution_valid;
+    uint8_t provider_owned;
+    uint8_t pin_installed;
+    uint8_t fault_from_flow;
+    uint16_t target_slot_plus_one;
+    uint16_t reserved0;
+    uint32_t reserved1;
+    uint64_t provider_generation;
+    struct fwlab_c43_target_request request;
+    struct fwlab_c43_target_terminal terminal;
+    uint32_t reserved2[4];
+    uint32_t reserved_tail[40];
+};
+
+enum c43_block_flow {
+    C43_BLOCK_FLOW_NONE = 0,
+    C43_BLOCK_FLOW_SUBMIT_START = 1,
+    C43_BLOCK_FLOW_QUERY = 2,
+    C43_BLOCK_FLOW_DONE = 3,
+    C43_BLOCK_FLOW_REJECTED_NO_EFFECT = 4,
+    C43_BLOCK_FLOW_FAULT = 5
+};
+
+struct c43_block_txn_record {
+    uint32_t flow;
+    uint32_t terminal_kind;
+    uint32_t resolved_status;
+    uint8_t resolution_valid;
+    uint8_t provider_owned;
+    uint8_t fault_from_flow;
+    uint8_t reserved0;
+    uint32_t reserved1;
+    uint32_t reserved_alignment;
+    uint64_t provider_generation;
+    struct fwlab_c43_block_action_request request;
+    struct fwlab_c43_block_action_terminal terminal;
+    uint32_t reserved2[4];
+    uint32_t reserved_tail[16];
+};
+
 struct c43_counter_cursor {
     uint64_t next;
     uint64_t maximum;
@@ -88,7 +140,11 @@ struct c43_command_record {
     struct fwlab_hif_command_ticket ticket;
     struct fwlab_c43_policy_request request;
     struct fwlab_c43_policy_plan plan;
-    struct c43_queue_txn_record queue_txn;
+    union {
+        struct c43_queue_txn_record queue_txn;
+        struct c43_target_txn_record target_txn;
+        struct c43_block_txn_record block_txn;
+    };
     uint64_t transaction_uid;
     uint64_t lease_uid;
     uint64_t consume_uid;
@@ -97,7 +153,7 @@ struct c43_command_record {
     uint32_t reservation_credit_mask;
     uint8_t state;
     uint8_t in_use;
-    uint8_t reserved0[2];
+    uint16_t incoming_target_pins;
     uint32_t reserved1[4];
 };
 

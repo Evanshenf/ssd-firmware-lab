@@ -389,6 +389,185 @@ static struct fwlab_c43_queue_effect_terminal expected_queue_terminal(
     return terminal;
 }
 
+static struct fwlab_c43_target_request expected_target_request(
+    const struct fwlab_hif_command_ticket *ticket,
+    const struct fwlab_c43_command_observer *observer)
+{
+    struct fwlab_c43_target_request request = {0};
+
+    request.version = FWLAB_C43_TARGET_RESOLVER_PORT_VERSION;
+    request.size = sizeof(request);
+    request.common.version = FWLAB_HIF_ACTION_VERSION;
+    request.common.size = sizeof(request.common);
+    request.common.token.command = ticket->handle;
+    request.common.token.origin = ticket->origin;
+    request.common.token.action_uid = observer->first_action_uid;
+    request.common.token.generation = observer->action_generation;
+    request.common.token.kind = FWLAB_HIF_ACTION_QUEUE_EFFECT;
+    request.common.cookie = observer->transaction_uid;
+    request.common.dependency_ordinal = UINT32_MAX;
+    request.common.requested_units = 1;
+    request.abort_command = *ticket;
+    request.operation = FWLAB_C43_TARGET_RESOLVE_ABORT;
+    return request;
+}
+
+static struct fwlab_c43_target_terminal expected_target_terminal(
+    const struct fwlab_c43_target_request *request,
+    uint32_t outcome,
+    const struct fwlab_hif_command_ticket *target,
+    const struct fwlab_c43_abort_target_ref *reference)
+{
+    struct fwlab_c43_target_terminal terminal = {0};
+
+    terminal.version = FWLAB_C43_TARGET_RESOLVER_PORT_VERSION;
+    terminal.size = sizeof(terminal);
+    terminal.common.version = FWLAB_HIF_ACTION_VERSION;
+    terminal.common.size = sizeof(terminal.common);
+    terminal.common.token = request->common.token;
+    terminal.common.cookie = request->common.cookie;
+    terminal.outcome = outcome;
+    if (outcome == FWLAB_C43_TARGET_FOUND) {
+        terminal.common.terminal_kind = FWLAB_HIF_ACTION_SUCCESS;
+        terminal.target = *target;
+        terminal.reference = *reference;
+    } else if (outcome == FWLAB_C43_TARGET_NOT_FOUND ||
+               outcome == FWLAB_C43_TARGET_TOO_LATE ||
+               outcome == FWLAB_C43_TARGET_RELEASED) {
+        terminal.common.terminal_kind = FWLAB_HIF_ACTION_SUCCESS;
+    } else if (outcome == FWLAB_C43_TARGET_STALE ||
+               outcome == FWLAB_C43_TARGET_SUPERSEDED) {
+        terminal.common.terminal_kind = FWLAB_HIF_ACTION_CANCELLED;
+    } else {
+        terminal.common.terminal_kind = FWLAB_HIF_ACTION_FAILED;
+    }
+    return terminal;
+}
+
+static struct fwlab_c43_block_intent expected_block_intent(
+    const struct fwlab_hif_command_ticket *ticket,
+    uint8_t kind,
+    uint8_t fua,
+    uint64_t slba)
+{
+    struct fwlab_c43_block_intent intent = {0};
+
+    intent.version = FWLAB_C43_POLICY_VERSION;
+    intent.size = sizeof(intent);
+    intent.command = ticket->handle;
+    intent.origin = ticket->origin;
+    intent.slba = slba;
+    intent.namespace_id = 1;
+    if (kind == FWLAB_C43_REQUEST_READ) {
+        intent.operation = FWLAB_C43_BLOCK_READ;
+        intent.durability = FWLAB_C43_DURABILITY_DEFAULT;
+        intent.lba_count = 1;
+        intent.data_bytes = 512;
+    } else if (kind == FWLAB_C43_REQUEST_WRITE) {
+        intent.operation = FWLAB_C43_BLOCK_WRITE;
+        intent.durability = fua ? FWLAB_C43_DURABILITY_REQUIRE_SELF
+                                : FWLAB_C43_DURABILITY_DEFAULT;
+        intent.lba_count = 1;
+        intent.data_bytes = 512;
+    } else {
+        intent.operation = FWLAB_C43_BLOCK_FLUSH;
+        intent.durability = FWLAB_C43_DURABILITY_FIXED_FRONTIER;
+    }
+    return intent;
+}
+
+static struct fwlab_c43_block_action_request expected_block_request(
+    const struct fwlab_hif_command_ticket *ticket,
+    const struct fwlab_c43_command_observer *observer,
+    uint8_t kind,
+    uint8_t fua,
+    uint64_t slba)
+{
+    struct fwlab_c43_block_action_request request = {0};
+
+    request.version = FWLAB_C43_BLOCK_ACTION_PORT_VERSION;
+    request.size = sizeof(request);
+    request.common.version = FWLAB_HIF_ACTION_VERSION;
+    request.common.size = sizeof(request.common);
+    request.common.token.command = ticket->handle;
+    request.common.token.origin = ticket->origin;
+    request.common.token.action_uid = observer->first_action_uid;
+    request.common.token.generation = observer->action_generation;
+    request.common.token.kind = FWLAB_HIF_ACTION_BLOCK;
+    request.common.cookie = observer->transaction_uid;
+    request.common.dependency_ordinal = UINT32_MAX;
+    request.common.requested_units = 1;
+    request.intent = expected_block_intent(ticket, kind, fua, slba);
+    request.requested_witness_mask = FWLAB_C43_WITNESS_VALIDATED_ONLY;
+    return request;
+}
+
+static struct fwlab_c43_block_action_terminal expected_block_terminal(
+    const struct fwlab_c43_block_action_request *request,
+    uint32_t terminal_kind)
+{
+    struct fwlab_c43_block_action_terminal terminal = {0};
+
+    terminal.version = FWLAB_C43_BLOCK_ACTION_PORT_VERSION;
+    terminal.size = sizeof(terminal);
+    terminal.common.version = FWLAB_HIF_ACTION_VERSION;
+    terminal.common.size = sizeof(terminal.common);
+    terminal.common.token = request->common.token;
+    terminal.common.cookie = request->common.cookie;
+    terminal.witness.version = FWLAB_C43_POLICY_VERSION;
+    terminal.witness.size = sizeof(terminal.witness);
+    terminal.witness.command = request->common.token.command;
+    terminal.witness.origin = request->common.token.origin;
+    terminal.witness.provider_generation = 1;
+    terminal.block_terminal_kind = terminal_kind;
+    if (terminal_kind == FWLAB_C43_BLOCK_VALIDATED_ONLY) {
+        terminal.common.terminal_kind = FWLAB_HIF_ACTION_SUCCESS;
+        terminal.witness.witness_mask = FWLAB_C43_WITNESS_VALIDATED_ONLY;
+        terminal.witness.terminal_kind = FWLAB_HIF_ACTION_SUCCESS;
+    } else {
+        terminal.common.terminal_kind = FWLAB_HIF_ACTION_FAILED;
+        terminal.witness.terminal_kind = FWLAB_HIF_ACTION_FAILED;
+    }
+    return terminal;
+}
+
+static int admit_block_at(
+    struct fixture *fixture,
+    uint64_t uid,
+    uint8_t kind,
+    uint8_t fua,
+    uint64_t slba,
+    struct fwlab_hif_prepare_result *prepared,
+    struct fwlab_c43_admit_result *admitted)
+{
+    struct fwlab_hif_prepare_key key = prepare_key(uid);
+    struct fwlab_c43_policy_request request;
+
+    if (fwlab_c43_graph_prepare_start(fixture->graph, &key, prepared) !=
+        FWLAB_C43_GRAPH_OK) {
+        return 0;
+    }
+    request = admission_request(&prepared->prepared, kind);
+    request.fua = fua;
+    request.slba = slba;
+    return fwlab_c43_graph_admit_start(
+               fixture->graph, &prepared->prepared, &request, admitted) ==
+               FWLAB_C43_GRAPH_OK &&
+           admit_result_matches(admitted, &prepared->prepared);
+}
+
+static int admit_block_kind(
+    struct fixture *fixture,
+    uint64_t uid,
+    uint8_t kind,
+    uint8_t fua,
+    struct fwlab_hif_prepare_result *prepared,
+    struct fwlab_c43_admit_result *admitted)
+{
+    return admit_block_at(fixture, uid, kind, fua, 0,
+                          prepared, admitted);
+}
+
 static int run_until_action_state(
     struct fixture *fixture,
     uint32_t slot,
@@ -1996,6 +2175,715 @@ static int test_queue_fault_and_too_late(void)
     return 0;
 }
 
+static int test_target_found_and_events(void)
+{
+    struct fixture fixture;
+    struct fwlab_c43_graph_config config = config_fixed();
+    struct fwlab_c43_graph_observer observer;
+    struct fwlab_c43_graph_observer forged;
+    struct fwlab_hif_prepare_result prepared;
+    struct fwlab_c43_admit_result admitted;
+    struct fwlab_c43_abort_target_ref reference = {
+        {UINT64_C(0xa001), UINT64_C(0xa002)}};
+    struct fwlab_c43_target_request expected_request;
+    struct fwlab_c43_target_terminal expected_terminal;
+    struct fwlab_hif_action_submit_result expected_submit;
+    struct c43_fake_event_record expected_events[4] = {{0}};
+    struct fwlab_hif_command_ticket target;
+    uint32_t event_delta;
+    uint32_t index;
+
+    CHECK(fixture_init(&fixture, &config));
+    CHECK(bootstrap_nq(&fixture, 1, 0, &observer));
+    target = fixture.graph->commands[0].ticket;
+    c43_fake_target_script_configure(
+        &fixture.services, FWLAB_C43_TARGET_FOUND, &target, &reference,
+        1, 1);
+    CHECK(admit_kind(&fixture, 2, FWLAB_C43_REQUEST_ABORT,
+                     &prepared, &admitted));
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 0 && observer.commands[1].action_domain ==
+              FWLAB_C43_ACTION_DOMAIN_TARGET &&
+          observer.commands[1].action_state ==
+              FWLAB_C43_ACTION_STATE_SUBMIT_READY &&
+          observer.ready_count == 0);
+    expected_request = expected_target_request(
+        &admitted.ticket, &observer.commands[1]);
+    expected_terminal = expected_target_terminal(
+        &expected_request, FWLAB_C43_TARGET_FOUND, &target, &reference);
+    expected_submit = expected_submit_result(&expected_request.common.token);
+    for (index = 0; index < 4; ++index) {
+        expected_events[index].sequence = index + 1;
+    }
+    expected_events[0].kind = C43_FAKE_TARGET_SUBMIT;
+    expected_events[0].returned = FWLAB_HIF_ACTION_BACKPRESSURE;
+    expected_events[0].input.target = expected_request;
+    expected_events[1].kind = C43_FAKE_TARGET_SUBMIT;
+    expected_events[1].returned = FWLAB_HIF_ACTION_ACCEPTED;
+    expected_events[1].output_written = 1;
+    expected_events[1].input.target = expected_request;
+    expected_events[1].output.submit = expected_submit;
+    expected_events[2].kind = C43_FAKE_TARGET_QUERY;
+    expected_events[2].returned = FWLAB_C43_API_OK;
+    expected_events[2].ready_written = 1;
+    expected_events[2].input.token = expected_request.common.token;
+    expected_events[3].kind = C43_FAKE_TARGET_QUERY;
+    expected_events[3].returned = FWLAB_C43_API_OK;
+    expected_events[3].ready_written = 1;
+    expected_events[3].ready_value = 1;
+    expected_events[3].output_written = 1;
+    expected_events[3].input.token = expected_request.common.token;
+    expected_events[3].output.target_terminal = expected_terminal;
+
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 1 && observer.commands[1].action_state ==
+              FWLAB_C43_ACTION_STATE_SUBMIT_READY);
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 1 && observer.commands[1].action_state ==
+              FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT);
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 1 && observer.commands[1].action_state ==
+              FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT);
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 1 && observer.commands[1].action_state ==
+              FWLAB_C43_ACTION_STATE_TERMINAL_HELD &&
+          observer.commands[1].action_outcome == FWLAB_C43_TARGET_FOUND &&
+          observer.commands[1].target_pin_present == 1 &&
+          observer.commands[0].incoming_target_pins == 1 &&
+          memcmp(&observer.commands[1].target_ticket, &target,
+                 sizeof(target)) == 0 &&
+          memcmp(&observer.commands[1].target_reference, &reference,
+                 sizeof(reference)) == 0 &&
+          observer.commands[1].resolved_status == FWLAB_C43_STATUS_SUCCESS &&
+          observer.commands[1].success_eligible == 1 &&
+          observer.commands[1].terminal_winner == FWLAB_C43_WINNER_NONE &&
+          observer.ready_count == 0 &&
+          fixture.graph->commands[0].incoming_target_pins == 1 &&
+          fixture.graph->commands[1].target_txn.provider_owned == 1 &&
+          fixture.services.event_count == 4 && !fixture.services.overflow &&
+          memcmp(fixture.services.events, expected_events,
+                 sizeof(expected_events)) == 0);
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 0 && fixture.services.event_count == 4 &&
+          observer.commands[1].action_state ==
+              FWLAB_C43_ACTION_STATE_TERMINAL_HELD);
+
+    forged = observer;
+    forged.commands[0].phase = FWLAB_C43_PHASE_PREPARED;
+    forged.commands[0].success_eligible = 0;
+    forged.commands[0].action_domain = FWLAB_C43_ACTION_DOMAIN_NONE;
+    forged.commands[0].action_state = FWLAB_C43_ACTION_STATE_NONE;
+    forged.commands[0].resolution_valid = 0;
+    forged.commands[0].resolved_status = 0;
+    CHECK(!fwlab_c43_graph_observer_valid(&forged));
+
+    fixture.graph->commands[0].incoming_target_pins = 0;
+    fixture.graph->observer.commands[0].incoming_target_pins = 0;
+    CHECK(!c43_graph_valid(fixture.graph));
+    fixture.graph->commands[0].incoming_target_pins = 1;
+    fixture.graph->observer.commands[0].incoming_target_pins = 1;
+    CHECK(c43_graph_valid(fixture.graph));
+    return 0;
+}
+
+static int test_action_union_storage_validator(void)
+{
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+        uint32_t event_delta;
+
+        CHECK(fixture_init(&fixture, &config));
+        CHECK(admit_kind(&fixture, 1, FWLAB_C43_REQUEST_ABORT,
+                         &prepared, &admitted));
+        CHECK(step_once(&fixture, &observer, &event_delta));
+        CHECK(c43_graph_valid(fixture.graph));
+        fixture.graph->commands[0].target_txn.reserved_tail[0] = 1;
+        CHECK(!c43_graph_valid(fixture.graph));
+        fixture.graph->commands[0].target_txn.reserved_tail[0] = 0;
+        fixture.graph->commands[0].target_txn.reserved_tail[39] = 1;
+        CHECK(!c43_graph_valid(fixture.graph));
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+        uint32_t event_delta;
+
+        CHECK(fixture_init(&fixture, &config));
+        CHECK(admit_block_kind(&fixture, 1, FWLAB_C43_REQUEST_READ, 0,
+                               &prepared, &admitted));
+        CHECK(step_once(&fixture, &observer, &event_delta));
+        CHECK(c43_graph_valid(fixture.graph));
+        fixture.graph->commands[0].block_txn.reserved_alignment = 1;
+        CHECK(!c43_graph_valid(fixture.graph));
+        fixture.graph->commands[0].block_txn.reserved_alignment = 0;
+        fixture.graph->commands[0].block_txn.reserved_tail[0] = 1;
+        CHECK(!c43_graph_valid(fixture.graph));
+        fixture.graph->commands[0].block_txn.reserved_tail[0] = 0;
+        fixture.graph->commands[0].block_txn.reserved_tail[15] = 1;
+        CHECK(!c43_graph_valid(fixture.graph));
+    }
+    return 0;
+}
+
+static int test_target_outcomes_and_guards(void)
+{
+    static const uint32_t outcomes[] = {
+        FWLAB_C43_TARGET_NOT_FOUND,
+        FWLAB_C43_TARGET_TOO_LATE,
+        FWLAB_C43_TARGET_STALE,
+        FWLAB_C43_TARGET_SUPERSEDED,
+    };
+    uint32_t index;
+
+    for (index = 0; index < sizeof(outcomes) / sizeof(outcomes[0]); ++index) {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+
+        CHECK(fixture_init(&fixture, &config));
+        c43_fake_target_script_configure(
+            &fixture.services, outcomes[index], NULL, NULL, 0, 0);
+        CHECK(admit_kind(&fixture, 1, FWLAB_C43_REQUEST_ABORT,
+                         &prepared, &admitted));
+        CHECK(run_until_action_state(
+            &fixture, 0, FWLAB_C43_ACTION_STATE_TERMINAL_HELD,
+            &observer, 6));
+        CHECK(observer.commands[0].action_outcome == outcomes[index] &&
+              observer.commands[0].target_pin_present == 0 &&
+              bytes_zero(&observer.commands[0].target_ticket,
+                         sizeof(observer.commands[0].target_ticket)) &&
+              bytes_zero(&observer.commands[0].target_reference,
+                         sizeof(observer.commands[0].target_reference)) &&
+              observer.commands[0].resolved_status ==
+                  FWLAB_C43_STATUS_SUCCESS &&
+              observer.commands[0].success_eligible == 1 &&
+              observer.ready_count == 0 &&
+              fixture.services.event_count == 2);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+
+        CHECK(fixture_init(&fixture, &config));
+        c43_fake_target_script_configure(
+            &fixture.services, FWLAB_C43_TARGET_FAULT,
+            NULL, NULL, 0, 0);
+        CHECK(admit_kind(&fixture, 1, FWLAB_C43_REQUEST_ABORT,
+                         &prepared, &admitted));
+        CHECK(run_until_action_state(
+            &fixture, 0, FWLAB_C43_ACTION_STATE_FAULT, &observer, 6));
+        CHECK(observer.commands[0].action_outcome ==
+                  FWLAB_C43_TARGET_FAULT &&
+              observer.commands[0].resolved_status ==
+                  FWLAB_C43_STATUS_INTERNAL_FAILURE &&
+              observer.commands[0].target_pin_present == 0 &&
+              fixture.graph->commands[0].target_txn.provider_owned == 1);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+        struct fwlab_hif_command_ticket inactive;
+        struct fwlab_c43_abort_target_ref reference = {{1, 2}};
+
+        CHECK(fixture_init(&fixture, &config));
+        CHECK(admit_kind(&fixture, 1, FWLAB_C43_REQUEST_ABORT,
+                         &prepared, &admitted));
+        inactive = admitted.ticket;
+        ++inactive.handle.command_uid;
+        ++inactive.ticket_uid;
+        c43_fake_target_script_configure(
+            &fixture.services, FWLAB_C43_TARGET_FOUND,
+            &inactive, &reference, 0, 0);
+        CHECK(run_until_action_state(
+            &fixture, 0, FWLAB_C43_ACTION_STATE_FAULT, &observer, 6));
+        CHECK(observer.commands[0].target_pin_present == 0 &&
+              observer.commands[0].action_outcome == 0 &&
+              fixture.graph->commands[0].target_txn.provider_owned == 1);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+
+        CHECK(fixture_init(&fixture, &config));
+        c43_fake_target_script_configure(
+            &fixture.services, FWLAB_C43_TARGET_NOT_FOUND,
+            NULL, NULL, 0, 0);
+        fixture.services.target_script.corrupt_submit_token = 1;
+        CHECK(admit_kind(&fixture, 1, FWLAB_C43_REQUEST_ABORT,
+                         &prepared, &admitted));
+        CHECK(step_once(&fixture, &observer, &(uint32_t){0}));
+        CHECK(step_once(&fixture, &observer, &(uint32_t){0}));
+        CHECK(observer.commands[0].action_state ==
+                  FWLAB_C43_ACTION_STATE_FAULT &&
+              fixture.graph->commands[0].target_txn.provider_owned == 1 &&
+              fixture.graph->commands[0].target_txn.fault_from_flow ==
+                  C43_TARGET_FLOW_SUBMIT_START);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+        uint32_t mutation;
+
+        for (mutation = 0; mutation < 2; ++mutation) {
+            CHECK(fixture_init(&fixture, &config));
+            c43_fake_target_script_configure(
+                &fixture.services, FWLAB_C43_TARGET_NOT_FOUND,
+                NULL, NULL, 0, 0);
+            CHECK(admit_kind(&fixture, 1, FWLAB_C43_REQUEST_ABORT,
+                             &prepared, &admitted));
+            CHECK(run_until_action_state(
+                &fixture, 0, FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT,
+                &observer, 4));
+            if (mutation == 0) {
+                fixture.services.target_script.first_request.common.cookie ^=
+                    UINT64_C(1);
+            } else {
+                fixture.services.target_script.first_request.common.token
+                    .action_uid ^= UINT64_C(1);
+            }
+            CHECK(run_until_action_state(
+                &fixture, 0, FWLAB_C43_ACTION_STATE_FAULT,
+                &observer, 3));
+            CHECK(observer.commands[0].target_pin_present == 0 &&
+                  fixture.graph->commands[0].target_txn.provider_owned == 1);
+        }
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+        struct fwlab_c43_target_request expected_request;
+        struct c43_fake_event_record expected_event = {0};
+        uint32_t event_delta;
+
+        CHECK(fixture_init(&fixture, &config));
+        CHECK(admit_kind(&fixture, 1, FWLAB_C43_REQUEST_ABORT,
+                         &prepared, &admitted));
+        CHECK(step_once(&fixture, &observer, &event_delta));
+        expected_request = expected_target_request(
+            &admitted.ticket, &observer.commands[0]);
+        CHECK(step_once(&fixture, &observer, &event_delta));
+        expected_event.sequence = 1;
+        expected_event.kind = C43_FAKE_TARGET_SUBMIT;
+        expected_event.returned = FWLAB_HIF_ACTION_REJECTED;
+        expected_event.input.target = expected_request;
+        CHECK(event_delta == 1 && fixture.services.event_count == 1 &&
+              memcmp(&fixture.services.events[0], &expected_event,
+                     sizeof(expected_event)) == 0 &&
+              observer.commands[0].action_state ==
+                  FWLAB_C43_ACTION_STATE_FAULT &&
+              observer.commands[0].target_pin_present == 0 &&
+              fixture.graph->commands[0].target_txn.provider_owned == 0);
+        CHECK(step_once(&fixture, &observer, &event_delta));
+        CHECK(event_delta == 0 && fixture.services.event_count == 1);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+        struct fwlab_c43_abort_target_ref reference = {{5, 6}};
+        struct fwlab_c43_target_request expected_request;
+        struct fwlab_c43_target_terminal expected_terminal;
+        struct fwlab_hif_action_submit_result expected_submit;
+        struct c43_fake_event_record expected_events[2] = {{0}};
+
+        CHECK(fixture_init(&fixture, &config));
+        CHECK(admit_kind(&fixture, 1, FWLAB_C43_REQUEST_ABORT,
+                         &prepared, &admitted));
+        c43_fake_target_script_configure(
+            &fixture.services, FWLAB_C43_TARGET_FOUND,
+            &admitted.ticket, &reference, 0, 0);
+        CHECK(step_once(&fixture, &observer, &(uint32_t){0}));
+        expected_request = expected_target_request(
+            &admitted.ticket, &observer.commands[0]);
+        expected_terminal = expected_target_terminal(
+            &expected_request, FWLAB_C43_TARGET_FOUND,
+            &admitted.ticket, &reference);
+        expected_submit = expected_submit_result(
+            &expected_request.common.token);
+        expected_events[0].sequence = 1;
+        expected_events[0].kind = C43_FAKE_TARGET_SUBMIT;
+        expected_events[0].returned = FWLAB_HIF_ACTION_ACCEPTED;
+        expected_events[0].output_written = 1;
+        expected_events[0].input.target = expected_request;
+        expected_events[0].output.submit = expected_submit;
+        expected_events[1].sequence = 2;
+        expected_events[1].kind = C43_FAKE_TARGET_QUERY;
+        expected_events[1].returned = FWLAB_C43_API_OK;
+        expected_events[1].ready_written = 1;
+        expected_events[1].ready_value = 1;
+        expected_events[1].output_written = 1;
+        expected_events[1].input.token = expected_request.common.token;
+        expected_events[1].output.target_terminal = expected_terminal;
+        CHECK(step_once(&fixture, &observer, &(uint32_t){0}));
+        CHECK(step_once(&fixture, &observer, &(uint32_t){0}));
+        CHECK(observer.commands[0].action_state ==
+                  FWLAB_C43_ACTION_STATE_FAULT &&
+              observer.commands[0].target_pin_present == 0 &&
+              observer.commands[0].incoming_target_pins == 0 &&
+              fixture.graph->commands[0].target_txn.provider_owned == 1 &&
+              fixture.services.event_count == 2 &&
+              memcmp(fixture.services.events, expected_events,
+                     sizeof(expected_events)) == 0);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+        struct fwlab_c43_abort_target_ref reference = {{3, 4}};
+        struct fwlab_hif_command_ticket target;
+
+        CHECK(fixture_init(&fixture, &config));
+        CHECK(bootstrap_nq(&fixture, 1, 0, &observer));
+        target = fixture.graph->commands[0].ticket;
+        c43_fake_target_script_configure(
+            &fixture.services, FWLAB_C43_TARGET_FOUND, &target, &reference,
+            0, 0);
+        CHECK(admit_kind(&fixture, 2, FWLAB_C43_REQUEST_ABORT,
+                         &prepared, &admitted));
+        CHECK(run_until_action_state(
+            &fixture, 1, FWLAB_C43_ACTION_STATE_TERMINAL_HELD,
+            &observer, 6));
+        c43_fake_target_script_configure(
+            &fixture.services, FWLAB_C43_TARGET_FOUND, &target, &reference,
+            0, 0);
+        CHECK(admit_kind(&fixture, 3, FWLAB_C43_REQUEST_ABORT,
+                         &prepared, &admitted));
+        CHECK(run_until_action_state(
+            &fixture, 2, FWLAB_C43_ACTION_STATE_FAULT, &observer, 6));
+        CHECK(observer.commands[0].incoming_target_pins == 1 &&
+              observer.commands[1].target_pin_present == 1 &&
+              observer.commands[2].target_pin_present == 0);
+    }
+    return 0;
+}
+
+static int test_block_validation_and_events(void)
+{
+    struct fixture fixture;
+    struct fwlab_c43_graph_config config = config_fixed();
+    struct fwlab_c43_graph_observer observer;
+    struct fwlab_hif_prepare_result prepared;
+    struct fwlab_c43_admit_result admitted;
+    struct fwlab_c43_block_action_request expected_request;
+    struct fwlab_c43_block_action_terminal expected_terminal;
+    struct fwlab_hif_action_submit_result expected_submit;
+    struct c43_fake_event_record expected_events[4] = {{0}};
+    uint32_t event_delta;
+    uint32_t index;
+
+    CHECK(fixture_init(&fixture, &config));
+    c43_fake_block_script_configure(
+        &fixture.services, FWLAB_C43_BLOCK_VALIDATED_ONLY, 1, 1);
+    CHECK(admit_block_kind(&fixture, 1, FWLAB_C43_REQUEST_READ, 0,
+                           &prepared, &admitted));
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 0 && observer.commands[0].action_domain ==
+              FWLAB_C43_ACTION_DOMAIN_BLOCK &&
+          observer.commands[0].action_state ==
+              FWLAB_C43_ACTION_STATE_SUBMIT_READY);
+    expected_request = expected_block_request(
+        &admitted.ticket, &observer.commands[0],
+        FWLAB_C43_REQUEST_READ, 0, 0);
+    expected_terminal = expected_block_terminal(
+        &expected_request, FWLAB_C43_BLOCK_VALIDATED_ONLY);
+    expected_submit = expected_submit_result(&expected_request.common.token);
+    for (index = 0; index < 4; ++index) {
+        expected_events[index].sequence = index + 1;
+    }
+    expected_events[0].kind = C43_FAKE_BLOCK_SUBMIT;
+    expected_events[0].returned = FWLAB_HIF_ACTION_BACKPRESSURE;
+    expected_events[0].input.block = expected_request;
+    expected_events[1].kind = C43_FAKE_BLOCK_SUBMIT;
+    expected_events[1].returned = FWLAB_HIF_ACTION_ACCEPTED;
+    expected_events[1].output_written = 1;
+    expected_events[1].input.block = expected_request;
+    expected_events[1].output.submit = expected_submit;
+    expected_events[2].kind = C43_FAKE_BLOCK_QUERY;
+    expected_events[2].returned = FWLAB_C43_API_OK;
+    expected_events[2].ready_written = 1;
+    expected_events[2].input.token = expected_request.common.token;
+    expected_events[3].kind = C43_FAKE_BLOCK_QUERY;
+    expected_events[3].returned = FWLAB_C43_API_OK;
+    expected_events[3].ready_written = 1;
+    expected_events[3].ready_value = 1;
+    expected_events[3].output_written = 1;
+    expected_events[3].input.token = expected_request.common.token;
+    expected_events[3].output.block_terminal = expected_terminal;
+
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 1 && observer.commands[0].action_state ==
+              FWLAB_C43_ACTION_STATE_SUBMIT_READY);
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 1 && observer.commands[0].action_state ==
+              FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT);
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 1 && observer.commands[0].action_state ==
+              FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT);
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 1 && observer.commands[0].action_state ==
+              FWLAB_C43_ACTION_STATE_TERMINAL_HELD &&
+          observer.commands[0].block_terminal_kind ==
+              FWLAB_C43_BLOCK_VALIDATED_ONLY &&
+          observer.commands[0].satisfied_witness_mask ==
+              FWLAB_C43_WITNESS_VALIDATED_ONLY &&
+          observer.commands[0].required_witness_mask ==
+              (FWLAB_C43_WITNESS_BLOCK_READ_READY |
+               FWLAB_C43_WITNESS_DMA_OUT_COMPLETE) &&
+          observer.commands[0].success_eligible == 0 &&
+          observer.commands[0].terminal_winner == FWLAB_C43_WINNER_NONE &&
+          observer.ready_count == 0 &&
+          fixture.services.event_count == 4 && !fixture.services.overflow &&
+          memcmp(fixture.services.events, expected_events,
+                 sizeof(expected_events)) == 0);
+    CHECK(step_once(&fixture, &observer, &event_delta));
+    CHECK(event_delta == 0 && fixture.services.event_count == 4);
+
+    fixture.graph->observer.commands[0].satisfied_witness_mask =
+        FWLAB_C43_WITNESS_BLOCK_READ_READY;
+    CHECK(!c43_graph_valid(fixture.graph));
+    fixture.graph->observer.commands[0].satisfied_witness_mask =
+        FWLAB_C43_WITNESS_VALIDATED_ONLY;
+    fixture.graph->observer.commands[0].success_eligible = 1;
+    CHECK(!c43_graph_valid(fixture.graph));
+    fixture.graph->observer.commands[0].success_eligible = 0;
+    CHECK(c43_graph_valid(fixture.graph));
+    return 0;
+}
+
+static int test_block_profiles_and_failures(void)
+{
+    static const struct {
+        uint8_t kind;
+        uint8_t fua;
+        uint32_t required;
+    } profiles[] = {
+        {FWLAB_C43_REQUEST_READ, 0,
+         FWLAB_C43_WITNESS_BLOCK_READ_READY |
+             FWLAB_C43_WITNESS_DMA_OUT_COMPLETE},
+        {FWLAB_C43_REQUEST_WRITE, 0,
+         FWLAB_C43_WITNESS_DMA_IN_COMPLETE |
+             FWLAB_C43_WITNESS_BLOCK_WRITE_COMPLETE},
+        {FWLAB_C43_REQUEST_WRITE, 1,
+         FWLAB_C43_WITNESS_DMA_IN_COMPLETE |
+             FWLAB_C43_WITNESS_BLOCK_WRITE_COMPLETE |
+             FWLAB_C43_WITNESS_DURABILITY_COMPLETE},
+        {FWLAB_C43_REQUEST_FLUSH, 0,
+         FWLAB_C43_WITNESS_DURABILITY_COMPLETE},
+    };
+    uint32_t index;
+
+    for (index = 0; index < sizeof(profiles) / sizeof(profiles[0]); ++index) {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+
+        CHECK(fixture_init(&fixture, &config));
+        c43_fake_block_script_configure(
+            &fixture.services, FWLAB_C43_BLOCK_VALIDATED_ONLY, 0, 0);
+        CHECK(admit_block_kind(
+            &fixture, 1, profiles[index].kind, profiles[index].fua,
+            &prepared, &admitted));
+        CHECK(run_until_action_state(
+            &fixture, 0, FWLAB_C43_ACTION_STATE_TERMINAL_HELD,
+            &observer, 6));
+        CHECK(observer.commands[0].required_witness_mask ==
+                  profiles[index].required &&
+              observer.commands[0].satisfied_witness_mask ==
+                  FWLAB_C43_WITNESS_VALIDATED_ONLY &&
+              observer.commands[0].success_eligible == 0 &&
+              observer.ready_count == 0);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+        struct fwlab_c43_block_action_request expected_request;
+        struct fwlab_c43_block_action_terminal expected_terminal;
+        struct fwlab_hif_action_submit_result expected_submit;
+        struct c43_fake_event_record expected_events[2] = {{0}};
+
+        CHECK(fixture_init(&fixture, &config));
+        c43_fake_block_script_configure(
+            &fixture.services, FWLAB_C43_BLOCK_VALIDATED_ONLY, 0, 0);
+        CHECK(admit_block_at(&fixture, 1, FWLAB_C43_REQUEST_READ, 0,
+                             UINT64_C(7), &prepared, &admitted));
+        CHECK(step_once(&fixture, &observer, &(uint32_t){0}));
+        expected_request = expected_block_request(
+            &admitted.ticket, &observer.commands[0],
+            FWLAB_C43_REQUEST_READ, 0, UINT64_C(7));
+        expected_terminal = expected_block_terminal(
+            &expected_request, FWLAB_C43_BLOCK_VALIDATED_ONLY);
+        expected_submit = expected_submit_result(
+            &expected_request.common.token);
+        expected_events[0].sequence = 1;
+        expected_events[0].kind = C43_FAKE_BLOCK_SUBMIT;
+        expected_events[0].returned = FWLAB_HIF_ACTION_ACCEPTED;
+        expected_events[0].output_written = 1;
+        expected_events[0].input.block = expected_request;
+        expected_events[0].output.submit = expected_submit;
+        expected_events[1].sequence = 2;
+        expected_events[1].kind = C43_FAKE_BLOCK_QUERY;
+        expected_events[1].returned = FWLAB_C43_API_OK;
+        expected_events[1].ready_written = 1;
+        expected_events[1].ready_value = 1;
+        expected_events[1].output_written = 1;
+        expected_events[1].input.token = expected_request.common.token;
+        expected_events[1].output.block_terminal = expected_terminal;
+        CHECK(step_once(&fixture, &observer, &(uint32_t){0}));
+        CHECK(step_once(&fixture, &observer, &(uint32_t){0}));
+        CHECK(observer.commands[0].action_state ==
+                  FWLAB_C43_ACTION_STATE_TERMINAL_HELD &&
+              observer.commands[0].satisfied_witness_mask ==
+                  FWLAB_C43_WITNESS_VALIDATED_ONLY &&
+              fixture.services.event_count == 2 &&
+              memcmp(&fixture.services.block_script.first_request,
+                     &expected_request, sizeof(expected_request)) == 0 &&
+              memcmp(fixture.services.events, expected_events,
+                     sizeof(expected_events)) == 0);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+
+        CHECK(fixture_init(&fixture, &config));
+        c43_fake_block_script_configure(
+            &fixture.services, FWLAB_C43_BLOCK_FAILED_NO_EFFECT, 0, 0);
+        CHECK(admit_block_kind(&fixture, 1, FWLAB_C43_REQUEST_READ, 0,
+                               &prepared, &admitted));
+        CHECK(run_until_action_state(
+            &fixture, 0, FWLAB_C43_ACTION_STATE_TERMINAL_HELD,
+            &observer, 6));
+        CHECK(observer.commands[0].block_terminal_kind ==
+                  FWLAB_C43_BLOCK_FAILED_NO_EFFECT &&
+              observer.commands[0].resolved_status ==
+                  FWLAB_C43_STATUS_MEDIA_FAILURE &&
+              observer.commands[0].satisfied_witness_mask == 0 &&
+              observer.commands[0].success_eligible == 0);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+
+        CHECK(fixture_init(&fixture, &config));
+        CHECK(admit_block_kind(&fixture, 1, FWLAB_C43_REQUEST_READ, 0,
+                               &prepared, &admitted));
+        CHECK(run_until_action_state(
+            &fixture, 0, FWLAB_C43_ACTION_STATE_REJECTED_NO_EFFECT,
+            &observer, 4));
+        CHECK(observer.commands[0].resolved_status ==
+                  FWLAB_C43_STATUS_RESOURCE_FAILURE &&
+              observer.commands[0].satisfied_witness_mask == 0 &&
+              fixture.graph->commands[0].block_txn.provider_owned == 0);
+    }
+
+    {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+        uint32_t event_delta;
+
+        CHECK(fixture_init(&fixture, &config));
+        c43_fake_block_script_configure(
+            &fixture.services, FWLAB_C43_BLOCK_VALIDATED_ONLY, 0, 0);
+        fixture.services.block_script.corrupt_submit_token = 1;
+        CHECK(admit_block_kind(&fixture, 1, FWLAB_C43_REQUEST_READ, 0,
+                               &prepared, &admitted));
+        CHECK(step_once(&fixture, &observer, &event_delta));
+        CHECK(step_once(&fixture, &observer, &event_delta));
+        CHECK(observer.commands[0].action_state ==
+                  FWLAB_C43_ACTION_STATE_FAULT &&
+              fixture.graph->commands[0].block_txn.provider_owned == 1 &&
+              fixture.graph->commands[0].block_txn.fault_from_flow ==
+                  C43_BLOCK_FLOW_SUBMIT_START);
+    }
+
+    for (index = 0; index < 4; ++index) {
+        struct fixture fixture;
+        struct fwlab_c43_graph_config config = config_fixed();
+        struct fwlab_c43_graph_observer observer;
+        struct fwlab_hif_prepare_result prepared;
+        struct fwlab_c43_admit_result admitted;
+
+        CHECK(fixture_init(&fixture, &config));
+        c43_fake_block_script_configure(
+            &fixture.services,
+            index == 0 ? FWLAB_C43_BLOCK_COMPLETED
+                       : FWLAB_C43_BLOCK_VALIDATED_ONLY,
+            0, 0);
+        CHECK(admit_block_kind(&fixture, 1, FWLAB_C43_REQUEST_READ, 0,
+                               &prepared, &admitted));
+        CHECK(run_until_action_state(
+            &fixture, 0, FWLAB_C43_ACTION_STATE_ACCEPTED_WAIT,
+            &observer, 4));
+        if (index == 1) {
+            fixture.services.block_script.witness_provider_generation = 2;
+        } else if (index == 2) {
+            fixture.services.block_script.first_request.common.cookie ^=
+                UINT64_C(1);
+        } else if (index == 3) {
+            fixture.services.block_script.first_request.common.token
+                .action_uid ^= UINT64_C(1);
+        }
+        CHECK(run_until_action_state(
+            &fixture, 0, FWLAB_C43_ACTION_STATE_FAULT, &observer, 3));
+        CHECK(observer.commands[0].satisfied_witness_mask == 0 &&
+              observer.commands[0].success_eligible == 0 &&
+              fixture.graph->commands[0].block_txn.provider_owned == 1);
+    }
+    return 0;
+}
+
 int main(void)
 {
     CHECK(test_capacity_query_and_atomicity() == 0);
@@ -2011,6 +2899,11 @@ int main(void)
     CHECK(test_delete_barrier_matrix() == 0);
     CHECK(test_queue_state_validator_negatives() == 0);
     CHECK(test_queue_fault_and_too_late() == 0);
-    puts("C4.3 phase4 queue graph: PASS commands=4 actions=32 counters=6");
+    CHECK(test_target_found_and_events() == 0);
+    CHECK(test_action_union_storage_validator() == 0);
+    CHECK(test_target_outcomes_and_guards() == 0);
+    CHECK(test_block_validation_and_events() == 0);
+    CHECK(test_block_profiles_and_failures() == 0);
+    puts("C4.3 phase4 typed actions: PASS commands=4 actions=32 counters=6");
     return 0;
 }

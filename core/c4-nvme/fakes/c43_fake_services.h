@@ -88,12 +88,47 @@ struct c43_fake_queue_script {
     struct fwlab_c43_queue_effect_terminal finish_terminal;
 };
 
+struct c43_fake_target_script {
+    uint8_t enabled;
+    uint8_t fault;
+    uint8_t accepted;
+    uint8_t corrupt_submit_token;
+    uint32_t backpressure_remaining;
+    uint32_t not_ready_remaining;
+    uint32_t outcome;
+    uint32_t submit_calls;
+    uint32_t query_calls;
+    struct fwlab_hif_command_ticket target;
+    struct fwlab_c43_abort_target_ref reference;
+    struct fwlab_c43_target_request first_request;
+    struct fwlab_c43_target_request last_request;
+    struct fwlab_c43_target_terminal terminal;
+};
+
+struct c43_fake_block_script {
+    uint8_t enabled;
+    uint8_t fault;
+    uint8_t accepted;
+    uint8_t corrupt_submit_token;
+    uint32_t backpressure_remaining;
+    uint32_t not_ready_remaining;
+    uint32_t terminal_kind;
+    uint32_t submit_calls;
+    uint32_t query_calls;
+    uint64_t witness_provider_generation;
+    struct fwlab_c43_block_action_request first_request;
+    struct fwlab_c43_block_action_request last_request;
+    struct fwlab_c43_block_action_terminal terminal;
+};
+
 struct c43_fake_services {
     uint32_t event_count;
     uint8_t overflow;
     uint8_t reserved[3];
     struct c43_fake_event_record events[C43_FAKE_EVENT_CAPACITY];
     struct c43_fake_queue_script queue_script;
+    struct c43_fake_target_script target_script;
+    struct c43_fake_block_script block_script;
 };
 
 void c43_fake_services_init(struct c43_fake_services *services);
@@ -109,6 +144,20 @@ void c43_fake_queue_script_configure(
     uint32_t prepare_not_ready,
     uint32_t finish_backpressure,
     uint32_t finish_not_ready
+);
+void c43_fake_target_script_configure(
+    struct c43_fake_services *services,
+    uint32_t outcome,
+    const struct fwlab_hif_command_ticket *target,
+    const struct fwlab_c43_abort_target_ref *reference,
+    uint32_t backpressure,
+    uint32_t not_ready
+);
+void c43_fake_block_script_configure(
+    struct c43_fake_services *services,
+    uint32_t terminal_kind,
+    uint32_t backpressure,
+    uint32_t not_ready
 );
 
 #endif /* FWLAB_C43_FAKE_SERVICES_H */

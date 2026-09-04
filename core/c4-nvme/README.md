@@ -34,6 +34,12 @@ commit-or-abort, a separate local apply point and same-token retirement. No
 queue is visible before local apply; faulted/unknown effects remain held for a
 later reset path.
 
+Phase 4B adds two independent address-free seams. Abort resolution accepts one
+stable target token and may retain one reverse pin, but does not cancel, release
+or choose a terminal winner yet. Read, Write and Flush submit only a
+validation-only block intent; that witness is recorded without satisfying any
+data or durability requirement. Both seams remain held and never publish READY.
+
 The portable values contain no queue identifier, command identifier, queue
 phase or Host/guest address. Native structures are not packed wire images; all
 byte boundaries use the explicit codecs in `c41_codec.c`.
