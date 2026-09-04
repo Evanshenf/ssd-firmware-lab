@@ -26,7 +26,8 @@ override C43_BUILD_DIR := $(BUILD_DIR)/c43
 override C43_ARCHIVE := $(C43_BUILD_DIR)/libfwlab_c43.a
 override C43_PUBLIC_ABI_BIN := $(C43_BUILD_DIR)/c43_public_abi
 override C43_FAKE_OUTPUT := $(C43_BUILD_DIR)/c43_core_fake_link
-override C43_RESERVATION_BIN := $(C43_BUILD_DIR)/c43_reservation_unit
+override C43_GRAPH_BIN := $(C43_BUILD_DIR)/c43_graph_unit
+override C43_POLICY_BIN := $(C43_BUILD_DIR)/c43_policy_unit
 
 override C43_ARCHIVE_SOURCES := c43_instance.c c43_policy.c c43_identify.c \
 	c43_graph.c c43_control.c c43_completion.c c43_actions.c
@@ -49,8 +50,8 @@ override C43_FAKE_SOURCES := fakes/c43_fake_services.c
 override C43_FAKE_HEADERS := fakes/c43_fake_services.h
 
 .PHONY: c43-archive check-c43-public-abi check-c43-architecture \
-	check-c43-reservation check-c43-phase1 check-c43-phase2 check-c43 \
-	fake-link-c43 clean-c43
+	check-c43-reservation check-c43-graph check-c43-phase1 check-c43-phase2 check-c43 \
+	check-c43-policy check-c43-phase3 fake-link-c43 clean-c43
 
 clean: clean-c43
 
@@ -89,31 +90,44 @@ $(C43_FAKE_OUTPUT): $(C43_ARCHIVE) $(C43_C41_SUPPORT_OBJECTS) \
 
 fake-link-c43: $(C43_FAKE_OUTPUT)
 
-$(C43_RESERVATION_BIN): $(C43_ARCHIVE) $(C43_C41_SUPPORT_OBJECTS) \
+$(C43_GRAPH_BIN): $(C43_ARCHIVE) $(C43_C41_SUPPORT_OBJECTS) \
 		$(C43_FAKE_SOURCES) $(C43_FAKE_HEADERS) \
 		tests/test_c43_reservation.c
 	$(CC) $(CPPFLAGS) -Ifakes $(CFLAGS) $(LDFLAGS) -o $@ \
 		$(C43_FAKE_SOURCES) tests/test_c43_reservation.c \
 		$(C43_ARCHIVE) $(C43_C41_SUPPORT_OBJECTS)
 
-check-c43-reservation: $(C43_RESERVATION_BIN)
-	$(C43_RESERVATION_BIN)
+check-c43-graph: $(C43_GRAPH_BIN)
+	$(C43_GRAPH_BIN)
+
+check-c43-reservation: check-c43-graph
+
+$(C43_POLICY_BIN): $(C43_ARCHIVE) $(C43_C41_SUPPORT_OBJECTS) \
+		tests/test_c43_policy.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ \
+		tests/test_c43_policy.c $(C43_ARCHIVE) $(C43_C41_SUPPORT_OBJECTS)
+
+check-c43-policy: $(C43_POLICY_BIN)
+	$(C43_POLICY_BIN)
 
 check-c43-architecture: $(C43_ARCHIVE) $(C43_PUBLIC_ABI_BIN) \
-		$(C43_FAKE_OUTPUT) $(C43_RESERVATION_BIN)
+		$(C43_FAKE_OUTPUT) $(C43_GRAPH_BIN) $(C43_POLICY_BIN)
 	python3 ../../scripts/check_c43_architecture.py \
 		--archive $(C43_ARCHIVE) --abi $(C43_PUBLIC_ABI_BIN) \
-		--fake $(C43_FAKE_OUTPUT) --reservation $(C43_RESERVATION_BIN)
+		--fake $(C43_FAKE_OUTPUT) --graph $(C43_GRAPH_BIN) \
+		--policy $(C43_POLICY_BIN)
 
 check-c43-phase1: check-c43-public-abi check-c43-architecture $(C43_FAKE_OUTPUT)
 	$(C43_FAKE_OUTPUT)
 
 check-c43-phase2: check-c43-phase1 check-c43-reservation
 
-check-c43: check-c43-phase2
+check-c43-phase3: check-c43-phase2 check-c43-policy
+
+check-c43: check-c43-phase3
 
 clean-c43:
 	rm -f -- $(C43_ARCHIVE_OBJECTS) $(C43_C41_SUPPORT_OBJECTS) \
 		$(C43_ARCHIVE) $(C43_PUBLIC_ABI_BIN) $(C43_FAKE_OUTPUT) \
-		$(C43_RESERVATION_BIN)
+		$(C43_GRAPH_BIN) $(C43_POLICY_BIN)
 	@rmdir -- $(C43_BUILD_DIR) 2>/dev/null || true

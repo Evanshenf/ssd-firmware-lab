@@ -86,6 +86,60 @@ static struct fwlab_hif_prepare_key prepare_key(uint64_t uid)
     return key;
 }
 
+static struct fwlab_c43_policy_request admission_request(
+    const struct fwlab_hif_prepared_token *prepared,
+    uint8_t kind)
+{
+    struct fwlab_c43_policy_request request = {0};
+
+    request.version = FWLAB_C43_POLICY_VERSION;
+    request.size = sizeof(request);
+    request.handle = prepared->handle;
+    request.origin = prepared->origin;
+    request.transaction_uid = prepared->reservation_uid;
+    request.kind = kind;
+    request.queue_class =
+        kind == FWLAB_C43_REQUEST_READ ||
+                kind == FWLAB_C43_REQUEST_WRITE ||
+                kind == FWLAB_C43_REQUEST_FLUSH
+            ? FWLAB_NVME_QUEUE_IO
+            : FWLAB_NVME_QUEUE_ADMIN;
+    request.pointer_format = FWLAB_NVME_DATA_POINTER_PRP;
+    if (kind <= FWLAB_C43_REQUEST_IDENTIFY_NAMESPACE_DESCRIPTOR_LIST ||
+        kind == FWLAB_C43_REQUEST_READ ||
+        kind == FWLAB_C43_REQUEST_WRITE) {
+        request.data_present = 1;
+    }
+    if (kind == FWLAB_C43_REQUEST_IDENTIFY_NAMESPACE ||
+        kind == FWLAB_C43_REQUEST_IDENTIFY_NAMESPACE_DESCRIPTOR_LIST ||
+        kind == FWLAB_C43_REQUEST_READ ||
+        kind == FWLAB_C43_REQUEST_WRITE ||
+        kind == FWLAB_C43_REQUEST_FLUSH) {
+        request.namespace_id = 1;
+    }
+    if (kind == FWLAB_C43_REQUEST_SET_NUMBER_OF_QUEUES) {
+        request.feature_selector = FWLAB_C43_FEATURE_NUMBER_OF_QUEUES;
+    }
+    return request;
+}
+
+static int admit_result_matches(
+    const struct fwlab_c43_admit_result *result,
+    const struct fwlab_hif_prepared_token *prepared)
+{
+    return fwlab_c43_admit_result_valid(result) &&
+           result->ticket.handle.instance_nonce ==
+               prepared->handle.instance_nonce &&
+           result->ticket.handle.command_uid == prepared->handle.command_uid &&
+           result->ticket.handle.controller_epoch ==
+               prepared->handle.controller_epoch &&
+           result->ticket.handle.generation == prepared->handle.generation &&
+           result->ticket.origin.word[0] == prepared->origin.word[0] &&
+           result->ticket.origin.word[1] == prepared->origin.word[1] &&
+           result->ticket.ticket_uid == prepared->reservation_uid &&
+           result->ticket.generation == prepared->generation;
+}
+
 static int fixture_init(
     struct fixture *fixture,
     const struct fwlab_c43_graph_config *config)
@@ -527,12 +581,258 @@ static int test_counter_endpoints_and_domains(void)
     return 0;
 }
 
+static int test_admission_identity_and_policy(void)
+{
+    static const uint8_t kinds[FWLAB_C43_MAX_COMMANDS] = {
+        FWLAB_C43_REQUEST_IDENTIFY_CONTROLLER,
+        FWLAB_C43_REQUEST_SET_NUMBER_OF_QUEUES,
+        FWLAB_C43_REQUEST_ABORT,
+        FWLAB_C43_REQUEST_READ,
+    };
+    union {
+        struct fwlab_c43_policy_request request;
+        struct fwlab_c43_admit_result result;
+    } alias;
+    struct fixture fixture;
+    struct fwlab_c43_graph_config config = config_fixed();
+    struct fwlab_hif_prepare_key keys[FWLAB_C43_MAX_COMMANDS];
+    struct fwlab_hif_prepare_result prepared[FWLAB_C43_MAX_COMMANDS];
+    struct fwlab_c43_policy_request requests[FWLAB_C43_MAX_COMMANDS];
+    struct fwlab_c43_admit_result admitted[FWLAB_C43_MAX_COMMANDS];
+    struct fwlab_c43_admit_result output;
+    struct fwlab_c43_admit_result output_before;
+    struct fwlab_c43_graph_observer observer;
+    struct fwlab_c43_graph_observer observer_before;
+    struct fwlab_c43_graph_observer altered;
+    uint8_t arena_before[8192];
+    unsigned char alias_before[sizeof(alias)];
+    uint32_t index;
+
+    CHECK(fixture_init(&fixture, &config));
+    for (index = 0; index < FWLAB_C43_MAX_COMMANDS; ++index) {
+        keys[index] = prepare_key(index + 1);
+        if (kinds[index] != FWLAB_C43_REQUEST_READ &&
+            kinds[index] != FWLAB_C43_REQUEST_WRITE &&
+            kinds[index] != FWLAB_C43_REQUEST_FLUSH) {
+            keys[index].queue_class = FWLAB_NVME_QUEUE_ADMIN;
+        }
+        CHECK(fwlab_c43_graph_prepare_start(
+                  fixture.graph, &keys[index], &prepared[index]) ==
+              FWLAB_C43_GRAPH_OK);
+        requests[index] = admission_request(&prepared[index].prepared,
+                                            kinds[index]);
+    }
+    requests[3].namespace_id = 2;
+
+    CHECK(observer_read(&fixture, &observer_before));
+    memcpy(arena_before, fixture.arena, fixture.arena_size);
+    memset(&output, 0xa5, sizeof(output));
+    memcpy(&output_before, &output, sizeof(output));
+    CHECK(fwlab_c43_graph_admit_query(
+              fixture.graph, &prepared[0].prepared, &requests[0], &output) ==
+          FWLAB_C43_GRAPH_WRONG_STATE);
+    CHECK(memcmp(&output, &output_before, sizeof(output)) == 0);
+    CHECK(memcmp(arena_before, fixture.arena, fixture.arena_size) == 0);
+
+    {
+        struct fwlab_c43_policy_request wrong_queue = requests[0];
+
+        wrong_queue.queue_class = FWLAB_NVME_QUEUE_IO;
+        memset(&output, 0xa5, sizeof(output));
+        memcpy(&output_before, &output, sizeof(output));
+        CHECK(fwlab_c43_graph_admit_start(
+                  fixture.graph, &prepared[0].prepared, &wrong_queue,
+                  &output) == FWLAB_C43_GRAPH_POISONED);
+        CHECK(memcmp(&output, &output_before, sizeof(output)) == 0);
+        CHECK(memcmp(arena_before, fixture.arena, fixture.arena_size) == 0);
+        CHECK(fixture.services.event_count == 0);
+    }
+
+    for (index = 0; index < FWLAB_C43_MAX_COMMANDS; ++index) {
+        CHECK(fwlab_c43_graph_admit_start(
+                  fixture.graph, &prepared[index].prepared, &requests[index],
+                  &output) == FWLAB_C43_GRAPH_OK);
+        CHECK(admit_result_matches(&output, &prepared[index].prepared));
+        memcpy(&admitted[index], &output, sizeof(output));
+        CHECK(observer_read(&fixture, &observer));
+        CHECK(observer.commands[index].phase ==
+                  FWLAB_C43_PHASE_ADMITTED_POLICY &&
+              observer.commands[index].terminal_winner ==
+                  FWLAB_C43_WINNER_NONE &&
+              observer.commands[index].publication ==
+                  FWLAB_C43_PUBLICATION_ELIGIBLE &&
+              observer.commands[index].satisfied_witness_mask == 0);
+        if (index == 0) {
+            CHECK(observer.commands[index].required_witness_mask ==
+                      (FWLAB_C43_WITNESS_PAYLOAD_READY |
+                       FWLAB_C43_WITNESS_DMA_OUT_COMPLETE) &&
+                  observer.commands[index].success_eligible == 0);
+        } else {
+            CHECK(observer.commands[index].required_witness_mask == 0 &&
+                  observer.commands[index].success_eligible == 0);
+        }
+        if (index == 0) {
+            altered = observer;
+            altered.commands[0].satisfied_witness_mask =
+                FWLAB_C43_WITNESS_PAYLOAD_READY;
+            CHECK(!fwlab_c43_graph_observer_valid(&altered));
+        } else if (index == 1) {
+            altered = observer;
+            altered.commands[1].success_eligible = 1;
+            CHECK(!fwlab_c43_graph_observer_valid(&altered));
+        }
+    }
+    CHECK(fixture.services.event_count == 0);
+
+    CHECK(observer_read(&fixture, &observer_before));
+    memcpy(arena_before, fixture.arena, fixture.arena_size);
+    memset(&output, 0xa5, sizeof(output));
+    CHECK(fwlab_c43_graph_admit_query(
+              fixture.graph, &prepared[0].prepared, &requests[0], &output) ==
+          FWLAB_C43_GRAPH_OK);
+    CHECK(memcmp(&output, &admitted[0], sizeof(output)) == 0);
+    CHECK(memcmp(arena_before, fixture.arena, fixture.arena_size) == 0);
+
+    memset(&output, 0xa5, sizeof(output));
+    memcpy(&output_before, &output, sizeof(output));
+    CHECK(fwlab_c43_graph_admit_start(
+              fixture.graph, &prepared[0].prepared, &requests[0], &output) ==
+          FWLAB_C43_GRAPH_IN_PROGRESS);
+    CHECK(memcmp(&output, &output_before, sizeof(output)) == 0);
+    CHECK(memcmp(arena_before, fixture.arena, fixture.arena_size) == 0);
+
+    {
+        struct fwlab_c43_policy_request changed = requests[0];
+
+        changed.namespace_id = 1;
+        memset(&output, 0xa5, sizeof(output));
+        memcpy(&output_before, &output, sizeof(output));
+        CHECK(fwlab_c43_graph_admit_query(
+                  fixture.graph, &prepared[0].prepared, &changed, &output) ==
+              FWLAB_C43_GRAPH_POISONED);
+        CHECK(memcmp(&output, &output_before, sizeof(output)) == 0);
+        CHECK(memcmp(arena_before, fixture.arena, fixture.arena_size) == 0);
+    }
+    {
+        struct fwlab_c43_policy_request changed = requests[0];
+
+        changed.fua = 1;
+        memset(&output, 0xa5, sizeof(output));
+        memcpy(&output_before, &output, sizeof(output));
+        CHECK(fwlab_c43_graph_admit_query(
+                  fixture.graph, &prepared[0].prepared, &changed, &output) ==
+              FWLAB_C43_GRAPH_POISONED);
+        CHECK(memcmp(&output, &output_before, sizeof(output)) == 0);
+        CHECK(memcmp(arena_before, fixture.arena, fixture.arena_size) == 0);
+    }
+    {
+        struct fwlab_c43_policy_request changed = requests[0];
+
+        ++changed.handle.command_uid;
+        memset(&output, 0xa5, sizeof(output));
+        memcpy(&output_before, &output, sizeof(output));
+        CHECK(fwlab_c43_graph_admit_start(
+                  fixture.graph, &prepared[0].prepared, &changed, &output) ==
+              FWLAB_C43_GRAPH_POISONED);
+        CHECK(memcmp(&output, &output_before, sizeof(output)) == 0);
+        CHECK(memcmp(arena_before, fixture.arena, fixture.arena_size) == 0);
+    }
+    {
+        struct fwlab_hif_prepared_token stale = prepared[0].prepared;
+
+        stale.handle.command_uid += 100;
+        stale.origin.word[0] += 100;
+        stale.reservation_uid += 100;
+        memset(&output, 0xa5, sizeof(output));
+        memcpy(&output_before, &output, sizeof(output));
+        CHECK(fwlab_c43_graph_admit_start(
+                  fixture.graph, &stale, &requests[0], &output) ==
+              FWLAB_C43_GRAPH_STALE);
+        CHECK(memcmp(&output, &output_before, sizeof(output)) == 0);
+        CHECK(memcmp(arena_before, fixture.arena, fixture.arena_size) == 0);
+    }
+
+    memcpy(arena_before, fixture.arena, fixture.arena_size);
+    CHECK(fwlab_c43_graph_admit_query(
+              fixture.graph, &prepared[0].prepared, &requests[0],
+              (struct fwlab_c43_admit_result *)(void *)fixture.graph) ==
+          FWLAB_C43_GRAPH_INVALID);
+    CHECK(memcmp(arena_before, fixture.arena, fixture.arena_size) == 0);
+
+    memset(&alias, 0, sizeof(alias));
+    alias.request = requests[0];
+    memcpy(alias_before, &alias, sizeof(alias));
+    CHECK(fwlab_c43_graph_admit_query(
+              fixture.graph, &prepared[0].prepared, &alias.request,
+              &alias.result) == FWLAB_C43_GRAPH_INVALID);
+    CHECK(memcmp(alias_before, &alias, sizeof(alias)) == 0);
+    CHECK(observer_read(&fixture, &observer));
+    CHECK(memcmp(&observer, &observer_before, sizeof(observer)) == 0);
+    CHECK(fixture.services.event_count == 0);
+    return 0;
+}
+
+static int test_cross_instance_admit_stale(void)
+{
+    struct fixture local;
+    struct fixture foreign;
+    struct fwlab_c43_graph_config local_config = config_fixed();
+    struct fwlab_c43_graph_config foreign_config = config_fixed();
+    struct fwlab_hif_prepare_key local_key = prepare_key(1);
+    struct fwlab_hif_prepare_key foreign_key = prepare_key(1);
+    struct fwlab_hif_prepare_result local_prepared;
+    struct fwlab_hif_prepare_result foreign_prepared;
+    struct fwlab_c43_policy_request local_request;
+    struct fwlab_c43_policy_request foreign_request;
+    struct fwlab_c43_admit_result output;
+    struct fwlab_c43_admit_result before;
+    uint8_t arena_before[8192];
+
+    foreign_config.instance_nonce = UINT64_C(0xc430000000000002);
+    local_key.queue_class = FWLAB_NVME_QUEUE_ADMIN;
+    foreign_key.queue_class = FWLAB_NVME_QUEUE_ADMIN;
+    foreign_key.instance_nonce = foreign_config.instance_nonce;
+    CHECK(fixture_init(&local, &local_config));
+    CHECK(fixture_init(&foreign, &foreign_config));
+    CHECK(fwlab_c43_graph_prepare_start(
+              local.graph, &local_key, &local_prepared) ==
+          FWLAB_C43_GRAPH_OK);
+    CHECK(fwlab_c43_graph_prepare_start(
+              foreign.graph, &foreign_key, &foreign_prepared) ==
+          FWLAB_C43_GRAPH_OK);
+    local_request = admission_request(&local_prepared.prepared,
+                                      FWLAB_C43_REQUEST_IDENTIFY_CONTROLLER);
+    foreign_request = admission_request(
+        &foreign_prepared.prepared, FWLAB_C43_REQUEST_IDENTIFY_CONTROLLER);
+    CHECK(fwlab_c43_graph_admit_start(
+              local.graph, &local_prepared.prepared, &local_request,
+              &output) == FWLAB_C43_GRAPH_OK);
+
+    memcpy(arena_before, local.arena, local.arena_size);
+    memset(&output, 0xa5, sizeof(output));
+    memcpy(&before, &output, sizeof(output));
+    CHECK(fwlab_c43_graph_admit_query(
+              local.graph, &foreign_prepared.prepared, &foreign_request,
+              &output) == FWLAB_C43_GRAPH_STALE);
+    CHECK(memcmp(&output, &before, sizeof(output)) == 0);
+    CHECK(memcmp(arena_before, local.arena, local.arena_size) == 0);
+    CHECK(fwlab_c43_graph_admit_start(
+              local.graph, &foreign_prepared.prepared, &foreign_request,
+              &output) == FWLAB_C43_GRAPH_STALE);
+    CHECK(memcmp(&output, &before, sizeof(output)) == 0);
+    CHECK(memcmp(arena_before, local.arena, local.arena_size) == 0);
+    CHECK(local.services.event_count == 0 &&
+          foreign.services.event_count == 0);
+    return 0;
+}
+
 int main(void)
 {
     CHECK(test_capacity_query_and_atomicity() == 0);
     CHECK(test_counter_exhaustion() == 0);
     CHECK(test_counter_endpoints_and_domains() == 0);
-    puts("C4.3 phase2 reservation ledger: PASS commands=4 actions=32 "
-         "counters=6");
+    CHECK(test_admission_identity_and_policy() == 0);
+    CHECK(test_cross_instance_admit_stale() == 0);
+    puts("C4.3 phase3 prepare/admit: PASS commands=4 actions=32 counters=6");
     return 0;
 }

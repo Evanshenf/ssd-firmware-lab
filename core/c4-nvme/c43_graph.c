@@ -123,6 +123,7 @@ static int prepared_valid(
     const struct fwlab_c43_graph *graph,
     const struct c43_command_record *record)
 {
+    struct fwlab_c43_policy_plan expected_plan;
     uint32_t index;
 
     if (!c43_prepare_key_valid(&graph->config, &record->key) ||
@@ -158,28 +159,77 @@ static int prepared_valid(
             return 0;
         }
     }
-    return 1;
+    if (record->state == C43_COMMAND_RECORD_PREPARED) {
+        return c43_bytes_zero(&record->ticket, sizeof(record->ticket)) &&
+               c43_bytes_zero(&record->request, sizeof(record->request)) &&
+               c43_bytes_zero(&record->plan, sizeof(record->plan));
+    }
+    if (record->state != C43_COMMAND_RECORD_ADMITTED ||
+        !c43_ticket_valid(&record->ticket) ||
+        !fwlab_c43_policy_request_valid(&record->request) ||
+        !fwlab_c43_policy_plan_valid(&record->plan) ||
+        !c43_handle_equal(&record->ticket.handle,
+                          &record->prepared.handle) ||
+        !c43_origin_equal(&record->ticket.origin,
+                          &record->prepared.origin) ||
+        record->ticket.ticket_uid != record->transaction_uid ||
+        record->ticket.generation != graph->config.safety_generation ||
+        !c43_handle_equal(&record->request.handle,
+                          &record->prepared.handle) ||
+        !c43_origin_equal(&record->request.origin,
+                          &record->prepared.origin) ||
+        record->request.transaction_uid != record->transaction_uid ||
+        record->request.queue_class != record->key.queue_class ||
+        !c43_handle_equal(&record->plan.command,
+                          &record->prepared.handle) ||
+        !c43_origin_equal(&record->plan.origin, &record->prepared.origin) ||
+        record->plan.transaction_uid != record->transaction_uid) {
+        return 0;
+    }
+    return fwlab_c43_policy_begin(&graph->config.profile, &record->request,
+                                  &expected_plan) == FWLAB_C43_API_OK &&
+           memcmp(&expected_plan, &record->plan, sizeof(expected_plan)) == 0;
 }
 
 static int observer_matches_record(
     const struct c43_command_record *record,
     const struct fwlab_c43_command_observer *observer)
 {
-    return observer->in_use == 1 &&
-           c43_handle_equal(&observer->handle, &record->prepared.handle) &&
-           c43_origin_equal(&observer->origin, &record->prepared.origin) &&
-           observer->transaction_uid == record->transaction_uid &&
-           observer->phase == FWLAB_C43_PHASE_PREPARED &&
-           observer->terminal_winner == FWLAB_C43_WINNER_NONE &&
-           observer->publication == FWLAB_C43_PUBLICATION_ELIGIBLE &&
-           observer->required_witness_mask == 0 &&
-           observer->satisfied_witness_mask == 0 &&
-           observer->action_count == FWLAB_C43_ACTIONS_PER_COMMAND &&
-           observer->success_eligible == 0 &&
-           observer->reservation_credit_mask == FWLAB_C43_CREDIT_ALL &&
-           observer->first_action_uid == record->actions[0].action_uid &&
-           observer->action_generation == record->actions[0].generation &&
-           observer->provider_generation_current == 1;
+    const int common = observer->in_use == 1 &&
+                       c43_handle_equal(&observer->handle,
+                                        &record->prepared.handle) &&
+                       c43_origin_equal(&observer->origin,
+                                        &record->prepared.origin) &&
+                       observer->transaction_uid == record->transaction_uid &&
+                       observer->terminal_winner == FWLAB_C43_WINNER_NONE &&
+                       observer->publication ==
+                           FWLAB_C43_PUBLICATION_ELIGIBLE &&
+                       observer->action_count ==
+                           FWLAB_C43_ACTIONS_PER_COMMAND &&
+                       observer->reservation_credit_mask ==
+                           FWLAB_C43_CREDIT_ALL &&
+                       observer->first_action_uid ==
+                           record->actions[0].action_uid &&
+                       observer->action_generation ==
+                           record->actions[0].generation &&
+                       observer->provider_generation_current == 1;
+
+    if (!common) {
+        return 0;
+    }
+    if (record->state == C43_COMMAND_RECORD_PREPARED) {
+        return observer->phase == FWLAB_C43_PHASE_PREPARED &&
+               observer->required_witness_mask == 0 &&
+               observer->satisfied_witness_mask == 0 &&
+               observer->success_eligible == 0;
+    }
+    return record->state == C43_COMMAND_RECORD_ADMITTED &&
+           observer->phase == FWLAB_C43_PHASE_ADMITTED_POLICY &&
+           observer->required_witness_mask ==
+               record->plan.required_witness_mask &&
+           observer->satisfied_witness_mask ==
+               record->plan.satisfied_witness_mask &&
+           observer->success_eligible == 0;
 }
 
 int c43_reservation_state_valid(const struct fwlab_c43_graph *graph)
@@ -319,6 +369,110 @@ static enum fwlab_c43_graph_result existing_key_result(
     return FWLAB_C43_GRAPH_STALE;
 }
 
+static int prepared_token_structural_valid(
+    const struct fwlab_hif_prepared_token *prepared)
+{
+    return prepared != NULL && c43_handle_valid(&prepared->handle) &&
+           c43_origin_valid(&prepared->origin) &&
+           prepared->reservation_uid != 0 && prepared->generation != 0 &&
+           prepared->reserved == 0;
+}
+
+static int prepared_token_equal(
+    const struct fwlab_hif_prepared_token *left,
+    const struct fwlab_hif_prepared_token *right)
+{
+    return c43_handle_equal(&left->handle, &right->handle) &&
+           c43_origin_equal(&left->origin, &right->origin) &&
+           left->reservation_uid == right->reservation_uid &&
+           left->generation == right->generation &&
+           left->reserved == right->reserved;
+}
+
+static enum fwlab_c43_graph_result find_prepared_record(
+    const struct fwlab_c43_graph *graph,
+    const struct fwlab_hif_prepared_token *prepared,
+    uint32_t *record_index)
+{
+    uint32_t index;
+
+    for (index = 0; index < FWLAB_C43_MAX_COMMANDS; ++index) {
+        const struct c43_command_record *record = &graph->commands[index];
+
+        if (!record->in_use) {
+            continue;
+        }
+        if (c43_handle_equal(&record->prepared.handle, &prepared->handle) ||
+            record->prepared.reservation_uid == prepared->reservation_uid) {
+            if (!prepared_token_equal(&record->prepared, prepared)) {
+                return FWLAB_C43_GRAPH_POISONED;
+            }
+            *record_index = index;
+            return FWLAB_C43_GRAPH_OK;
+        }
+        if (c43_origin_equal(&record->prepared.origin, &prepared->origin)) {
+            return FWLAB_C43_GRAPH_POISONED;
+        }
+    }
+    return FWLAB_C43_GRAPH_STALE;
+}
+
+static int request_matches_prepared(
+    const struct fwlab_c43_policy_request *request,
+    const struct fwlab_hif_prepared_token *prepared,
+    uint16_t prepared_queue_class)
+{
+    return c43_handle_equal(&request->handle, &prepared->handle) &&
+           c43_origin_equal(&request->origin, &prepared->origin) &&
+           request->transaction_uid == prepared->reservation_uid &&
+           request->queue_class == prepared_queue_class;
+}
+
+int fwlab_c43_admit_result_valid(
+    const struct fwlab_c43_admit_result *result)
+{
+    return result != NULL &&
+           result->version == FWLAB_C43_ADMIT_RESULT_VERSION &&
+           result->size == sizeof(*result) && result->reserved0 == 0 &&
+           result->state == FWLAB_HIF_ADMISSION_COMMITTED &&
+           result->reserved1 == 0 && c43_ticket_valid(&result->ticket) &&
+           c43_bytes_zero(result->reserved2, sizeof(result->reserved2));
+}
+
+static void admit_result_set(
+    struct fwlab_c43_admit_result *result,
+    const struct fwlab_hif_command_ticket *ticket)
+{
+    struct fwlab_c43_admit_result local;
+
+    memset(&local, 0, sizeof(local));
+    local.version = FWLAB_C43_ADMIT_RESULT_VERSION;
+    local.size = sizeof(local);
+    local.state = FWLAB_HIF_ADMISSION_COMMITTED;
+    local.ticket = *ticket;
+    memcpy(result, &local, sizeof(local));
+}
+
+static int admit_arguments_overlap(
+    const struct fwlab_c43_graph *graph,
+    const struct fwlab_hif_prepared_token *prepared,
+    const struct fwlab_c43_policy_request *request,
+    const struct fwlab_c43_admit_result *result)
+{
+    return c43_ranges_overlap(graph, sizeof(*graph), prepared,
+                              sizeof(*prepared)) ||
+           c43_ranges_overlap(graph, sizeof(*graph), request,
+                              sizeof(*request)) ||
+           c43_ranges_overlap(graph, sizeof(*graph), result,
+                              sizeof(*result)) ||
+           c43_ranges_overlap(prepared, sizeof(*prepared), request,
+                              sizeof(*request)) ||
+           c43_ranges_overlap(prepared, sizeof(*prepared), result,
+                              sizeof(*result)) ||
+           c43_ranges_overlap(request, sizeof(*request), result,
+                              sizeof(*result));
+}
+
 enum fwlab_c43_graph_result fwlab_c43_graph_prepare_start(
     struct fwlab_c43_graph *graph,
     const struct fwlab_hif_prepare_key *key,
@@ -394,6 +548,7 @@ enum fwlab_c43_graph_result fwlab_c43_graph_prepare_start(
     record.prepared.generation = graph->config.safety_generation;
     record.transaction_uid = transaction_uid;
     record.reservation_credit_mask = FWLAB_C43_CREDIT_ALL;
+    record.state = C43_COMMAND_RECORD_PREPARED;
     record.in_use = 1;
     for (index = 0; index < FWLAB_C43_ACTIONS_PER_COMMAND; ++index) {
         record.actions[index].action_uid = action_uid + index;
@@ -462,6 +617,118 @@ enum fwlab_c43_graph_result fwlab_c43_graph_prepare_query(
     prepare_result_set(&local_result, FWLAB_HIF_PREPARE_RESERVED,
                        &graph->commands[exact_index].prepared);
     memcpy(result, &local_result, sizeof(local_result));
+    return FWLAB_C43_GRAPH_OK;
+}
+
+enum fwlab_c43_graph_result fwlab_c43_graph_admit_start(
+    struct fwlab_c43_graph *graph,
+    const struct fwlab_hif_prepared_token *prepared,
+    const struct fwlab_c43_policy_request *request,
+    struct fwlab_c43_admit_result *result)
+{
+    struct fwlab_c43_policy_plan plan;
+    struct fwlab_hif_command_ticket ticket = {0};
+    struct c43_command_record *record;
+    struct fwlab_c43_command_observer *observer;
+    uint32_t record_index = FWLAB_C43_MAX_COMMANDS;
+    enum fwlab_c43_api_result policy_result;
+    enum fwlab_c43_graph_result found;
+
+    if (!c43_graph_valid(graph) || result == NULL ||
+        !prepared_token_structural_valid(prepared) ||
+        !fwlab_c43_policy_request_valid(request) ||
+        admit_arguments_overlap(graph, prepared, request, result)) {
+        return FWLAB_C43_GRAPH_INVALID;
+    }
+    if (prepared->handle.instance_nonce != graph->config.instance_nonce ||
+        prepared->handle.controller_epoch != graph->config.controller_epoch ||
+        prepared->handle.generation != graph->config.safety_generation ||
+        prepared->generation != graph->config.safety_generation) {
+        return FWLAB_C43_GRAPH_STALE;
+    }
+    found = find_prepared_record(graph, prepared, &record_index);
+    if (found != FWLAB_C43_GRAPH_OK) {
+        return found;
+    }
+    record = &graph->commands[record_index];
+    if (!request_matches_prepared(request, &record->prepared,
+                                  record->key.queue_class)) {
+        return FWLAB_C43_GRAPH_POISONED;
+    }
+    if (record->state == C43_COMMAND_RECORD_ADMITTED) {
+        return memcmp(&record->request, request, sizeof(*request)) == 0
+                   ? FWLAB_C43_GRAPH_IN_PROGRESS
+                   : FWLAB_C43_GRAPH_POISONED;
+    }
+    if (record->state != C43_COMMAND_RECORD_PREPARED) {
+        return FWLAB_C43_GRAPH_WRONG_STATE;
+    }
+    policy_result = fwlab_c43_policy_begin(&graph->config.profile, request,
+                                           &plan);
+    if (policy_result != FWLAB_C43_API_OK) {
+        return policy_result == FWLAB_C43_API_INVALID
+                   ? FWLAB_C43_GRAPH_INVALID
+                   : FWLAB_C43_GRAPH_POISONED;
+    }
+
+    ticket.handle = record->prepared.handle;
+    ticket.origin = record->prepared.origin;
+    ticket.ticket_uid = record->transaction_uid;
+    ticket.generation = graph->config.safety_generation;
+    if (!c43_ticket_valid(&ticket)) {
+        return FWLAB_C43_GRAPH_POISONED;
+    }
+
+    memcpy(&record->request, request, sizeof(*request));
+    memcpy(&record->plan, &plan, sizeof(plan));
+    record->ticket = ticket;
+    record->state = C43_COMMAND_RECORD_ADMITTED;
+    observer = &graph->observer.commands[record_index];
+    observer->phase = FWLAB_C43_PHASE_ADMITTED_POLICY;
+    observer->required_witness_mask = plan.required_witness_mask;
+    observer->satisfied_witness_mask = plan.satisfied_witness_mask;
+    observer->success_eligible = 0;
+    admit_result_set(result, &ticket);
+    return FWLAB_C43_GRAPH_OK;
+}
+
+enum fwlab_c43_graph_result fwlab_c43_graph_admit_query(
+    const struct fwlab_c43_graph *graph,
+    const struct fwlab_hif_prepared_token *prepared,
+    const struct fwlab_c43_policy_request *request,
+    struct fwlab_c43_admit_result *result)
+{
+    uint32_t record_index = FWLAB_C43_MAX_COMMANDS;
+    const struct c43_command_record *record;
+    enum fwlab_c43_graph_result found;
+
+    if (!c43_graph_valid(graph) || result == NULL ||
+        !prepared_token_structural_valid(prepared) ||
+        !fwlab_c43_policy_request_valid(request) ||
+        admit_arguments_overlap(graph, prepared, request, result)) {
+        return FWLAB_C43_GRAPH_INVALID;
+    }
+    if (prepared->handle.instance_nonce != graph->config.instance_nonce ||
+        prepared->handle.controller_epoch != graph->config.controller_epoch ||
+        prepared->handle.generation != graph->config.safety_generation ||
+        prepared->generation != graph->config.safety_generation) {
+        return FWLAB_C43_GRAPH_STALE;
+    }
+    found = find_prepared_record(graph, prepared, &record_index);
+    if (found != FWLAB_C43_GRAPH_OK) {
+        return found;
+    }
+    record = &graph->commands[record_index];
+    if (!request_matches_prepared(request, &record->prepared,
+                                  record->key.queue_class) ||
+        (record->state == C43_COMMAND_RECORD_ADMITTED &&
+         memcmp(&record->request, request, sizeof(*request)) != 0)) {
+        return FWLAB_C43_GRAPH_POISONED;
+    }
+    if (record->state != C43_COMMAND_RECORD_ADMITTED) {
+        return FWLAB_C43_GRAPH_WRONG_STATE;
+    }
+    admit_result_set(result, &record->ticket);
     return FWLAB_C43_GRAPH_OK;
 }
 

@@ -11,6 +11,7 @@
 
 #define FWLAB_C43_POLICY_VERSION 1u
 #define FWLAB_C43_IDENTIFY_BYTES 4096u
+#define FWLAB_C43_FEATURE_NUMBER_OF_QUEUES 7u
 
 enum fwlab_c43_api_result {
     FWLAB_C43_API_OK = 0,
@@ -133,7 +134,8 @@ struct fwlab_c43_policy_request {
     uint8_t metadata_present;
     uint8_t fua;
     uint8_t save;
-    uint32_t reserved_command_flags;
+    uint8_t reserved_bits_present;
+    uint8_t reserved_flag_padding[3];
     uint32_t reserved1[5];
     uint32_t reserved2;
 };
@@ -236,6 +238,12 @@ int fwlab_c43_block_intent_valid(
 int fwlab_c43_policy_plan_valid(const struct fwlab_c43_policy_plan *plan);
 int fwlab_c43_completion_witness_valid(
     const struct fwlab_c43_completion_witness *witness
+);
+
+enum fwlab_c43_api_result fwlab_c43_policy_begin(
+    const struct fwlab_nvme_profile *profile,
+    const struct fwlab_c43_policy_request *request,
+    struct fwlab_c43_policy_plan *plan
 );
 
 enum fwlab_c43_api_result fwlab_c43_identify_encode(

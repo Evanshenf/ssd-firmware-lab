@@ -22,7 +22,7 @@ int fwlab_c43_policy_plan_valid(const struct fwlab_c43_policy_plan *plan)
          ~(plan->required_witness_mask |
            FWLAB_C43_WITNESS_VALIDATED_ONLY)) != 0 ||
         plan->dnr > 1 || plan->more != 0 || plan->crd != 0 ||
-        plan->effect_class > FWLAB_NVME_EFFECT_UNKNOWN_PREFIX ||
+        plan->effect_class != FWLAB_NVME_EFFECT_NONE ||
         plan->reserved_branch_padding != 0 ||
         !c43_bytes_zero(plan->reserved1, sizeof(plan->reserved1))) {
         return 0;
@@ -31,7 +31,8 @@ int fwlab_c43_policy_plan_valid(const struct fwlab_c43_policy_plan *plan)
         return 0;
     }
     if (plan->semantic_status != FWLAB_C43_STATUS_SUCCESS &&
-        (plan->result_dword0 != 0 || plan->actual_length != 0)) {
+        (plan->kind != FWLAB_C43_PLAN_IMMEDIATE ||
+         plan->result_dword0 != 0 || plan->actual_length != 0)) {
         return 0;
     }
     switch (plan->kind) {

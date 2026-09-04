@@ -60,6 +60,7 @@ CHECKPOINT_PATHS = sorted([
     "core/c4-nvme/fakes/c43_phase1_fake_main.c",
     "core/c4-nvme/tests/test_c43_public_abi.c",
     "core/c4-nvme/tests/test_c43_reservation.c",
+    "core/c4-nvme/tests/test_c43_policy.c",
     "docs/adr/0011-c4-command-graph-v1.md",
     "docs/adr/README.md",
     "docs/architecture.md",
@@ -194,14 +195,15 @@ def nm_text(path: Path, *options: str) -> str:
 
 
 def check_artifacts(
-    archive: Path, abi: Path, fake: Path, reservation: Path
+    archive: Path, abi: Path, fake: Path, graph: Path, policy: Path
 ) -> None:
-    artifacts = [archive, abi, fake, reservation]
+    artifacts = [archive, abi, fake, graph, policy]
     for left in range(len(artifacts)):
         for right in range(left):
             if os.path.samefile(artifacts[left], artifacts[right]):
                 fail("C43 archive and ELF artifacts must be distinct")
-    if not all(os.access(path, os.X_OK) for path in (abi, fake, reservation)):
+    if not all(os.access(path, os.X_OK)
+               for path in (abi, fake, graph, policy)):
         fail("C43 ELF artifacts must be executable")
 
     members = subprocess.run(
@@ -221,14 +223,19 @@ def check_artifacts(
         if not any(line.rstrip().endswith(f" {symbol}")
                    for line in fake_defined.splitlines()):
             fail(f"fake-link did not whole-link {member}:{symbol}")
-    reservation_defined = nm_text(reservation, "--defined-only")
+    graph_defined = nm_text(graph, "--defined-only")
     if not any(line.rstrip().endswith(" fwlab_c43_graph_prepare_start")
-               for line in reservation_defined.splitlines()):
-        fail("reservation ELF does not link graph prepare authority")
+               for line in graph_defined.splitlines()):
+        fail("graph ELF does not link graph prepare authority")
+    policy_defined = nm_text(policy, "--defined-only")
+    for symbol in ("fwlab_c43_policy_begin", "fwlab_c43_identify_encode"):
+        if not any(line.rstrip().endswith(f" {symbol}")
+                   for line in policy_defined.splitlines()):
+            fail(f"policy ELF does not link {symbol}")
 
     provenance = (
         nm_text(archive, "-u") + "\n" + nm_text(fake, "-u") + "\n" +
-        nm_text(reservation, "-u")
+        nm_text(graph, "-u") + "\n" + nm_text(policy, "-u")
     ).lower()
     for fragment in ("c42_", "c31_", "c35_", "vfio", "qemu", "pci_"):
         if fragment in provenance:
@@ -242,9 +249,8 @@ def main() -> int:
     )
     parser.add_argument("--abi", default="build/c43/c43_public_abi")
     parser.add_argument("--fake", default="build/c43/c43_core_fake_link")
-    parser.add_argument(
-        "--reservation", default="build/c43/c43_reservation_unit"
-    )
+    parser.add_argument("--graph", default="build/c43/c43_graph_unit")
+    parser.add_argument("--policy", default="build/c43/c43_policy_unit")
     arguments = parser.parse_args()
 
     paths = changed_paths()
@@ -258,7 +264,8 @@ def main() -> int:
         "override C43_ARCHIVE_OBJECTS :=",
         "override C43_PUBLIC_ABI_BIN :=",
         "override C43_FAKE_OUTPUT :=",
-        "override C43_RESERVATION_BIN :=",
+        "override C43_GRAPH_BIN :=",
+        "override C43_POLICY_BIN :=",
         "C43_FROZEN_HEADERS",
         "-Wl,--whole-archive $(C43_ARCHIVE) -Wl,--no-whole-archive",
         "rm -f --",
@@ -294,10 +301,9 @@ def main() -> int:
     archive = checked_artifact(arguments.archive, "libfwlab_c43.a")
     abi = checked_artifact(arguments.abi, "c43_public_abi")
     fake = checked_artifact(arguments.fake, "c43_core_fake_link")
-    reservation = checked_artifact(
-        arguments.reservation, "c43_reservation_unit"
-    )
-    check_artifacts(archive, abi, fake, reservation)
+    graph = checked_artifact(arguments.graph, "c43_graph_unit")
+    policy = checked_artifact(arguments.policy, "c43_policy_unit")
+    check_artifacts(archive, abi, fake, graph, policy)
 
     path_digest = hashlib.sha256(
         ("\n".join(paths) + "\n").encode("utf-8")

@@ -12,7 +12,7 @@ gates.
 C4.3 design is now fixed by ADR-0011. Phase 1 adds only versioned typed
 contracts, the seven-member C43 archive skeleton, layout/reserved-zero checks
 and fake-adjacent linkage. Protocol and graph behavior remain later phase
-checkpoints; the phase-1 Identify encoder explicitly returns NOT_IMPLEMENTED
+checkpoints; at that checkpoint the Identify encoder returned NOT_IMPLEMENTED
 without changing its output buffer.
 
 The Phase 2 reservation checkpoint reserves one complete command closure
@@ -20,8 +20,13 @@ atomically: eight action records plus transaction, lease, consume and finalizer
 identities.
 `prepare_start`/`prepare_query` cover four fixed slots, exact-key response-loss
 recovery, backpressure and counter exhaustion without admitting command
-ownership. Policy, action submission and completion behavior remain
-unimplemented.
+ownership.
+
+Phase 3 adds the fixed-profile legality/status planner, four minimal 4096-byte
+Identify payloads, checked Read/Write arithmetic and held block/durability
+plans. The direct admit seam stores the sanitized request and immutable plan,
+then returns one queryable ticket at the ownership LP. It still performs no
+provider action, data movement or completion publication.
 
 The portable values contain no queue identifier, command identifier, queue
 phase or Host/guest address. Native structures are not packed wire images; all
@@ -37,10 +42,11 @@ make check-c41
 make fake-link-c41
 make check-c43-phase1
 make check-c43-phase2
+make check-c43-phase3
 make fake-link-c43
 make check-all
 ```
 
-Still outside: protocol command execution, PRP walking, queue state, DMA,
-persistent storage, PCI/BAR/MSI-X, QEMU/vfio-user and native Linux-driver
+Still outside: graph action execution, queue state transitions, PRP walking,
+DMA, persistent storage, PCI/BAR/MSI-X, QEMU/vfio-user and native Linux-driver
 interoperability.

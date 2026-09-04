@@ -37,6 +37,8 @@ _Static_assert(FWLAB_C43_CREDIT_BLOCK_INTENT == (1u << 9),
                "block-intent credit bit changed");
 _Static_assert(FWLAB_C43_CREDIT_ALL == 0x03ffu,
                "credit mask changed");
+_Static_assert(FWLAB_C43_FEATURE_NUMBER_OF_QUEUES == 7u,
+               "Number of Queues feature selector changed");
 
 ABI_SIZE(struct fwlab_c43_policy_request, 128);
 ABI_FIELD(struct fwlab_c43_policy_request, version, 0);
@@ -61,7 +63,8 @@ ABI_FIELD(struct fwlab_c43_policy_request, data_present, 96);
 ABI_FIELD(struct fwlab_c43_policy_request, metadata_present, 97);
 ABI_FIELD(struct fwlab_c43_policy_request, fua, 98);
 ABI_FIELD(struct fwlab_c43_policy_request, save, 99);
-ABI_FIELD(struct fwlab_c43_policy_request, reserved_command_flags, 100);
+ABI_FIELD(struct fwlab_c43_policy_request, reserved_bits_present, 100);
+ABI_FIELD(struct fwlab_c43_policy_request, reserved_flag_padding, 101);
 ABI_FIELD(struct fwlab_c43_policy_request, reserved1, 104);
 ABI_FIELD(struct fwlab_c43_policy_request, reserved2, 124);
 
@@ -216,6 +219,15 @@ ABI_FIELD(struct fwlab_c43_step_result, transitions, 16);
 ABI_FIELD(struct fwlab_c43_step_result, ready_events, 20);
 ABI_FIELD(struct fwlab_c43_step_result, service_gap_maximum, 24);
 ABI_FIELD(struct fwlab_c43_step_result, reserved, 28);
+
+ABI_SIZE(struct fwlab_c43_admit_result, 96);
+ABI_FIELD(struct fwlab_c43_admit_result, version, 0);
+ABI_FIELD(struct fwlab_c43_admit_result, size, 2);
+ABI_FIELD(struct fwlab_c43_admit_result, reserved0, 4);
+ABI_FIELD(struct fwlab_c43_admit_result, state, 8);
+ABI_FIELD(struct fwlab_c43_admit_result, reserved1, 12);
+ABI_FIELD(struct fwlab_c43_admit_result, ticket, 16);
+ABI_FIELD(struct fwlab_c43_admit_result, reserved2, 72);
 
 ABI_SIZE(struct fwlab_c43_queue_facts, 96);
 ABI_FIELD(struct fwlab_c43_queue_facts, transaction, 8);
@@ -491,9 +503,14 @@ static int check_policy_and_layout(void)
     request.requested_cq_count = 1;
     CHECK(!fwlab_c43_policy_request_valid(&request));
     request.requested_cq_count = 0;
-    request.reserved_command_flags = 1;
+    request.reserved_bits_present = 1;
+    CHECK(fwlab_c43_policy_request_valid(&request));
+    request.reserved_bits_present = 2;
     CHECK(!fwlab_c43_policy_request_valid(&request));
-    request.reserved_command_flags = 0;
+    request.reserved_bits_present = 0;
+    request.reserved_flag_padding[0] = 1;
+    CHECK(!fwlab_c43_policy_request_valid(&request));
+    request.reserved_flag_padding[0] = 0;
     request.reserved2 = 1;
     CHECK(!fwlab_c43_policy_request_valid(&request));
 
@@ -529,6 +546,13 @@ static int check_policy_and_layout(void)
     plan.shape = read_shape();
     plan.block = read_intent();
     CHECK(fwlab_c43_policy_plan_valid(&plan));
+    plan.semantic_status = FWLAB_C43_STATUS_INVALID_FIELD;
+    plan.dnr = 1;
+    plan.actual_length = 0;
+    CHECK(!fwlab_c43_policy_plan_valid(&plan));
+    plan.semantic_status = FWLAB_C43_STATUS_SUCCESS;
+    plan.dnr = 0;
+    plan.actual_length = 512;
     plan.block.command = handle(2);
     CHECK(!fwlab_c43_policy_plan_valid(&plan));
     plan.block.command = handle(1);
@@ -539,6 +563,14 @@ static int check_policy_and_layout(void)
     plan.required_witness_mask = FWLAB_C43_WITNESS_VALIDATED_ONLY;
     plan.satisfied_witness_mask = FWLAB_C43_WITNESS_VALIDATED_ONLY;
     CHECK(!fwlab_c43_policy_plan_valid(&plan));
+    plan.required_witness_mask = 0;
+    plan.satisfied_witness_mask = 0;
+    plan.semantic_status = FWLAB_C43_STATUS_INVALID_FIELD;
+    plan.dnr = 1;
+    plan.effect_class = FWLAB_NVME_EFFECT_FULL;
+    CHECK(!fwlab_c43_policy_plan_valid(&plan));
+    plan.effect_class = FWLAB_NVME_EFFECT_NONE;
+    CHECK(fwlab_c43_policy_plan_valid(&plan));
 
     witness.version = FWLAB_C43_POLICY_VERSION;
     witness.size = sizeof(witness);
@@ -658,6 +690,7 @@ static int check_graph_records(void)
 {
     struct fwlab_c43_graph_config config = fixed_config();
     struct fwlab_c43_graph_observer observer = {0};
+    struct fwlab_c43_admit_result admit = {0};
 
     CHECK(fwlab_c43_graph_config_valid(&config));
     ++config.profile.maximum_transfer_bytes;
@@ -665,6 +698,14 @@ static int check_graph_records(void)
     config = fixed_config();
     config.reserved_alignment = 1;
     CHECK(!fwlab_c43_graph_config_valid(&config));
+
+    admit.version = FWLAB_C43_ADMIT_RESULT_VERSION;
+    admit.size = sizeof(admit);
+    admit.state = FWLAB_HIF_ADMISSION_COMMITTED;
+    admit.ticket = ticket(1);
+    CHECK(fwlab_c43_admit_result_valid(&admit));
+    admit.reserved2[0] = 1;
+    CHECK(!fwlab_c43_admit_result_valid(&admit));
 
     observer.version = FWLAB_C43_GRAPH_VERSION;
     observer.size = sizeof(observer);
@@ -682,12 +723,13 @@ static int check_graph_records(void)
     observer.commands[0].handle = handle(1);
     observer.commands[0].origin = origin(1);
     observer.commands[0].transaction_uid = 1;
-    observer.commands[0].phase = FWLAB_C43_PHASE_ADMITTED_POLICY;
+    observer.commands[0].phase = FWLAB_C43_PHASE_ACTION_WAIT;
     observer.commands[0].action_count = FWLAB_C43_ACTIONS_PER_COMMAND;
     observer.commands[0].in_use = 1;
     observer.commands[0].reservation_credit_mask = FWLAB_C43_CREDIT_ALL;
     observer.commands[0].first_action_uid = 1;
     observer.commands[0].action_generation = 1;
+    observer.commands[0].provider_generation_current = 1;
     observer.reserved_intent_credits = 1;
     observer.reserved_ready_credits = 1;
     observer.reserved_lease_credits = 1;
@@ -727,7 +769,7 @@ int main(void)
     CHECK(check_queue_target_block() == 0);
     CHECK(check_graph_records() == 0);
 
-    printf("C4.3 phase1 sizes: request=%zu plan=%zu witness=%zu "
+    printf("C4.3 public sizes: request=%zu plan=%zu witness=%zu "
            "graph_config=%zu providers=%zu observer=%zu\n",
            sizeof(struct fwlab_c43_policy_request),
            sizeof(struct fwlab_c43_policy_plan),
@@ -735,6 +777,6 @@ int main(void)
            sizeof(struct fwlab_c43_graph_config),
            sizeof(struct fwlab_c43_graph_providers),
            sizeof(struct fwlab_c43_graph_observer));
-    puts("C4.3 phase1 public ABI: PASS");
+    puts("C4.3 public ABI: PASS");
     return 0;
 }

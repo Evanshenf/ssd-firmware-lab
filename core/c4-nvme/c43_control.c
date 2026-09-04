@@ -89,19 +89,26 @@ int fwlab_c43_graph_observer_valid(
                 (command->satisfied_witness_mask &
                  command->required_witness_mask) ==
                     command->required_witness_mask;
+            const int initial_phase =
+                command->phase == FWLAB_C43_PHASE_PREPARED ||
+                command->phase == FWLAB_C43_PHASE_ADMITTED_POLICY;
 
             if (command->phase == FWLAB_C43_PHASE_FREE ||
-                (command->phase == FWLAB_C43_PHASE_PREPARED &&
+                (initial_phase &&
                  (command->action_count !=
                       FWLAB_C43_ACTIONS_PER_COMMAND ||
                   command->reservation_credit_mask != FWLAB_C43_CREDIT_ALL ||
                   command->terminal_winner != FWLAB_C43_WINNER_NONE ||
                   command->publication !=
                       FWLAB_C43_PUBLICATION_ELIGIBLE ||
-                  command->required_witness_mask != 0 ||
-                  command->satisfied_witness_mask != 0 ||
-                  command->success_eligible != 0 ||
                   command->provider_generation_current != 1)) ||
+                (command->phase == FWLAB_C43_PHASE_PREPARED &&
+                 (command->required_witness_mask != 0 ||
+                  command->satisfied_witness_mask != 0 ||
+                  command->success_eligible != 0)) ||
+                (command->phase == FWLAB_C43_PHASE_ADMITTED_POLICY &&
+                 (command->satisfied_witness_mask != 0 ||
+                  command->success_eligible != 0)) ||
                 !c43_handle_valid(&command->handle) ||
                 !c43_origin_valid(&command->origin) ||
                 command->transaction_uid == 0 ||

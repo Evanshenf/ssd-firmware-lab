@@ -270,11 +270,21 @@ int main(void)
     memset(identify, 0xa5, sizeof(identify));
     memcpy(before, identify, sizeof(before));
     if (fwlab_c43_identify_encode(&recipe, identify, sizeof(identify)) !=
-            FWLAB_C43_API_NOT_IMPLEMENTED ||
+            FWLAB_C43_API_OK ||
+        bytes_equal(identify, before, sizeof(identify)) ||
+        memcmp(identify + 4, "FWLABC43P1-000000001", 20) != 0 ||
+        identify[516] != 1 || identify[517] != 0 || identify[525] != 1) {
+        return 1;
+    }
+    recipe.identity_version = 0;
+    memset(identify, 0xa5, sizeof(identify));
+    memcpy(before, identify, sizeof(before));
+    if (fwlab_c43_identify_encode(&recipe, identify, sizeof(identify)) !=
+            FWLAB_C43_API_INVALID ||
         !bytes_equal(identify, before, sizeof(identify)) ||
         !check_fake_entrypoints(&services, &providers)) {
         return 1;
     }
-    puts("C4.3 phase1 core fake-link: PASS");
+    puts("C4.3 core fake-link: PASS");
     return 0;
 }

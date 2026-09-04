@@ -15,6 +15,7 @@
 
 #define FWLAB_C43_GRAPH_VERSION 1u
 #define FWLAB_C43_PROVIDER_BUNDLE_VERSION 1u
+#define FWLAB_C43_ADMIT_RESULT_VERSION 1u
 #define FWLAB_C43_MAX_COMMANDS 4u
 #define FWLAB_C43_ACTIONS_PER_COMMAND 8u
 #define FWLAB_C43_MAX_ACTIONS 32u
@@ -194,6 +195,16 @@ struct fwlab_c43_step_result {
     uint32_t reserved[3];
 };
 
+struct fwlab_c43_admit_result {
+    uint16_t version;
+    uint16_t size;
+    uint32_t reserved0;
+    uint32_t state;
+    uint32_t reserved1;
+    struct fwlab_hif_command_ticket ticket;
+    uint32_t reserved2[6];
+};
+
 struct fwlab_c43_graph;
 
 int fwlab_c43_graph_config_valid(
@@ -230,6 +241,28 @@ enum fwlab_c43_graph_result fwlab_c43_graph_prepare_query(
     const struct fwlab_c43_graph *graph,
     const struct fwlab_hif_prepare_key *key,
     struct fwlab_hif_prepare_result *result
+);
+int fwlab_c43_admit_result_valid(
+    const struct fwlab_c43_admit_result *result
+);
+/*
+ * Admit stores only the exact sanitized request and its immutable policy plan.
+ * A successful start is the graph ownership LP and returns one stable ticket;
+ * a repeated start cannot remint it, while query recovers it after response
+ * loss.  prepared/request/result must be pairwise disjoint and outside the
+ * graph arena.  Non-OK returns preserve graph state and caller output.
+ */
+enum fwlab_c43_graph_result fwlab_c43_graph_admit_start(
+    struct fwlab_c43_graph *graph,
+    const struct fwlab_hif_prepared_token *prepared,
+    const struct fwlab_c43_policy_request *request,
+    struct fwlab_c43_admit_result *result
+);
+enum fwlab_c43_graph_result fwlab_c43_graph_admit_query(
+    const struct fwlab_c43_graph *graph,
+    const struct fwlab_hif_prepared_token *prepared,
+    const struct fwlab_c43_policy_request *request,
+    struct fwlab_c43_admit_result *result
 );
 enum fwlab_c43_graph_result fwlab_c43_graph_step(
     struct fwlab_c43_graph *graph,

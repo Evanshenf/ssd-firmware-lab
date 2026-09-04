@@ -17,6 +17,12 @@ enum c43_action_record_state {
     C43_ACTION_RECORD_RESERVED = 1
 };
 
+enum c43_command_record_state {
+    C43_COMMAND_RECORD_FREE = 0,
+    C43_COMMAND_RECORD_PREPARED = 1,
+    C43_COMMAND_RECORD_ADMITTED = 2
+};
+
 struct c43_counter_cursor {
     uint64_t next;
     uint64_t maximum;
@@ -35,14 +41,18 @@ struct c43_action_record {
 struct c43_command_record {
     struct fwlab_hif_prepare_key key;
     struct fwlab_hif_prepared_token prepared;
+    struct fwlab_hif_command_ticket ticket;
+    struct fwlab_c43_policy_request request;
+    struct fwlab_c43_policy_plan plan;
     uint64_t transaction_uid;
     uint64_t lease_uid;
     uint64_t consume_uid;
     uint64_t finalizer_uid;
     struct c43_action_record actions[FWLAB_C43_ACTIONS_PER_COMMAND];
     uint32_t reservation_credit_mask;
+    uint8_t state;
     uint8_t in_use;
-    uint8_t reserved0[3];
+    uint8_t reserved0[2];
     uint32_t reserved1[4];
 };
 
