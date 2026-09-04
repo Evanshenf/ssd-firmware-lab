@@ -1036,6 +1036,28 @@ EXPECTED_PORTABLE_COMPONENTS = {
     },
 }
 
+EXPECTED_J0A_COMPONENT_PATHS = {
+    Path("core/m3p/fakes/m3p_fake_adjacent.c"),
+    Path("core/m3p/fakes/m3p_fake_adjacent.h"),
+    Path("core/m3p/m3p.h"),
+    Path("core/m3p/m3p_codec.c"),
+    Path("core/m3p/m3p_gc.c"),
+    Path("core/m3p/m3p_internal.h"),
+    Path("core/m3p/m3p_mapping.c"),
+    Path("core/m3p/m3p_nfc.c"),
+    Path("core/m3p/m3p_recovery.c"),
+    Path("core/m3p/m3p_runtime.c"),
+    Path("core/m3p/tests/test_j0a_lower.c"),
+    Path("frontends/headless-j0/Makefile"),
+    Path("frontends/headless-j0/j0.mk"),
+    Path("media/file-nand-v0/file_nand.h"),
+    Path("media/file-nand-v0/file_nand_codec.c"),
+    Path("media/file-nand-v0/file_nand_engine.c"),
+    Path("media/file-nand-v0/file_nand_internal.h"),
+    Path("media/file-nand-v0/file_nand_media.c"),
+    Path("media/file-nand-v0/file_nand_posix.c"),
+}
+
 
 def project_files():
     result = subprocess.run(
@@ -1082,6 +1104,52 @@ def load_policy(relative: str, failures: list[str]):
 def is_under(relative: Path, root: str) -> bool:
     root_path = Path(root)
     return relative == root_path or root_path in relative.parents
+
+
+def check_j0a_component_budget(
+    files: list[tuple[Path, Path]], failures: list[str]
+) -> None:
+    roots = ("core/m3p", "media/file-nand-v0", "frontends/headless-j0")
+    actual = {
+        relative for _, relative in files
+        if any(is_under(relative, root) for root in roots)
+    }
+    if not actual:
+        return
+    if actual != EXPECTED_J0A_COMPONENT_PATHS:
+        failures.append(
+            "J0-A component path budget differs: "
+            f"missing={sorted(EXPECTED_J0A_COMPONENT_PATHS - actual)} "
+            f"extra={sorted(actual - EXPECTED_J0A_COMPONENT_PATHS)}"
+        )
+    for path, relative in files:
+        if relative not in actual or relative.suffix.lower() not in {
+            ".c", ".h"
+        }:
+            continue
+        try:
+            text = strip_c_comments(path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError:
+            continue
+        if is_under(relative, "core/m3p") and \
+                not is_under(relative, "core/m3p/fakes") and \
+                not is_under(relative, "core/m3p/tests"):
+            for forbidden in (
+                "file_nand", "openat", "pread", "pwrite", "fdatasync",
+                "execveat", "host_dma", "prp", "iova", "qid", "cid",
+            ):
+                if re.search(rf"\b{forbidden}\b", text, re.IGNORECASE):
+                    failures.append(
+                        f"J0-A M3-P crosses its aggregate boundary with "
+                        f"{forbidden!r}: {relative}"
+                    )
+        if is_under(relative, "media/file-nand-v0"):
+            for forbidden in ("lba", "nsid", "nvme", "host_dma", "prp", "iova"):
+                if re.search(rf"\b{forbidden}\b", text, re.IGNORECASE):
+                    failures.append(
+                        f"J0-A file-NAND crosses its physical boundary with "
+                        f"{forbidden!r}: {relative}"
+                    )
 
 
 def is_kernel_vfio_source(relative: Path) -> bool:
@@ -1737,6 +1805,7 @@ def main() -> int:
     failures: list[str] = []
     boundaries = load_policy("policy/source-boundaries.toml", failures)
     project_entries = list(project_files())
+    check_j0a_component_budget(project_entries, failures)
 
     if boundaries.get("architecture") != EXPECTED_ARCHITECTURE:
         failures.append("source architecture boundary matrix changed or is incomplete")

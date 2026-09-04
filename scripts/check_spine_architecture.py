@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Fail closed on the bounded S0-A/S0-B command-spine checkpoints."""
+"""Fail closed on bounded S0 and J0 command-spine checkpoints."""
 
 from __future__ import annotations
 
@@ -24,6 +24,91 @@ S0A_PATH_MANIFEST = \
     "601ac20de15d91c9c9e0ba0afb111cae617a5b21d70ca3435a70e87d65eab2a0"
 S0A_CONTENT_MANIFEST = \
     "d420e88da5806c2bc2fd39e246f600d5571e00eafafcbd949b0044d7c38059fb"
+S0B_CHECKPOINT = "924007d3ec185ca641ebab8b3129466203952c43"
+S0B_PATH_MANIFEST = \
+    "215c94614033a596c03837568e10425c45456d8af364ed31eda6eadd76854d73"
+S0B_CONTENT_MANIFEST = \
+    "90de973eb65bda98867c725a586e7fcf328f4626990d268105ab85fa1b8addad"
+J0_COMPONENT = ROOT / "frontends" / "headless-j0"
+
+J0A_NEW_PATHS = [
+    "core/m3p/fakes/m3p_fake_adjacent.c",
+    "core/m3p/fakes/m3p_fake_adjacent.h",
+    "core/m3p/m3p.h",
+    "core/m3p/m3p_codec.c",
+    "core/m3p/m3p_gc.c",
+    "core/m3p/m3p_internal.h",
+    "core/m3p/m3p_mapping.c",
+    "core/m3p/m3p_nfc.c",
+    "core/m3p/m3p_recovery.c",
+    "core/m3p/m3p_runtime.c",
+    "core/m3p/tests/test_j0a_lower.c",
+    "frontends/headless-j0/Makefile",
+    "frontends/headless-j0/j0.mk",
+    "media/file-nand-v0/file_nand.h",
+    "media/file-nand-v0/file_nand_codec.c",
+    "media/file-nand-v0/file_nand_engine.c",
+    "media/file-nand-v0/file_nand_internal.h",
+    "media/file-nand-v0/file_nand_media.c",
+    "media/file-nand-v0/file_nand_posix.c",
+]
+J0A_MODIFIED_PATHS = [
+    "scripts/check_repo_policy.py",
+    "scripts/check_spine_architecture.py",
+]
+J0A_PATHS = sorted([*J0A_NEW_PATHS, *J0A_MODIFIED_PATHS])
+
+J0_M3P_SOURCES = [
+    "../../core/m3p/m3p_codec.c",
+    "../../core/m3p/m3p_mapping.c",
+    "../../core/m3p/m3p_nfc.c",
+    "../../core/m3p/m3p_gc.c",
+    "../../core/m3p/m3p_recovery.c",
+    "../../core/m3p/m3p_runtime.c",
+]
+J0_M3P_MEMBERS = [
+    "m3p_codec.o", "m3p_mapping.o", "m3p_nfc.o", "m3p_gc.o",
+    "m3p_recovery.o", "m3p_runtime.o",
+]
+J0_NFC_SOURCES = [
+    "../../nfc/nfc_model.c", "../../nfc/nfc_scheduler.c",
+    "../../nfc/nfc_fault.c", "../../nfc/nfc_media.c",
+]
+J0_NFC_MEMBERS = [
+    "nfc_model.o", "nfc_scheduler.o", "nfc_fault.o", "nfc_media.o",
+]
+J0_FILE_SOURCES = [
+    "../../media/file-nand-v0/file_nand_codec.c",
+    "../../media/file-nand-v0/file_nand_engine.c",
+    "../../media/file-nand-v0/file_nand_media.c",
+    "../../media/file-nand-v0/file_nand_posix.c",
+]
+J0_FILE_MEMBERS = [
+    "file_nand_codec.o", "file_nand_engine.o", "file_nand_media.o",
+    "file_nand_posix.o",
+]
+J0A_M3P_OBJECTS = [f"build/j0a/{member}" for member in J0_M3P_MEMBERS]
+J0A_NFC_OBJECTS = [f"build/j0a/{member}" for member in J0_NFC_MEMBERS]
+J0A_FILE_OBJECTS = [f"build/j0a/{member}" for member in J0_FILE_MEMBERS]
+J0A_FAKE_OBJECT = "build/j0a/m3p_fake_adjacent.o"
+J0A_TEST_OBJECT = "build/j0a/test_j0a_lower.o"
+J0A_ARCHIVES = [
+    "build/j0a/libfwlab_m3p_v0.a",
+    "build/j0a/libfwlab_nfc_v1.a",
+    "build/j0a/libfwlab_file_nand_v0.a",
+]
+J0A_MATRIX = "build/j0a/j0a_lower_matrix"
+J0A_INTERMEDIATES = [
+    *J0A_M3P_OBJECTS, *J0A_NFC_OBJECTS, *J0A_FILE_OBJECTS,
+    J0A_FAKE_OBJECT, J0A_TEST_OBJECT, *J0A_ARCHIVES,
+]
+J0A_OWNED = [*J0A_INTERMEDIATES, J0A_MATRIX]
+J0_FORBIDDEN_MEMBERS = [
+    "nfc_codec.o", "nfc_adapter.o", "nfc_fake_main.o",
+    "nfc_memory_media.o", "spine_fake_adjacent.o",
+    "tiny_profile_fixture.o", "m4_frontend.o", "m4_nvme.o",
+    "m4_media_fixture.o",
+]
 
 PUBLIC_HEADERS = [
     "include/fwlab/portable/host_action_program_v0.h",
@@ -434,6 +519,22 @@ def changed_paths(phase: str) -> list[str]:
         ]
         check_ignored(allowed_s0a, "S0-A")
         return CHECKPOINT_PATHS
+
+    if subprocess.run(
+        ["git", "-C", str(ROOT), "merge-base", "--is-ancestor",
+         S0B_CHECKPOINT, "HEAD"], check=False,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ).returncode == 0:
+        s0b_checkpoint_identity()
+        for path in S0B_TRANSITION_PATHS:
+            if path == "scripts/check_spine_architecture.py":
+                continue
+            if (ROOT / path).read_bytes() != git_bytes(
+                    "show", f"{S0B_CHECKPOINT}:{path}"):
+                fail(f"frozen S0-B leaf differs from {S0B_CHECKPOINT}: {path}")
+        check_regular_paths(S0B_TRANSITION_PATHS)
+        check_ignored(S0B_OWNED, "S0-B")
+        return S0B_TRANSITION_PATHS
 
     tracked = git_bytes(
         "diff", "--name-only", "--no-renames", "-z", S0A_CHECKPOINT, "--"
@@ -1149,11 +1250,440 @@ def check_s0b_artifacts(
     return lifecycle_digest
 
 
+def s0b_checkpoint_identity() -> None:
+    paths = git_bytes(
+        "diff", "--name-only", "--no-renames", S0A_CHECKPOINT,
+        S0B_CHECKPOINT, "--"
+    ).decode("utf-8").splitlines()
+    paths = sorted(path for path in paths if path)
+    encoded = "".join(f"{path}\n" for path in paths).encode("utf-8")
+    if hashlib.sha256(encoded).hexdigest() != S0B_PATH_MANIFEST:
+        fail("S0-B checkpoint path manifest does not reconstruct")
+    content = bytearray()
+    for path in paths:
+        digest = hashlib.sha256(
+            git_bytes("show", f"{S0B_CHECKPOINT}:{path}")
+        ).hexdigest()
+        content.extend(f"{digest}  {path}\n".encode("utf-8"))
+    if hashlib.sha256(content).hexdigest() != S0B_CONTENT_MANIFEST:
+        fail("S0-B checkpoint content manifest does not reconstruct")
+
+
+def changed_paths_j0a() -> list[str]:
+    if subprocess.run(
+        ["git", "-C", str(ROOT), "merge-base", "--is-ancestor",
+         S0B_CHECKPOINT, "HEAD"], check=False,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ).returncode:
+        fail(f"HEAD is not descended from S0-B checkpoint {S0B_CHECKPOINT}")
+    s0b_checkpoint_identity()
+    for path in S0B_TRANSITION_PATHS:
+        if path == "scripts/check_spine_architecture.py":
+            continue
+        if (ROOT / path).read_bytes() != git_bytes(
+                "show", f"{S0B_CHECKPOINT}:{path}"):
+            fail(f"frozen S0-B leaf differs from {S0B_CHECKPOINT}: {path}")
+    tracked = git_bytes(
+        "diff", "--name-only", "--no-renames", "-z", S0B_CHECKPOINT, "--"
+    ).decode("utf-8").split("\0")
+    untracked = git_bytes(
+        "ls-files", "--others", "--exclude-standard", "-z"
+    ).decode("utf-8").split("\0")
+    paths = sorted(set(path for path in [*tracked, *untracked] if path))
+    if paths != J0A_PATHS:
+        missing = sorted(set(J0A_PATHS) - set(paths))
+        extra = sorted(set(paths) - set(J0A_PATHS))
+        fail(f"J0-A path manifest differs: missing={missing} extra={extra}")
+    check_regular_paths(paths)
+    for path in J0A_NEW_PATHS:
+        if subprocess.run(
+            ["git", "-C", str(ROOT), "cat-file", "-e",
+             f"{S0B_CHECKPOINT}:{path}"], check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        ).returncode == 0:
+            fail(f"J0-A new path existed at its exact base: {path}")
+    for path in J0A_MODIFIED_PATHS:
+        if subprocess.run(
+            ["git", "-C", str(ROOT), "cat-file", "-e",
+             f"{S0B_CHECKPOINT}:{path}"], check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        ).returncode != 0:
+            fail(f"J0-A modified authority absent at exact base: {path}")
+    ignored = git_bytes(
+        "ls-files", "--others", "--ignored", "--exclude-standard", "-z",
+        "--", "core/m3p", "media/file-nand-v0", "frontends/headless-j0",
+    ).decode("utf-8").split("\0")
+    allowed = {f"frontends/headless-j0/{path}" for path in J0A_OWNED}
+    unexpected = sorted(path for path in ignored if path and path not in allowed)
+    if unexpected:
+        fail(f"unexpected ignored J0-A inputs/artifacts: {unexpected}")
+    return paths
+
+
+def j0_manifest_expected() -> dict[str, list[str]]:
+    return {
+        "J0_BASE_COMMIT": [S0B_CHECKPOINT],
+        "J0_S0B_PATH_MANIFEST": [S0B_PATH_MANIFEST],
+        "J0_S0B_CONTENT_MANIFEST": [S0B_CONTENT_MANIFEST],
+        "J0_M3P_SOURCES": J0_M3P_SOURCES,
+        "J0_M3P_MEMBERS": J0_M3P_MEMBERS,
+        "J0_NFC_SOURCES": J0_NFC_SOURCES,
+        "J0_NFC_MEMBERS": J0_NFC_MEMBERS,
+        "J0_FILE_SOURCES": J0_FILE_SOURCES,
+        "J0_FILE_MEMBERS": J0_FILE_MEMBERS,
+        "J0A_BUILD_DIR": ["build/j0a"],
+        "J0A_M3P_OBJECTS": J0A_M3P_OBJECTS,
+        "J0A_NFC_OBJECTS": J0A_NFC_OBJECTS,
+        "J0A_FILE_OBJECTS": J0A_FILE_OBJECTS,
+        "J0A_FAKE_SOURCE": ["../../core/m3p/fakes/m3p_fake_adjacent.c"],
+        "J0A_FAKE_OBJECT": [J0A_FAKE_OBJECT],
+        "J0A_TEST_SOURCE": ["../../core/m3p/tests/test_j0a_lower.c"],
+        "J0A_TEST_OBJECT": [J0A_TEST_OBJECT],
+        "J0A_M3P_ARCHIVE": [J0A_ARCHIVES[0]],
+        "J0A_NFC_ARCHIVE": [J0A_ARCHIVES[1]],
+        "J0A_FILE_ARCHIVE": [J0A_ARCHIVES[2]],
+        "J0A_MATRIX": [J0A_MATRIX],
+        "J0A_INTERMEDIATES": J0A_INTERMEDIATES,
+        "J0A_ARTIFACTS": [J0A_MATRIX],
+        "J0A_OWNED": J0A_OWNED,
+        "J0_FORBIDDEN_MEMBERS": J0_FORBIDDEN_MEMBERS,
+        "J0_FORBIDDEN_SYMBOL_PREFIXES": [
+            "c34_", "c35_", "fwlab_c31_", "fwlab_m4_",
+        ],
+    }
+
+
+def check_j0_manifest() -> None:
+    manifest = (J0_COMPONENT / "j0.mk").read_text(encoding="utf-8")
+    assignment_re = re.compile(
+        r"^[ \t]*(?P<override>override[ \t]+)?"
+        r"(?P<name>J0[A-Z0-9_]+)[ \t]*(?P<operator>[:+?!]*=)",
+        re.MULTILINE,
+    )
+    expected = j0_manifest_expected()
+    counts: dict[str, int] = {}
+    for assignment in assignment_re.finditer(manifest):
+        name = assignment.group("name")
+        counts[name] = counts.get(name, 0) + 1
+        if (assignment.group("override") or "").strip() != "override" or \
+                assignment.group("operator") != ":=":
+            fail(f"J0 manifest assignment is not fixed override ':=': {name}")
+    unknown = sorted(set(counts) - set(expected))
+    missing = sorted(set(expected) - set(counts))
+    duplicate = sorted(name for name, count in counts.items() if count != 1)
+    if unknown or missing or duplicate:
+        fail(f"J0 manifest assignment set differs: unknown={unknown} "
+             f"missing={missing} duplicate={duplicate}")
+    for variable, words in expected.items():
+        if make_words(manifest, variable) != words:
+            fail(f"{variable} differs from the frozen literal list")
+    if "$(wildcard" in manifest or re.search(
+            r"(?m)^\s*J0[A-Z0-9_]+\s*\?=", manifest):
+        fail("J0 manifest contains discovery or an overridable binding")
+    for variable in ("J0A_INTERMEDIATES", "J0A_OWNED"):
+        if any("$(" in word for word in make_words(manifest, variable)):
+            fail(f"{variable} contains a derived/nonliteral member")
+    if [Path(source).with_suffix(".o").name for source in J0_M3P_SOURCES] != \
+            J0_M3P_MEMBERS or \
+       [Path(source).with_suffix(".o").name for source in J0_NFC_SOURCES] != \
+            J0_NFC_MEMBERS or \
+       [Path(source).with_suffix(".o").name for source in J0_FILE_SOURCES] != \
+            J0_FILE_MEMBERS:
+        fail("J0 source/member derivation differs")
+    makefile = (J0_COMPONENT / "Makefile").read_text(encoding="utf-8")
+    if makefile.count("--phase j0a") != 1 or \
+            makefile.count("--receipts -") != 1 or \
+            makefile.count("$(J0A_MATRIX) --m3p-sha") != 1:
+        fail("J0-A matrix-to-checker authority pipeline differs")
+    matrix_position = makefile.find("$(J0A_MATRIX) --m3p-sha")
+    checker_position = makefile.find("--phase j0a")
+    if matrix_position < 0 or checker_position <= matrix_position:
+        fail("J0-A checker is not downstream of its single matrix execution")
+    for required in (
+        "override SHELL := /bin/sh",
+        "override J0A_ACTIVE_SHORT_FLAGS :=",
+        "check-j0a: j0a-authority-guard",
+        "$(words $(MAKEFILE_LIST))",
+        "$(word 1,$(MAKEFILE_LIST))",
+        "$(word 2,$(MAKEFILE_LIST))",
+        "if ! receipts=$$($(J0A_MATRIX)",
+        "printf '%s\\n' \"$$receipts\" | python3",
+    ):
+        if makefile.count(required) != 1:
+            fail(f"J0-A make authority fragment differs: {required}")
+    for short_mode in ("n", "t", "q"):
+        if makefile.count(
+                f"findstring {short_mode},$(J0A_ACTIVE_SHORT_FLAGS)"
+        ) != 1:
+            fail(f"J0-A make mode rejection differs: {short_mode}")
+
+
+def check_j0_sources() -> None:
+    immutable = [
+        "nfc/nfc_model.c", "nfc/nfc_scheduler.c", "nfc/nfc_fault.c",
+        "nfc/nfc_media.c", "include/fwlab/portable/nfc_types.h",
+        "include/fwlab/portable/nfc_model.h",
+        "include/fwlab/contracts/nfc_provider.h",
+        "include/fwlab/contracts/nand_media.h",
+        "include/fwlab/contracts/block_service_v0.h",
+        "include/fwlab/contracts/controller_buffer_v0.h",
+    ]
+    for path in immutable:
+        if (ROOT / path).read_bytes() != git_bytes(
+                "show", f"{S0B_CHECKPOINT}:{path}"):
+            fail(f"J0-A changed a frozen C3/S0 contract leaf: {path}")
+    if includes(ROOT / "core/m3p/m3p.h") != {
+        "stddef.h", "stdint.h", "fwlab/contracts/block_service_v0.h",
+        "fwlab/contracts/controller_buffer_v0.h",
+        "fwlab/contracts/nfc_provider.h",
+    }:
+        fail("M3-P public include boundary differs")
+    if includes(ROOT / "media/file-nand-v0/file_nand.h") != {
+        "stddef.h", "stdint.h", "fwlab/contracts/nand_media.h",
+    }:
+        fail("file-NAND public include boundary differs")
+    m3p_text = "\n".join(
+        (ROOT / Path(source).as_posix().removeprefix("../../")).read_text(
+            encoding="utf-8") for source in J0_M3P_SOURCES
+    )
+    for forbidden in (
+        "file_nand", "openat", "pread", "pwrite", "fdatasync", "execveat",
+        "host_dma", "prp", "iova", "qid", "cid",
+    ):
+        if re.search(rf"\b{re.escape(forbidden)}\b", m3p_text,
+                     re.IGNORECASE):
+            fail(f"M3-P imports a forbidden lower/Host concept: {forbidden}")
+    file_text = "\n".join(
+        (ROOT / Path(source).as_posix().removeprefix("../../")).read_text(
+            encoding="utf-8") for source in J0_FILE_SOURCES
+    )
+    for forbidden in ("lba", "nsid", "nvme", "host_dma", "prp", "iova"):
+        if re.search(rf"\b{forbidden}\b", file_text, re.IGNORECASE):
+            fail(f"file-NAND imports a logical/Host concept: {forbidden}")
+    engine_text = (ROOT / "media/file-nand-v0/file_nand_engine.c").read_text(
+        encoding="utf-8"
+    )
+    for forbidden in (
+        "open", "openat", "close", "pread", "pwrite", "ftruncate",
+        "fdatasync", "fsync", "fcntl", "unlink", "unlinkat",
+    ):
+        if re.search(rf"(?<![>.])\b{forbidden}\s*\(", engine_text):
+            fail(f"file-NAND engine contains POSIX operation: {forbidden}")
+
+
+def checked_j0_artifact(path_text: str, expected: str) -> Path:
+    if path_text != expected:
+        fail(f"J0-A artifact path differs: expected={expected!r} "
+             f"actual={path_text!r}")
+    path = J0_COMPONENT / path_text
+    for directory in (J0_COMPONENT / "build", J0_COMPONENT / "build/j0a"):
+        try:
+            mode = directory.lstat().st_mode
+        except OSError as error:
+            fail(f"J0-A artifact directory cannot be inspected: {error}")
+        if directory.is_symlink() or not stat.S_ISDIR(mode):
+            fail(f"J0-A artifact directory is not real: {directory}")
+    try:
+        mode = path.lstat().st_mode
+    except OSError as error:
+        fail(f"J0-A artifact cannot be inspected: {path}: {error}")
+    if path.is_symlink() or not stat.S_ISREG(mode):
+        fail(f"J0-A artifact is not a regular file: {path}")
+    return path
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def check_j0_receipts(receipt_text: str, m3p_sha: str, nfc_sha: str,
+                      file_sha: str, elf_sha: str) -> None:
+    if not receipt_text or len(receipt_text.encode("utf-8")) > 16384 or \
+            "\0" in receipt_text:
+        fail("J0-A bounded receipt input is absent or invalid")
+    lines = receipt_text.splitlines()
+    if len(lines) != 10:
+        fail(f"J0-A emitted absent/extra receipts: count={len(lines)}")
+    binding = re.fullmatch(
+        r"J0A_BINDING\|m3p=([0-9a-f]{64})\|nfc=([0-9a-f]{64})\|"
+        r"file=([0-9a-f]{64})\|elf=([0-9a-f]{64})\|"
+        r"uuid=([0-9a-f]{32})\|geometry=1x1x1x16x32x4096\+128",
+        lines[0],
+    )
+    if binding is None or binding.groups()[:4] != (
+            m3p_sha, nfc_sha, file_sha, elf_sha) or \
+            int(binding.group(5), 16) == 0:
+        fail("J0-A binding receipt does not match exact artifacts")
+    if lines[1] != (
+        "J0A_ADJACENCY|block_upper=1|scripted_nfc_lower=1|"
+        "file_memory_lower=1|barrier_fault=1"
+    ):
+        fail("J0-A adjacency receipt differs")
+    rmw = re.fullmatch(
+        r"J0A_RMW\|one_sector=1\|unaligned_16_lba=1\|lpn_span=3\|"
+        r"data_ppas=([0-9a-f]{16})", lines[2]
+    )
+    if rmw is None or int(rmw.group(1), 16) == 0:
+        fail("J0-A RMW receipt differs")
+    if lines[3] != (
+        "J0A_TRIM|partial_mask=1|whole_tombstone=1|flush_survives=1"
+    ):
+        fail("J0-A Trim receipt differs")
+    durability = re.fullmatch(
+        r"J0A_DURABILITY\|volatile_lost=1\|self_survives=1\|"
+        r"frontier=([1-9][0-9]*)\|later_uncovered=0", lines[4]
+    )
+    if durability is None:
+        fail("J0-A durability receipt differs")
+    checkpoint = re.fullmatch(
+        r"J0A_CHECKPOINT\|generation=([1-9][0-9]*)\|"
+        r"covered=([1-9][0-9]*)\|tail_ignored=1\|interior_quarantine=1",
+        lines[5],
+    )
+    if checkpoint is None:
+        fail("J0-A checkpoint receipt differs")
+    gc = re.fullmatch(
+        r"J0A_GC\|victim=([0-9])\|live=([0-9]|1[0-9]|2[0-5])\|"
+        r"reclaimable=([7-9]|[12][0-9]|3[0-2])\|"
+        r"gc_uid=([1-9][0-9]*)\|switch=([1-9][0-9]*)\|"
+        r"erase_count=([1-9][0-9]*)", lines[6],
+    )
+    if gc is None:
+        fail("J0-A GC receipt differs")
+    before = re.fullmatch(
+        r"J0A_CUT\|phase=BEFORE\|exit=90\|physical_delta=0\|"
+        r"logical=old\|elf_devino=([0-9a-f]+:[0-9a-f]+)\|"
+        r"elf=([0-9a-f]{64})", lines[7],
+    )
+    after = re.fullmatch(
+        r"J0A_CUT\|phase=AFTER\|exit=91\|physical_delta=1\|"
+        r"logical=old\|p2l=ORPHAN\|"
+        r"elf_devino=([0-9a-f]+:[0-9a-f]+)\|elf=([0-9a-f]{64})",
+        lines[8],
+    )
+    if before is None or after is None or before.group(1) != after.group(1) or \
+            before.group(2) != elf_sha or after.group(2) != elf_sha:
+        fail("J0-A cut identity/effect receipt differs")
+    if lines[9] != "J0-A lower matrix: PASS (rows=9 artifacts=1)":
+        fail("J0-A final receipt differs")
+
+
+def check_j0a_artifacts(m3p_archive: Path, nfc_archive: Path,
+                        file_archive: Path, matrix: Path,
+                        receipt_text: str) -> tuple[str, str, str, str, str]:
+    artifacts = [m3p_archive, nfc_archive, file_archive, matrix]
+    if len({os.path.realpath(path) for path in artifacts}) != len(artifacts):
+        fail("J0-A artifacts are not four distinct files")
+    if not os.access(matrix, os.X_OK):
+        fail("J0-A matrix is not executable")
+    for relative in J0A_INTERMEDIATES:
+        path = J0_COMPONENT / relative
+        try:
+            mode = path.lstat().st_mode
+        except OSError as error:
+            fail(f"J0-A intermediate absent during authority check: "
+                 f"{relative}: {error}")
+        if path.is_symlink() or not stat.S_ISREG(mode):
+            fail(f"J0-A intermediate is not regular: {relative}")
+    archive_specs = (
+        (m3p_archive, J0_M3P_MEMBERS, J0A_M3P_OBJECTS, J0_M3P_SOURCES),
+        (nfc_archive, J0_NFC_MEMBERS, J0A_NFC_OBJECTS, J0_NFC_SOURCES),
+        (file_archive, J0_FILE_MEMBERS, J0A_FILE_OBJECTS, J0_FILE_SOURCES),
+    )
+    authority = hashlib.sha256()
+    for archive, expected, objects, sources in archive_specs:
+        members = subprocess.run(
+            ["ar", "t", str(archive)], check=True, text=True,
+            stdout=subprocess.PIPE,
+        ).stdout.splitlines()
+        if members != expected:
+            fail(f"J0-A archive members differ for {archive.name}: {members}")
+        if set(members) & set(J0_FORBIDDEN_MEMBERS):
+            fail(f"forbidden object entered {archive.name}")
+        for member, object_relative, source_relative in zip(
+                members, objects, sources, strict=True):
+            object_path = J0_COMPONENT / object_relative
+            member_bytes = subprocess.run(
+                ["ar", "p", str(archive), member], check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
+            object_bytes = object_path.read_bytes()
+            if member_bytes != object_bytes:
+                fail(f"archive member differs byte-for-byte from object: "
+                     f"{archive.name}:{member}")
+            source_path = ROOT / Path(source_relative).as_posix().removeprefix(
+                "../../"
+            )
+            source_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()
+            object_digest = hashlib.sha256(object_bytes).hexdigest()
+            authority.update(
+                f"{source_digest} {source_path.relative_to(ROOT)} "
+                f"{object_digest} {object_relative} {member} "
+                f"{file_sha256(archive)}\n".encode("utf-8")
+            )
+    for source_relative, object_relative in (
+        ("core/m3p/fakes/m3p_fake_adjacent.c", J0A_FAKE_OBJECT),
+        ("core/m3p/tests/test_j0a_lower.c", J0A_TEST_OBJECT),
+    ):
+        source_digest = hashlib.sha256(
+            (ROOT / source_relative).read_bytes()
+        ).hexdigest()
+        object_digest = hashlib.sha256(
+            (J0_COMPONENT / object_relative).read_bytes()
+        ).hexdigest()
+        authority.update(
+            f"{source_digest} {source_relative} {object_digest} "
+            f"{object_relative} direct-link\n".encode("utf-8")
+        )
+    expected_symbols = (
+        (m3p_archive, {
+            "m3p_codec.o": "m3p_crc32c",
+            "m3p_mapping.o": "m3p_mapping_reset",
+            "m3p_nfc.o": "m3p_child_read_start",
+            "m3p_gc.o": "fwlab_m3p_force_gc_start",
+            "m3p_recovery.o": "fwlab_m3p_recover_start",
+            "m3p_runtime.o": "fwlab_m3p_init",
+        }),
+        (nfc_archive, {
+            "nfc_model.o": "fwlab_nfc_model_init",
+            "nfc_scheduler.o": "c33_schedule_operation",
+            "nfc_fault.o": "c33_fault_word",
+            "nfc_media.o": "c33_finish_operation",
+        }),
+        (file_archive, {
+            "file_nand_codec.o": "file_nand_crc32c",
+            "file_nand_engine.o": "file_nand_engine_format",
+            "file_nand_media.o": "fwlab_file_nand_v0_media",
+            "file_nand_posix.o": "fwlab_file_nand_v0_posix_format",
+        }),
+    )
+    provenance = []
+    for archive, symbols in expected_symbols:
+        defined = nm(archive, "-A", "--defined-only")
+        undefined = nm(archive, "-u")
+        provenance.extend((defined, undefined))
+        for member, symbol in symbols.items():
+            require_member_symbol(defined, member, symbol)
+    joined = "\n".join(provenance).lower()
+    for prefix in ("c34_", "c35_", "fwlab_c31_", "fwlab_m4_"):
+        if prefix in joined:
+            fail(f"forbidden donor symbol entered J0-A: {prefix}")
+    digests = tuple(file_sha256(path) for path in artifacts)
+    check_j0_receipts(receipt_text, *digests)
+    return (*digests, authority.hexdigest())
+
+
 def main() -> int:
     global ACTIVE_PHASE
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phase", choices=("s0a", "s0b"), default="s0a")
+    parser.add_argument(
+        "--phase", choices=("s0a", "s0b", "j0a"), default="s0a"
+    )
     parser.add_argument(
         "--archive", default="build/s0a/libfwlab_spine_contracts_v0.a"
     )
@@ -1165,16 +1695,46 @@ def main() -> int:
     )
     parser.add_argument("--lifecycle")
     parser.add_argument("--profiles")
+    parser.add_argument("--m3p")
+    parser.add_argument("--nfc")
+    parser.add_argument("--file")
     parser.add_argument("--matrix")
     parser.add_argument("--receipts")
     arguments = parser.parse_args()
     ACTIVE_PHASE = arguments.phase
 
+    if arguments.phase == "j0a":
+        if arguments.m3p is None or arguments.nfc is None or \
+                arguments.file is None or arguments.matrix is None or \
+                arguments.receipts != "-":
+            fail("J0-A requires three archives, matrix and stdin receipts")
+        if arguments.lifecycle is not None or arguments.profiles is not None:
+            fail("S0-B artifacts are forbidden in J0-A phase")
+        paths = changed_paths_j0a()
+        check_j0_manifest()
+        check_j0_sources()
+        m3p_archive = checked_j0_artifact(arguments.m3p, J0A_ARCHIVES[0])
+        nfc_archive = checked_j0_artifact(arguments.nfc, J0A_ARCHIVES[1])
+        file_archive = checked_j0_artifact(arguments.file, J0A_ARCHIVES[2])
+        matrix = checked_j0_artifact(arguments.matrix, J0A_MATRIX)
+        digests = check_j0a_artifacts(
+            m3p_archive, nfc_archive, file_archive, matrix, sys.stdin.read()
+        )
+        print(
+            "J0-A lower-spine architecture: PASS "
+            f"(paths={len(paths)} intermediates={len(J0A_INTERMEDIATES)} "
+            f"archive_members={len(J0_M3P_MEMBERS) + len(J0_NFC_MEMBERS) + len(J0_FILE_MEMBERS)} "
+            f"artifacts=1 matrix_sha256={digests[3]} "
+            f"source_object_sha256={digests[4]})"
+        )
+        return 0
+
     if arguments.phase == "s0b":
         if arguments.lifecycle is None or arguments.profiles is None or \
                 arguments.matrix is None or arguments.receipts != "-":
             fail("S0-B requires lifecycle/profiles/matrix and stdin receipts")
-        if arguments.archive != \
+        if arguments.m3p is not None or arguments.nfc is not None or \
+                arguments.file is not None or arguments.archive != \
                 "build/s0a/libfwlab_spine_contracts_v0.a" or \
                 arguments.public != "build/s0a/s0a_public_contracts" or \
                 arguments.fake != "build/s0a/s0a_fake_adjacent_link":
@@ -1202,7 +1762,9 @@ def main() -> int:
         return 0
 
     if arguments.lifecycle is not None or arguments.profiles is not None or \
-            arguments.matrix is not None or arguments.receipts is not None:
+            arguments.m3p is not None or arguments.nfc is not None or \
+            arguments.file is not None or arguments.matrix is not None or \
+            arguments.receipts is not None:
         fail("S0-B artifacts require literal --phase s0b")
     paths = changed_paths("s0a")
     check_manifest()
