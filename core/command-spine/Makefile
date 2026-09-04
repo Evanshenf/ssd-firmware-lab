@@ -11,18 +11,25 @@ CFLAGS ?= $(BASE_CFLAGS)
 
 include spine.mk
 
-.PHONY: all check-s0a check-s0a-owned check-headers check-public-contracts \
+.PHONY: all check-s0a check-s0a-owned check-s0b check-s0b-owned \
+	check-headers check-public-contracts \
 	check-fake-adjacent check-token-negatives check-anchor-negatives \
-	check-architecture clean clean-s0a-owned
+	check-architecture check-s0b-architecture clean clean-s0a-owned \
+	clean-s0b-owned
 
 .INTERMEDIATE: $(SPINE_S0A_CONTRACT_OBJECTS) \
-	$(SPINE_S0A_PUBLIC_TEST_OBJECT) $(SPINE_S0A_FAKE_OBJECT)
+	$(SPINE_S0A_PUBLIC_TEST_OBJECT) $(SPINE_S0A_FAKE_OBJECT) \
+	$(SPINE_S0B_INTERMEDIATES)
 
 all: check-s0a
 
 check-s0a:
 	$(MAKE) --no-print-directory clean-s0a-owned
 	$(MAKE) --no-print-directory check-s0a-owned
+
+check-s0b:
+	$(MAKE) --no-print-directory clean-s0a-owned clean-s0b-owned
+	$(MAKE) --no-print-directory check-s0b-owned
 
 $(SPINE_S0A_BUILD_DIR):
 	mkdir -p $@
@@ -148,7 +155,82 @@ check-architecture: $(SPINE_S0A_ARCHIVE) $(SPINE_S0A_PUBLIC_CONTRACTS) \
 check-s0a-owned: check-headers check-public-contracts check-fake-adjacent \
 	check-token-negatives check-anchor-negatives check-architecture
 
-clean: clean-s0a-owned
+$(SPINE_S0B_BUILD_DIR):
+	mkdir -p $@
+
+$(SPINE_S0B_LIFECYCLE_OBJECTS): $(SPINE_S0B_BUILD_DIR)/%.o: %.c \
+		spine_internal.h $(SPINE_S0A_PUBLIC_HEADERS) \
+		spine.mk | $(SPINE_S0B_BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(SPINE_S0B_PROFILE_OBJECTS): $(SPINE_S0B_BUILD_DIR)/%.o: profiles/%.c \
+		spine_internal.h \
+		../../include/fwlab/portable/host_action_program_v0.h \
+		../../include/fwlab/portable/nvme_codec.h spine.mk \
+		| $(SPINE_S0B_BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(SPINE_S0B_C41_OBJECT): $(SPINE_S0B_C41_SOURCE) \
+		../../include/fwlab/portable/nvme_codec.h \
+		../../include/fwlab/portable/nvme_types.h spine.mk \
+		| $(SPINE_S0B_BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(SPINE_S0B_FAKE_OBJECT): $(SPINE_S0B_FAKE_SOURCE) \
+		fakes/spine_fake_adjacent.h spine_internal.h \
+		../../include/fwlab/portable/host_action_program_v0.h spine.mk \
+		| $(SPINE_S0B_BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(SPINE_S0B_TINY_OBJECT): $(SPINE_S0B_TINY_SOURCE) \
+		fakes/spine_fake_adjacent.h spine_internal.h \
+		../../include/fwlab/portable/host_action_program_v0.h \
+		../../include/fwlab/portable/nvme_codec.h spine.mk \
+		| $(SPINE_S0B_BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(SPINE_S0B_MATRIX_OBJECT): $(SPINE_S0B_MATRIX_SOURCE) \
+		fakes/spine_fake_adjacent.h spine_internal.h \
+		../../include/fwlab/portable/host_action_program_v0.h spine.mk \
+		| $(SPINE_S0B_BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(SPINE_S0B_LIFECYCLE_ARCHIVE): $(SPINE_S0B_LIFECYCLE_OBJECTS)
+	rm -f -- $@
+	$(AR) rcs $@ $(SPINE_S0B_LIFECYCLE_OBJECTS)
+
+$(SPINE_S0B_PROFILE_ARCHIVE): $(SPINE_S0B_PROFILE_OBJECTS)
+	rm -f -- $@
+	$(AR) rcs $@ $(SPINE_S0B_PROFILE_OBJECTS)
+
+$(SPINE_S0B_MATRIX): $(SPINE_S0B_MATRIX_OBJECT) $(SPINE_S0B_FAKE_OBJECT) \
+		$(SPINE_S0B_TINY_OBJECT) $(SPINE_S0B_C41_OBJECT) \
+		$(SPINE_S0B_LIFECYCLE_ARCHIVE) $(SPINE_S0B_PROFILE_ARCHIVE)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ \
+		$(SPINE_S0B_MATRIX_OBJECT) $(SPINE_S0B_FAKE_OBJECT) \
+		$(SPINE_S0B_TINY_OBJECT) $(SPINE_S0B_C41_OBJECT) \
+		-Wl,--whole-archive $(SPINE_S0B_LIFECYCLE_ARCHIVE) \
+		$(SPINE_S0B_PROFILE_ARCHIVE) -Wl,--no-whole-archive
+
+check-s0b-architecture: $(SPINE_S0B_LIFECYCLE_ARCHIVE) \
+		$(SPINE_S0B_PROFILE_ARCHIVE) $(SPINE_S0B_MATRIX)
+	@set -eu; \
+	digest=$$(sha256sum $(addprefix $(SPINE_S0B_BUILD_DIR)/,\
+		$(word 2,$(SPINE_S0B_LIFECYCLE_MEMBERS))) | \
+		awk '{print $$1}'); \
+	if ! receipts=$$($(SPINE_S0B_MATRIX) "$$digest"); then \
+		echo "S0-B matrix execution failed" >&2; exit 1; \
+	fi; \
+	printf '%s\n' "$$receipts"; \
+	printf '%s\n' "$$receipts" | \
+		python3 ../../scripts/check_spine_architecture.py --phase s0b \
+		--lifecycle $(SPINE_S0B_LIFECYCLE_ARCHIVE) \
+		--profiles $(SPINE_S0B_PROFILE_ARCHIVE) \
+		--matrix $(SPINE_S0B_MATRIX) --receipts -
+
+check-s0b-owned: check-s0b-architecture
+
+clean: clean-s0a-owned clean-s0b-owned
 
 clean-s0a-owned:
 	rm -f -- $(SPINE_S0A_CONTRACT_OBJECTS) \
@@ -156,3 +238,7 @@ clean-s0a-owned:
 		$(SPINE_S0A_ARCHIVE) $(SPINE_S0A_PUBLIC_CONTRACTS) \
 		$(SPINE_S0A_FAKE_ADJACENT)
 	@rmdir -- $(SPINE_S0A_BUILD_DIR) build 2>/dev/null || true
+
+clean-s0b-owned:
+	rm -f -- $(SPINE_S0B_OWNED)
+	@rmdir -- $(SPINE_S0B_BUILD_DIR) build 2>/dev/null || true

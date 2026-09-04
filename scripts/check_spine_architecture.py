@@ -2,11 +2,12 @@
 # SPDX-FileCopyrightText: 2026 Evanshenf
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Fail closed on the bounded S0-A contract and construction checkpoint."""
+"""Fail closed on the bounded S0-A/S0-B command-spine checkpoints."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -18,6 +19,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = ROOT / "core" / "command-spine"
 BASE = "8002355dd43a36a085df864174613cadd508021a"
+S0A_CHECKPOINT = "fa40ccac01c76f75e9a8c536000db087aa619f8a"
+S0A_PATH_MANIFEST = \
+    "601ac20de15d91c9c9e0ba0afb111cae617a5b21d70ca3435a70e87d65eab2a0"
+S0A_CONTENT_MANIFEST = \
+    "d420e88da5806c2bc2fd39e246f600d5571e00eafafcbd949b0044d7c38059fb"
 
 PUBLIC_HEADERS = [
     "include/fwlab/portable/host_action_program_v0.h",
@@ -42,6 +48,27 @@ CHECKPOINT_PATHS = sorted([
     *COMPONENT_PATHS,
     "scripts/check_spine_architecture.py",
 ])
+
+S0B_ADDED_PATHS = [
+    "core/command-spine/fakes/spine_fake_adjacent.c",
+    "core/command-spine/fakes/spine_fake_adjacent.h",
+    "core/command-spine/profiles/c43_p1_adapter.c",
+    "core/command-spine/profiles/linux_profile_v1_adapter.c",
+    "core/command-spine/spine_internal.h",
+    "core/command-spine/spine_lifecycle.c",
+    "core/command-spine/tests/test_s0b_lifecycle.c",
+    "core/command-spine/tests/tiny_profile_fixture.c",
+]
+S0B_MODIFIED_PATHS = [
+    "core/command-spine/Makefile",
+    "core/command-spine/README.md",
+    "core/command-spine/spine.mk",
+    "scripts/check_spine_architecture.py",
+]
+S0B_TRANSITION_PATHS = sorted([*S0B_ADDED_PATHS, *S0B_MODIFIED_PATHS])
+S0A_IMMUTABLE_PATHS = sorted(
+    set(CHECKPOINT_PATHS) - set(S0B_MODIFIED_PATHS)
+)
 
 EXPECTED_SOURCES = ["spine_contracts.c", "spine_construction.c"]
 EXPECTED_MEMBERS = ["spine_contracts.o", "spine_construction.o"]
@@ -112,6 +139,36 @@ FORBIDDEN_SYMBOLS = [
     "fwlab_m4_media_flush",
     "nvme_mode",
 ]
+
+S0B_LIFECYCLE_SOURCES = ["spine_contracts.c", "spine_lifecycle.c"]
+S0B_LIFECYCLE_MEMBERS = ["spine_contracts.o", "spine_lifecycle.o"]
+S0B_LIFECYCLE_OBJECTS = [
+    "build/s0b/spine_contracts.o",
+    "build/s0b/spine_lifecycle.o",
+]
+S0B_PROFILE_SOURCES = [
+    "profiles/c43_p1_adapter.c",
+    "profiles/linux_profile_v1_adapter.c",
+]
+S0B_PROFILE_MEMBERS = ["c43_p1_adapter.o", "linux_profile_v1_adapter.o"]
+S0B_PROFILE_OBJECTS = [
+    "build/s0b/c43_p1_adapter.o",
+    "build/s0b/linux_profile_v1_adapter.o",
+]
+S0B_INTERMEDIATES = [
+    *S0B_LIFECYCLE_OBJECTS,
+    *S0B_PROFILE_OBJECTS,
+    "build/s0b/c41_codec.o",
+    "build/s0b/spine_fake_adjacent.o",
+    "build/s0b/tiny_profile_fixture.o",
+    "build/s0b/test_s0b_lifecycle.o",
+]
+S0B_ARTIFACTS = [
+    "build/s0b/libfwlab_spine_lifecycle_v0.a",
+    "build/s0b/libfwlab_spine_profiles_v0.a",
+    "build/s0b/s0b_profile_matrix",
+]
+S0B_OWNED = [*S0B_INTERMEDIATES, *S0B_ARTIFACTS]
 EXPECTED_MANIFEST = {
     "SPINE_S0A_BUILD_DIR": ["build/s0a"],
     "SPINE_S0A_CONTRACT_SOURCES": EXPECTED_SOURCES,
@@ -128,6 +185,27 @@ EXPECTED_MANIFEST = {
     "SPINE_S0A_PUBLIC_HEADERS": EXPECTED_HEADERS,
     "SPINE_S0A_ANCHOR_HEADER": ["spine_anchor_internal.h"],
     "SPINE_S0A_ANCHOR_SYMBOLS": ANCHORS,
+    "SPINE_S0B_BUILD_DIR": ["build/s0b"],
+    "SPINE_S0B_LIFECYCLE_SOURCES": S0B_LIFECYCLE_SOURCES,
+    "SPINE_S0B_LIFECYCLE_MEMBERS": S0B_LIFECYCLE_MEMBERS,
+    "SPINE_S0B_LIFECYCLE_OBJECTS": S0B_LIFECYCLE_OBJECTS,
+    "SPINE_S0B_PROFILE_SOURCES": S0B_PROFILE_SOURCES,
+    "SPINE_S0B_PROFILE_MEMBERS": S0B_PROFILE_MEMBERS,
+    "SPINE_S0B_PROFILE_OBJECTS": S0B_PROFILE_OBJECTS,
+    "SPINE_S0B_C41_SOURCE": ["../c4-nvme/c41_codec.c"],
+    "SPINE_S0B_C41_OBJECT": ["build/s0b/c41_codec.o"],
+    "SPINE_S0B_FAKE_SOURCE": ["fakes/spine_fake_adjacent.c"],
+    "SPINE_S0B_FAKE_OBJECT": ["build/s0b/spine_fake_adjacent.o"],
+    "SPINE_S0B_TINY_SOURCE": ["tests/tiny_profile_fixture.c"],
+    "SPINE_S0B_TINY_OBJECT": ["build/s0b/tiny_profile_fixture.o"],
+    "SPINE_S0B_MATRIX_SOURCE": ["tests/test_s0b_lifecycle.c"],
+    "SPINE_S0B_MATRIX_OBJECT": ["build/s0b/test_s0b_lifecycle.o"],
+    "SPINE_S0B_INTERMEDIATES": S0B_INTERMEDIATES,
+    "SPINE_S0B_LIFECYCLE_ARCHIVE": [S0B_ARTIFACTS[0]],
+    "SPINE_S0B_PROFILE_ARCHIVE": [S0B_ARTIFACTS[1]],
+    "SPINE_S0B_MATRIX": [S0B_ARTIFACTS[2]],
+    "SPINE_S0B_ARTIFACTS": S0B_ARTIFACTS,
+    "SPINE_S0B_OWNED": S0B_OWNED,
     "SPINE_M4_AUTHORITATIVE_TARGET": AUTHORITATIVE_TARGET,
     "SPINE_M4_AUTHORITATIVE_MEMBERS": AUTHORITATIVE_MEMBERS,
     "SPINE_M4_FIXTURE_TARGET": FIXTURE_TARGET,
@@ -196,6 +274,56 @@ EXACT_INCLUDES = {
         "fwlab/contracts/hif_action.h",
         "fwlab/contracts/host_data_v0.h",
     },
+    "core/command-spine/spine_internal.h": {
+        "stddef.h",
+        "stdint.h",
+        "fwlab/portable/host_action_program_v0.h",
+    },
+    "core/command-spine/spine_lifecycle.c": {
+        "spine_internal.h",
+        "stddef.h",
+        "stdint.h",
+        "string.h",
+    },
+    "core/command-spine/profiles/c43_p1_adapter.c": {
+        "spine_internal.h",
+        "stddef.h",
+        "stdint.h",
+        "string.h",
+        "fwlab/portable/nvme_codec.h",
+    },
+    "core/command-spine/profiles/linux_profile_v1_adapter.c": {
+        "spine_internal.h",
+        "stddef.h",
+        "stdint.h",
+        "string.h",
+        "fwlab/portable/nvme_codec.h",
+    },
+    "core/command-spine/fakes/spine_fake_adjacent.h": {
+        "stddef.h",
+        "stdint.h",
+        "spine_internal.h",
+    },
+    "core/command-spine/fakes/spine_fake_adjacent.c": {
+        "fakes/spine_fake_adjacent.h",
+        "stddef.h",
+        "stdint.h",
+        "string.h",
+    },
+    "core/command-spine/tests/tiny_profile_fixture.c": {
+        "fakes/spine_fake_adjacent.h",
+        "stddef.h",
+        "stdint.h",
+        "string.h",
+        "fwlab/portable/nvme_codec.h",
+    },
+    "core/command-spine/tests/test_s0b_lifecycle.c": {
+        "fakes/spine_fake_adjacent.h",
+        "stddef.h",
+        "stdint.h",
+        "stdio.h",
+        "string.h",
+    },
 }
 
 INCLUDE_DIRECTIVE_RE = re.compile(
@@ -214,8 +342,12 @@ SOURCE_INPUT_SUFFIXES = {
 }
 
 
+ACTIVE_PHASE = "s0a"
+
+
 def fail(message: str) -> None:
-    print(f"S0-A architecture failed: {message}", file=sys.stderr)
+    print(f"{ACTIVE_PHASE.upper()} architecture failed: {message}",
+          file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -227,25 +359,25 @@ def git_bytes(*arguments: str) -> bytes:
     ).stdout
 
 
-def changed_paths() -> list[str]:
-    if subprocess.run(
-        ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", BASE, "HEAD"],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    ).returncode:
-        fail(f"HEAD is not descended from S0-A base {BASE}")
-    tracked = git_bytes(
-        "diff", "--name-only", "--no-renames", "-z", BASE, "--"
-    ).decode("utf-8").split("\0")
-    untracked = git_bytes(
-        "ls-files", "--others", "--exclude-standard", "-z"
-    ).decode("utf-8").split("\0")
-    paths = sorted(set(path for path in [*tracked, *untracked] if path))
-    if paths != CHECKPOINT_PATHS:
-        missing = sorted(set(CHECKPOINT_PATHS) - set(paths))
-        extra = sorted(set(paths) - set(CHECKPOINT_PATHS))
-        fail(f"checkpoint path manifest differs: missing={missing} extra={extra}")
+def s0a_checkpoint_identity() -> None:
+    paths = git_bytes(
+        "diff", "--name-only", "--no-renames", BASE, S0A_CHECKPOINT, "--"
+    ).decode("utf-8").splitlines()
+    paths = sorted(path for path in paths if path)
+    path_bytes = "".join(f"{path}\n" for path in paths).encode("utf-8")
+    if hashlib.sha256(path_bytes).hexdigest() != S0A_PATH_MANIFEST:
+        fail("S0-A checkpoint path manifest does not reconstruct")
+    content = bytearray()
+    for path in paths:
+        digest = hashlib.sha256(
+            git_bytes("show", f"{S0A_CHECKPOINT}:{path}")
+        ).hexdigest()
+        content.extend(f"{digest}  {path}\n".encode("utf-8"))
+    if hashlib.sha256(content).hexdigest() != S0A_CONTENT_MANIFEST:
+        fail("S0-A checkpoint content manifest does not reconstruct")
+
+
+def check_regular_paths(paths: list[str]) -> None:
     for path in paths:
         candidate = ROOT / path
         try:
@@ -254,38 +386,85 @@ def changed_paths() -> list[str]:
             fail(f"checkpoint path cannot be inspected: {path}: {error}")
         if candidate.is_symlink() or not stat.S_ISREG(mode):
             fail(f"checkpoint path is not a regular non-symlink file: {path}")
-        if subprocess.run(
-            ["git", "-C", str(ROOT), "cat-file", "-e", f"{BASE}:{path}"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        ).returncode == 0:
-            fail(f"S0-A path unexpectedly existed at the exact base: {path}")
 
+
+def check_ignored(allowed_relative: list[str], label: str) -> None:
     ignored = git_bytes(
         "ls-files", "--others", "--ignored", "--exclude-standard", "-z",
         "--", "core/command-spine",
     ).decode("utf-8").split("\0")
-    allowed_ignored = {
-        *(f"core/command-spine/{path}" for path in EXPECTED_OBJECTS),
-        f"core/command-spine/{PUBLIC_TEST_OBJECT[0]}",
-        f"core/command-spine/{FAKE_OBJECT[0]}",
-        f"core/command-spine/{ARCHIVE_PATH[0]}",
-        f"core/command-spine/{PUBLIC_PATH[0]}",
-        f"core/command-spine/{FAKE_PATH[0]}",
+    allowed = {
+        f"core/command-spine/{path}" for path in allowed_relative
     }
-    unexpected_ignored = sorted(
-        path for path in ignored if path and path not in allowed_ignored
-    )
-    if unexpected_ignored:
+    unexpected = sorted(path for path in ignored if path and path not in allowed)
+    if unexpected:
         source_inputs = [
-            path for path in unexpected_ignored
+            path for path in unexpected
             if Path(path).suffix.lower() in SOURCE_INPUT_SUFFIXES or
             Path(path).name in {"Makefile", "Kbuild", "meson.build"}
         ]
         if source_inputs:
             fail(f"ignored non-artifact source inputs: {source_inputs}")
-        fail(f"unexpected ignored S0-A build inputs/artifacts: {unexpected_ignored}")
+        fail(f"unexpected ignored {label} build inputs/artifacts: {unexpected}")
+
+
+def changed_paths(phase: str) -> list[str]:
+    if subprocess.run(
+        ["git", "-C", str(ROOT), "merge-base", "--is-ancestor",
+         S0A_CHECKPOINT, "HEAD"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode:
+        fail(f"HEAD is not descended from S0-A checkpoint {S0A_CHECKPOINT}")
+    s0a_checkpoint_identity()
+    for path in S0A_IMMUTABLE_PATHS:
+        if (ROOT / path).read_bytes() != git_bytes(
+                "show", f"{S0A_CHECKPOINT}:{path}"):
+            fail(f"immutable S0-A leaf differs from {S0A_CHECKPOINT}: {path}")
+    if phase == "s0a":
+        check_regular_paths(CHECKPOINT_PATHS)
+        allowed_s0a = [
+            *EXPECTED_OBJECTS,
+            PUBLIC_TEST_OBJECT[0],
+            FAKE_OBJECT[0],
+            ARCHIVE_PATH[0],
+            PUBLIC_PATH[0],
+            FAKE_PATH[0],
+        ]
+        check_ignored(allowed_s0a, "S0-A")
+        return CHECKPOINT_PATHS
+
+    tracked = git_bytes(
+        "diff", "--name-only", "--no-renames", "-z", S0A_CHECKPOINT, "--"
+    ).decode("utf-8").split("\0")
+    untracked = git_bytes(
+        "ls-files", "--others", "--exclude-standard", "-z"
+    ).decode("utf-8").split("\0")
+    paths = sorted(set(path for path in [*tracked, *untracked] if path))
+    if paths != S0B_TRANSITION_PATHS:
+        missing = sorted(set(S0B_TRANSITION_PATHS) - set(paths))
+        extra = sorted(set(paths) - set(S0B_TRANSITION_PATHS))
+        fail(f"S0-B transition path manifest differs: "
+             f"missing={missing} extra={extra}")
+    check_regular_paths(paths)
+    for path in S0B_ADDED_PATHS:
+        if subprocess.run(
+            ["git", "-C", str(ROOT), "cat-file", "-e",
+             f"{S0A_CHECKPOINT}:{path}"], check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode == 0:
+            fail(f"S0-B added path existed at the exact base: {path}")
+    for path in S0B_MODIFIED_PATHS:
+        if subprocess.run(
+            ["git", "-C", str(ROOT), "cat-file", "-e",
+             f"{S0A_CHECKPOINT}:{path}"], check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode != 0:
+            fail(f"S0-B modified authority absent at exact base: {path}")
+    check_ignored(S0B_OWNED, "S0-B")
     return paths
 
 
@@ -361,6 +540,53 @@ def check_manifest() -> None:
         if any("$(" in word or not word.startswith("build/s0a/")
                for word in make_words(manifest, variable)):
             fail(f"{variable} is not an exact direct artifact path")
+
+    s0b_build = make_words(manifest, "SPINE_S0B_BUILD_DIR")
+    if s0b_build != ["build/s0b"]:
+        fail("S0-B build directory differs")
+    lifecycle_sources = make_words(
+        manifest, "SPINE_S0B_LIFECYCLE_SOURCES"
+    )
+    lifecycle_members = [
+        Path(source).with_suffix(".o").name for source in lifecycle_sources
+    ]
+    if lifecycle_members != S0B_LIFECYCLE_MEMBERS:
+        fail("S0-B lifecycle members are not source-derived")
+    profile_sources = make_words(manifest, "SPINE_S0B_PROFILE_SOURCES")
+    profile_members = [
+        Path(source).with_suffix(".o").name for source in profile_sources
+    ]
+    if profile_members != S0B_PROFILE_MEMBERS:
+        fail("S0-B profile members are not source-derived")
+    derived_s0b_objects = [
+        f"build/s0b/{member}"
+        for member in [*lifecycle_members, *profile_members]
+    ]
+    if derived_s0b_objects != [
+            *S0B_LIFECYCLE_OBJECTS, *S0B_PROFILE_OBJECTS]:
+        fail("S0-B archive objects are not source/member-derived")
+    for variable in (
+        "SPINE_S0B_LIFECYCLE_OBJECTS",
+        "SPINE_S0B_PROFILE_OBJECTS",
+        "SPINE_S0B_C41_OBJECT",
+        "SPINE_S0B_FAKE_OBJECT",
+        "SPINE_S0B_TINY_OBJECT",
+        "SPINE_S0B_MATRIX_OBJECT",
+        "SPINE_S0B_INTERMEDIATES",
+        "SPINE_S0B_LIFECYCLE_ARCHIVE",
+        "SPINE_S0B_PROFILE_ARCHIVE",
+        "SPINE_S0B_MATRIX",
+        "SPINE_S0B_ARTIFACTS",
+        "SPINE_S0B_OWNED",
+    ):
+        words = make_words(manifest, variable)
+        if any("$(" in word or not word.startswith("build/s0b/")
+               for word in words) or len(words) != len(set(words)):
+            fail(f"{variable} is not a unique direct S0-B path list")
+    if set(S0B_LIFECYCLE_MEMBERS) & set(S0B_PROFILE_MEMBERS):
+        fail("S0-B archive member lists overlap")
+    if S0B_OWNED != [*S0B_INTERMEDIATES, *S0B_ARTIFACTS]:
+        fail("S0-B owned set is not intermediates followed by artifacts")
     if "$(wildcard" in manifest or re.search(r"(?m)^\s*[A-Z0-9_]+\s*\?=", manifest):
         fail("construction manifest contains a wildcard or overridable binding")
     if set(AUTHORITATIVE_MEMBERS) & set(FIXTURE_MEMBERS):
@@ -385,6 +611,26 @@ def check_manifest() -> None:
     )
     if fresh is None or makefile.count("check-s0a:") != 1:
         fail("check-s0a does not perform one fresh owned-artifact rebuild")
+    fresh_s0b = re.search(
+        r"(?m)^check-s0b:\s*$\n"
+        r"\t\$\(MAKE\) --no-print-directory "
+        r"clean-s0a-owned clean-s0b-owned\n"
+        r"\t\$\(MAKE\) --no-print-directory check-s0b-owned$",
+        makefile,
+    )
+    if fresh_s0b is None or makefile.count("check-s0b:") != 1:
+        fail("check-s0b does not perform the exact fresh owned build")
+    if makefile.count("--phase s0b") != 1 or \
+            "check-s0b-owned: check-s0b-architecture" not in makefile:
+        fail("S0-B gate is not bound to the one literal checker phase")
+    for literal in [*S0B_LIFECYCLE_SOURCES, *S0B_PROFILE_SOURCES,
+                    "../c4-nvme/c41_codec.c",
+                    "fakes/spine_fake_adjacent.c",
+                    "tests/tiny_profile_fixture.c",
+                    "tests/test_s0b_lifecycle.c"]:
+        if literal in makefile:
+            fail(f"component Makefile duplicates S0-B manifest literal: "
+                 f"{literal}")
     for required in (
         'grep -Eiq "undefined reference to .*$$anchor"',
         'grep -Eiq "multiple definition of .*$$anchor"',
@@ -491,6 +737,59 @@ def check_imports() -> None:
             if re.search(rf"\b{anchor}\s*\(", text):
                 fail(f"{name} treats link-only marker as a runtime callback: "
                      f"{anchor}")
+
+    lifecycle_text = (COMPONENT / "spine_lifecycle.c").read_text(
+        encoding="utf-8"
+    )
+    lifecycle_forbidden = re.compile(
+        r"(?:\bc43\b|\blinux\b|\bopcode\b|\bnamespace_id\b|\bnsid\b|"
+        r"\bqid\b|\bcid\b|\bdma\b|\bblock\b|\bnfc\b|\bppa\b|"
+        r"\bmedia\b|vfio|qemu|filesystem)", re.IGNORECASE
+    )
+    match = lifecycle_forbidden.search(lifecycle_text)
+    if match is not None:
+        fail(f"profile/transport/storage word in neutral lifecycle: "
+             f"{match.group(0)!r}")
+
+    for relative in S0B_PROFILE_SOURCES:
+        text = (COMPONENT / relative).read_text(encoding="utf-8")
+        for forbidden in (
+            "fwlab_nvme_profile_valid",
+            "fwlab_nvme_profile_encode",
+            "fwlab_nvme_profile_decode",
+            "fwlab_nvme_command_encode",
+            "fwlab_nvme_command_decode",
+            "fwlab_nvme_completion_encode",
+            "fwlab_nvme_completion_decode",
+            "fwlab_c43_policy_",
+            "fwlab_c43_graph_",
+            "fwlab_c43_instance_",
+            "c43_control",
+        ):
+            if forbidden in text:
+                fail(f"forbidden donor/profile symbol in {relative}: "
+                     f"{forbidden}")
+
+    adjacent_text = (
+        COMPONENT / "fakes/spine_fake_adjacent.c"
+    ).read_text(encoding="utf-8")
+    if re.search(r"\bfwlab_spine_lifecycle_v0_[a-z0-9_]+\s*\(",
+                 adjacent_text):
+        fail("fake adjacent code reenters the lifecycle")
+    for required in (
+        "expected->binding.argument_read(",
+        "expected->binding.payload_read(",
+        "expected->binding.result_latch(",
+        "fwlab_spine_fake_v0_abort_candidate_append(",
+        "fake_relation_source(",
+    ):
+        if required not in adjacent_text:
+            fail(f"typed fake-adjacent construction is absent: {required}")
+    matrix_text = (
+        COMPONENT / "tests/test_s0b_lifecycle.c"
+    ).read_text(encoding="utf-8")
+    if "payload_copy_v0" in matrix_text:
+        fail("matrix bypasses PAYLOAD_FILL through a direct adapter copy")
 
 
 def checked_artifact(path_text: str, expected_name: str) -> Path:
@@ -614,8 +913,247 @@ def check_artifacts(archive: Path, public: Path, fake: Path) -> None:
             fail(f"legacy authoritative symbol is reachable: {symbol}")
 
 
+def checked_s0b_artifact(path_text: str, expected: str) -> Path:
+    if path_text != expected:
+        fail(f"S0-B artifact path differs: expected={expected!r} "
+             f"actual={path_text!r}")
+    path = COMPONENT / path_text
+    for directory in (COMPONENT / "build", COMPONENT / "build" / "s0b"):
+        try:
+            mode = directory.lstat().st_mode
+        except OSError as error:
+            fail(f"S0-B artifact directory cannot be inspected: {error}")
+        if directory.is_symlink() or not stat.S_ISDIR(mode):
+            fail(f"S0-B artifact directory is not real: {directory}")
+    try:
+        mode = path.lstat().st_mode
+    except OSError as error:
+        fail(f"required S0-B artifact cannot be inspected: {path}: {error}")
+    if path.is_symlink() or not stat.S_ISREG(mode):
+        fail(f"S0-B artifact is not a regular file: {path}")
+    return path
+
+
+def undefined_symbols(text: str) -> set[str]:
+    symbols = set()
+
+    for line in text.splitlines():
+        fields = line.split()
+        if fields and (" U " in f" {line} " or
+                       (len(fields) >= 2 and fields[-2] == "U")):
+            symbols.add(fields[-1])
+    return symbols
+
+
+def require_member_symbol(
+    defined: str,
+    member: str,
+    symbol: str,
+) -> None:
+    if not any(member in line and line.rstrip().endswith(f" {symbol}")
+               for line in defined.splitlines()):
+        fail(f"archive member {member} does not own {symbol}")
+
+
+def check_s0b_artifacts(
+    lifecycle_archive: Path,
+    profile_archive: Path,
+    matrix: Path,
+    receipt_text: str,
+) -> str:
+    if os.path.samefile(lifecycle_archive, profile_archive) or \
+            os.path.samefile(lifecycle_archive, matrix) or \
+            os.path.samefile(profile_archive, matrix):
+        fail("S0-B artifacts must be three distinct files")
+    if not os.access(matrix, os.X_OK):
+        fail("S0-B matrix is not executable")
+    for relative in S0B_INTERMEDIATES:
+        path = COMPONENT / relative
+        try:
+            mode = path.lstat().st_mode
+        except OSError as error:
+            fail(f"S0-B intermediate absent during authority check: "
+                 f"{relative}: {error}")
+        if path.is_symlink() or not stat.S_ISREG(mode):
+            fail(f"S0-B intermediate is not a regular file: {relative}")
+
+    lifecycle_members = subprocess.run(
+        ["ar", "t", str(lifecycle_archive)], check=True, text=True,
+        stdout=subprocess.PIPE,
+    ).stdout.splitlines()
+    profile_members = subprocess.run(
+        ["ar", "t", str(profile_archive)], check=True, text=True,
+        stdout=subprocess.PIPE,
+    ).stdout.splitlines()
+    if lifecycle_members != S0B_LIFECYCLE_MEMBERS:
+        fail(f"S0-B lifecycle archive members differ: {lifecycle_members}")
+    if profile_members != S0B_PROFILE_MEMBERS:
+        fail(f"S0-B profile archive members differ: {profile_members}")
+
+    lifecycle_defined = nm(lifecycle_archive, "-A", "--defined-only")
+    lifecycle_undefined = nm(lifecycle_archive, "-u")
+    profile_defined = nm(profile_archive, "-A", "--defined-only")
+    profile_undefined = nm(profile_archive, "-u")
+    matrix_defined = nm(matrix, "--defined-only")
+    matrix_undefined = nm(matrix, "-u")
+
+    for symbol in (
+        "fwlab_spine_lifecycle_v0_symbol_owner",
+        "fwlab_spine_lifecycle_v0_admit_start",
+        "fwlab_spine_lifecycle_v0_step",
+        "fwlab_spine_lifecycle_v0_intent_read",
+        "fwlab_spine_lifecycle_v0_epoch_close_start",
+        "fwlab_spine_lifecycle_v0_fini",
+    ):
+        require_member_symbol(lifecycle_defined, "spine_lifecycle.o", symbol)
+    require_member_symbol(
+        lifecycle_defined, "spine_contracts.o",
+        "fwlab_host_action_program_v0_valid"
+    )
+    require_member_symbol(
+        profile_defined, "c43_p1_adapter.o",
+        "fwlab_c43_p1_adapter_v0_init"
+    )
+    require_member_symbol(
+        profile_defined, "linux_profile_v1_adapter.o",
+        "fwlab_linux_profile_v1_adapter_init"
+    )
+
+    if symbol_types(matrix_defined,
+                    "fwlab_spine_lifecycle_v0_symbol_owner") != ["R"]:
+        fail("matrix does not contain exactly one strong lifecycle owner")
+    if symbol_types(matrix_undefined,
+                    "fwlab_spine_lifecycle_v0_symbol_owner"):
+        fail("matrix leaves lifecycle owner unresolved")
+    for prefix in (
+        "fwlab_spine_fake_", "fwlab_tiny_profile_",
+        "test_s0b_", "main",
+    ):
+        if any(prefix in line for line in lifecycle_defined.splitlines()) or \
+                any(prefix in line for line in profile_defined.splitlines()):
+            fail(f"fake/tiny/test owner leaked into production archive: "
+                 f"{prefix}")
+
+    profile_imports = undefined_symbols(profile_undefined)
+    nvme_imports = {
+        symbol for symbol in profile_imports
+        if symbol.startswith("fwlab_nvme_")
+    }
+    expected_nvme_imports = {
+        "fwlab_nvme_command_valid",
+        "fwlab_nvme_completion_valid",
+    }
+    if nvme_imports != expected_nvme_imports:
+        fail(f"adapter C41 import set differs: {sorted(nvme_imports)}")
+    for forbidden in (
+        "fwlab_nvme_profile_valid",
+        "fwlab_nvme_profile_encode",
+        "fwlab_nvme_profile_decode",
+        "fwlab_nvme_command_encode",
+        "fwlab_nvme_command_decode",
+        "fwlab_nvme_completion_encode",
+        "fwlab_nvme_completion_decode",
+    ):
+        if forbidden in profile_imports:
+            fail(f"adapter references forbidden C41 donor symbol: {forbidden}")
+
+    provenance = "\n".join((
+        lifecycle_defined, lifecycle_undefined,
+        profile_defined, profile_undefined,
+    )).lower()
+    for forbidden in (
+        "fwlab_c43_policy_", "fwlab_c43_graph_", "fwlab_c43_instance_",
+        "fwlab_c43_action_", "fwlab_m4_frontend_", "fwlab_m4_nvme_",
+        "fwlab_m4_media_", "nvme_mode",
+    ):
+        if forbidden in provenance:
+            fail(f"legacy executor symbol is reachable in S0-B: {forbidden}")
+    lifecycle_symbols = "\n".join((
+        lifecycle_defined, lifecycle_undefined,
+    )).lower()
+    for forbidden in ("c43", "linux_profile", "opcode", "namespace_id"):
+        if forbidden in lifecycle_symbols:
+            fail(f"profile symbol leaked into lifecycle archive: {forbidden}")
+
+    member_bytes = subprocess.run(
+        ["ar", "p", str(lifecycle_archive), "spine_lifecycle.o"],
+        check=True, stdout=subprocess.PIPE,
+    ).stdout
+    lifecycle_digest = hashlib.sha256(member_bytes).hexdigest()
+
+    if not receipt_text or len(receipt_text.encode("utf-8")) > 16384 or \
+            "\0" in receipt_text:
+        fail("S0-B bounded matrix receipt input is absent or invalid")
+    lines = receipt_text.splitlines()
+    expected_profiles = {
+        "C43-P1": ("c430", "11", "20", "15"),
+        "Linux-profile-v1": ("7100", "12", "20", "15"),
+        "tiny-HARNESS-PROVISIONAL": ("7700", "13", "2", "1"),
+    }
+    seen = {}
+    row_pattern = re.compile(
+        r"^S0B_PROFILE_ROW\|profile=([^|]+)\|adapter=([0-9a-f]+):"
+        r"([1-9][0-9]*)\|ticket=([1-9][0-9]*):([1-9][0-9]*)\|"
+        r"actions=([1-9][0-9]*)\|tokens=([0-9a-f]{16})\|"
+        r"intents=([0-9a-f]{16})\|epoch=([1-9][0-9]*)\|"
+        r"retained=([1-9][0-9]*)\|close=1\|fini_calls=([1-9][0-9]*)\|"
+        r"owner=([0-9a-f]+)\|object=([0-9a-f]{64})$"
+    )
+    for line in lines:
+        match = row_pattern.fullmatch(line)
+        if match is not None:
+            profile = match.group(1)
+            if profile in seen:
+                fail(f"duplicate S0-B profile receipt: {profile}")
+            seen[profile] = match.groups()[1:]
+    if set(seen) != set(expected_profiles):
+        fail(f"S0-B profile receipt set differs: {sorted(seen)}")
+    owners = set()
+    token_digests = set()
+    intent_digests = set()
+    for profile, expected in expected_profiles.items():
+        (adapter_nonce, generation, ticket_uid, command_uid, actions,
+         tokens, intents, epoch, retained, fini_calls, owner,
+         object_digest) = seen[profile]
+        expected_nonce, expected_generation, expected_actions, \
+            expected_retained = expected
+        if (adapter_nonce, generation, actions, retained) != (
+                expected_nonce, expected_generation, expected_actions,
+                expected_retained):
+            fail(f"S0-B dynamic receipt differs for {profile}: "
+                 f"{seen[profile]}")
+        if ticket_uid != "1" or command_uid != "1" or epoch != "7" or \
+                int(tokens, 16) == 0 or int(intents, 16) == 0 or \
+                int(fini_calls) < 2 or object_digest != lifecycle_digest:
+            fail(f"S0-B lifecycle identity receipt invalid for {profile}")
+        owners.add(owner)
+        token_digests.add(tokens)
+        intent_digests.add(intents)
+    if owners != {"4c49464543593030"}:
+        fail(f"S0-B rows do not share the strong lifecycle owner: {owners}")
+    if len(token_digests) != 3 or len(intent_digests) != 3:
+        fail("S0-B per-profile token/intent identities are not distinct")
+    lifecycle_line = (
+        "S0B_LIFECYCLE_CASES|admit-retry=1|rollback=1|dependency=1|"
+        "backpressure=1|response-loss=1|typed-sidecars=1|"
+        "normalized-results=1|substitution=1|first-failure=1|"
+        "abort-cases=14|close-cuts=3|close-fair=1|close-resume=1|"
+        "intent-repeat=1|"
+        "cpls-advance=0|PASS"
+    )
+    if lines.count(lifecycle_line) != 1 or lines.count(
+            "S0-B profile matrix: PASS (profiles=3 artifacts=3)") != 1:
+        fail("S0-B lifecycle/final matrix receipt differs")
+    if len(lines) != 5:
+        fail(f"S0-B matrix emitted an unbounded/extra receipt: {lines}")
+    return lifecycle_digest
+
+
 def main() -> int:
+    global ACTIVE_PHASE
+
     parser = argparse.ArgumentParser()
+    parser.add_argument("--phase", choices=("s0a", "s0b"), default="s0a")
     parser.add_argument(
         "--archive", default="build/s0a/libfwlab_spine_contracts_v0.a"
     )
@@ -625,9 +1163,48 @@ def main() -> int:
     parser.add_argument(
         "--fake", default="build/s0a/s0a_fake_adjacent_link"
     )
+    parser.add_argument("--lifecycle")
+    parser.add_argument("--profiles")
+    parser.add_argument("--matrix")
+    parser.add_argument("--receipts")
     arguments = parser.parse_args()
+    ACTIVE_PHASE = arguments.phase
 
-    paths = changed_paths()
+    if arguments.phase == "s0b":
+        if arguments.lifecycle is None or arguments.profiles is None or \
+                arguments.matrix is None or arguments.receipts != "-":
+            fail("S0-B requires lifecycle/profiles/matrix and stdin receipts")
+        if arguments.archive != \
+                "build/s0a/libfwlab_spine_contracts_v0.a" or \
+                arguments.public != "build/s0a/s0a_public_contracts" or \
+                arguments.fake != "build/s0a/s0a_fake_adjacent_link":
+            fail("S0-A artifact arguments are forbidden in S0-B phase")
+        paths = changed_paths("s0b")
+        check_manifest()
+        check_imports()
+        lifecycle = checked_s0b_artifact(
+            arguments.lifecycle, S0B_ARTIFACTS[0]
+        )
+        profiles = checked_s0b_artifact(
+            arguments.profiles, S0B_ARTIFACTS[1]
+        )
+        matrix = checked_s0b_artifact(arguments.matrix, S0B_ARTIFACTS[2])
+        receipt_text = sys.stdin.read()
+        digest = check_s0b_artifacts(
+            lifecycle, profiles, matrix, receipt_text
+        )
+        print(
+            "S0-B shared lifecycle architecture: PASS "
+            f"(paths={len(paths)} intermediates={len(S0B_INTERMEDIATES)} "
+            f"archive_members=4 profiles=3 artifacts=3 "
+            f"lifecycle_object_sha256={digest})"
+        )
+        return 0
+
+    if arguments.lifecycle is not None or arguments.profiles is not None or \
+            arguments.matrix is not None or arguments.receipts is not None:
+        fail("S0-B artifacts require literal --phase s0b")
+    paths = changed_paths("s0a")
     check_manifest()
     check_imports()
     archive = checked_artifact(arguments.archive,
