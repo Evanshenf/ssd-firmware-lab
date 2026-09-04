@@ -28,6 +28,12 @@ plans. The direct admit seam stores the sanitized request and immutable plan,
 then returns one queryable ticket at the ownership LP. It still performs no
 provider action, data movement or completion publication.
 
+Phase 4A adds graph-local Number-of-Queues state and one serialized queue-effect
+transaction. Queue changes follow delayed prepare, immutable decision,
+commit-or-abort, a separate local apply point and same-token retirement. No
+queue is visible before local apply; faulted/unknown effects remain held for a
+later reset path.
+
 The portable values contain no queue identifier, command identifier, queue
 phase or Host/guest address. Native structures are not packed wire images; all
 byte boundaries use the explicit codecs in `c41_codec.c`.
@@ -43,6 +49,7 @@ make fake-link-c41
 make check-c43-phase1
 make check-c43-phase2
 make check-c43-phase3
+make check-c43-phase4
 make fake-link-c43
 make check-all
 ```

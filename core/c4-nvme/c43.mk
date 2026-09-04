@@ -51,7 +51,7 @@ override C43_FAKE_HEADERS := fakes/c43_fake_services.h
 
 .PHONY: c43-archive check-c43-public-abi check-c43-architecture \
 	check-c43-reservation check-c43-graph check-c43-phase1 check-c43-phase2 check-c43 \
-	check-c43-policy check-c43-phase3 fake-link-c43 clean-c43
+	check-c43-policy check-c43-phase3 check-c43-phase4 fake-link-c43 clean-c43
 
 clean: clean-c43
 
@@ -124,7 +124,9 @@ check-c43-phase2: check-c43-phase1 check-c43-reservation
 
 check-c43-phase3: check-c43-phase2 check-c43-policy
 
-check-c43: check-c43-phase3
+check-c43-phase4: check-c43-phase3
+
+check-c43: check-c43-phase4
 
 clean-c43:
 	rm -f -- $(C43_ARCHIVE_OBJECTS) $(C43_C41_SUPPORT_OBJECTS) \

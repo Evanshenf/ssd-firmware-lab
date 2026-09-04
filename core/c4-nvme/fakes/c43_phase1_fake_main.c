@@ -214,7 +214,8 @@ static int check_fake_entrypoints(
         return 0;
     }
     for (index = 0; index < services->event_count; ++index) {
-        if (services->events[index] != index + 1) {
+        if (services->events[index].sequence != index + 1 ||
+            services->events[index].kind != index + 1) {
             return 0;
         }
     }
@@ -254,9 +255,12 @@ int main(void)
     }
 
     memset(&step_result, 0xa5, sizeof(step_result));
-    step_before = step_result;
+    memset(&step_before, 0, sizeof(step_before));
+    step_before.version = FWLAB_C43_GRAPH_VERSION;
+    step_before.size = sizeof(step_before);
+    step_before.requested_budget = 1;
     if (fwlab_c43_graph_step(graph, 1, &step_result) !=
-            FWLAB_C43_GRAPH_NOT_IMPLEMENTED ||
+            FWLAB_C43_GRAPH_OK ||
         !bytes_equal(&step_result, &step_before, sizeof(step_result)) ||
         services.event_count != 0) {
         return 1;

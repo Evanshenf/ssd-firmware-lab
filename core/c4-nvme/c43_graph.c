@@ -224,12 +224,9 @@ static int observer_matches_record(
                observer->success_eligible == 0;
     }
     return record->state == C43_COMMAND_RECORD_ADMITTED &&
-           observer->phase == FWLAB_C43_PHASE_ADMITTED_POLICY &&
+           observer->phase >= FWLAB_C43_PHASE_ADMITTED_POLICY &&
            observer->required_witness_mask ==
-               record->plan.required_witness_mask &&
-           observer->satisfied_witness_mask ==
-               record->plan.satisfied_witness_mask &&
-           observer->success_eligible == 0;
+               record->plan.required_witness_mask;
 }
 
 int c43_reservation_state_valid(const struct fwlab_c43_graph *graph)
@@ -737,6 +734,9 @@ enum fwlab_c43_graph_result fwlab_c43_graph_step(
     uint32_t budget,
     struct fwlab_c43_step_result *result)
 {
+    struct fwlab_c43_step_result local;
+    uint32_t transitions = 0;
+
     if (!c43_graph_valid(graph) || result == NULL || budget == 0 ||
         budget > graph->config.ordinary_progress_maximum) {
         return FWLAB_C43_GRAPH_INVALID;
@@ -744,6 +744,13 @@ enum fwlab_c43_graph_result fwlab_c43_graph_step(
     if (c43_ranges_overlap(graph, sizeof(*graph), result, sizeof(*result))) {
         return FWLAB_C43_GRAPH_INVALID;
     }
-    /* Phase 2 reserves complete records; policy/action behavior comes later. */
-    return FWLAB_C43_GRAPH_NOT_IMPLEMENTED;
+    memset(&local, 0, sizeof(local));
+    local.version = FWLAB_C43_GRAPH_VERSION;
+    local.size = sizeof(local);
+    local.requested_budget = budget;
+    local.units_executed = (uint32_t)c43_phase4_step(graph, &transitions);
+    local.transitions = transitions;
+    local.service_gap_maximum = local.units_executed;
+    memcpy(result, &local, sizeof(local));
+    return FWLAB_C43_GRAPH_OK;
 }

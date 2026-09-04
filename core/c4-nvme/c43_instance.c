@@ -289,6 +289,7 @@ int c43_graph_valid(const struct fwlab_c43_graph *graph)
            fwlab_c43_graph_config_valid(&graph->config) &&
            providers_valid(&graph->providers) &&
            c43_reservation_state_valid(graph) &&
+           c43_phase4_state_valid(graph) &&
            fwlab_c43_graph_observer_valid(&graph->observer);
 }
 

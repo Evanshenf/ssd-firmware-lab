@@ -39,6 +39,17 @@ _Static_assert(FWLAB_C43_CREDIT_ALL == 0x03ffu,
                "credit mask changed");
 _Static_assert(FWLAB_C43_FEATURE_NUMBER_OF_QUEUES == 7u,
                "Number of Queues feature selector changed");
+_Static_assert(FWLAB_C43_ACTION_DOMAIN_QUEUE == 1 &&
+                   FWLAB_C43_ACTION_DOMAIN_TARGET == 2 &&
+                   FWLAB_C43_ACTION_DOMAIN_BLOCK == 3,
+               "action domain values changed");
+_Static_assert(FWLAB_C43_ACTION_STATE_SUBMIT_READY == 1 &&
+                   FWLAB_C43_ACTION_STATE_TERMINAL_HELD == 9 &&
+                   FWLAB_C43_ACTION_STATE_FAULT == 11,
+               "action state values changed");
+_Static_assert(FWLAB_C43_NQ_UNNEGOTIATED == 0 &&
+                   FWLAB_C43_NQ_NEGOTIATED == 1,
+               "NQ state values changed");
 
 ABI_SIZE(struct fwlab_c43_policy_request, 128);
 ABI_FIELD(struct fwlab_c43_policy_request, version, 0);
@@ -182,13 +193,15 @@ ABI_FIELD(struct fwlab_c43_command_observer, action_count, 68);
 ABI_FIELD(struct fwlab_c43_command_observer, in_use, 70);
 ABI_FIELD(struct fwlab_c43_command_observer, success_eligible, 71);
 ABI_FIELD(struct fwlab_c43_command_observer, provider_generation_current, 72);
-ABI_FIELD(struct fwlab_c43_command_observer, reserved0, 73);
+ABI_FIELD(struct fwlab_c43_command_observer, action_domain, 73);
+ABI_FIELD(struct fwlab_c43_command_observer, action_state, 74);
+ABI_FIELD(struct fwlab_c43_command_observer, resolution_valid, 75);
 ABI_FIELD(struct fwlab_c43_command_observer, reservation_credit_mask, 76);
 ABI_FIELD(struct fwlab_c43_command_observer, first_action_uid, 80);
 ABI_FIELD(struct fwlab_c43_command_observer, action_generation, 88);
-ABI_FIELD(struct fwlab_c43_command_observer, reserved2, 92);
+ABI_FIELD(struct fwlab_c43_command_observer, resolved_status, 92);
 
-ABI_SIZE(struct fwlab_c43_graph_observer, 488);
+ABI_SIZE(struct fwlab_c43_graph_observer, 568);
 ABI_FIELD(struct fwlab_c43_graph_observer, controller_epoch, 4);
 ABI_FIELD(struct fwlab_c43_graph_observer, instance_nonce, 8);
 ABI_FIELD(struct fwlab_c43_graph_observer, active_commands, 16);
@@ -211,6 +224,16 @@ ABI_FIELD(struct fwlab_c43_graph_observer, reserved_target_credits, 476);
 ABI_FIELD(struct fwlab_c43_graph_observer,
           reserved_queue_transaction_credits, 480);
 ABI_FIELD(struct fwlab_c43_graph_observer, reserved_block_intent_credits, 484);
+ABI_FIELD(struct fwlab_c43_graph_observer, nq_state, 488);
+ABI_FIELD(struct fwlab_c43_graph_observer, queue_owner_slot_plus_one, 492);
+ABI_FIELD(struct fwlab_c43_graph_observer, queue_txn_active, 494);
+ABI_FIELD(struct fwlab_c43_graph_observer, io_cq_present, 495);
+ABI_FIELD(struct fwlab_c43_graph_observer, io_sq_present, 496);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_queue_flags, 497);
+ABI_FIELD(struct fwlab_c43_graph_observer, io_cq, 504);
+ABI_FIELD(struct fwlab_c43_graph_observer, io_sq, 520);
+ABI_FIELD(struct fwlab_c43_graph_observer, sq_associated_cq, 536);
+ABI_FIELD(struct fwlab_c43_graph_observer, reserved_queue, 552);
 
 ABI_SIZE(struct fwlab_c43_step_result, 40);
 ABI_FIELD(struct fwlab_c43_step_result, requested_budget, 8);
@@ -716,6 +739,18 @@ static int check_graph_records(void)
     observer.provider_generation[2] = 1;
     observer.provider_generation[3] = 1;
     CHECK(fwlab_c43_graph_observer_valid(&observer));
+    observer.io_cq_present = 1;
+    CHECK(!fwlab_c43_graph_observer_valid(&observer));
+    observer.io_cq.word[0] = 1;
+    CHECK(!fwlab_c43_graph_observer_valid(&observer));
+    observer.nq_state = FWLAB_C43_NQ_NEGOTIATED;
+    CHECK(fwlab_c43_graph_observer_valid(&observer));
+    observer.io_cq_present = 0;
+    observer.io_cq.word[0] = 0;
+    observer.nq_state = FWLAB_C43_NQ_UNNEGOTIATED;
+    observer.queue_txn_active = 1;
+    CHECK(!fwlab_c43_graph_observer_valid(&observer));
+    observer.queue_txn_active = 0;
     observer.active_commands = 1;
     CHECK(!fwlab_c43_graph_observer_valid(&observer));
     observer.active_commands = 1;
@@ -751,6 +786,35 @@ static int check_graph_records(void)
         FWLAB_C43_WITNESS_QUEUE_EFFECT_COMMITTED;
     CHECK(!fwlab_c43_graph_observer_valid(&observer));
     observer.commands[0].success_eligible = 1;
+    CHECK(fwlab_c43_graph_observer_valid(&observer));
+    observer.commands[0].action_domain = FWLAB_C43_ACTION_DOMAIN_QUEUE;
+    observer.commands[0].action_state =
+        FWLAB_C43_ACTION_STATE_TERMINAL_HELD;
+    observer.commands[0].resolution_valid = 1;
+    observer.commands[0].resolved_status = FWLAB_C43_STATUS_SUCCESS;
+    CHECK(fwlab_c43_graph_observer_valid(&observer));
+    observer.commands[0].action_state = FWLAB_C43_ACTION_STATE_SUBMIT_READY;
+    observer.commands[0].phase = FWLAB_C43_PHASE_RESOLVE_WAIT;
+    observer.commands[0].resolution_valid = 0;
+    observer.commands[0].resolved_status = 0;
+    observer.commands[0].satisfied_witness_mask = 0;
+    observer.commands[0].success_eligible = 0;
+    observer.queue_txn_active = 1;
+    observer.queue_owner_slot_plus_one = 1;
+    CHECK(fwlab_c43_graph_observer_valid(&observer));
+    observer.commands[0].terminal_winner = FWLAB_C43_WINNER_NORMAL;
+    CHECK(!fwlab_c43_graph_observer_valid(&observer));
+    observer.commands[0].terminal_winner = FWLAB_C43_WINNER_NONE;
+    observer.commands[0].phase = FWLAB_C43_PHASE_INTENT_READY;
+    observer.ready_count = 1;
+    CHECK(!fwlab_c43_graph_observer_valid(&observer));
+    observer.commands[0].phase = FWLAB_C43_PHASE_RESOLVE_WAIT;
+    observer.ready_count = 0;
+    observer.queue_txn_active = 0;
+    observer.queue_owner_slot_plus_one = 0;
+    CHECK(!fwlab_c43_graph_observer_valid(&observer));
+    observer.queue_txn_active = 1;
+    observer.queue_owner_slot_plus_one = 1;
     CHECK(fwlab_c43_graph_observer_valid(&observer));
     ++observer.commands[0].handle.instance_nonce;
     CHECK(!fwlab_c43_graph_observer_valid(&observer));

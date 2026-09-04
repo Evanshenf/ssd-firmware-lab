@@ -23,6 +23,50 @@ enum c43_command_record_state {
     C43_COMMAND_RECORD_ADMITTED = 2
 };
 
+enum c43_queue_flow {
+    C43_QUEUE_FLOW_NONE = 0,
+    C43_QUEUE_FLOW_PREPARE_START = 1,
+    C43_QUEUE_FLOW_PREPARE_QUERY = 2,
+    C43_QUEUE_FLOW_DECIDE = 3,
+    C43_QUEUE_FLOW_FINISH_START = 4,
+    C43_QUEUE_FLOW_FINISH_QUERY = 5,
+    C43_QUEUE_FLOW_APPLY_COMMIT = 6,
+    C43_QUEUE_FLOW_APPLY_ABORT = 7,
+    C43_QUEUE_FLOW_RETIRE = 8,
+    C43_QUEUE_FLOW_DONE = 9,
+    C43_QUEUE_FLOW_REJECTED_NO_EFFECT = 10,
+    C43_QUEUE_FLOW_FAULT = 11
+};
+
+struct c43_queue_authority {
+    uint8_t nq_state;
+    uint8_t txn_active;
+    uint16_t owner_slot_plus_one;
+    uint8_t io_cq_present;
+    uint8_t io_sq_present;
+    uint8_t reserved0[2];
+    struct fwlab_c43_queue_live_ref io_cq;
+    struct fwlab_c43_queue_live_ref io_sq;
+    struct fwlab_c43_queue_live_ref sq_associated_cq;
+    uint32_t reserved1[4];
+};
+
+struct c43_queue_txn_record {
+    uint32_t flow;
+    uint32_t decision;
+    uint32_t resolved_status;
+    uint8_t resolution_valid;
+    uint8_t local_effect_applied;
+    uint8_t provider_owned;
+    uint8_t fault_from_flow;
+    uint64_t provider_generation;
+    struct fwlab_c43_queue_effect_request prepare_request;
+    struct fwlab_c43_queue_facts prepared_facts;
+    struct fwlab_c43_queue_finish_request finish_request;
+    struct fwlab_c43_queue_effect_terminal terminal;
+    uint32_t reserved1[4];
+};
+
 struct c43_counter_cursor {
     uint64_t next;
     uint64_t maximum;
@@ -44,6 +88,7 @@ struct c43_command_record {
     struct fwlab_hif_command_ticket ticket;
     struct fwlab_c43_policy_request request;
     struct fwlab_c43_policy_plan plan;
+    struct c43_queue_txn_record queue_txn;
     uint64_t transaction_uid;
     uint64_t lease_uid;
     uint64_t consume_uid;
@@ -70,6 +115,9 @@ struct fwlab_c43_graph {
     struct c43_counter_cursor consume_uid;
     struct c43_counter_cursor finalizer_uid;
     struct c43_command_record commands[FWLAB_C43_MAX_COMMANDS];
+    struct c43_queue_authority queue_authority;
+    uint32_t next_service_slot;
+    uint32_t reserved_scheduler[3];
     struct fwlab_c43_graph_observer observer;
 };
 
@@ -107,6 +155,11 @@ int c43_prepare_key_valid(
     const struct fwlab_hif_prepare_key *key
 );
 int c43_reservation_state_valid(const struct fwlab_c43_graph *graph);
+int c43_phase4_state_valid(const struct fwlab_c43_graph *graph);
+int c43_phase4_step(
+    struct fwlab_c43_graph *graph,
+    uint32_t *transitions
+);
 int c43_graph_valid(const struct fwlab_c43_graph *graph);
 int c43_semantic_status_valid(uint32_t status);
 int c43_witness_mask_valid(uint32_t mask);

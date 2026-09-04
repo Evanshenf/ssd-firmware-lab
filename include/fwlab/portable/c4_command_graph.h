@@ -92,6 +92,33 @@ enum fwlab_c43_reservation_credit_bit {
 
 #define FWLAB_C43_CREDIT_ALL ((uint32_t)0x03ffu)
 
+enum fwlab_c43_action_domain {
+    FWLAB_C43_ACTION_DOMAIN_NONE = 0,
+    FWLAB_C43_ACTION_DOMAIN_QUEUE = 1,
+    FWLAB_C43_ACTION_DOMAIN_TARGET = 2,
+    FWLAB_C43_ACTION_DOMAIN_BLOCK = 3
+};
+
+enum fwlab_c43_action_state {
+    FWLAB_C43_ACTION_STATE_NONE = 0,
+    FWLAB_C43_ACTION_STATE_SUBMIT_READY = 1,
+    FWLAB_C43_ACTION_STATE_PREPARE_QUERY = 2,
+    FWLAB_C43_ACTION_STATE_DECIDE = 3,
+    FWLAB_C43_ACTION_STATE_FINISH_READY = 4,
+    FWLAB_C43_ACTION_STATE_FINISH_QUERY = 5,
+    FWLAB_C43_ACTION_STATE_APPLY_COMMIT = 6,
+    FWLAB_C43_ACTION_STATE_APPLY_ABORT = 7,
+    FWLAB_C43_ACTION_STATE_RETIRE = 8,
+    FWLAB_C43_ACTION_STATE_TERMINAL_HELD = 9,
+    FWLAB_C43_ACTION_STATE_REJECTED_NO_EFFECT = 10,
+    FWLAB_C43_ACTION_STATE_FAULT = 11
+};
+
+enum fwlab_c43_nq_state {
+    FWLAB_C43_NQ_UNNEGOTIATED = 0,
+    FWLAB_C43_NQ_NEGOTIATED = 1
+};
+
 struct fwlab_c43_counter_seed {
     uint64_t next;
     uint64_t maximum;
@@ -150,11 +177,13 @@ struct fwlab_c43_command_observer {
     uint8_t in_use;
     uint8_t success_eligible;
     uint8_t provider_generation_current;
-    uint8_t reserved0[3];
+    uint8_t action_domain;
+    uint8_t action_state;
+    uint8_t resolution_valid;
     uint32_t reservation_credit_mask;
     uint64_t first_action_uid;
     uint32_t action_generation;
-    uint32_t reserved2;
+    uint32_t resolved_status;
 };
 
 struct fwlab_c43_graph_observer {
@@ -181,6 +210,16 @@ struct fwlab_c43_graph_observer {
     uint32_t reserved_target_credits;
     uint32_t reserved_queue_transaction_credits;
     uint32_t reserved_block_intent_credits;
+    uint32_t nq_state;
+    uint16_t queue_owner_slot_plus_one;
+    uint8_t queue_txn_active;
+    uint8_t io_cq_present;
+    uint8_t io_sq_present;
+    uint8_t reserved_queue_flags[7];
+    struct fwlab_c43_queue_live_ref io_cq;
+    struct fwlab_c43_queue_live_ref io_sq;
+    struct fwlab_c43_queue_live_ref sq_associated_cq;
+    uint32_t reserved_queue[4];
 };
 
 struct fwlab_c43_step_result {
