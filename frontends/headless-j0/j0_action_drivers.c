@@ -194,6 +194,52 @@ static enum fwlab_spine_result_v0 latch_terminal(
     return FWLAB_SPINE_V0_OK;
 }
 
+enum fwlab_spine_result_v0 j0_runtime_action_argument(
+    struct j0_runtime *runtime, const struct fwlab_host_action_token_v0 *token,
+    const struct fwlab_host_action_argument_ref_v0 *reference,
+    struct fwlab_spine_profile_argument_v0 *argument)
+{
+    struct j0_action_record *action;
+
+    if (runtime == NULL || token == NULL || reference == NULL || argument == NULL ||
+        token->kind != FWLAB_HOST_ACTION_V0_QUEUE_EFFECT) {
+        return FWLAB_SPINE_V0_INVALID;
+    }
+    action = action_for(&runtime->lane[token->kind - 1u], token, reference, 1);
+    if (action == NULL) {
+        return FWLAB_SPINE_V0_STALE;
+    }
+    *argument = action->argument;
+    return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 j0_runtime_action_result(
+    struct j0_runtime *runtime, const struct fwlab_host_action_token_v0 *token,
+    const struct fwlab_host_action_status_v0 *status)
+{
+    struct j0_action_record *action;
+    enum fwlab_spine_result_v0 result;
+
+    if (runtime == NULL || token == NULL || status == NULL ||
+        token->kind != FWLAB_HOST_ACTION_V0_QUEUE_EFFECT ||
+        !fwlab_host_action_status_v0_valid(status) ||
+        !j0_action_token_equal(token, &status->token)) {
+        return FWLAB_SPINE_V0_INVALID;
+    }
+    action = action_for(&runtime->lane[token->kind - 1u], token, NULL, 0);
+    if (action == NULL) {
+        return FWLAB_SPINE_V0_STALE;
+    }
+    action->terminal = *status;
+    result = latch_terminal(runtime, action);
+    if (result != FWLAB_SPINE_V0_OK) {
+        return result;
+    }
+    action->state = status->state == FWLAB_HOST_ACTION_V0_STATE_DRAINED
+                        ? J0_DRIVER_DRAINED : J0_DRIVER_TERMINAL_LATCHED;
+    return FWLAB_SPINE_V0_OK;
+}
+
 static enum fwlab_spine_result_v0 payload_submit(
     struct j0_driver_lane *lane, struct j0_action_record *action,
     struct fwlab_host_action_submit_result_v0 *result)

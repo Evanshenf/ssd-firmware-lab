@@ -339,14 +339,19 @@ static int dwords_valid(
     case LINUX_KIND_READ:
     case LINUX_KIND_WRITE: {
         const uint32_t allowed = kind == LINUX_KIND_WRITE
-                                     ? UINT32_C(0x4000ffff)
-                                     : UINT32_C(0x0000ffff);
+                                     ? UINT32_C(0xc000ffff)
+                                     : UINT32_C(0x8000ffff);
         const uint64_t lba_count = (uint64_t)(dword[2] & UINT32_C(0xffff)) + 1;
         const uint64_t slba =
             (uint64_t)dword[0] | ((uint64_t)dword[1] << 32);
         uint64_t bytes;
 
-        if ((dword[2] & ~allowed) != 0 || !words_zero(dword + 3, 3)) {
+        /* Linux marks readahead with Limited Retry and the prefetch hint.
+         * This profile does no command-level retry or speculative caching;
+         * those hints retain the same finite Block read/write semantics. */
+        if ((dword[2] & ~allowed) != 0 || !words_zero(dword + 4, 2) ||
+            (dword[3] != 0 &&
+             !(kind == LINUX_KIND_READ && dword[3] == 7))) {
             return 0;
         }
         if (lba_count > 16 || slba >= 2048 ||

@@ -6,8 +6,7 @@ CPPFLAGS += -I../../include -I../../core/command-spine -I../../core/m3p \
 	-I../../media/file-nand-v0 -I../../nfc
 CFLAGS ?= -std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic -fno-common
 
-RUNTIME_SOURCES := \
-	tests/test_runtime.c \
+FIRMWARE_SOURCES := \
 	../headless-j0/j0_controller_buffer.c \
 	../headless-j0/j0_host_data.c \
 	../headless-j0/j0_action_drivers.c \
@@ -27,7 +26,18 @@ RUNTIME_SOURCES := \
 	../../media/file-nand-v0/file_nand_media.c \
 	../../media/file-nand-v0/file_nand_posix.c
 
-.PHONY: check-runtime clean
+RUNTIME_SOURCES := tests/test_runtime.c $(FIRMWARE_SOURCES)
+WORKER_SOURCES := native_worker.c native_host.c $(FIRMWARE_SOURCES)
+
+.PHONY: worker native-io check-runtime clean
+
+worker:
+	mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WORKER_SOURCES) -o build/fwlab_native_worker
+
+native-io:
+	mkdir -p build
+	$(CC) $(CFLAGS) tests/test_native_io.c -o build/j1_native_io
 
 check-runtime:
 	mkdir -p build
@@ -35,5 +45,5 @@ check-runtime:
 	./build/j1_runtime_matrix
 
 clean:
-	rm -f -- build/j1_runtime_matrix
+	rm -f -- build/j1_runtime_matrix build/fwlab_native_worker build/j1_native_io
 	@rmdir build 2>/dev/null || true

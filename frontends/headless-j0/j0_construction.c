@@ -89,7 +89,8 @@ static struct fwlab_m3p_config m3p_config(
     config.next_nfc_operation_uid = 1;
     config.generation = runtime->config.generation;
     config.execution_epoch = runtime->config.execution_epoch;
-    config.nfc_epoch = runtime->config.execution_epoch;
+    /* A fresh NFC instance begins its own epoch at one. */
+    config.nfc_epoch = 1;
     config.nfc_operation_uid_limit = 2048;
     config.host_sequence_limit = 512;
     config.record_sequence_limit = 2048;
@@ -598,6 +599,15 @@ enum fwlab_spine_result_v0 j0_runtime_init(
         goto failed;
     }
     j0_action_drivers_init(runtime, &runtime->drivers);
+    if (runtime->host_binding.queue_driver.ops != NULL) {
+        if (runtime->host_binding.queue_driver.kind !=
+                FWLAB_HOST_ACTION_V0_QUEUE_EFFECT ||
+            runtime->host_binding.queue_driver.generation != config->generation) {
+            goto failed;
+        }
+        runtime->drivers.entry[FWLAB_HOST_ACTION_V0_QUEUE_EFFECT - 1u] =
+            runtime->host_binding.queue_driver;
+    }
     lifecycle = lifecycle_config(runtime);
     if (fwlab_spine_lifecycle_v0_init(
             runtime->lifecycle_arena,
@@ -619,12 +629,13 @@ failed:
     return result;
 }
 
-enum fwlab_spine_result_v0 j0_runtime_admit_start(
+static enum fwlab_spine_result_v0 runtime_admit(
     struct j0_runtime *runtime, uint32_t profile,
     const struct fwlab_nvme_command *command,
     const struct j0_host_transfer *transfer,
-    struct fwlab_spine_command_ticket_v0 *ticket)
+    struct fwlab_spine_command_ticket_v0 *ticket, int referenced)
 {
+    struct j0_host_transfer referenced_transfer;
     const struct fwlab_spine_profile_binding_v0 *binding;
     struct j0_admission_record *record;
     struct fwlab_host_action_program_v0 program;
@@ -636,7 +647,7 @@ enum fwlab_spine_result_v0 j0_runtime_admit_start(
     int existing;
 
     if (runtime == NULL || runtime->magic != J0_RUNTIME_MAGIC ||
-        command == NULL || transfer == NULL || ticket == NULL ||
+        command == NULL || (!referenced && transfer == NULL) || ticket == NULL ||
         runtime->poisoned || runtime->admission_closed || !runtime->ready) {
         if (runtime != NULL && runtime->poisoned) {
             return FWLAB_SPINE_V0_POISONED;
@@ -645,11 +656,24 @@ enum fwlab_spine_result_v0 j0_runtime_admit_start(
                    ? FWLAB_SPINE_V0_WRONG_STATE
                    : FWLAB_SPINE_V0_INVALID;
     }
+    if (referenced) {
+        if (runtime->host_binding.inline_input) {
+            return FWLAB_SPINE_V0_INVALID;
+        }
+        memset(&referenced_transfer, 0, sizeof(referenced_transfer));
+        referenced_transfer.version = J0_RUNTIME_VERSION;
+        referenced_transfer.size = (uint16_t)sizeof(referenced_transfer);
+        transfer = &referenced_transfer;
+    }
     record = admission_identity_find(runtime, command);
     if (runtime->poisoned) {
         return FWLAB_SPINE_V0_POISONED;
     }
     existing = record != NULL;
+    if (referenced && existing) {
+        referenced_transfer.direction = record->transfer_direction;
+        referenced_transfer.exact_bytes = record->transfer_bytes;
+    }
     binding = profile_binding(runtime, profile);
     if (existing &&
         (record->profile != profile || binding == NULL ||
@@ -728,8 +752,16 @@ enum fwlab_spine_result_v0 j0_runtime_admit_start(
         }
     }
     if (!transfer_contract(&program, record->argument, &direction,
-                           &exact_bytes, &buffer_required) ||
-        !supplied_transfer_valid(runtime, transfer, direction, exact_bytes)) {
+                           &exact_bytes, &buffer_required)) {
+        record->original_failure = FWLAB_SPINE_V0_INVALID;
+        record->phase = J0_ADMISSION_ROLLBACK;
+        return rollback_drive(runtime, record);
+    }
+    if (referenced) {
+        referenced_transfer.direction = direction;
+        referenced_transfer.exact_bytes = exact_bytes;
+    }
+    if (!supplied_transfer_valid(runtime, transfer, direction, exact_bytes)) {
         record->original_failure = FWLAB_SPINE_V0_INVALID;
         record->phase = J0_ADMISSION_ROLLBACK;
         return rollback_drive(runtime, record);
@@ -759,6 +791,23 @@ enum fwlab_spine_result_v0 j0_runtime_admit_start(
     ++runtime->active_admissions;
     *ticket = record->ticket;
     return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 j0_runtime_admit_start(
+    struct j0_runtime *runtime, uint32_t profile,
+    const struct fwlab_nvme_command *command,
+    const struct j0_host_transfer *transfer,
+    struct fwlab_spine_command_ticket_v0 *ticket)
+{
+    return runtime_admit(runtime, profile, command, transfer, ticket, 0);
+}
+
+enum fwlab_spine_result_v0 j0_runtime_admit_referenced(
+    struct j0_runtime *runtime, uint32_t profile,
+    const struct fwlab_nvme_command *command,
+    struct fwlab_spine_command_ticket_v0 *ticket)
+{
+    return runtime_admit(runtime, profile, command, NULL, ticket, 1);
 }
 
 static int close_reap_one(struct j0_runtime *runtime)

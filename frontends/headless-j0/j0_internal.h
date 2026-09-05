@@ -72,6 +72,7 @@ struct j0_host_transfer {
 
 struct j0_host_binding {
     struct fwlab_host_data_port_v0 data;
+    struct fwlab_host_action_driver_binding_v0 queue_driver;
     void *context;
     enum fwlab_spine_result_v0 (*endpoint_prepare)(
         void *context, const struct fwlab_nvme_command_handle *command,
@@ -359,6 +360,17 @@ enum fwlab_spine_result_v0 j0_runtime_admit_start(
     const struct fwlab_nvme_command *command,
     const struct j0_host_transfer *transfer,
     struct fwlab_spine_command_ticket_v0 *ticket);
+enum fwlab_spine_result_v0 j0_runtime_admit_referenced(
+    struct j0_runtime *runtime, uint32_t profile,
+    const struct fwlab_nvme_command *command,
+    struct fwlab_spine_command_ticket_v0 *ticket);
+enum fwlab_spine_result_v0 j0_runtime_action_argument(
+    struct j0_runtime *runtime, const struct fwlab_host_action_token_v0 *token,
+    const struct fwlab_host_action_argument_ref_v0 *reference,
+    struct fwlab_spine_profile_argument_v0 *argument);
+enum fwlab_spine_result_v0 j0_runtime_action_result(
+    struct j0_runtime *runtime, const struct fwlab_host_action_token_v0 *token,
+    const struct fwlab_host_action_status_v0 *status);
 enum fwlab_spine_result_v0 j0_runtime_step(
     struct j0_runtime *runtime, uint32_t budget, uint32_t *units);
 enum fwlab_spine_result_v0 j0_runtime_intent_read(

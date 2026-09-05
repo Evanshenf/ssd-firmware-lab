@@ -51,6 +51,10 @@ static int continuous_stream(struct j0_runtime *runtime)
         uint8_t expected[512];
         uint8_t actual[512];
 
+        if (profile == J0_PROFILE_LINUX_V1) {
+            command.command_dword10_15[2] |= UINT32_C(0x80000000);
+            command.command_dword10_15[3] = 7;
+        }
         CHECK(command_run(runtime, profile, &command, &transfer,
                           &ticket, &intent));
         pattern_fill(expected, sizeof(expected),
@@ -179,6 +183,9 @@ static int referenced_host_journey(
 
     CHECK(runtime != NULL);
     memset(&host, 0, sizeof(host));
+    command.handle.controller_epoch = 2;
+    command.handle.generation = 2;
+    command.safety_generation = 2;
     host.command = command.handle;
     host.origin = command.origin;
     host.exact_bytes = 512;
@@ -189,14 +196,14 @@ static int referenced_host_journey(
     memcpy(config.media_uuid, uuid, sizeof(config.media_uuid));
     config.file = file;
     config.media_mode = J0_MEDIA_RECOVER;
-    config.generation = 1;
-    config.execution_epoch = 1;
+    config.generation = 2;
+    config.execution_epoch = 2;
     config.volatile_nonce_seed = 12;
     config.host_factory = &factory;
     CHECK(j0_runtime_init(runtime, &config) == FWLAB_SPINE_V0_OK);
     CHECK(runtime_ready(runtime));
-    CHECK(j0_runtime_admit_start(runtime, J0_PROFILE_LINUX_V1, &command,
-                                 &transfer, &ticket) == FWLAB_SPINE_V0_OK);
+    CHECK(j0_runtime_admit_referenced(runtime, J0_PROFILE_LINUX_V1, &command,
+                                      &ticket) == FWLAB_SPINE_V0_OK);
     CHECK(!host.request_valid);
     CHECK(j0_bytes_zero(record_for_ticket(runtime, &ticket)->transfer_copy,
                         J0_MAX_TRANSFER_BYTES));
