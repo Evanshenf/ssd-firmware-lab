@@ -11,6 +11,10 @@ journeys. This is not production firmware, a physical endpoint or a performance
 result. Implementation and individual test results are not reviewed milestone
 graduation; exact release evidence must state its source and remaining limits.
 
+Current preview: **v0.1.0-spine-preview.1**, a reviewed fixed-profile software
+baseline. See the [source-bound results and limitations](docs/results/2026-09-05-vertical-spine-preview.md)
+for the 1-MiB/file-NAND envelope, native/QEMU results and remaining risks.
+
 ## What we are building
 
 ```text
