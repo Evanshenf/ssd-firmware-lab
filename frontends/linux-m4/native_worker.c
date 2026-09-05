@@ -116,6 +116,7 @@ int native_runtime_create(struct native_context *context,
     memcpy(config.media_uuid, media->uuid, sizeof(config.media_uuid));
     config.file = media->file;
     config.media_mode = format ? J0_MEDIA_FORMAT : J0_MEDIA_RECOVER;
+    config.budget_profile = J0_BUDGET_LAB;
     config.generation = context->epoch;
     config.execution_epoch = context->epoch;
     /* Failed pre-grant construction may retry the same unpublished controller

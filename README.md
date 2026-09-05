@@ -5,7 +5,11 @@
 
 `ssd-firmware-lab` is a pre-alpha, AI-assisted, open-source laboratory for developing portable SSD controller firmware, a programmable NAND flash controller model, and crash-consistent persistent media.
 
-The repository currently freezes the architecture and contribution boundaries. It does **not** yet contain a working NVMe controller, production firmware, or benchmark result.
+The repository contains an experimental Host-visible software PCI/NVMe controller,
+portable firmware/FTL/NFC, persistent file-NAND and sequential QEMU ownership
+journeys. This is not production firmware, a physical endpoint or a performance
+result. Implementation and individual test results are not reviewed milestone
+graduation; exact release evidence must state its source and remaining limits.
 
 ## What we are building
 
@@ -28,7 +32,10 @@ persistent physical media
 page/OOB truth · wear/bad-block state · physical-operation WAL
 ```
 
-The v0.x release baseline is a headless test harness, the portable firmware/NFC stack and persistent file/raw-block media. A `vfio-user` guest adapter is an optional, deferred differential frontend rather than a release prerequisite. The longer-term project target adds:
+The current vertical path uses the portable firmware/NFC stack and persistent
+file-NAND, exposed through a headless binding or the experimental native PCI/HIF.
+Raw-block backing is deferred. A `vfio-user` guest adapter is also optional and
+deferred, not a release prerequisite. The project roadmap includes:
 
 - a host synthetic PCI function that the native Linux storage driver can use;
 - a destructive, sequential Host-to-Guest ownership switch of that same function through upstream `vfio-pci`, IOMMUFD and QEMU;
@@ -41,10 +48,13 @@ The project does not implement a custom VFIO userspace ABI or a QEMU NVMe device
 ## Storage separation
 
 - PCI configuration, BAR state, queue shadows and controller DRAM live in volatile memory.
-- NAND pages, OOB, wear/bad-block truth and recovery records live in a persistent image or dedicated block device.
-- A synthetic `/dev/nvmeXnY` is the tested namespace. Its raw backing device is private implementation media and must never be mounted or used for unrelated data.
+- NAND pages, OOB, wear/bad-block truth and recovery records currently live in a persistent file image; dedicated raw-block backing is later work.
+- A synthetic `/dev/nvmeXnY` is the tested namespace. Its backing image is private implementation media and must never be mounted or used for unrelated data.
 
-Raw block media is destructive. The normal daemon will never auto-format it; a separate initializer must verify whole-device identity, serial, exact size and an operator confirmation token. File-backed media is the safe default.
+Raw block media would be destructive. Its future initializer must verify
+whole-device identity, serial, exact size and operator approval; it is not
+implemented by the current worker. The file worker creates a new image only
+with explicit `--format` and otherwise recovers the existing UUID-bound image.
 
 ## Authenticity boundary
 
@@ -56,6 +66,7 @@ This independent project is not affiliated with, endorsed by, recognized by, or 
 
 - [Requirements](docs/requirements.md)
 - [Architecture](docs/architecture.md)
+- [Current native firmware/data path and bounded checks](frontends/linux-m4/README.md)
 - [Portable command lifecycle core](core/README.md)
 - [Executable persistence model](core/c32/README.md)
 - [Programmable NAND/NFC model](nfc/README.md)

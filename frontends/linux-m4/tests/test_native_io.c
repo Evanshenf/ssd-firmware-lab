@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 struct native_case { uint32_t lba, bytes, offset; uint8_t seed; };
-int native_owner_host_journey(const char *directory, const char *bdf);
+int native_owner_host_journey(const char *directory, const char *bdf, int budget);
 int native_owner_stale_journey(const char *directory, const char *bdf);
 int native_owner_qemu_journey(const char *directory, const char *bdf,
                               const char *kernel, const char *initrd, const char *workdir, unsigned cut);
@@ -326,11 +326,46 @@ done:
     return result;
 }
 
+static int budget_journey(int fd, uint8_t *buffer)
+{
+    const struct native_case *test = &cases[2];
+    uint8_t expected[8192];
+    uint32_t iteration, byte;
+    int status;
+
+    if (transfer(fd, 2, test, buffer, 0, 0)) return 0;
+    memcpy(expected, buffer, sizeof(expected));
+    for (iteration = 0; iteration < 12000; ++iteration) {
+        memset(buffer, 0xa5, sizeof(expected));
+        status = transfer(fd, 2, test, buffer, 0, 0);
+        if (status != 0) {
+            struct nvme_passthru_cmd flush = { 0 };
+            /* Linux ioctl status has no CQ phase bit: SC=6, SCT=0, DNR=1. */
+            if (status != 0x4006 || iteration < 4096) return 0;
+            for (byte = 0; byte < sizeof(expected); ++byte)
+                if (buffer[byte] != 0xa5) return 0;
+            flush.nsid = 1;
+            if (exchange(fd, NVME_IOCTL_IO_CMD, &flush)) return 0;
+            printf("NATIVE_BUDGET_PASS reads=%u status=0x%x DNR=1 error_buffer=unchanged final_flush=success timeout_reset=not_used\n",
+                   iteration + 1u, status);
+            return 1;
+        }
+        if (memcmp(buffer, expected, sizeof(expected))) return 0;
+        if ((iteration + 1u) % 1024u == 0)
+            printf("NATIVE_BUDGET_PROGRESS reads=%u\n", iteration + 1u);
+    }
+    fputs("native budget boundary was not reached within its declared bound\n", stderr);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     uint8_t *allocation;
     int fd, write_mode, result = 1, guest = 0, guest_phase = 0, guest_hold = 0, pba = 0;
     uint32_t index, iteration, cut = 0;
+    int budget = argc == 4 && !strcmp(argv[1], "budget");
+
+    setvbuf(stdout, NULL, _IOLBF, 0);
 
     if (argc == 7 && !strcmp(argv[1], "owner-qemu"))
         return native_owner_qemu_journey(argv[2], argv[3], argv[4], argv[5], argv[6], 0);
@@ -339,7 +374,9 @@ int main(int argc, char **argv)
     if (argc == 7 && !strcmp(argv[1], "owner-postkill"))
         return native_owner_postkill_journey(argv[2], argv[3], argv[4], argv[5], argv[6]);
     if (argc == 4 && !strcmp(argv[1], "owner-host"))
-        return native_owner_host_journey(argv[2], argv[3]);
+        return native_owner_host_journey(argv[2], argv[3], 0);
+    if (argc == 4 && !strcmp(argv[1], "owner-budget"))
+        return native_owner_host_journey(argv[2], argv[3], 1);
     if (argc == 4 && !strcmp(argv[1], "owner-stale"))
         return native_owner_stale_journey(argv[2], argv[3]);
     if (argc == 4 && strlen(argv[1]) == 4 && !strncmp(argv[1], "cut", 3) &&
@@ -348,13 +385,13 @@ int main(int argc, char **argv)
     guest_hold = argc == 4 && !strcmp(argv[1], "guest-hold");
     pba = argc == 4 && !strcmp(argv[1], "pba");
     guest = guest_hold || (argc == 4 && !strcmp(argv[1], "guest-ab"));
-    if (argc != 4 || (!cut && !guest && !pba && strcmp(argv[1], "write") &&
+    if (argc != 4 || (!cut && !guest && !pba && !budget && strcmp(argv[1], "write") &&
                       strcmp(argv[1], "verify") && strcmp(argv[1], "verify-b"))) {
-        fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3 /dev/nvmeXn1 BDF\n", argv[0]);
+        fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3|budget /dev/nvmeXn1 BDF\n", argv[0]);
         return 2;
     }
     pattern_delta = !strcmp(argv[1], "verify-b") ? 0x33 : 0;
-    write_mode = cut != 0 || !strcmp(argv[1], "write");
+    write_mode = cut != 0 || budget || !strcmp(argv[1], "write");
     fd = open(argv[2], (write_mode || guest ? O_RDWR : O_RDONLY) |
                         O_EXCL | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) {
@@ -376,6 +413,10 @@ int main(int argc, char **argv)
     }
     if (pba) {
         result = masked_pba_journey(fd, argv[3], allocation) ? 0 : 1;
+        goto done;
+    }
+    if (budget) {
+        result = budget_journey(fd, allocation) ? 0 : 1;
         goto done;
     }
 guest_again:

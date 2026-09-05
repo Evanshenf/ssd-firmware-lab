@@ -151,7 +151,7 @@ static int grant_owner(int fd, uint8_t target,
                         const struct fwlab_owner_revoke_status_v0 *revoked,
                         const struct fwlab_owner_stable_identity_v0 *stable);
 
-int native_owner_host_journey(const char *directory, const char *bdf)
+int native_owner_host_journey(const char *directory, const char *bdf, int budget)
 {
     struct sockaddr_un address;
     struct native_owner_packet before, packet;
@@ -205,7 +205,8 @@ int native_owner_host_journey(const char *directory, const char *bdf)
         memcmp(packet.stable.binding_manifest_sha256, before.stable.binding_manifest_sha256, 32))
         goto done;
     if (!native_bind(bdf) || !namespace_find(bdf, device) ||
-        !run_native_io("verify", device, bdf, fd)) goto done;
+        !run_native_io("verify", device, bdf, fd) ||
+        (budget && !run_native_io("budget", device, bdf, fd))) goto done;
     if (!sysfs_write(bdf, "driver/unbind", bdf) || !revoke_and_drain(fd, client_uid(), &before, &revoked))
         goto done;
     puts("OWNER_HOST_PATH_PASS same_function=1 same_media=1 cleanup=NO_OWNER guest=not_connected");

@@ -108,6 +108,7 @@ override J0B_M3P_OBJECTS := \
 	build/j0b/m3p_recovery.o \
 	build/j0b/m3p_runtime.o
 override J0B_NFC_OBJECTS := \
+	build/j0b/nfc_trace_window.o \
 	build/j0b/nfc_model.o \
 	build/j0b/nfc_scheduler.o \
 	build/j0b/nfc_fault.o \
@@ -153,6 +154,7 @@ override J0B_SPINE_ARCHIVE := build/j0b/libfwlab_spine_lifecycle_v0.a
 override J0B_PROFILE_ARCHIVE := build/j0b/libfwlab_spine_profiles_v0.a
 override J0B_MATRIX := build/j0b/j0b_profile_matrix
 override J0B_INTERMEDIATES := \
+	build/j0b/nfc_trace_window.o \
 	build/j0b/m3p_codec.o \
 	build/j0b/m3p_mapping.o \
 	build/j0b/m3p_nfc.o \
@@ -184,6 +186,7 @@ override J0B_INTERMEDIATES := \
 	build/j0b/libfwlab_spine_profiles_v0.a
 override J0B_ARTIFACTS := build/j0b/j0b_profile_matrix
 override J0B_OWNED := \
+	build/j0b/nfc_trace_window.o \
 	build/j0b/m3p_codec.o \
 	build/j0b/m3p_mapping.o \
 	build/j0b/m3p_nfc.o \

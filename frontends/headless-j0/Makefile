@@ -194,6 +194,11 @@ $(J0B_NFC_ARCHIVE): $(J0B_NFC_OBJECTS)
 	rm -f -- $@
 	$(AR) rcs $@ $(J0B_NFC_OBJECTS)
 
+$(J0B_BUILD_DIR)/nfc_trace_window.o: ../../core/nfc-runtime/nfc_trace_window.c \
+		../../include/fwlab/private/nfc_trace_window.h ../../nfc/nfc_internal.h \
+		| $(J0B_BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
 $(J0B_FILE_ARCHIVE): $(J0B_FILE_OBJECTS)
 	rm -f -- $@
 	$(AR) rcs $@ $(J0B_FILE_OBJECTS)

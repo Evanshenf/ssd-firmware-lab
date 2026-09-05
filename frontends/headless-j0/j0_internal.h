@@ -19,6 +19,8 @@
 #define J0_MAX_COMMANDS 32u
 #define J0_MAX_DMA_OPERATIONS 32u
 #define J0_MAX_TRANSFER_BYTES 8192u
+#define J0_BUDGET_REFERENCE 0u
+#define J0_BUDGET_LAB 1u
 
 #define J0_LIFECYCLE_NONCE UINT64_C(0x4a304c4946450001)
 #define J0_C43_ADAPTER_NONCE UINT64_C(0x4a30433433000001)
@@ -108,6 +110,7 @@ struct j0_runtime_config {
     uint32_t execution_epoch;
     uint64_t volatile_nonce_seed;
     const struct j0_host_factory *host_factory;
+    uint32_t budget_profile;
     uint32_t reserved1[4];
 };
 
@@ -258,6 +261,7 @@ struct j0_runtime {
     struct fwlab_spine_profile_binding_v0 linux_binding;
     struct fwlab_nfc_model *nfc_model;
     struct fwlab_nfc_provider nfc_provider;
+    uint32_t nfc_trace_windows;
     struct fwlab_m3p *m3p;
     struct fwlab_block_service_v0 block;
     struct fwlab_block_namespace_ref_v0 namespace_ref;

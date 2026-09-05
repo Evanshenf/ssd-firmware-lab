@@ -6,6 +6,9 @@
 
 #include <stdint.h>
 
+/* An unrecoverable admission budget/space failure, not a media data error. */
+#define FWLAB_BLOCK_V0_FAULT_RESOURCE UINT32_C(0x424c5253)
+
 #include "fwlab/contracts/controller_buffer_v0.h"
 #include "fwlab/portable/host_action_program_v0.h"
 

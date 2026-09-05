@@ -387,6 +387,21 @@ static int finalize_recovery(struct fwlab_m3p *m3p)
                 record->oob.record_sequence;
             ++open_gc_count;
         } else if (record->map.subtype == M3P_MAP_GC_SWITCH) {
+            /* A zero-live GC has no relocation records. Its durable switch
+             * is the complete transaction, but may not discard a live LPN. */
+            if (open_gc_uid == 0 && record->map.gc_expected_live == 0 &&
+                record->map.gc_moved == 0) {
+                if (record->map.gc_source_block ==
+                    record->map.gc_destination_block) return 0;
+                for (lpn = 0; lpn < M3P_LPN_COUNT; ++lpn)
+                    if (m3p->durable[lpn].state == M3P_L2P_VALUE &&
+                        m3p->durable[lpn].block ==
+                            record->map.gc_source_block) return 0;
+                open_gc_uid = record->map.gc_uid;
+                open_gc_expected = 0;
+                open_gc_source = record->map.gc_source_block;
+                open_gc_destination = record->map.gc_destination_block;
+            }
             if (open_gc_uid == 0 || record->map.gc_uid != open_gc_uid ||
                 record->map.gc_moved != open_gc_count ||
                 record->map.gc_expected_live != open_gc_expected ||

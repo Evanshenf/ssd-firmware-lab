@@ -19,6 +19,7 @@ FIRMWARE_SOURCES := \
 	../../core/m3p/m3p_codec.c ../../core/m3p/m3p_mapping.c \
 	../../core/m3p/m3p_nfc.c ../../core/m3p/m3p_gc.c \
 	../../core/m3p/m3p_recovery.c ../../core/m3p/m3p_runtime.c \
+	../../core/nfc-runtime/nfc_trace_window.c \
 	../../nfc/nfc_model.c ../../nfc/nfc_scheduler.c \
 	../../nfc/nfc_fault.c ../../nfc/nfc_media.c \
 	../../media/file-nand-v0/file_nand_codec.c \
@@ -29,7 +30,7 @@ FIRMWARE_SOURCES := \
 RUNTIME_SOURCES := tests/test_runtime.c $(FIRMWARE_SOURCES)
 WORKER_SOURCES := native_worker.c native_host.c native_owner.c native_owner_socket.c $(FIRMWARE_SOURCES)
 
-.PHONY: worker native-io native-io-static check-runtime clean
+.PHONY: worker native-io native-io-static runtime check-runtime clean
 
 worker:
 	mkdir -p build
@@ -43,9 +44,11 @@ native-io-static:
 	mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -static tests/test_native_io.c tests/owner_journey.c tests/vfio_epoch.c -o build/j1_native_io_static
 
-check-runtime:
+runtime:
 	mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(RUNTIME_SOURCES) -o build/j1_runtime_matrix
+
+check-runtime: runtime
 	./build/j1_runtime_matrix
 
 clean:

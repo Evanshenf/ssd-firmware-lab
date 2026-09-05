@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include "spine_internal.h"
+#include "fwlab/contracts/block_service_v0.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -1104,11 +1105,17 @@ static enum fwlab_spine_result_v0 linux_complete(
         if (failed_index >= 0) {
             semantic_status = normalized_provider_status(
                 failed_outcome, status[failed_index].token.kind);
+            if (status[failed_index].token.kind >= FWLAB_HOST_ACTION_V0_BLOCK_READ &&
+                status[failed_index].token.kind <= FWLAB_HOST_ACTION_V0_BLOCK_FLUSH &&
+                status[failed_index].fault_domain == FWLAB_BLOCK_V0_FAULT_RESOURCE) {
+                semantic_status = LINUX_STATUS_RESOURCE_FAILURE;
+            }
             dnr = (uint8_t)(semantic_status == LINUX_STATUS_INVALID_QUEUE ||
                             semantic_status ==
                                 LINUX_STATUS_INVALID_QUEUE_SIZE ||
                             semantic_status ==
-                                LINUX_STATUS_INVALID_QUEUE_DELETE);
+                                LINUX_STATUS_INVALID_QUEUE_DELETE ||
+                            semantic_status == LINUX_STATUS_RESOURCE_FAILURE);
             effect = any_effect ? FWLAB_NVME_EFFECT_UNKNOWN_PREFIX
                                 : FWLAB_NVME_EFFECT_NONE;
         } else if (cancelled_index >= 0) {

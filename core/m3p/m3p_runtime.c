@@ -155,6 +155,14 @@ static void submit_result_init(
     }
 }
 
+static void submit_resource_failure(
+    struct fwlab_block_submit_result_v0 *result,
+    const struct fwlab_block_op_token_v0 *token, uint32_t code)
+{
+    submit_result_init(result, token, FWLAB_HOST_ACTION_V0_REJECTED, code);
+    result->fault_domain = FWLAB_BLOCK_V0_FAULT_RESOURCE;
+}
+
 static int child_credit_available(const struct fwlab_m3p *m3p,
                                   uint32_t required)
 {
@@ -298,12 +306,6 @@ static enum fwlab_spine_result_v0 block_submit(
                            FWLAB_HOST_ACTION_V0_BACKPRESSURE, 0);
         return FWLAB_SPINE_V0_OK;
     }
-    if (request->operation == FWLAB_BLOCK_V0_FLUSH &&
-        m3p->host_sequence == 0) {
-        submit_result_init(result, &request->operation_token,
-                           FWLAB_HOST_ACTION_V0_REJECTED, 2);
-        return FWLAB_SPINE_V0_OK;
-    }
     first_lpn = request->operation == FWLAB_BLOCK_V0_FLUSH ? 0 :
         (uint16_t)(request->lba / M3P_SECTORS_PER_PAGE);
     last_lpn = request->operation == FWLAB_BLOCK_V0_FLUSH ? 0 :
@@ -326,14 +328,18 @@ static enum fwlab_spine_result_v0 block_submit(
         return FWLAB_SPINE_V0_OK;
     }
     child_bound = request_child_bound(m3p, request);
-    if (child_bound == 0 || !child_credit_available(m3p, child_bound) ||
+    if (child_bound == 0 ||
+        !child_credit_available(m3p, child_bound +
+            (request->operation == FWLAB_BLOCK_V0_FLUSH ? 0u : 32u)) ||
         m3p->record_sequence >= m3p->config.record_sequence_limit ||
         ((request->operation == FWLAB_BLOCK_V0_WRITE ||
           request->operation == FWLAB_BLOCK_V0_TRIM) &&
-         m3p->host_sequence >= m3p->config.host_sequence_limit) ||
-        m3p->journal_page + m3p->pending_count + 1u > M3P_PAGES_PER_BLOCK) {
-        submit_result_init(result, &request->operation_token,
-                           FWLAB_HOST_ACTION_V0_BACKPRESSURE, 0);
+         m3p->host_sequence >= m3p->config.host_sequence_limit)) {
+        submit_resource_failure(result, &request->operation_token, 3);
+        return FWLAB_SPINE_V0_OK;
+    }
+    if (m3p->journal_page + m3p->pending_count + 1u > M3P_PAGES_PER_BLOCK) {
+        submit_resource_failure(result, &request->operation_token, 4);
         return FWLAB_SPINE_V0_OK;
     }
     memset(&candidate, 0, sizeof(candidate));
@@ -353,10 +359,19 @@ static enum fwlab_spine_result_v0 block_submit(
                 m3p->controller_buffer.context, &request->buffer,
                 &request->buffer_span, candidate.io_bytes,
                 request->buffer_span.length) !=
-                FWLAB_CONTROLLER_BUFFER_V0_OK ||
-            !reserve_write_pages(m3p, &candidate)) {
-            submit_result_init(result, &request->operation_token,
-                               FWLAB_HOST_ACTION_V0_BACKPRESSURE, 0);
+                FWLAB_CONTROLLER_BUFFER_V0_OK) {
+            submit_resource_failure(result, &request->operation_token, 5);
+            return FWLAB_SPINE_V0_OK;
+        }
+        if (!reserve_write_pages(m3p, &candidate)) {
+            /* Reservation rolls back fully. Private maintenance is the actual
+             * progress owner while this Host operation remains unaccepted. */
+            if (fwlab_m3p_force_gc_start(m3p) == FWLAB_SPINE_V0_OK) {
+                submit_result_init(result, &request->operation_token,
+                                   FWLAB_HOST_ACTION_V0_BACKPRESSURE, 0);
+            } else {
+                submit_resource_failure(result, &request->operation_token, 6);
+            }
             return FWLAB_SPINE_V0_OK;
         }
         candidate.host_sequence = ++m3p->host_sequence;
@@ -578,11 +593,14 @@ int fwlab_m3p_config_valid(const struct fwlab_m3p_config *config)
            config->provider_nonce != config->nfc_instance_nonce &&
            config->next_nfc_operation_uid != 0 && config->generation != 0 &&
            config->execution_epoch != 0 && config->nfc_epoch != 0 &&
-           config->nfc_operation_uid_limit == 2048 &&
+           ((config->nfc_operation_uid_limit == 2048 &&
+             config->host_sequence_limit == 512 &&
+             config->record_sequence_limit == 2048) ||
+            (config->nfc_operation_uid_limit == 65536 &&
+             config->host_sequence_limit == 4096 &&
+             config->record_sequence_limit == 65536)) &&
            config->next_nfc_operation_uid <=
                config->nfc_operation_uid_limit &&
-           config->host_sequence_limit == 512 &&
-           config->record_sequence_limit == 2048 &&
            m3p_bytes_zero(config->reserved1, sizeof(config->reserved1));
 }
 
@@ -934,7 +952,9 @@ void m3p_operation_succeed(struct fwlab_m3p *m3p,
                 operation->request.operation == FWLAB_BLOCK_V0_WRITE ?
             operation->request.buffer_span.length : 0;
     operation->status.durability_witness = durability_witness;
-    if (frontier_sequence != 0) {
+    /* A durable frontier at sequence zero is valid for an empty namespace. */
+    if (durability_witness == FWLAB_BLOCK_V0_WITNESS_SELF_DURABLE ||
+        durability_witness == FWLAB_BLOCK_V0_WITNESS_FRONTIER_DURABLE) {
         operation->status.frontier.word[0] = m3p->config.provider_nonce;
         operation->status.frontier.word[1] = frontier_sequence;
     }

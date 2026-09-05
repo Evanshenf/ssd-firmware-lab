@@ -13,19 +13,6 @@ static int gc_credit_available(const struct fwlab_m3p *m3p, uint32_t count)
                             m3p->next_child_uid;
 }
 
-static int data_pool_full(const struct fwlab_m3p *m3p)
-{
-    uint8_t block;
-
-    for (block = 0; block < M3P_BLOCKS; ++block) {
-        if (m3p->block_role[block] == M3P_ROLE_DATA &&
-            m3p->block_next_page[block] < M3P_PAGES_PER_BLOCK) {
-            return 0;
-        }
-    }
-    return 1;
-}
-
 static int select_victim(struct fwlab_m3p *m3p, uint8_t *victim,
                          uint8_t *live_count, uint8_t *reclaimable)
 {
@@ -40,7 +27,7 @@ static int select_victim(struct fwlab_m3p *m3p, uint8_t *victim,
         uint8_t reclaim = 0;
 
         if (m3p->block_role[block] != M3P_ROLE_DATA ||
-            m3p->block_next_page[block] != M3P_PAGES_PER_BLOCK) {
+            m3p->block_next_page[block] == 0) {
             continue;
         }
         for (page = 0; page < M3P_PAGES_PER_BLOCK; ++page) {
@@ -59,7 +46,7 @@ static int select_victim(struct fwlab_m3p *m3p, uint8_t *victim,
                 break;
             }
         }
-        if (live == UINT8_MAX) {
+        if (live > 25 || reclaim == 0) {
             continue;
         }
         if (best == UINT8_MAX || reclaim > best_reclaimable ||
@@ -126,7 +113,7 @@ enum fwlab_spine_result_v0 fwlab_m3p_force_gc_start(struct fwlab_m3p *m3p)
         m3p->work_kind != FWLAB_M3P_MAINTENANCE_NONE ||
         m3p->operation.state != M3P_OPERATION_FREE ||
         m3p->pending_count != 0 || m3p->child.state != M3P_CHILD_IDLE ||
-        !data_pool_full(m3p) || m3p->block_role[m3p->reserve_block] !=
+        m3p->block_role[m3p->reserve_block] !=
                                     M3P_ROLE_RESERVE ||
         m3p->block_health[m3p->reserve_block] != FWLAB_NFC_BLOCK_GOOD ||
         m3p->block_next_page[m3p->reserve_block] != 0 ||
@@ -134,7 +121,9 @@ enum fwlab_spine_result_v0 fwlab_m3p_force_gc_start(struct fwlab_m3p *m3p)
         live + 1u > M3P_PAGES_PER_BLOCK) {
         return FWLAB_SPINE_V0_WRONG_STATE;
     }
-    child_bound = 6u * live + 3u;
+    /* Relocation plus worst-case checkpoint/switch/erase and space for the
+     * waiting write and final Flush. No new Host work owns these GC children. */
+    child_bound = 6u * live + 16u + 20u + 32u;
     if (!gc_credit_available(m3p, child_bound) ||
         m3p->record_sequence + 2u * live + 1u >
             m3p->config.record_sequence_limit ||
@@ -402,7 +391,9 @@ int m3p_gc_drive(struct fwlab_m3p *m3p)
             gc_fail(m3p, 2);
             return 1;
         }
-        m3p->work_state = M3P_GC_READ;
+        /* A zero-live victim has no source page to read or relocate. */
+        m3p->work_state = m3p->gc_live_count == 0 ?
+            M3P_GC_SWITCH : M3P_GC_READ;
         return 1;
     }
     if (m3p->work_state == M3P_GC_READ) {

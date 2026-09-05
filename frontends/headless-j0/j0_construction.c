@@ -3,6 +3,7 @@
 
 #include "j0_internal.h"
 #include "m3p_internal.h"
+#include "fwlab/private/nfc_trace_window.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -19,7 +20,7 @@ static void *arena_allocate(size_t alignment, size_t size)
     return aligned_alloc(alignment, rounded);
 }
 
-static struct fwlab_nfc_model_config nfc_config(void)
+static struct fwlab_nfc_model_config nfc_config(uint32_t budget_profile)
 {
     struct fwlab_nfc_model_config config;
 
@@ -68,6 +69,15 @@ static struct fwlab_nfc_model_config nfc_config(void)
     config.capacity.operation_uid_limit = 2048;
     config.capacity.virtual_tick_limit = UINT64_C(1000000);
     config.successful_erase_limit = 64;
+    if (budget_profile == J0_BUDGET_LAB) {
+        config.capacity.operation_generation_limit = 65536;
+        config.capacity.cache_generation_limit = 65536;
+        config.capacity.submit_sequence_limit = 65536;
+        config.capacity.operation_uid_limit = 65536;
+        config.capacity.trace_entries = UINT16_MAX;
+        config.capacity.virtual_tick_limit = UINT64_C(100000000);
+        config.successful_erase_limit = 4096;
+    }
     return config;
 }
 
@@ -94,6 +104,11 @@ static struct fwlab_m3p_config m3p_config(
     config.nfc_operation_uid_limit = 2048;
     config.host_sequence_limit = 512;
     config.record_sequence_limit = 2048;
+    if (runtime->config.budget_profile == J0_BUDGET_LAB) {
+        config.nfc_operation_uid_limit = 65536;
+        config.host_sequence_limit = 4096;
+        config.record_sequence_limit = 65536;
+    }
     return config;
 }
 
@@ -118,6 +133,12 @@ static struct fwlab_host_lifecycle_config_v0 lifecycle_config(
     config.abort_uid.maximum = 9100;
     config.completion_lease_uid.next = 12001;
     config.completion_lease_uid.maximum = 16096;
+    if (runtime->config.budget_profile == J0_BUDGET_LAB) {
+        config.command_uid.maximum = 65536;
+        config.action_uid.maximum = 524288;
+        config.abort_uid.maximum = 74536;
+        config.completion_lease_uid.maximum = 77536;
+    }
     return config;
 }
 
@@ -132,6 +153,7 @@ static int runtime_config_valid(const struct j0_runtime_config *config)
            config->generation != 0 && config->execution_epoch != 0 &&
            config->volatile_nonce_seed != 0 &&
            config->volatile_nonce_seed < UINT64_C(0x100000) &&
+           config->budget_profile <= J0_BUDGET_LAB &&
            j0_bytes_zero(config->reserved1, sizeof(config->reserved1));
 }
 
@@ -570,7 +592,7 @@ enum fwlab_spine_result_v0 j0_runtime_init(
     }
 
     m3p = m3p_config(runtime);
-    nfc = nfc_config();
+    nfc = nfc_config(config->budget_profile);
     m3p_size = fwlab_m3p_arena_size(&m3p);
     nfc_size = fwlab_nfc_model_arena_size(&nfc);
     runtime->m3p_arena = arena_allocate(fwlab_m3p_arena_alignment(), m3p_size);
@@ -887,6 +909,16 @@ enum fwlab_spine_result_v0 j0_runtime_step(
             }
         } else {
             (void)close_reap_one(runtime);
+        }
+        if (runtime->config.budget_profile == J0_BUDGET_LAB &&
+            fwlab_nfc_model_trace_count(runtime->nfc_model) >= UINT16_MAX - 4096u) {
+            uint32_t retired = 0;
+            enum fwlab_nfc_api_result trace_result =
+                fwlab_nfc_trace_window_retire(runtime->nfc_model, &retired);
+            if (trace_result == FWLAB_NFC_API_OK && retired != 0)
+                ++runtime->nfc_trace_windows;
+            else if (trace_result != FWLAB_NFC_API_WRONG_STATE)
+                runtime->poisoned = 1;
         }
         runtime->fair_cursor = (runtime->fair_cursor + 1u) % 3u;
         ++used;

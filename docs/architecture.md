@@ -47,11 +47,12 @@ physical completion placement are not transport-neutral. The generalized
 remain unchanged regression references and are not a Cycle 04 runtime
 dependency. See [ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md).
 
-C4.3 implements that separation through sanitized typed requests and the sole
-`c4_command_graph_v1` outer lifecycle. Data-bearing commands remain held until
-their later-profile witness mask is complete; a validation-only fake cannot
-produce success. Queue/target integration uses a non-reentrant mailbox bridge
-to the frozen C4.2 HIF. See [ADR-0011](adr/0011-c4-command-graph-v1.md).
+The earlier C4.3 `c4_command_graph_v1` implementation and ADR-0011 remain bounded
+references, not the native executor. The current vertical path uses
+`core/command-spine/spine_lifecycle.c`, two real profile adapters and aggregate
+Block operations. GC, RMW, metadata and NAND child work stay inside M3-P/NFC.
+The native PCI/HIF performs queue capture and completion publication through
+`frontends/linux-m4`; no old whole NVMe/media fixture is linked into that path.
 
 ## Command identity and lifecycle
 
@@ -114,5 +115,15 @@ Portable: protocol/media policy, request/dependency logic that uses the fixed co
 Replaced by hardware: PCIe link/config/BAR, requester DMA, queue walkers, completion writers, interrupt generation, NFC PHY and ECC/LDPC engines.
 
 Platform-specific: boot, RTOS/runtime, linker map, interrupt controller, timers, cache/coherency and atomics.
+
+Physical NAND is not yet a drop-in backend. Current recovery consumes NFC
+`final_erase_generation` in `core/m3p/m3p_recovery.c`; `nfc/nfc_media.c` obtains it
+from file-NAND block-health slots restored by the physical-media WAL/checkpoint
+engine. The generation also validates page/OOB identity. A raw-block substrate
+can preserve this same simulated format and health metadata. Real NAND needs a
+separate, still-open contract specifying who durably owns erase/wear generations,
+how blank blocks recover them and how interrupted erases are reconciled. The
+current simulator's explicit health metadata is not itself evidence of data
+corruption, nor evidence of lossless physical migration by replacing one backend.
 
 Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md), [ADR-0003](adr/0003-firmware-hardware-contract.md), [ADR-0004](adr/0004-kernel-baseline.md), [ADR-0005](adr/0005-synchronous-ioas-copy-gate.md), [ADR-0006](adr/0006-portable-command-lifecycle-contract.md), [ADR-0007](adr/0007-command-durability-and-persistence-policy.md), [ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md), [ADR-0009](adr/0009-upstream-vfio-route-and-milestones.md), [ADR-0010](adr/0010-linux-hif-portable-executor-contract.md) and [ADR-0011](adr/0011-c4-command-graph-v1.md).
