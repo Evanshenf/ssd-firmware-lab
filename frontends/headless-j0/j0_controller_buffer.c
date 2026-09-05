@@ -122,7 +122,7 @@ static enum fwlab_controller_buffer_result_v0 buffer_acquire(
     }
     record = NULL;
     for (index = 0; index < J0_MAX_COMMANDS; ++index) {
-        if (!buffer->record[index].occupied) {
+        if (!buffer->record[index].occupied || buffer->record[index].released) {
             record = &buffer->record[index];
             break;
         }

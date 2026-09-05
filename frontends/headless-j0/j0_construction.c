@@ -116,7 +116,7 @@ static struct fwlab_host_lifecycle_config_v0 lifecycle_config(
     config.abort_uid.next = 9001;
     config.abort_uid.maximum = 9100;
     config.completion_lease_uid.next = 12001;
-    config.completion_lease_uid.maximum = 12100;
+    config.completion_lease_uid.maximum = 16096;
     return config;
 }
 
@@ -244,6 +244,7 @@ static struct j0_admission_record *admission_free(
 }
 
 static int transfer_equal(
+    const struct j0_runtime *runtime,
     const struct j0_admission_record *record,
     const struct j0_host_transfer *transfer)
 {
@@ -251,7 +252,8 @@ static int transfer_equal(
         record->transfer_bytes != transfer->exact_bytes) {
         return 0;
     }
-    return transfer->direction != FWLAB_HOST_DATA_V0_HOST_TO_CONTROLLER ||
+    return !runtime->host_binding.inline_input ||
+           transfer->direction != FWLAB_HOST_DATA_V0_HOST_TO_CONTROLLER ||
            (transfer->input != NULL &&
             memcmp(record->transfer_copy, transfer->input,
                    transfer->exact_bytes) == 0);
@@ -307,6 +309,7 @@ static int transfer_contract(
 }
 
 static int supplied_transfer_valid(
+    const struct j0_runtime *runtime,
     const struct j0_host_transfer *transfer,
     uint32_t direction, uint32_t exact_bytes)
 {
@@ -321,7 +324,8 @@ static int supplied_transfer_valid(
         return exact_bytes == 0 && transfer->input == NULL;
     }
     if (direction == FWLAB_HOST_DATA_V0_HOST_TO_CONTROLLER) {
-        return exact_bytes != 0 && transfer->input != NULL;
+        return exact_bytes != 0 && (runtime->host_binding.inline_input
+                   ? transfer->input != NULL : transfer->input == NULL);
     }
     return direction == FWLAB_HOST_DATA_V0_CONTROLLER_TO_HOST &&
            exact_bytes != 0 && transfer->input == NULL;
@@ -333,8 +337,8 @@ static enum fwlab_spine_result_v0 release_resources(
     enum fwlab_spine_result_v0 result;
 
     if (record->authority_held) {
-        result = runtime->host.port.ops->authority_release(
-            runtime->host.port.context, &record->authority);
+        result = runtime->host_binding.data.ops->authority_release(
+            runtime->host_binding.data.context, &record->authority);
         if (result != FWLAB_SPINE_V0_OK) {
             return result;
         }
@@ -361,8 +365,9 @@ static enum fwlab_spine_result_v0 release_endpoint(
     if (!record->endpoint_held) {
         return FWLAB_SPINE_V0_OK;
     }
-    result = j0_host_endpoint_release(
-        &runtime->host, &record->command.handle, &record->command.origin);
+    result = runtime->host_binding.endpoint_release(
+        runtime->host_binding.context, &record->command.handle,
+        &record->command.origin);
     if (result == FWLAB_SPINE_V0_OK) {
         record->endpoint_held = 0;
     }
@@ -413,10 +418,11 @@ static enum fwlab_spine_result_v0 resources_acquire(
         record->phase = J0_ADMISSION_RESOURCES_HELD;
         return FWLAB_SPINE_V0_OK;
     }
-    result = j0_host_endpoint_prepare(
-        &runtime->host, &record->command.handle, &record->command.origin,
+    result = runtime->host_binding.endpoint_prepare(
+        runtime->host_binding.context, &record->command.handle,
+        &record->command.origin,
         record->transfer_direction, record->transfer_bytes,
-        record->transfer_direction ==
+        runtime->host_binding.inline_input && record->transfer_direction ==
                 FWLAB_HOST_DATA_V0_HOST_TO_CONTROLLER
             ? record->transfer_copy
             : NULL);
@@ -454,8 +460,8 @@ static enum fwlab_spine_result_v0 resources_acquire(
     authority_request.execution_epoch = runtime->config.execution_epoch;
     authority_request.exact_bytes = record->transfer_bytes;
     authority_request.direction = (uint8_t)record->transfer_direction;
-    result = runtime->host.port.ops->authority_mint(
-        runtime->host.port.context, &authority_request, &record->authority);
+    result = runtime->host_binding.data.ops->authority_mint(
+        runtime->host_binding.data.context, &authority_request, &record->authority);
     if (result != FWLAB_SPINE_V0_OK) {
         return result;
     }
@@ -497,13 +503,34 @@ enum fwlab_spine_result_v0 j0_runtime_init(
         &runtime->buffer,
         J0_BUFFER_ISSUER_NONCE + config->volatile_nonce_seed,
         config->generation);
-    j0_host_data_init(
-        &runtime->host, &runtime->buffer,
-        J0_AUTHORITY_ISSUER_NONCE + config->volatile_nonce_seed,
-        J0_DMA_ISSUER_NONCE + config->volatile_nonce_seed,
-        config->generation);
+    if (config->host_factory != NULL) {
+        if (config->host_factory->bind == NULL ||
+            config->host_factory->bind(
+                config->host_factory->context, &runtime->buffer.port,
+                config->generation, &runtime->host_binding) !=
+                FWLAB_SPINE_V0_OK) {
+            goto failed;
+        }
+    } else {
+        j0_host_data_init(
+            &runtime->host, &runtime->buffer,
+            J0_AUTHORITY_ISSUER_NONCE + config->volatile_nonce_seed,
+            J0_DMA_ISSUER_NONCE + config->volatile_nonce_seed,
+            config->generation);
+        j0_headless_host_binding(&runtime->host, &runtime->host_binding);
+    }
     if (!fwlab_controller_buffer_port_v0_valid(&runtime->buffer.port) ||
-        !fwlab_host_data_port_v0_valid(&runtime->host.port)) {
+        !fwlab_host_data_port_v0_valid(&runtime->host_binding.data) ||
+        runtime->host_binding.context == NULL ||
+        runtime->host_binding.endpoint_prepare == NULL ||
+        runtime->host_binding.endpoint_release == NULL ||
+        runtime->host_binding.inline_input > 1 ||
+        runtime->host_binding.data.buffer.ops != runtime->buffer.port.ops ||
+        runtime->host_binding.data.buffer.context != runtime->buffer.port.context ||
+        runtime->host_binding.data.buffer.issuer_nonce !=
+            runtime->buffer.port.issuer_nonce ||
+        runtime->host_binding.data.buffer.generation !=
+            runtime->buffer.port.generation) {
         goto failed;
     }
 
@@ -628,9 +655,9 @@ enum fwlab_spine_result_v0 j0_runtime_admit_start(
         (record->profile != profile || binding == NULL ||
          !binding_equal(&record->binding, binding) ||
          memcmp(&record->command, command, sizeof(*command)) != 0 ||
-         !supplied_transfer_valid(transfer, record->transfer_direction,
+         !supplied_transfer_valid(runtime, transfer, record->transfer_direction,
                                   record->transfer_bytes) ||
-         !transfer_equal(record, transfer))) {
+         !transfer_equal(runtime, record, transfer))) {
         return admission_poison(runtime);
     }
     if (binding == NULL) {
@@ -702,14 +729,15 @@ enum fwlab_spine_result_v0 j0_runtime_admit_start(
     }
     if (!transfer_contract(&program, record->argument, &direction,
                            &exact_bytes, &buffer_required) ||
-        !supplied_transfer_valid(transfer, direction, exact_bytes)) {
+        !supplied_transfer_valid(runtime, transfer, direction, exact_bytes)) {
         record->original_failure = FWLAB_SPINE_V0_INVALID;
         record->phase = J0_ADMISSION_ROLLBACK;
         return rollback_drive(runtime, record);
     }
     record->transfer_direction = direction;
     record->transfer_bytes = exact_bytes;
-    if (direction == FWLAB_HOST_DATA_V0_HOST_TO_CONTROLLER) {
+    if (runtime->host_binding.inline_input &&
+        direction == FWLAB_HOST_DATA_V0_HOST_TO_CONTROLLER) {
         memcpy(record->transfer_copy, transfer->input, exact_bytes);
     }
     result = resources_acquire(runtime, record, buffer_required);
@@ -886,13 +914,15 @@ enum fwlab_spine_result_v0 j0_runtime_host_read(
     }
     if (!record->intent_seen || record->transfer_direction !=
             FWLAB_HOST_DATA_V0_CONTROLLER_TO_HOST ||
-        output_size != record->transfer_bytes) {
+        output_size != record->transfer_bytes ||
+        runtime->host_binding.endpoint_read == NULL) {
         return FWLAB_SPINE_V0_WRONG_STATE;
     }
     {
-        enum fwlab_spine_result_v0 result = j0_host_endpoint_read(
-        &runtime->host, &record->command.handle, &record->command.origin,
-        output, output_size);
+        enum fwlab_spine_result_v0 result =
+            runtime->host_binding.endpoint_read(
+                runtime->host_binding.context, &record->command.handle,
+                &record->command.origin, output, output_size);
 
         if (result != FWLAB_SPINE_V0_OK) {
             return result;
@@ -919,14 +949,19 @@ enum fwlab_spine_result_v0 j0_runtime_close_start(
     }
     runtime->admission_closed = 1;
     runtime->close_started = 1;
+    if (runtime->buffer.port.ops->epoch_close(
+            runtime->buffer.port.context, runtime->lifecycle_instance_nonce,
+            runtime->config.execution_epoch) != FWLAB_CONTROLLER_BUFFER_V0_OK) {
+        return admission_poison(runtime);
+    }
     result = fwlab_spine_lifecycle_v0_epoch_close_start(
         runtime->lifecycle_arena, runtime->config.execution_epoch);
     if (result != FWLAB_SPINE_V0_OK) {
         runtime->poisoned = 1;
         return result;
     }
-    result = runtime->host.port.ops->epoch_close(
-        runtime->host.port.context, runtime->lifecycle_instance_nonce,
+    result = runtime->host_binding.data.ops->epoch_close(
+        runtime->host_binding.data.context, runtime->lifecycle_instance_nonce,
         runtime->config.execution_epoch);
     if (result != FWLAB_SPINE_V0_OK) {
         runtime->poisoned = 1;
@@ -958,6 +993,8 @@ enum fwlab_spine_result_v0 j0_runtime_close_query(
     struct fwlab_spine_epoch_status_v0 lifecycle;
     struct fwlab_host_data_epoch_status_v0 host;
     struct fwlab_block_epoch_status_v0 block;
+    uint32_t buffer_leases = 0;
+    uint8_t buffer_quiescent = 0;
     enum fwlab_spine_result_v0 result;
 
     if (runtime == NULL || runtime->magic != J0_RUNTIME_MAGIC ||
@@ -977,8 +1014,8 @@ enum fwlab_spine_result_v0 j0_runtime_close_query(
     if (result != FWLAB_SPINE_V0_OK) {
         return result;
     }
-    result = runtime->host.port.ops->epoch_quiescent(
-        runtime->host.port.context, runtime->lifecycle_instance_nonce,
+    result = runtime->host_binding.data.ops->epoch_quiescent(
+        runtime->host_binding.data.context, runtime->lifecycle_instance_nonce,
         runtime->config.execution_epoch, &host);
     if (result != FWLAB_SPINE_V0_OK) {
         return result;
@@ -989,15 +1026,22 @@ enum fwlab_spine_result_v0 j0_runtime_close_query(
     if (result != FWLAB_SPINE_V0_OK) {
         return result;
     }
+    if (runtime->buffer.port.ops->epoch_quiescent(
+            runtime->buffer.port.context, runtime->lifecycle_instance_nonce,
+            runtime->config.execution_epoch, &buffer_leases,
+            &buffer_quiescent) != FWLAB_CONTROLLER_BUFFER_V0_OK) {
+        return FWLAB_SPINE_V0_POISONED;
+    }
     status->host_authorities = host.authority_refs;
     status->dma_operations = host.dma_operations;
-    status->buffers = host.buffer_leases;
+    status->buffers = buffer_leases;
     status->block_operations = block.aggregate_operations;
     status->pending = block.quiescent ? 0 : 1;
     status->pinned = block.quiescent ? 0 : 1;
     status->nfc_operations = block.quiescent ? 0 : 1;
     status->quiescent = (uint8_t)(lifecycle.effectful_quiescent &&
-        host.quiescent && block.quiescent &&
+        host.quiescent && block.quiescent && buffer_quiescent &&
+        host.buffer_leases == 0 &&
         status->host_authorities == 0 && status->dma_operations == 0 &&
         status->buffers == 0 && status->block_operations == 0);
     return FWLAB_SPINE_V0_OK;
@@ -1039,5 +1083,53 @@ enum fwlab_spine_result_v0 j0_runtime_fini(struct j0_runtime *runtime)
     }
     runtime->m3p_finished = 1;
     arena_release(runtime);
+    return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 j0_runtime_publication_acquire(
+    struct j0_runtime *runtime,
+    const struct fwlab_spine_command_ticket_v0 *ticket,
+    struct fwlab_completion_lease_v0 *lease,
+    struct fwlab_nvme_completion_intent *intent)
+{
+    struct fwlab_nvme_completion_intent observed;
+    enum fwlab_spine_result_v0 result;
+
+    if (lease == NULL || intent == NULL) {
+        return FWLAB_SPINE_V0_INVALID;
+    }
+    result = j0_runtime_intent_read(runtime, ticket, &observed);
+    if (result != FWLAB_SPINE_V0_OK) {
+        return result;
+    }
+    return fwlab_spine_publication_v1_acquire(
+        runtime->lifecycle_arena, ticket, lease, intent);
+}
+
+enum fwlab_spine_result_v0 j0_runtime_publication_finish(
+    struct j0_runtime *runtime,
+    const struct fwlab_spine_command_ticket_v0 *ticket,
+    const struct fwlab_completion_lease_v0 *lease, uint32_t decision)
+{
+    struct j0_admission_record *record;
+    enum fwlab_spine_result_v0 result;
+
+    if (runtime == NULL || runtime->magic != J0_RUNTIME_MAGIC ||
+        ticket == NULL || lease == NULL) {
+        return FWLAB_SPINE_V0_INVALID;
+    }
+    record = admission_ticket_find(runtime, ticket);
+    result = fwlab_spine_publication_v1_finish(
+        runtime->lifecycle_arena, ticket, lease, decision);
+    if (result != FWLAB_SPINE_V0_OK || record == NULL) {
+        return result;
+    }
+    if (!record->intent_seen || runtime->retained_intents == 0 ||
+        release_resources(runtime, record) != FWLAB_SPINE_V0_OK ||
+        release_endpoint(runtime, record) != FWLAB_SPINE_V0_OK) {
+        return admission_poison(runtime);
+    }
+    --runtime->retained_intents;
+    memset(record, 0, sizeof(*record));
     return FWLAB_SPINE_V0_OK;
 }

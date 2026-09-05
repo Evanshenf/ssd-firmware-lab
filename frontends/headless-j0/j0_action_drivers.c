@@ -248,8 +248,8 @@ static enum fwlab_spine_result_v0 dma_submit_action(
         return FWLAB_SPINE_V0_POISONED;
     }
     if (!action->lower_token_valid) {
-        lower = runtime->host.port.ops->token_reserve(
-            runtime->host.port.context, &action->token, &action->dma_token);
+        lower = runtime->host_binding.data.ops->token_reserve(
+            runtime->host_binding.data.context, &action->token, &action->dma_token);
         if (lower != FWLAB_SPINE_V0_OK) {
             return lower;
         }
@@ -274,8 +274,8 @@ static enum fwlab_spine_result_v0 dma_submit_action(
     }
     memset(&submitted, 0, sizeof(submitted));
     action->state = J0_DRIVER_SUBMIT_UNKNOWN;
-    lower = runtime->host.port.ops->submit(
-        runtime->host.port.context, &action->dma_request, &submitted);
+    lower = runtime->host_binding.data.ops->submit(
+        runtime->host_binding.data.context, &action->dma_request, &submitted);
     if (lower == FWLAB_SPINE_V0_IN_PROGRESS) {
         return lower;
     }
@@ -541,8 +541,8 @@ static enum fwlab_spine_result_v0 driver_query(
     if (lane->kind == FWLAB_HOST_ACTION_V0_DMA_IN ||
         lane->kind == FWLAB_HOST_ACTION_V0_DMA_OUT) {
         memset(&action->dma_status, 0, sizeof(action->dma_status));
-        result = lane->runtime->host.port.ops->query(
-            lane->runtime->host.port.context, &action->dma_token,
+        result = lane->runtime->host_binding.data.ops->query(
+            lane->runtime->host_binding.data.context, &action->dma_token,
             &action->dma_status);
         if (result != FWLAB_SPINE_V0_OK) {
             return result;
@@ -599,14 +599,14 @@ static enum fwlab_spine_result_v0 driver_cancel(
         lane->kind == FWLAB_HOST_ACTION_V0_DMA_OUT) {
         struct fwlab_dma_status_v0 lower;
 
-        if (lane->runtime->host.port.ops->query(
-                lane->runtime->host.port.context, &action->dma_token,
+        if (lane->runtime->host_binding.data.ops->query(
+                lane->runtime->host_binding.data.context, &action->dma_token,
                 &lower) == FWLAB_SPINE_V0_OK &&
             lower.state != FWLAB_DMA_V0_STATE_ACCEPTED) {
             return FWLAB_SPINE_V0_OK;
         }
-        return lane->runtime->host.port.ops->cancel(
-            lane->runtime->host.port.context, &action->dma_token);
+        return lane->runtime->host_binding.data.ops->cancel(
+            lane->runtime->host_binding.data.context, &action->dma_token);
     }
     if (lane->kind >= FWLAB_HOST_ACTION_V0_BLOCK_READ &&
         lane->kind <= FWLAB_HOST_ACTION_V0_BLOCK_FLUSH) {
@@ -654,8 +654,8 @@ static enum fwlab_spine_result_v0 driver_retire_start(
     }
     if (lane->kind == FWLAB_HOST_ACTION_V0_DMA_IN ||
         lane->kind == FWLAB_HOST_ACTION_V0_DMA_OUT) {
-        result = lane->runtime->host.port.ops->retire_start(
-            lane->runtime->host.port.context, &action->dma_token);
+        result = lane->runtime->host_binding.data.ops->retire_start(
+            lane->runtime->host_binding.data.context, &action->dma_token);
     } else if (lane->kind >= FWLAB_HOST_ACTION_V0_BLOCK_READ &&
                lane->kind <= FWLAB_HOST_ACTION_V0_BLOCK_FLUSH) {
         result = lane->runtime->block.ops->retire_start(
@@ -693,8 +693,8 @@ static enum fwlab_spine_result_v0 driver_retire_query(
     } else if (lane->kind == FWLAB_HOST_ACTION_V0_DMA_IN ||
                lane->kind == FWLAB_HOST_ACTION_V0_DMA_OUT) {
         memset(&action->dma_status, 0, sizeof(action->dma_status));
-        result = lane->runtime->host.port.ops->retire_query(
-            lane->runtime->host.port.context, &action->dma_token,
+        result = lane->runtime->host_binding.data.ops->retire_query(
+            lane->runtime->host_binding.data.context, &action->dma_token,
             &action->dma_status);
         if (result == FWLAB_SPINE_V0_IN_PROGRESS) {
             return result;
@@ -706,8 +706,8 @@ static enum fwlab_spine_result_v0 driver_retire_query(
         admission = admission_for_action(lane->runtime, action);
         if (result == FWLAB_SPINE_V0_OK && admission != NULL &&
             admission->authority_held && !action->authority_released) {
-            result = lane->runtime->host.port.ops->authority_release(
-                lane->runtime->host.port.context, &admission->authority);
+            result = lane->runtime->host_binding.data.ops->authority_release(
+                lane->runtime->host_binding.data.context, &admission->authority);
             if (result == FWLAB_SPINE_V0_OK) {
                 action->authority_released = 1;
                 admission->authority_held = 0;
@@ -808,8 +808,8 @@ static enum fwlab_spine_result_v0 driver_epoch_close(
         lane->kind == FWLAB_HOST_ACTION_V0_DMA_OUT) {
         shared = &lane->runtime->host_close;
         if (!shared->started) {
-            result = lane->runtime->host.port.ops->epoch_close(
-                lane->runtime->host.port.context, lifecycle_instance_nonce,
+            result = lane->runtime->host_binding.data.ops->epoch_close(
+                lane->runtime->host_binding.data.context, lifecycle_instance_nonce,
                 old_execution_epoch);
             if (result != FWLAB_SPINE_V0_OK) {
                 return result;
@@ -885,8 +885,8 @@ static enum fwlab_spine_result_v0 driver_epoch_quiescent(
         lane->kind == FWLAB_HOST_ACTION_V0_DMA_OUT) {
         struct fwlab_host_data_epoch_status_v0 lower;
         enum fwlab_spine_result_v0 result =
-            lane->runtime->host.port.ops->epoch_quiescent(
-                lane->runtime->host.port.context, lifecycle_instance_nonce,
+            lane->runtime->host_binding.data.ops->epoch_quiescent(
+                lane->runtime->host_binding.data.context, lifecycle_instance_nonce,
                 old_execution_epoch, &lower);
 
         if (result != FWLAB_SPINE_V0_OK) {

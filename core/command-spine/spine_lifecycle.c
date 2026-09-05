@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include "spine_internal.h"
+#include "spine_publication_v1.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -65,10 +66,12 @@ struct spine_command_record {
     struct spine_action_record action[FWLAB_HOST_ACTION_V0_MAX_ACTIONS];
     struct spine_abort_record abort;
     struct fwlab_nvme_completion_intent intent;
+    struct fwlab_completion_lease_v0 completion_lease;
     uint64_t first_terminal_sequence;
     uint64_t incoming_abort_uid;
     uint32_t role;
     uint32_t phase;
+    uint32_t publication_decision;
     uint8_t occupied;
     uint8_t cancel_requested;
     uint8_t first_failure;
@@ -77,6 +80,12 @@ struct spine_command_record {
     uint8_t profile_retired;
     uint8_t resolver_succeeded_before_close;
     uint8_t suppress_intent;
+};
+
+struct spine_publication_receipt {
+    struct fwlab_spine_command_ticket_v0 ticket;
+    struct fwlab_completion_lease_v0 lease;
+    uint32_t decision;
 };
 
 struct spine_driver_close_record {
@@ -91,16 +100,21 @@ struct spine_lifecycle {
     struct fwlab_host_lifecycle_config_v0 config;
     struct fwlab_host_action_driver_table_v0 drivers;
     struct spine_command_record command[FWLAB_SPINE_LIFECYCLE_V0_MAX_COMMANDS];
+    struct spine_publication_receipt
+        publication_receipt[FWLAB_SPINE_LIFECYCLE_V0_MAX_COMMANDS];
     struct spine_driver_close_record
         driver_close[FWLAB_HOST_ACTION_V0_KIND_COUNT];
     uint64_t next_command_uid;
     uint64_t next_action_uid;
     uint64_t next_abort_uid;
+    uint64_t next_completion_lease_uid;
     uint64_t terminal_sequence;
     uint64_t close_sequence;
     uint32_t service_cursor;
     uint32_t active_commands;
     uint32_t retained_intents;
+    uint32_t completion_leases;
+    uint32_t publication_cursor;
     uint8_t admission_closed;
     uint8_t close_started;
     uint8_t poisoned;
@@ -304,6 +318,8 @@ enum fwlab_spine_result_v0 fwlab_spine_lifecycle_v0_init(
     lifecycle->next_command_uid = config_copy.command_uid.next;
     lifecycle->next_action_uid = config_copy.action_uid.next;
     lifecycle->next_abort_uid = config_copy.abort_uid.next;
+    lifecycle->next_completion_lease_uid =
+        config_copy.completion_lease_uid.next;
     return FWLAB_SPINE_V0_OK;
 }
 
@@ -1254,7 +1270,8 @@ static int effectful_quiescent(const struct spine_lifecycle *lifecycle)
 {
     uint32_t index;
 
-    if (!lifecycle->close_started || lifecycle->active_commands != 0) {
+    if (!lifecycle->close_started || lifecycle->active_commands != 0 ||
+        lifecycle->completion_leases != 0) {
         return 0;
     }
     for (index = 0; index < FWLAB_HOST_ACTION_V0_KIND_COUNT; ++index) {
@@ -1322,5 +1339,128 @@ enum fwlab_spine_result_v0 fwlab_spine_lifecycle_v0_fini(void *arena)
         return FWLAB_SPINE_V0_IN_PROGRESS;
     }
     memset(lifecycle, 0, sizeof(*lifecycle));
+    return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 fwlab_spine_publication_v1_acquire(
+    void *arena,
+    const struct fwlab_spine_command_ticket_v0 *ticket,
+    struct fwlab_completion_lease_v0 *lease,
+    struct fwlab_nvme_completion_intent *intent)
+{
+    struct spine_lifecycle *lifecycle = lifecycle_from(arena);
+    struct spine_command_record *command;
+
+    if (lifecycle == NULL || lease == NULL || intent == NULL ||
+        !fwlab_spine_command_ticket_v0_valid(ticket)) {
+        return FWLAB_SPINE_V0_INVALID;
+    }
+    if (lifecycle->admission_closed) {
+        return lifecycle->poisoned ? FWLAB_SPINE_V0_POISONED
+                                   : FWLAB_SPINE_V0_WRONG_STATE;
+    }
+    command = find_ticket(lifecycle, ticket);
+    if (command == NULL) {
+        return FWLAB_SPINE_V0_STALE;
+    }
+    if (command->role != FWLAB_SPINE_ROLE_V0_NORMAL ||
+        command->incoming_abort_uid != 0 || command->publication_decision != 0) {
+        return FWLAB_SPINE_V0_WRONG_STATE;
+    }
+    if (!command->intent_valid || command->phase != SPINE_COMMAND_INTENT) {
+        return FWLAB_SPINE_V0_IN_PROGRESS;
+    }
+    if (command->completion_lease.lease_uid == 0) {
+        struct fwlab_completion_lease_v0 granted;
+
+        if (!uid_available(lifecycle->next_completion_lease_uid,
+                           lifecycle->config.completion_lease_uid.maximum, 1)) {
+            return FWLAB_SPINE_V0_COUNTER_EXHAUSTED;
+        }
+        memset(&granted, 0, sizeof(granted));
+        granted.version = FWLAB_HOST_ACTION_PROGRAM_V0_VERSION;
+        granted.size = (uint16_t)sizeof(granted);
+        granted.type_tag = FWLAB_COMPLETION_LEASE_V0_TAG;
+        granted.command = ticket->command;
+        granted.origin = ticket->origin;
+        granted.issuer_nonce = lifecycle->config.lifecycle_instance_nonce;
+        granted.lease_uid = lifecycle->next_completion_lease_uid++;
+        granted.intent_generation = ticket->generation;
+        granted.lease_generation = lifecycle->config.generation;
+        command->completion_lease = granted;
+        ++lifecycle->completion_leases;
+    }
+    *lease = command->completion_lease;
+    *intent = command->intent;
+    return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 fwlab_spine_publication_v1_finish(
+    void *arena,
+    const struct fwlab_spine_command_ticket_v0 *ticket,
+    const struct fwlab_completion_lease_v0 *lease,
+    uint32_t decision)
+{
+    struct spine_lifecycle *lifecycle = lifecycle_from(arena);
+    struct spine_command_record *command;
+    struct spine_publication_receipt *receipt;
+    enum fwlab_spine_result_v0 result;
+    uint32_t index;
+
+    if (lifecycle == NULL || !fwlab_spine_command_ticket_v0_valid(ticket) ||
+        !fwlab_completion_lease_v0_valid(lease) ||
+        (decision != FWLAB_SPINE_PUBLICATION_V1_COMMITTED &&
+         decision != FWLAB_SPINE_PUBLICATION_V1_DISCARDED)) {
+        return FWLAB_SPINE_V0_INVALID;
+    }
+    command = find_ticket(lifecycle, ticket);
+    if (command == NULL) {
+        for (index = 0; index < lifecycle->config.command_capacity; ++index) {
+            receipt = &lifecycle->publication_receipt[index];
+            if (receipt->decision != 0 &&
+                fwlab_spine_command_ticket_v0_equal(&receipt->ticket, ticket)) {
+                if (memcmp(&receipt->lease, lease, sizeof(*lease)) != 0) {
+                    return FWLAB_SPINE_V0_STALE;
+                }
+                return receipt->decision == decision ? FWLAB_SPINE_V0_OK
+                                                     : poison_lifecycle(lifecycle);
+            }
+        }
+        return FWLAB_SPINE_V0_STALE;
+    }
+    if (memcmp(&command->completion_lease, lease, sizeof(*lease)) != 0) {
+        return FWLAB_SPINE_V0_STALE;
+    }
+    if (command->role != FWLAB_SPINE_ROLE_V0_NORMAL ||
+        command->incoming_abort_uid != 0 || !command->intent_valid ||
+        command->phase != SPINE_COMMAND_INTENT ||
+        (decision == FWLAB_SPINE_PUBLICATION_V1_DISCARDED &&
+         !lifecycle->close_started)) {
+        return FWLAB_SPINE_V0_WRONG_STATE;
+    }
+    if (command->publication_decision != 0 &&
+        command->publication_decision != decision) {
+        return poison_lifecycle(lifecycle);
+    }
+    command->publication_decision = decision;
+    command->profile_retire_issued = 1;
+    result = command->binding.adapter.ops->retire(
+        command->binding.adapter.context, &command->program);
+    if (result == FWLAB_SPINE_V0_IN_PROGRESS) {
+        return result;
+    }
+    if (result != FWLAB_SPINE_V0_OK || lifecycle->completion_leases == 0 ||
+        lifecycle->retained_intents == 0) {
+        return poison_lifecycle(lifecycle);
+    }
+    receipt = &lifecycle->publication_receipt[lifecycle->publication_cursor];
+    receipt->ticket = *ticket;
+    receipt->lease = *lease;
+    receipt->decision = decision;
+    lifecycle->publication_cursor =
+        (lifecycle->publication_cursor + 1u) % lifecycle->config.command_capacity;
+    --lifecycle->completion_leases;
+    --lifecycle->retained_intents;
+    memset(command, 0, sizeof(*command));
     return FWLAB_SPINE_V0_OK;
 }

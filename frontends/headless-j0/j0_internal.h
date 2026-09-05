@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "spine_internal.h"
+#include "spine_publication_v1.h"
 #include "m3p.h"
 #include "file_nand.h"
 #include "fwlab/contracts/host_data_v0.h"
@@ -69,6 +70,32 @@ struct j0_host_transfer {
     uint32_t reserved1[4];
 };
 
+struct j0_host_binding {
+    struct fwlab_host_data_port_v0 data;
+    void *context;
+    enum fwlab_spine_result_v0 (*endpoint_prepare)(
+        void *context, const struct fwlab_nvme_command_handle *command,
+        const struct fwlab_nvme_origin_token *origin, uint32_t direction,
+        uint32_t exact_bytes, const uint8_t *input);
+    enum fwlab_spine_result_v0 (*endpoint_read)(
+        void *context, const struct fwlab_nvme_command_handle *command,
+        const struct fwlab_nvme_origin_token *origin, void *output,
+        size_t output_size);
+    enum fwlab_spine_result_v0 (*endpoint_release)(
+        void *context, const struct fwlab_nvme_command_handle *command,
+        const struct fwlab_nvme_origin_token *origin);
+    /* Referenced Host endpoints require NULL input; DMA reads their bytes
+     * only when the typed DMA action executes after profile shape. */
+    uint8_t inline_input;
+};
+
+struct j0_host_factory {
+    enum fwlab_spine_result_v0 (*bind)(
+        void *context, const struct fwlab_controller_buffer_port_v0 *buffer,
+        uint32_t generation, struct j0_host_binding *binding);
+    void *context;
+};
+
 struct j0_runtime_config {
     uint16_t version;
     uint16_t size;
@@ -79,6 +106,7 @@ struct j0_runtime_config {
     uint32_t generation;
     uint32_t execution_epoch;
     uint64_t volatile_nonce_seed;
+    const struct j0_host_factory *host_factory;
     uint32_t reserved1[4];
 };
 
@@ -220,6 +248,7 @@ struct j0_runtime {
     struct j0_runtime_config config;
     struct j0_controller_buffer buffer;
     struct j0_host_data host;
+    struct j0_host_binding host_binding;
     struct fwlab_host_action_driver_table_v0 drivers;
     struct j0_driver_lane lane[FWLAB_HOST_ACTION_V0_KIND_COUNT];
     struct fwlab_host_profile_adapter_v0 c43_adapter;
@@ -299,6 +328,8 @@ void j0_host_data_init(
     struct j0_host_data *host, struct j0_controller_buffer *buffer,
     uint64_t authority_issuer_nonce, uint64_t dma_issuer_nonce,
     uint32_t generation);
+void j0_headless_host_binding(
+    struct j0_host_data *host, struct j0_host_binding *binding);
 enum fwlab_spine_result_v0 j0_host_endpoint_prepare(
     struct j0_host_data *host,
     const struct fwlab_nvme_command_handle *command,
@@ -343,6 +374,16 @@ enum fwlab_spine_result_v0 j0_runtime_close_start(
 enum fwlab_spine_result_v0 j0_runtime_close_query(
     struct j0_runtime *runtime, struct j0_close_status *status);
 enum fwlab_spine_result_v0 j0_runtime_fini(struct j0_runtime *runtime);
+
+enum fwlab_spine_result_v0 j0_runtime_publication_acquire(
+    struct j0_runtime *runtime,
+    const struct fwlab_spine_command_ticket_v0 *ticket,
+    struct fwlab_completion_lease_v0 *lease,
+    struct fwlab_nvme_completion_intent *intent);
+enum fwlab_spine_result_v0 j0_runtime_publication_finish(
+    struct j0_runtime *runtime,
+    const struct fwlab_spine_command_ticket_v0 *ticket,
+    const struct fwlab_completion_lease_v0 *lease, uint32_t decision);
 
 int j0_handle_equal(
     const struct fwlab_nvme_command_handle *left,

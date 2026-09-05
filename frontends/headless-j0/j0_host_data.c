@@ -254,7 +254,7 @@ static enum fwlab_spine_result_v0 authority_mint(
     endpoint_index = (uint32_t)(endpoint - host->endpoint);
     record = NULL;
     for (index = 0; index < J0_MAX_COMMANDS; ++index) {
-        if (!host->authority[index].occupied) {
+        if (!host->authority[index].occupied || host->authority[index].released) {
             record = &host->authority[index];
             break;
         }
@@ -334,7 +334,7 @@ static enum fwlab_spine_result_v0 dma_token_reserve(
     }
     record = NULL;
     for (index = 0; index < J0_MAX_DMA_OPERATIONS; ++index) {
-        if (!host->dma[index].occupied) {
+        if (!host->dma[index].occupied || host->dma[index].drained) {
             record = &host->dma[index];
             break;
         }
@@ -635,4 +635,40 @@ void j0_host_data_init(
     host->port.authority_issuer_nonce = authority_issuer_nonce;
     host->port.dma_issuer_nonce = dma_issuer_nonce;
     host->port.generation = generation;
+}
+
+static enum fwlab_spine_result_v0 headless_endpoint_prepare(
+    void *context, const struct fwlab_nvme_command_handle *command,
+    const struct fwlab_nvme_origin_token *origin, uint32_t direction,
+    uint32_t exact_bytes, const uint8_t *input)
+{
+    return j0_host_endpoint_prepare(context, command, origin, direction,
+                                    exact_bytes, input);
+}
+
+static enum fwlab_spine_result_v0 headless_endpoint_read(
+    void *context, const struct fwlab_nvme_command_handle *command,
+    const struct fwlab_nvme_origin_token *origin, void *output,
+    size_t output_size)
+{
+    return j0_host_endpoint_read(context, command, origin, output, output_size);
+}
+
+static enum fwlab_spine_result_v0 headless_endpoint_release(
+    void *context, const struct fwlab_nvme_command_handle *command,
+    const struct fwlab_nvme_origin_token *origin)
+{
+    return j0_host_endpoint_release(context, command, origin);
+}
+
+void j0_headless_host_binding(
+    struct j0_host_data *host, struct j0_host_binding *binding)
+{
+    memset(binding, 0, sizeof(*binding));
+    binding->data = host->port;
+    binding->context = host;
+    binding->endpoint_prepare = headless_endpoint_prepare;
+    binding->endpoint_read = headless_endpoint_read;
+    binding->endpoint_release = headless_endpoint_release;
+    binding->inline_input = 1;
 }

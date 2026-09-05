@@ -1258,13 +1258,13 @@ static int adjacent_replacement_rows(struct image_context *image)
     fake_data_init(&fake_data, runtime, &data_command,
                    data_bytes, sizeof(data_bytes));
     CHECK(fwlab_host_data_port_v0_valid(&fake_data.port));
-    real_host = runtime->host.port;
-    runtime->host.port = fake_data.port;
+    real_host = runtime->host_binding.data;
+    runtime->host_binding.data = fake_data.port;
     CHECK(command_run(runtime, J0_PROFILE_LINUX_V1, &data_command,
                       &transfer, &ticket, &intent));
     CHECK(fake_data.request_valid && fake_data.drained &&
           !fake_data.authority_live);
-    runtime->host.port = real_host;
+    runtime->host_binding.data = real_host;
 
     CHECK(runtime_close(runtime, &close_status));
     CHECK(close_status.quiescent && close_status.profiles_retired);
