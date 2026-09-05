@@ -1036,7 +1036,7 @@ EXPECTED_PORTABLE_COMPONENTS = {
     },
 }
 
-EXPECTED_J0A_COMPONENT_PATHS = {
+EXPECTED_J0_COMPONENT_PATHS = {
     Path("core/m3p/fakes/m3p_fake_adjacent.c"),
     Path("core/m3p/fakes/m3p_fake_adjacent.h"),
     Path("core/m3p/m3p.h"),
@@ -1049,7 +1049,13 @@ EXPECTED_J0A_COMPONENT_PATHS = {
     Path("core/m3p/m3p_runtime.c"),
     Path("core/m3p/tests/test_j0a_lower.c"),
     Path("frontends/headless-j0/Makefile"),
+    Path("frontends/headless-j0/j0_action_drivers.c"),
+    Path("frontends/headless-j0/j0_construction.c"),
+    Path("frontends/headless-j0/j0_controller_buffer.c"),
+    Path("frontends/headless-j0/j0_host_data.c"),
+    Path("frontends/headless-j0/j0_internal.h"),
     Path("frontends/headless-j0/j0.mk"),
+    Path("frontends/headless-j0/tests/test_j0b.c"),
     Path("media/file-nand-v0/file_nand.h"),
     Path("media/file-nand-v0/file_nand_codec.c"),
     Path("media/file-nand-v0/file_nand_engine.c"),
@@ -1106,7 +1112,7 @@ def is_under(relative: Path, root: str) -> bool:
     return relative == root_path or root_path in relative.parents
 
 
-def check_j0a_component_budget(
+def check_j0_component_budget(
     files: list[tuple[Path, Path]], failures: list[str]
 ) -> None:
     roots = ("core/m3p", "media/file-nand-v0", "frontends/headless-j0")
@@ -1116,11 +1122,11 @@ def check_j0a_component_budget(
     }
     if not actual:
         return
-    if actual != EXPECTED_J0A_COMPONENT_PATHS:
+    if actual != EXPECTED_J0_COMPONENT_PATHS:
         failures.append(
-            "J0-A component path budget differs: "
-            f"missing={sorted(EXPECTED_J0A_COMPONENT_PATHS - actual)} "
-            f"extra={sorted(actual - EXPECTED_J0A_COMPONENT_PATHS)}"
+            "J0 component path budget differs: "
+            f"missing={sorted(EXPECTED_J0_COMPONENT_PATHS - actual)} "
+            f"extra={sorted(actual - EXPECTED_J0_COMPONENT_PATHS)}"
         )
     for path, relative in files:
         if relative not in actual or relative.suffix.lower() not in {
@@ -1149,6 +1155,18 @@ def check_j0a_component_budget(
                     failures.append(
                         f"J0-A file-NAND crosses its physical boundary with "
                         f"{forbidden!r}: {relative}"
+                    )
+        if is_under(relative, "frontends/headless-j0") and \
+                not is_under(relative, "frontends/headless-j0/tests"):
+            for forbidden in (
+                "ppa", "oob", "gc", "prp", "iova", "qid", "cid",
+                "spine_fake_adjacent", "tiny_profile", "m4_frontend",
+                "m4_nvme", "m4_media_fixture",
+            ):
+                if re.search(rf"\b{forbidden}\b", text, re.IGNORECASE):
+                    failures.append(
+                        f"J0-B headless source crosses its aggregate boundary "
+                        f"with {forbidden!r}: {relative}"
                     )
 
 
@@ -1805,7 +1823,7 @@ def main() -> int:
     failures: list[str] = []
     boundaries = load_policy("policy/source-boundaries.toml", failures)
     project_entries = list(project_files())
-    check_j0a_component_budget(project_entries, failures)
+    check_j0_component_budget(project_entries, failures)
 
     if boundaries.get("architecture") != EXPECTED_ARCHITECTURE:
         failures.append("source architecture boundary matrix changed or is incomplete")

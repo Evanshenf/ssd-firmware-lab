@@ -99,6 +99,122 @@ override J0A_OWNED := \
 	build/j0a/libfwlab_file_nand_v0.a \
 	build/j0a/j0a_lower_matrix
 
+override J0B_BUILD_DIR := build/j0b
+override J0B_M3P_OBJECTS := \
+	build/j0b/m3p_codec.o \
+	build/j0b/m3p_mapping.o \
+	build/j0b/m3p_nfc.o \
+	build/j0b/m3p_gc.o \
+	build/j0b/m3p_recovery.o \
+	build/j0b/m3p_runtime.o
+override J0B_NFC_OBJECTS := \
+	build/j0b/nfc_model.o \
+	build/j0b/nfc_scheduler.o \
+	build/j0b/nfc_fault.o \
+	build/j0b/nfc_media.o
+override J0B_FILE_OBJECTS := \
+	build/j0b/file_nand_codec.o \
+	build/j0b/file_nand_engine.o \
+	build/j0b/file_nand_media.o \
+	build/j0b/file_nand_posix.o
+override J0B_SPINE_SOURCES := \
+	../../core/command-spine/spine_contracts.c \
+	../../core/command-spine/spine_lifecycle.c
+override J0B_SPINE_MEMBERS := spine_contracts.o spine_lifecycle.o
+override J0B_SPINE_OBJECTS := \
+	build/j0b/spine_contracts.o \
+	build/j0b/spine_lifecycle.o
+override J0B_PROFILE_SOURCES := \
+	../../core/command-spine/profiles/c43_p1_adapter.c \
+	../../core/command-spine/profiles/linux_profile_v1_adapter.c
+override J0B_PROFILE_MEMBERS := \
+	c43_p1_adapter.o linux_profile_v1_adapter.o
+override J0B_PROFILE_OBJECTS := \
+	build/j0b/c43_p1_adapter.o \
+	build/j0b/linux_profile_v1_adapter.o
+override J0B_C41_SOURCE := ../../core/c4-nvme/c41_codec.c
+override J0B_C41_OBJECT := build/j0b/c41_codec.o
+override J0B_HEADLESS_SOURCES := \
+	j0_controller_buffer.c \
+	j0_host_data.c \
+	j0_action_drivers.c \
+	j0_construction.c
+override J0B_HEADLESS_OBJECTS := \
+	build/j0b/j0_controller_buffer.o \
+	build/j0b/j0_host_data.o \
+	build/j0b/j0_action_drivers.o \
+	build/j0b/j0_construction.o
+override J0B_TEST_SOURCE := tests/test_j0b.c
+override J0B_TEST_OBJECT := build/j0b/test_j0b.o
+override J0B_M3P_ARCHIVE := build/j0b/libfwlab_m3p_v0.a
+override J0B_NFC_ARCHIVE := build/j0b/libfwlab_nfc_v1.a
+override J0B_FILE_ARCHIVE := build/j0b/libfwlab_file_nand_v0.a
+override J0B_SPINE_ARCHIVE := build/j0b/libfwlab_spine_lifecycle_v0.a
+override J0B_PROFILE_ARCHIVE := build/j0b/libfwlab_spine_profiles_v0.a
+override J0B_MATRIX := build/j0b/j0b_profile_matrix
+override J0B_INTERMEDIATES := \
+	build/j0b/m3p_codec.o \
+	build/j0b/m3p_mapping.o \
+	build/j0b/m3p_nfc.o \
+	build/j0b/m3p_gc.o \
+	build/j0b/m3p_recovery.o \
+	build/j0b/m3p_runtime.o \
+	build/j0b/nfc_model.o \
+	build/j0b/nfc_scheduler.o \
+	build/j0b/nfc_fault.o \
+	build/j0b/nfc_media.o \
+	build/j0b/file_nand_codec.o \
+	build/j0b/file_nand_engine.o \
+	build/j0b/file_nand_media.o \
+	build/j0b/file_nand_posix.o \
+	build/j0b/spine_contracts.o \
+	build/j0b/spine_lifecycle.o \
+	build/j0b/c43_p1_adapter.o \
+	build/j0b/linux_profile_v1_adapter.o \
+	build/j0b/c41_codec.o \
+	build/j0b/j0_controller_buffer.o \
+	build/j0b/j0_host_data.o \
+	build/j0b/j0_action_drivers.o \
+	build/j0b/j0_construction.o \
+	build/j0b/test_j0b.o \
+	build/j0b/libfwlab_m3p_v0.a \
+	build/j0b/libfwlab_nfc_v1.a \
+	build/j0b/libfwlab_file_nand_v0.a \
+	build/j0b/libfwlab_spine_lifecycle_v0.a \
+	build/j0b/libfwlab_spine_profiles_v0.a
+override J0B_ARTIFACTS := build/j0b/j0b_profile_matrix
+override J0B_OWNED := \
+	build/j0b/m3p_codec.o \
+	build/j0b/m3p_mapping.o \
+	build/j0b/m3p_nfc.o \
+	build/j0b/m3p_gc.o \
+	build/j0b/m3p_recovery.o \
+	build/j0b/m3p_runtime.o \
+	build/j0b/nfc_model.o \
+	build/j0b/nfc_scheduler.o \
+	build/j0b/nfc_fault.o \
+	build/j0b/nfc_media.o \
+	build/j0b/file_nand_codec.o \
+	build/j0b/file_nand_engine.o \
+	build/j0b/file_nand_media.o \
+	build/j0b/file_nand_posix.o \
+	build/j0b/spine_contracts.o \
+	build/j0b/spine_lifecycle.o \
+	build/j0b/c43_p1_adapter.o \
+	build/j0b/linux_profile_v1_adapter.o \
+	build/j0b/c41_codec.o \
+	build/j0b/j0_controller_buffer.o \
+	build/j0b/j0_host_data.o \
+	build/j0b/j0_action_drivers.o \
+	build/j0b/j0_construction.o \
+	build/j0b/test_j0b.o \
+	build/j0b/libfwlab_m3p_v0.a \
+	build/j0b/libfwlab_nfc_v1.a \
+	build/j0b/libfwlab_file_nand_v0.a \
+	build/j0b/libfwlab_spine_lifecycle_v0.a \
+	build/j0b/libfwlab_spine_profiles_v0.a \
+	build/j0b/j0b_profile_matrix
+
 override J0_FORBIDDEN_MEMBERS := \
 	nfc_codec.o nfc_adapter.o nfc_fake_main.o nfc_memory_media.o \
 	spine_fake_adjacent.o tiny_profile_fixture.o \
