@@ -3,6 +3,7 @@
 
 #define _GNU_SOURCE
 #include "native_internal.h"
+#include "native_owner.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -14,14 +15,6 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-
-struct native_media {
-    int directory_fd;
-    void *arena;
-    struct fwlab_file_nand_v0 *file;
-    struct fwlab_file_nand_holder_v0 holder;
-    uint8_t uuid[16];
-};
 
 static volatile sig_atomic_t stop_requested;
 
@@ -104,13 +97,15 @@ static int media_open(struct native_media *media, const char *directory, int for
     return 1;
 }
 
-static int runtime_create(struct native_context *context,
+int native_runtime_create(struct native_context *context,
                           struct native_media *media, int format)
 {
     struct j0_host_factory factory = { native_host_bind, context };
     struct j0_runtime_config config;
     uint32_t iteration;
 
+    if (context->runtime || context->next_runtime_seed >= UINT64_C(0xfffff))
+        return 0;
     context->runtime = calloc(1, sizeof(*context->runtime));
     if (!context->runtime)
         return 0;
@@ -122,7 +117,9 @@ static int runtime_create(struct native_context *context,
     config.media_mode = format ? J0_MEDIA_FORMAT : J0_MEDIA_RECOVER;
     config.generation = context->epoch;
     config.execution_epoch = context->epoch;
-    config.volatile_nonce_seed = context->epoch;
+    /* Failed pre-grant construction may retry the same unpublished controller
+     * epoch. Its internal objects still need fresh, non-reused identities. */
+    config.volatile_nonce_seed = ++context->next_runtime_seed;
     config.host_factory = &factory;
     if (j0_runtime_init(context->runtime, &config) != FWLAB_SPINE_V0_OK)
         return 0;
@@ -309,47 +306,57 @@ static int finish_commands(struct native_context *context, int closing)
     return 1;
 }
 
+enum fwlab_spine_result_v0 native_runtime_close_step(
+    struct native_context *context, uint32_t budget)
+{
+    struct j0_close_status closed;
+    enum fwlab_spine_result_v0 result;
+    uint32_t units;
+
+    if (!context || !budget)
+        return FWLAB_SPINE_V0_INVALID;
+    if (!context->runtime)
+        return FWLAB_SPINE_V0_OK;
+    result = j0_runtime_close_start(context->runtime);
+    if (result != FWLAB_SPINE_V0_OK)
+        return result;
+    if (!finish_commands(context, 1))
+        return FWLAB_SPINE_V0_POISONED;
+    result = j0_runtime_close_query(context->runtime, &closed);
+    if (result != FWLAB_SPINE_V0_OK)
+        return result;
+    result = j0_runtime_fini(context->runtime);
+    if (result == FWLAB_SPINE_V0_OK) {
+        context->last_closed = closed;
+        context->last_closed.profiles_retired = context->runtime->profiles_retired;
+        context->last_ftl_nonce = context->runtime->m3p_instance_nonce;
+        context->last_nfc_nonce = context->runtime->nfc_instance_nonce;
+        context->last_closed_epoch = context->epoch;
+        printf("EPOCH_DRAINED epoch=%u quiescent=%u authorities=%u dma=%u "
+               "buffers=%u block=%u nfc=%u\n", context->epoch, closed.quiescent,
+               closed.host_authorities, closed.dma_operations, closed.buffers,
+               closed.block_operations, closed.nfc_operations);
+        free(context->runtime);
+        context->runtime = NULL;
+        memset(context->slot, 0, sizeof(context->slot));
+        return FWLAB_SPINE_V0_OK;
+    }
+    if (result != FWLAB_SPINE_V0_IN_PROGRESS)
+        return result;
+    result = j0_runtime_step(context->runtime, budget, &units);
+    return result == FWLAB_SPINE_V0_OK ? FWLAB_SPINE_V0_IN_PROGRESS : result;
+}
+
 static int runtime_close(struct native_context *context)
 {
     uint32_t iteration;
-    enum fwlab_spine_result_v0 start = j0_runtime_close_start(context->runtime);
 
-    if (start != FWLAB_SPINE_V0_OK) {
-        fprintf(stderr, "drain start result=%u\n", (unsigned)start);
-        return 0;
-    }
     for (iteration = 0; iteration < 800000; ++iteration) {
-        uint32_t units;
-        struct j0_close_status closed;
-        enum fwlab_spine_result_v0 result;
-        if (!finish_commands(context, 1)) {
-            fprintf(stderr, "drain publication failed iteration=%u\n", iteration);
-            return 0;
-        }
-        result = j0_runtime_close_query(context->runtime, &closed);
-        if (result != FWLAB_SPINE_V0_OK)
-            return 0;
-        result = j0_runtime_fini(context->runtime);
-        if (result == FWLAB_SPINE_V0_OK) {
-            printf("EPOCH_DRAINED epoch=%u quiescent=%u authorities=%u dma=%u "
-                   "buffers=%u block=%u nfc=%u\n", context->epoch, closed.quiescent,
-                   closed.host_authorities, closed.dma_operations, closed.buffers,
-                   closed.block_operations, closed.nfc_operations);
-            free(context->runtime);
-            context->runtime = NULL;
-            memset(context->slot, 0, sizeof(context->slot));
+        enum fwlab_spine_result_v0 result = native_runtime_close_step(context, 48);
+        if (result == FWLAB_SPINE_V0_OK)
             return 1;
-        }
         if (result != FWLAB_SPINE_V0_IN_PROGRESS) {
-            fprintf(stderr, "drain fini result=%u iteration=%u\n", (unsigned)result, iteration);
-            return 0;
-        }
-        result = j0_runtime_step(context->runtime, 48, &units);
-        if (result != FWLAB_SPINE_V0_OK) {
-            fprintf(stderr, "drain step result=%u iteration=%u units=%u cursor=%u "
-                    "active=%u intents=%u buffers=%u\n", (unsigned)result, iteration,
-                    units, context->runtime->fair_cursor, context->runtime->active_admissions,
-                    context->runtime->retained_intents, context->runtime->buffer.active_leases);
+            fprintf(stderr, "drain result=%u iteration=%u\n", (unsigned)result, iteration);
             return 0;
         }
     }
@@ -357,7 +364,8 @@ static int runtime_close(struct native_context *context)
     return 0;
 }
 
-static int firmware_loop(struct native_context *context, struct native_media *media)
+static int firmware_loop(struct native_context *context, struct native_media *media,
+                         struct native_owner_server *server)
 {
     const struct timespec idle = { 0, 100000 };
 
@@ -367,19 +375,26 @@ static int firmware_loop(struct native_context *context, struct native_media *me
         native_message_init(context, NULL, FWLAB_M4_NATIVE_STATUS, &message);
         if (native_exchange(context, &message))
             return 0;
-        if (message.event == FWLAB_M4_NATIVE_RESET) {
+        if (message.event == FWLAB_M4_NATIVE_RESET && context->runtime &&
+            (!server || !native_owner_blocks_commands(&server->owner))) {
             uint32_t next_epoch = message.controller_epoch;
             if (!runtime_close(context)) {
                 fprintf(stderr, "epoch drain failed at %u\n", context->epoch);
                 return 0;
             }
             context->epoch = next_epoch;
-            if (!runtime_create(context, media, 0))
+            if (!native_runtime_create(context, media, 0))
                 return 0;
             native_message_init(context, NULL, FWLAB_M4_NATIVE_RESET_ACK, &message);
             if (native_exchange(context, &message))
                 return 0;
             printf("EPOCH_READY epoch=%u\n", context->epoch);
+            continue;
+        }
+        if (server && !native_owner_server_poll(server))
+            return 0;
+        if (!context->runtime || (server && native_owner_blocks_commands(&server->owner))) {
+            nanosleep(&idle, NULL);
             continue;
         }
         if (receive_command(context) < 0 || !admit_commands(context))
@@ -397,7 +412,9 @@ static int firmware_loop(struct native_context *context, struct native_media *me
 int main(int argc, char **argv)
 {
     const char *device = NULL, *directory = NULL, *uuid = NULL, *digest = NULL;
+    const char *owner_directory = NULL;
     struct native_context *context = NULL;
+    struct native_owner_server *server = NULL;
     struct native_media media;
     struct fwlab_m4_native_message message;
     struct sigaction action;
@@ -414,6 +431,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[index], "--media-dir")) directory = argv[++index];
         else if (!strcmp(argv[index], "--uuid")) uuid = argv[++index];
         else if (!strcmp(argv[index], "--binding-sha")) digest = argv[++index];
+        else if (!strcmp(argv[index], "--owner-dir")) owner_directory = argv[++index];
         else goto usage;
     }
     if (!device || strncmp(device, "/dev/fwlab-native-", 18) || !directory ||
@@ -435,19 +453,29 @@ int main(int argc, char **argv)
         goto done;
     context->function_nonce = message.function_nonce;
     context->epoch = message.controller_epoch;
-    if (!runtime_create(context, &media, format))
+    if (!native_runtime_create(context, &media, format))
         goto done;
     native_message_init(context, NULL, FWLAB_M4_NATIVE_RESET_ACK, &message);
     if (native_exchange(context, &message))
         goto done;
+    if (owner_directory) {
+        server = calloc(1, sizeof(*server));
+        if (!server || !native_owner_server_open(server, context, &media, owner_directory))
+            goto done;
+        printf("OWNER_CONTROL_READY directory=%s\n", owner_directory);
+    }
     memset(&action, 0, sizeof(action));
     action.sa_handler = stop_signal;
     sigemptyset(&action.sa_mask);
     sigaction(SIGTERM, &action, NULL);
     sigaction(SIGINT, &action, NULL);
     printf("NATIVE_READY function=%" PRIu64 " epoch=%u\n", context->function_nonce, context->epoch);
-    result = firmware_loop(context, &media) ? 0 : 1;
+    result = firmware_loop(context, &media, server) ? 0 : 1;
 done:
+    if (server) {
+        native_owner_server_close(server);
+        free(server);
+    }
     if (context && context->runtime && context->runtime->magic == J0_RUNTIME_MAGIC) {
         native_message_init(context, NULL, FWLAB_M4_NATIVE_REVOKE, &message);
         (void)native_exchange(context, &message);
@@ -467,6 +495,6 @@ done:
     return result;
 usage:
     fprintf(stderr, "usage: %s --device /dev/fwlab-native-BDF --media-dir DIR "
-                    "--uuid 32hex --binding-sha 64hex [--format]\n", argv[0]);
+                    "--uuid 32hex --binding-sha 64hex [--format] [--owner-dir DIR]\n", argv[0]);
     return 2;
 }

@@ -1,0 +1,57 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+# RAM-only J2 boot prerequisite. No disk is required or written.
+fail()
+{
+    echo "J2_L2_PREFLIGHT_FAIL: $*"
+    poweroff -f
+    while :; do sleep 1; done
+}
+
+mount -t proc proc /proc || fail proc
+mount -t sysfs sysfs /sys || fail sysfs
+mount -t devtmpfs devtmpfs /dev || fail devtmpfs
+
+for module in /modules/*.ko; do
+    insmod "$module" || fail "insmod $module"
+done
+
+mode=
+for argument in $(cat /proc/cmdline); do
+    case "$argument" in fwlab_journey=*) mode=${argument#fwlab_journey=} ;; esac
+done
+[ -d /sys/module/nvme ] || fail "native nvme module absent"
+[ ! -e /dev/sda ] && [ ! -e /dev/sdb ] || fail "unexpected SCSI disk"
+case "$mode" in
+    preflight)
+        [ ! -e /dev/nvme0n1 ] || fail "unexpected NVMe in diskless preflight"
+        echo "J2_L2_PREFLIGHT_PASS kernel=$(uname -r) native_nvme=loaded disks=0"
+        ;;
+    owner|owner-cut)
+        remaining=200
+        while [ "$remaining" -gt 0 ] && [ ! -b /dev/nvme0n1 ]; do
+            remaining=$((remaining - 1))
+            sleep 0.05
+        done
+        [ -b /dev/nvme0n1 ] || fail "native namespace absent"
+        bdf=
+        for candidate in /sys/bus/pci/devices/*; do
+            [ -r "$candidate/vendor" ] || continue
+            if [ "$(cat "$candidate/vendor")" = 0xfffa ] &&
+               [ "$(cat "$candidate/device")" = 0x0002 ]; then
+                [ -z "$bdf" ] || fail "ambiguous synthetic function"
+                bdf=${candidate##*/}
+            fi
+        done
+        [ -n "$bdf" ] || fail "synthetic function absent"
+        client_mode=guest-ab
+        [ "$mode" != owner-cut ] || client_mode=guest-hold
+        /bin/j1_native_io "$client_mode" /dev/nvme0n1 "$bdf" || fail "A/B native journey"
+        echo "J2_L2_OWNER_PASS"
+        ;;
+    *) fail "unsupported journey" ;;
+esac
+poweroff -f
+while :; do sleep 1; done

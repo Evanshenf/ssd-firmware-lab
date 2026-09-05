@@ -74,8 +74,13 @@ struct fwlab_m4_pci_ctx {
 	struct irq_work irq_work;
 	unsigned int pending_virq;
 	u64 irq_generation;
+	u64 irq_owner_epoch;
 	u32 irq_epoch;
 	bool irq_pending;
+	bool effects_open;
+	u64 owner_epoch;
+	u32 owner_kind;
+	u32 owner_phase;
 	phys_addr_t bar_start;
 	resource_size_t bar_size;
 	u32 bar_epoch;
@@ -92,6 +97,7 @@ struct fwlab_m4_pci_ctx {
 void fwlab_m4_raise_msix(struct fwlab_m4_pci_ctx *ctx);
 void fwlab_m4_flush_msix(struct fwlab_m4_pci_ctx *ctx);
 void fwlab_m4_clear_msix(struct fwlab_m4_pci_ctx *ctx);
+void fwlab_m4_close_effects(struct fwlab_m4_pci_ctx *ctx);
 
 int fwlab_m4_pci_prepare(struct device *root_dev,
 			 struct fwlab_m4_pci_ctx **out_ctx);

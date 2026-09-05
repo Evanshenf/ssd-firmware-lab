@@ -13,6 +13,7 @@
 
 #include "m4_internal.h"
 #include "fwlab/unstable/m4_native.h"
+#include "fwlab/unstable/m4_owner_native.h"
 
 #define NATIVE_DEPTH 32U
 #define NATIVE_QUEUES 2U
@@ -35,6 +36,8 @@
  * 512-byte Q1 origin with captured CDW10=128/CDW11=0. Not a policy engine. */
 static unsigned int native_cut;
 static unsigned long long native_cut_uid;
+static int native_cut_permission_result;
+static unsigned int native_cut_permission_bit;
 static int native_cut_set(const char *value, const struct kernel_param *parameter)
 {
 	unsigned int requested;
@@ -57,6 +60,8 @@ module_param_cb(native_cut, &native_cut_ops, &native_cut, 0600);
 MODULE_PARM_DESC(native_cut, "J1 one-shot: 0 off, 1 DMA-in, 2 DMA-out, 3 pre-CQE");
 module_param(native_cut_uid, ullong, 0400);
 MODULE_PARM_DESC(native_cut_uid, "Last native journey cut's captured origin UID");
+module_param(native_cut_permission_result, int, 0400);
+module_param(native_cut_permission_bit, uint, 0400);
 
 /* Kernel declarations of the two distinct, four-byte link-only anchor types. */
 struct fwlab_sq_consumer_anchor_v0 { u32 type_tag; };
@@ -80,6 +85,7 @@ struct native_queue {
 struct native_request {
 	u64 uid;
 	u64 bus_generation;
+	u64 owner_epoch;
 	u64 authority_uid;
 	u64 dma_uid;
 	u64 completion_uid;
@@ -126,14 +132,20 @@ struct fwlab_m4_hif {
 	u64 delivery_uid;
 	u64 bus_generation;
 	u32 controller_epoch;
+	u32 activation_epoch;
 	u32 seen_flr_epoch;
 	u32 requested_flr_epoch;
 	u32 queue_cursor;
+	u64 next_owner_uid;
+	struct fwlab_m4_owner_message revoke_key;
+	struct fwlab_m4_owner_message revoke_result;
+	struct fwlab_m4_owner_message grant_key;
+	struct fwlab_m4_owner_message grant_result;
+	struct fwlab_m4_domain_identity owner_domain;
 	bool registered;
 	bool opened;
 	bool attached;
 	bool firmware_ready;
-	bool enabled;
 	bool reset_pending;
 	bool shutdown;
 	bool faulted;
@@ -148,6 +160,7 @@ struct native_guard {
 	struct fwlab_m4_hif *hif;
 	u64 bus_generation;
 	u32 epoch;
+	u64 owner_epoch;
 };
 
 static bool native_access_locked(void *context)
@@ -157,7 +170,9 @@ static bool native_access_locked(void *context)
 	u16 command = get_unaligned_le16(&hif->pci->config[PCI_COMMAND]);
 	u32 cc = readl(hif->pci->bar_mapping + REG_CC);
 
-	return hif->enabled && hif->firmware_ready && !hif->reset_pending &&
+	return hif->pci->effects_open && hif->firmware_ready && !hif->reset_pending &&
+	       hif->pci->owner_phase == FWLAB_M4_OWNER_OWNED &&
+	       guard->owner_epoch == hif->pci->owner_epoch &&
 	       !hif->quarantined && !hif->stopped &&
 	       guard->epoch == hif->controller_epoch &&
 	       guard->bus_generation == hif->pci->access_generation &&
@@ -167,9 +182,10 @@ static bool native_access_locked(void *context)
 	       (cc & CC_ENABLE) && !(cc & CC_SHUTDOWN);
 }
 
-static bool native_access(struct fwlab_m4_hif *hif, u64 generation, u32 epoch)
+static bool native_access(struct fwlab_m4_hif *hif, u64 generation, u32 epoch,
+			  u64 owner_epoch)
 {
-	struct native_guard guard = { hif, generation, epoch };
+	struct native_guard guard = { hif, generation, epoch, owner_epoch };
 	unsigned long flags;
 	bool allowed;
 
@@ -181,15 +197,19 @@ static bool native_access(struct fwlab_m4_hif *hif, u64 generation, u32 epoch)
 
 static int native_copy(struct fwlab_m4_hif *hif,
 		       const struct fwlab_m4_mapping *mapping, u32 offset,
-		       void *bytes, u32 length, u64 generation, u32 epoch)
+		       void *bytes, u32 length, u64 generation, u32 epoch,
+		       u64 owner_epoch)
 {
-	struct native_guard context = { hif, generation, epoch };
+	struct native_guard context = { hif, generation, epoch, owner_epoch };
 	struct fwlab_m4_copy_guard guard = {
 		.lock = &hif->pci->config_lock,
 		.valid_locked = native_access_locked,
 		.context = &context,
 	};
 
+	if (mapping->domain_nonce != hif->owner_domain.nonce ||
+	    mapping->attach_generation != hif->owner_domain.attach_generation)
+		return -ESTALE;
 	return fwlab_m4_mapping_copy(&hif->pci->pdev->dev, mapping, offset,
 				     bytes, length, &guard);
 }
@@ -202,23 +222,12 @@ static void native_registers_init(struct fwlab_m4_hif *hif)
 	wmb();
 }
 
-static void native_begin_reset(struct fwlab_m4_hif *hif, bool shutdown,
-			       bool flr)
+static void native_cancel_transport(struct fwlab_m4_hif *hif)
 {
 	u32 index;
 
-	if (hif->reset_pending)
-		return;
-	if (hif->controller_epoch == U32_MAX) {
-		hif->quarantined = true;
-		writel(CSTS_FATAL, hif->pci->bar_mapping + REG_CSTS);
-		return;
-	}
-	hif->controller_epoch++;
-	hif->enabled = false;
+	fwlab_m4_close_effects(hif->pci);
 	hif->firmware_ready = false;
-	hif->reset_pending = true;
-	hif->shutdown = shutdown;
 	hif->delivery_uid = 0;
 	for (index = 0; index < NATIVE_DEPTH; index++) {
 		struct native_request *request = &hif->request[index];
@@ -242,6 +251,23 @@ static void native_begin_reset(struct fwlab_m4_hif *hif, bool shutdown,
 	}
 	wmb();
 	memset_io(hif->pci->bar_mapping + FWLAB_M4_MSIX_PBA_OFFSET, 0, 8);
+}
+
+static void native_begin_reset(struct fwlab_m4_hif *hif, bool shutdown,
+			       bool flr)
+{
+	if (hif->reset_pending || hif->pci->owner_phase != FWLAB_M4_OWNER_OWNED)
+		return;
+	if (hif->controller_epoch == U32_MAX) {
+		hif->quarantined = true;
+		fwlab_m4_close_effects(hif->pci);
+		writel(CSTS_FATAL, hif->pci->bar_mapping + REG_CSTS);
+		return;
+	}
+	native_cancel_transport(hif);
+	hif->controller_epoch++;
+	hif->reset_pending = true;
+	hif->shutdown = shutdown;
 	if (flr)
 		native_registers_init(hif);
 }
@@ -261,6 +287,9 @@ static int native_queue_mapping(struct fwlab_m4_hif *hif,
 		FWLAB_M4_DMA_WRITE_HOST, &candidate.mapping);
 	if (ret)
 		return ret;
+	if (candidate.mapping.domain_nonce != hif->owner_domain.nonce ||
+	    candidate.mapping.attach_generation != hif->owner_domain.attach_generation)
+		return -ESTALE;
 	candidate.depth = depth;
 	candidate.phase = 1;
 	candidate.valid = true;
@@ -291,6 +320,26 @@ static bool native_cut_point(struct fwlab_m4_hif *hif,
 	    cmpxchg(&native_cut, point, 0) != point)
 		return false;
 	WRITE_ONCE(native_cut_uid, request->uid);
+	WRITE_ONCE(native_cut_permission_result, 0);
+	WRITE_ONCE(native_cut_permission_bit, 0);
+	if (point == 1 || point == 2) {
+		u16 command;
+		u16 bit = point == 1 ? PCI_COMMAND_MASTER : PCI_COMMAND_MEMORY;
+		int ret = -EIO;
+
+		/* Exercise the real config-write generation/permission gate with
+		 * this already owned mapping, not a reminted authority. */
+		if (!pci_read_config_word(hif->pci->pdev, PCI_COMMAND, &command)) {
+			if (!pci_write_config_word(hif->pci->pdev, PCI_COMMAND, command & ~bit))
+				ret = native_copy(hif, &request->data_mapping[0], 0,
+					request->data, request->data_mapping[0].length,
+					request->bus_generation, request->epoch, request->owner_epoch);
+			if (pci_write_config_word(hif->pci->pdev, PCI_COMMAND, command))
+				ret = -EIO;
+		}
+		WRITE_ONCE(native_cut_permission_result, ret);
+		WRITE_ONCE(native_cut_permission_bit, bit);
+	}
 	native_fault(hif);
 	pr_info(FWLAB_M4_PCI_NAME
 		": J1_CUT point=%u uid=%llu old_epoch=%u next_epoch=%u bytes_done=%u publication=%u\n",
@@ -302,6 +351,7 @@ static bool native_cut_point(struct fwlab_m4_hif *hif,
 static int native_enable(struct fwlab_m4_hif *hif, u32 cc)
 {
 	u32 aqa = readl(hif->pci->bar_mapping + REG_AQA);
+	struct fwlab_m4_domain_identity domain;
 	unsigned long flags;
 	u16 command;
 	int ret;
@@ -309,6 +359,22 @@ static int native_enable(struct fwlab_m4_hif *hif, u32 cc)
 	if ((cc & ~CC_SHUTDOWN) != 0x00460001 ||
 	    (aqa & 0xf000f000) || hif->faulted)
 		return -EINVAL;
+	ret = fwlab_m4_domain_identity(&hif->pci->pdev->dev, &domain);
+	if (ret || domain.kind != hif->pci->owner_kind)
+		return ret ? ret : -EACCES;
+	if (!hif->owner_domain.nonce && hif->pci->owner_epoch == 1 &&
+	    hif->pci->owner_kind == 1)
+		hif->owner_domain = domain;
+	if (domain.nonce != hif->owner_domain.nonce)
+		return -ESTALE;
+	/* PCI reset may temporarily attach the blocking domain, then restore
+	 * the same IOAS. Only a freshly drained controller epoch may adopt that
+	 * new attachment generation; a different IOAS still requires owner grant. */
+	if (domain.attach_generation != hif->owner_domain.attach_generation) {
+		if (hif->controller_epoch <= hif->activation_epoch)
+			return -ESTALE;
+		hif->owner_domain.attach_generation = domain.attach_generation;
+	}
 	spin_lock_irqsave(&hif->pci->config_lock, flags);
 	command = get_unaligned_le16(&hif->pci->config[PCI_COMMAND]);
 	hif->bus_generation = hif->pci->access_generation;
@@ -324,7 +390,22 @@ static int native_enable(struct fwlab_m4_hif *hif, u32 cc)
 			((aqa >> 16) & 0xfff) + 1, false);
 	if (ret)
 		return ret;
-	hif->enabled = true;
+	pr_info(FWLAB_M4_PCI_NAME ": enable epoch=%u owner=%llu stale_db=%u/%u\n",
+		hif->controller_epoch, hif->pci->owner_epoch,
+		readl(hif->pci->bar_mapping + REG_SQ_DB(0)),
+		readl(hif->pci->bar_mapping + REG_CQ_DB(0)));
+	/* Old software may still write a doorbell after an earlier failure cut.
+	 * The new controller may consume nothing before publishing RDY, so reset
+	 * its new queue doorbells at that activation boundary as well. */
+	writel(0, hif->pci->bar_mapping + REG_SQ_DB(0));
+	writel(0, hif->pci->bar_mapping + REG_CQ_DB(0));
+	writel(0, hif->pci->bar_mapping + REG_SQ_DB(1));
+	writel(0, hif->pci->bar_mapping + REG_CQ_DB(1));
+	wmb();
+	spin_lock_irqsave(&hif->pci->config_lock, flags);
+	hif->pci->effects_open = true;
+	spin_unlock_irqrestore(&hif->pci->config_lock, flags);
+	hif->activation_epoch = hif->controller_epoch;
 	writel(CSTS_READY, hif->pci->bar_mapping + REG_CSTS);
 	wmb();
 	return 0;
@@ -375,11 +456,12 @@ static int native_capture(struct fwlab_m4_hif *hif, u32 qid)
 		return -EOVERFLOW;
 	memset(request, 0, sizeof(*request));
 	ret = native_copy(hif, &sq->mapping, sq->head * 64, request->sqe, 64,
-			  hif->bus_generation, hif->controller_epoch);
+			  hif->bus_generation, hif->controller_epoch, hif->pci->owner_epoch);
 	if (ret)
 		return ret;
 	request->uid = hif->next_uid++;
 	request->epoch = hif->controller_epoch;
+	request->owner_epoch = hif->pci->owner_epoch;
 	request->bus_generation = hif->bus_generation;
 	request->sqid = qid;
 	request->cid = get_unaligned_le16(request->sqe + 2);
@@ -415,13 +497,18 @@ int fwlab_m4_hif_step(struct fwlab_m4_hif *hif)
 	flr = READ_ONCE(hif->requested_flr_epoch);
 	if (flr != hif->seen_flr_epoch) {
 		hif->seen_flr_epoch = flr;
-		native_begin_reset(hif, false, true);
+		if (hif->pci->owner_phase == FWLAB_M4_OWNER_OWNED)
+			native_begin_reset(hif, false, true);
+		else
+			native_registers_init(hif);
 	}
-	if (hif->enabled && (!(cc & CC_ENABLE) || (cc & CC_SHUTDOWN)))
+	if (hif->pci->owner_phase != FWLAB_M4_OWNER_OWNED)
+		goto out;
+	if (hif->pci->effects_open && (!(cc & CC_ENABLE) || (cc & CC_SHUTDOWN)))
 		native_begin_reset(hif, !!(cc & CC_SHUTDOWN), false);
 	if (!(cc & CC_ENABLE)) {
 		hif->faulted = false;
-		if (!hif->reset_pending && !hif->enabled)
+		if (!hif->reset_pending && !hif->pci->effects_open)
 			writel(0, hif->pci->bar_mapping + REG_CSTS);
 	}
 	if (hif->reset_pending || !hif->firmware_ready)
@@ -436,14 +523,15 @@ int fwlab_m4_hif_step(struct fwlab_m4_hif *hif)
 		hif->shutdown = false;
 		writel(0, hif->pci->bar_mapping + REG_CSTS);
 	}
-	if (!hif->enabled && (cc & CC_ENABLE)) {
+	if (!hif->pci->effects_open && (cc & CC_ENABLE)) {
 		ret = native_enable(hif, cc);
 		if (ret)
 			goto fault;
 	}
-	if (!hif->enabled)
+	if (!hif->pci->effects_open)
 		goto out;
-	if (!native_access(hif, hif->bus_generation, hif->controller_epoch)) {
+	if (!native_access(hif, hif->bus_generation, hif->controller_epoch,
+			   hif->pci->owner_epoch)) {
 		ret = -ESTALE;
 		goto fault;
 	}
@@ -478,7 +566,7 @@ static int native_shape(struct fwlab_m4_hif *hif,
 			return -EINVAL;
 		goto result;
 	}
-	if (!native_access(hif, request->bus_generation, request->epoch))
+	if (!native_access(hif, request->bus_generation, request->epoch, request->owner_epoch))
 		return -ESTALE;
 	prp1 = get_unaligned_le64(request->sqe + 24);
 	prp2 = get_unaligned_le64(request->sqe + 32);
@@ -499,7 +587,7 @@ static int native_shape(struct fwlab_m4_hif *hif,
 				sizeof(entries), FWLAB_M4_DMA_READ_HOST, &list);
 			if (!ret)
 				ret = native_copy(hif, &list, 0, entries, sizeof(entries),
-					request->bus_generation, request->epoch);
+					request->bus_generation, request->epoch, request->owner_epoch);
 			if (ret)
 				return ret;
 			address[1] = le64_to_cpu(entries[0]);
@@ -518,8 +606,11 @@ static int native_shape(struct fwlab_m4_hif *hif,
 			length[index], direction, &request->data_mapping[index]);
 		if (ret)
 			return ret;
+		if (request->data_mapping[index].domain_nonce != hif->owner_domain.nonce ||
+		    request->data_mapping[index].attach_generation != hif->owner_domain.attach_generation)
+			return -ESTALE;
 	}
-	if (!native_access(hif, request->bus_generation, request->epoch))
+	if (!native_access(hif, request->bus_generation, request->epoch, request->owner_epoch))
 		return -ESTALE;
 	if (hif->next_authority_uid == U64_MAX || hif->next_dma_uid == U64_MAX)
 		return -EOVERFLOW;
@@ -550,7 +641,7 @@ static int native_dma(struct fwlab_m4_hif *hif, struct native_request *request,
 	if (!query && (request->authority_released || request->dma_retired))
 		return -ESTALE;
 	if (!query && request->dma_state == FWLAB_M4_NATIVE_DMA_RESERVED) {
-		if (!native_access(hif, request->bus_generation, request->epoch)) {
+		if (!native_access(hif, request->bus_generation, request->epoch, request->owner_epoch)) {
 			request->dma_state = FWLAB_M4_NATIVE_DMA_CANCELLED;
 			goto result;
 		}
@@ -564,7 +655,7 @@ static int native_dma(struct fwlab_m4_hif *hif, struct native_request *request,
 			ret = native_copy(hif, &request->data_mapping[index], 0,
 				request->data + request->bytes_done,
 				request->data_mapping[index].length,
-				request->bus_generation, request->epoch);
+				request->bus_generation, request->epoch, request->owner_epoch);
 			if (ret)
 				break;
 			request->bytes_done += request->data_mapping[index].length;
@@ -591,7 +682,8 @@ static int native_queue_effect(struct fwlab_m4_hif *hif,
 	u64 address;
 	unsigned long flags;
 	struct native_queue candidate = {};
-	struct native_guard guard = { hif, request->bus_generation, request->epoch };
+	struct native_guard guard = { hif, request->bus_generation, request->epoch,
+				    request->owner_epoch };
 
 	if (request->queue_done) {
 		if (request->queue_effect != message->queue_effect ||
@@ -602,7 +694,7 @@ static int native_queue_effect(struct fwlab_m4_hif *hif,
 			return -EINVAL;
 		return request->queue_result;
 	}
-	if (!native_access(hif, request->bus_generation, request->epoch))
+	if (!native_access(hif, request->bus_generation, request->epoch, request->owner_epoch))
 		return -ESTALE;
 	if (message->queue_effect != FWLAB_M4_NATIVE_NUMBER_OF_QUEUES &&
 	    message->queue_id != 1)
@@ -703,7 +795,7 @@ static int native_publish(struct fwlab_m4_hif *hif,
 		message->publication = request->publication;
 		return 0;
 	}
-	if (!native_access(hif, request->bus_generation, request->epoch)) {
+	if (!native_access(hif, request->bus_generation, request->epoch, request->owner_epoch)) {
 		native_begin_reset(hif,
 			!!(readl(hif->pci->bar_mapping + REG_CC) & CC_SHUTDOWN), false);
 		message->publication = request->publication;
@@ -720,11 +812,11 @@ static int native_publish(struct fwlab_m4_hif *hif,
 	memcpy(request->completion, bytes, sizeof(bytes));
 	put_unaligned_le16(status | cq->phase, bytes + 14);
 	ret = native_copy(hif, &cq->mapping, cq->tail * 16, bytes, 14,
-			  request->bus_generation, request->epoch);
+			  request->bus_generation, request->epoch, request->owner_epoch);
 	if (!ret) {
 		wmb();
 		ret = native_copy(hif, &cq->mapping, cq->tail * 16 + 14, bytes + 14, 2,
-				  request->bus_generation, request->epoch);
+				  request->bus_generation, request->epoch, request->owner_epoch);
 	}
 	if (ret) {
 		native_fault(hif);
@@ -804,7 +896,8 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 		return 0;
 	}
 	if (message->operation == FWLAB_M4_NATIVE_RESET_ACK) {
-		if (message->controller_epoch != hif->controller_epoch || hif->quarantined)
+		if (message->controller_epoch != hif->controller_epoch || hif->quarantined ||
+		    hif->pci->owner_phase != FWLAB_M4_OWNER_OWNED)
 			return -ESTALE;
 		if (!hif->reset_pending && hif->firmware_ready)
 			return 0;
@@ -878,11 +971,235 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 	}
 }
 
+static void native_owner_observe(struct fwlab_m4_hif *hif,
+				 struct fwlab_m4_owner_message *message)
+{
+	message->function_nonce = hif->function_nonce;
+	message->owner_epoch = hif->pci->owner_epoch;
+	message->owner_kind = hif->pci->owner_kind;
+	message->phase = hif->pci->owner_phase;
+	message->controller_epoch = hif->controller_epoch;
+	message->execution_epoch = hif->controller_epoch;
+	message->generation = 1;
+	message->media_format_version = 1;
+	memcpy(message->media_uuid, hif->media_uuid, sizeof(message->media_uuid));
+	memcpy(message->binding_sha256, hif->binding_sha256, sizeof(message->binding_sha256));
+}
+
+static bool native_owner_revoke_equal(const struct fwlab_m4_owner_message *left,
+				      const struct fwlab_m4_owner_message *right)
+{
+	struct fwlab_m4_owner_message a = *left, b = *right;
+
+	a.operation = b.operation = 0;
+	a.result = b.result = 0;
+	return !memcmp(&a, &b, sizeof(a));
+}
+
+static bool native_owner_grant_equal(const struct fwlab_m4_owner_message *left,
+				     const struct fwlab_m4_owner_message *right)
+{
+	return native_owner_revoke_equal(left, right);
+}
+
+static bool native_owner_zero(const struct fwlab_m4_owner_message *message)
+{
+	return message->proof_flags == FWLAB_M4_OWNER_PROOFS &&
+	       !message->host_dma_authorities && !message->mapping_refs &&
+	       !message->pin_refs && !message->dma_operations &&
+	       !message->controller_buffer_leases && !message->lifecycle_commands &&
+	       !message->aggregate_block_operations && !message->completion_leases &&
+	       !message->cqe_workers && !message->irq_workers && !message->pba_pending_vectors &&
+	       (message->ftl_epoch_proof[0] || message->ftl_epoch_proof[1]) &&
+	       (message->nfc_epoch_proof[0] || message->nfc_epoch_proof[1]);
+}
+
+static int native_owner_exchange(struct fwlab_m4_hif *hif,
+				 struct fwlab_m4_owner_message *message)
+{
+	struct fwlab_m4_owner_message input = *message;
+	struct fwlab_m4_owner_message *retained = &hif->revoke_result;
+	unsigned long flags;
+	u32 index;
+
+	if (!hif->attached || message->function_nonce != hif->function_nonce)
+		return -ESTALE;
+	if (message->operation == FWLAB_M4_OWNER_OBSERVE) {
+		native_owner_observe(hif, message);
+		return 0;
+	}
+	if (message->operation == FWLAB_M4_OWNER_QUARANTINE) {
+		native_cancel_transport(hif);
+		hif->quarantined = true;
+		spin_lock_irqsave(&hif->pci->config_lock, flags);
+		hif->pci->owner_kind = 0;
+		hif->pci->owner_phase = FWLAB_M4_OWNER_QUARANTINED;
+		spin_unlock_irqrestore(&hif->pci->config_lock, flags);
+		writel(CSTS_FATAL, hif->pci->bar_mapping + REG_CSTS);
+		native_owner_observe(hif, message);
+		return 0;
+	}
+	if (hif->quarantined)
+		return -EIO;
+	if (message->operation == FWLAB_M4_OWNER_REVOKE ||
+	    message->operation == FWLAB_M4_OWNER_REVOKE_QUERY) {
+		if (hif->revoke_key.client_uid == message->client_uid && message->client_uid) {
+			if (!native_owner_revoke_equal(message, &hif->revoke_key))
+				return -ESTALE;
+			*message = *retained;
+			return 0;
+		}
+		if (message->operation == FWLAB_M4_OWNER_REVOKE_QUERY)
+			return -ESTALE;
+		if (!message->client_uid || message->policy != 1 ||
+		    hif->reset_pending || !hif->firmware_ready ||
+		    hif->pci->owner_phase != FWLAB_M4_OWNER_OWNED ||
+		    message->owner_epoch != hif->pci->owner_epoch ||
+		    message->owner_kind != hif->pci->owner_kind ||
+		    message->controller_epoch != hif->controller_epoch ||
+		    message->execution_epoch != hif->controller_epoch ||
+		    memcmp(message->binding_sha256, hif->binding_sha256, sizeof(hif->binding_sha256)))
+			return -EINVAL;
+		if (hif->pci->owner_epoch == U64_MAX || hif->next_owner_uid >= U64_MAX - 1)
+			return -EOVERFLOW;
+		/* Close data and IRQ entry, then drain handlers before publishing the
+		 * owner-revoke LP. Internal firmware work drains after this LP. */
+		native_cancel_transport(hif);
+		hif->revoke_key = input;
+		memset(retained, 0, sizeof(*retained));
+		retained->version = FWLAB_M4_OWNER_VERSION;
+		retained->size = sizeof(*retained);
+		retained->transition_uid = hif->next_owner_uid++;
+		retained->old_owner_epoch = hif->pci->owner_epoch;
+		retained->old_controller_epoch = hif->controller_epoch;
+		retained->old_execution_epoch = hif->controller_epoch;
+		retained->old_owner_kind = hif->pci->owner_kind;
+		spin_lock_irqsave(&hif->pci->config_lock, flags);
+		hif->pci->owner_epoch++;
+		hif->pci->owner_kind = 0;
+		hif->pci->owner_phase = FWLAB_M4_OWNER_DRAINING;
+		spin_unlock_irqrestore(&hif->pci->config_lock, flags);
+		memset(&hif->grant_key, 0, sizeof(hif->grant_key));
+		memset(&hif->grant_result, 0, sizeof(hif->grant_result));
+		native_owner_observe(hif, retained);
+		*message = *retained;
+		return 0;
+	}
+	if (message->operation == FWLAB_M4_OWNER_CERTIFY) {
+		if (!native_owner_zero(message) || !retained->transition_uid ||
+		    message->transition_uid != retained->transition_uid ||
+		    message->owner_epoch != retained->owner_epoch ||
+		    memcmp(message->binding_sha256, hif->binding_sha256, sizeof(hif->binding_sha256)))
+			return -ESTALE;
+		if (retained->certificate_uid) {
+			if (memcmp(message->ftl_epoch_proof, retained->ftl_epoch_proof,
+				   sizeof(retained->ftl_epoch_proof)) ||
+			    memcmp(message->nfc_epoch_proof, retained->nfc_epoch_proof,
+				   sizeof(retained->nfc_epoch_proof)))
+				return -ESTALE;
+			*message = *retained;
+			return 0;
+		}
+		if (hif->pci->owner_phase != FWLAB_M4_OWNER_DRAINING || hif->pci->effects_open)
+			return -EBUSY;
+		for (index = 0; index < NATIVE_DEPTH; index++) {
+			struct native_request *request = &hif->request[index];
+			if (request->active && (request->publication == FWLAB_M4_NATIVE_UNPUBLISHED ||
+			    (request->shaped && (!request->authority_released || !request->dma_retired))))
+				return -EBUSY;
+		}
+		fwlab_m4_close_effects(hif->pci);
+		native_registers_init(hif);
+		memset(hif->request, 0, sizeof(hif->request));
+		hif->controller_epoch = 0;
+		hif->faulted = false;
+		hif->shutdown = false;
+		spin_lock_irqsave(&hif->pci->config_lock, flags);
+		hif->pci->owner_phase = FWLAB_M4_OWNER_NONE;
+		spin_unlock_irqrestore(&hif->pci->config_lock, flags);
+		retained->certificate_uid = hif->next_owner_uid++;
+		retained->proof_flags = message->proof_flags;
+		memcpy(retained->ftl_epoch_proof, message->ftl_epoch_proof, sizeof(retained->ftl_epoch_proof));
+		memcpy(retained->nfc_epoch_proof, message->nfc_epoch_proof, sizeof(retained->nfc_epoch_proof));
+		native_owner_observe(hif, retained);
+		*message = *retained;
+		return 0;
+	}
+	if (message->operation == FWLAB_M4_OWNER_GRANT ||
+	    message->operation == FWLAB_M4_OWNER_GRANT_QUERY) {
+		struct fwlab_m4_domain_identity domain;
+		struct device *device = &hif->pci->pdev->dev;
+		int ret;
+		if (hif->grant_key.client_uid == message->client_uid && message->client_uid) {
+			if (!native_owner_grant_equal(message, &hif->grant_key))
+				return -ESTALE;
+			*message = hif->grant_result;
+			return 0;
+		}
+		if (message->operation == FWLAB_M4_OWNER_GRANT_QUERY)
+			return -ESTALE;
+		if (!message->client_uid || !retained->certificate_uid ||
+		    hif->pci->owner_phase != FWLAB_M4_OWNER_NONE ||
+		    message->transition_uid != retained->transition_uid ||
+		    message->certificate_uid != retained->certificate_uid ||
+		    message->owner_epoch != hif->pci->owner_epoch ||
+		    (message->target_owner != 1 && message->target_owner != 2) ||
+		    memcmp(message->binding_sha256, hif->binding_sha256, sizeof(hif->binding_sha256)))
+			return -ESTALE;
+		if (retained->old_controller_epoch == U32_MAX)
+			return -EOVERFLOW;
+		/* Firmware has already prepared the successor under the closed gate.
+		 * Kernel grant validates its exact successor and retained certificate. */
+		if (message->controller_epoch != retained->old_controller_epoch + 1 ||
+		    message->execution_epoch != retained->old_execution_epoch + 1)
+			return -EINVAL;
+		device_lock(device);
+		ret = fwlab_m4_domain_identity(device, &domain);
+		if (!ret && (domain.kind != message->target_owner ||
+		    (message->target_owner == 1 && device->driver) ||
+		    (message->target_owner == 2 &&
+		     (!device->driver || strcmp(device->driver->name, "vfio-pci")))))
+			ret = -EACCES;
+		device_unlock(device);
+		if (ret)
+			return ret;
+		native_registers_init(hif);
+		hif->owner_domain = domain;
+		hif->controller_epoch = message->controller_epoch;
+		hif->firmware_ready = true;
+		hif->reset_pending = false;
+		hif->grant_key = input;
+		spin_lock_irqsave(&hif->pci->config_lock, flags);
+		hif->pci->owner_kind = message->target_owner;
+		hif->pci->owner_phase = FWLAB_M4_OWNER_OWNED;
+		spin_unlock_irqrestore(&hif->pci->config_lock, flags);
+		native_owner_observe(hif, message);
+		hif->grant_result = *message;
+		return 0;
+	}
+	return -EINVAL;
+}
+
 static long native_ioctl(struct file *file, unsigned int command, unsigned long arg)
 {
 	struct fwlab_m4_hif *hif = file->private_data;
 	struct fwlab_m4_native_message message;
 
+	if (command == FWLAB_M4_OWNER_EXCHANGE) {
+		struct fwlab_m4_owner_message owner;
+		u32 operation;
+		if (copy_from_user(&owner, (void __user *)arg, sizeof(owner)))
+			return -EFAULT;
+		if (owner.version != FWLAB_M4_OWNER_VERSION || owner.size != sizeof(owner) ||
+		    owner.reserved0 || memchr_inv(owner.reserved, 0, sizeof(owner.reserved)))
+			return -EINVAL;
+		operation = owner.operation;
+		mutex_lock(&hif->lock);
+		owner.result = hif->stopped ? -ENODEV : native_owner_exchange(hif, &owner);
+		mutex_unlock(&hif->lock);
+		owner.operation = operation;
+		return copy_to_user((void __user *)arg, &owner, sizeof(owner)) ? -EFAULT : 0;
+	}
 	if (command != FWLAB_M4_NATIVE_EXCHANGE)
 		return -ENOTTY;
 	if (copy_from_user(&message, (void __user *)arg, sizeof(message)))
@@ -921,9 +1238,8 @@ static int native_release(struct inode *inode, struct file *file)
 	mutex_lock(&hif->lock);
 	hif->opened = false;
 	hif->quarantined = hif->attached;
-	hif->enabled = false;
 	hif->firmware_ready = false;
-	fwlab_m4_clear_msix(hif->pci);
+	fwlab_m4_close_effects(hif->pci);
 	writel(CSTS_FATAL, hif->pci->bar_mapping + REG_CSTS);
 	mutex_unlock(&hif->lock);
 	return 0;
@@ -952,6 +1268,10 @@ int fwlab_m4_hif_create(struct fwlab_m4_pci_ctx *pci, struct fwlab_m4_hif **out)
 	hif->next_authority_uid = 1000001;
 	hif->next_dma_uid = 2000001;
 	hif->controller_epoch = 1;
+	hif->next_owner_uid = 1;
+	pci->owner_epoch = 1;
+	pci->owner_kind = 1;
+	pci->owner_phase = FWLAB_M4_OWNER_OWNED;
 	hif->seen_flr_epoch = pci->bar_epoch;
 	hif->requested_flr_epoch = pci->bar_epoch;
 	native_registers_init(hif);
@@ -982,8 +1302,7 @@ int fwlab_m4_hif_stop(struct fwlab_m4_hif *hif)
 		return 0;
 	mutex_lock(&hif->lock);
 	hif->stopped = true;
-	hif->enabled = false;
-	fwlab_m4_clear_msix(hif->pci);
+	fwlab_m4_close_effects(hif->pci);
 	mutex_unlock(&hif->lock);
 	return 0;
 }

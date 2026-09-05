@@ -37,6 +37,15 @@ struct fwlab_m4_copy_guard {
 	void *context;
 };
 
+struct fwlab_m4_domain_identity {
+	u64 nonce;
+	u64 attach_generation;
+	u32 kind; /* 1: DMA-API native domain; 2: user-managed VFIO domain. */
+};
+
+int fwlab_m4_domain_identity(struct device *dev,
+			    struct fwlab_m4_domain_identity *identity);
+
 int fwlab_m4_mapping_capture(struct device *dev, dma_addr_t iova, u32 length,
 			     enum fwlab_m4_dma_direction direction,
 			     struct fwlab_m4_mapping *mapping);

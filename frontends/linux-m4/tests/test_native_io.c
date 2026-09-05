@@ -16,17 +16,25 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
+#include <sys/vfs.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 struct native_case { uint32_t lba, bytes, offset; uint8_t seed; };
+int native_owner_host_journey(const char *directory, const char *bdf);
+int native_owner_qemu_journey(const char *directory, const char *bdf,
+                              const char *kernel, const char *initrd, const char *workdir, unsigned cut);
+int native_owner_postkill_journey(const char *directory, const char *bdf,
+                                  const char *kernel, const char *initrd, const char *workdir);
 static const struct native_case cases[] = {
     { 128, 512, 0, 0x31 },
     { 129, 4096, 0, 0x52 },
     { 137, 8192, 512, 0x73 },
 };
+static uint8_t pattern_delta;
 
 static int exchange(int fd, unsigned long operation,
                     struct nvme_passthru_cmd *command)
@@ -41,7 +49,7 @@ static int exchange(int fd, unsigned long operation,
     return result;
 }
 
-static int identity_guard(int fd, const char *bdf)
+static int identity_guard(int fd, const char *bdf, int guest)
 {
     struct stat st;
     struct nvme_passthru_cmd command = { 0 };
@@ -50,6 +58,7 @@ static int identity_guard(int fd, const char *bdf)
     uint64_t bytes = 0;
     unsigned domain, bus, device, function;
     int consumed = 0, valid = 0;
+    struct statfs rootfs;
 
     if (!identify)
         return 0;
@@ -64,7 +73,9 @@ static int identity_guard(int fd, const char *bdf)
     snprintf(sysfs, sizeof(sysfs), "/sys/dev/block/%u:%u",
              major(st.st_rdev), minor(st.st_rdev));
     if (!realpath(sysfs, resolved) || !strstr(resolved, component) ||
-        !strstr(resolved, "/ssd_fwlab_native_pci/") ||
+        (!guest && !strstr(resolved, "/ssd_fwlab_native_pci/")) ||
+        (guest && (statfs("/", &rootfs) ||
+                   (rootfs.f_type != 0x858458f6 && rootfs.f_type != 0x01021994))) ||
         ioctl(fd, BLKGETSIZE64, &bytes) || bytes != UINT64_C(1048576) ||
         ioctl(fd, NVME_IOCTL_ID) != 1)
         goto done;
@@ -90,7 +101,7 @@ done:
 
 static uint8_t pattern(uint32_t index, uint8_t seed)
 {
-    return (uint8_t)(seed + index * 17u + (index >> 8));
+    return (uint8_t)(seed + pattern_delta + index * 17u + (index >> 8));
 }
 
 static int transfer(int fd, uint8_t opcode, const struct native_case *test,
@@ -198,6 +209,32 @@ static int cut_journey(int fd, const char *device, const char *bdf,
         test.seed = cases[0].seed;
     if (!read_compare(fd, &test, buffer, 0, 0))
         goto done;
+    if (point <= 2) {
+        int permission = open("/sys/module/ssd_fwlab_native_pci/parameters/native_cut_permission_result",
+                              O_RDONLY | O_CLOEXEC);
+        ssize_t length;
+        if (permission < 0)
+            goto done;
+        length = read(permission, text, sizeof(text) - 1);
+        close(permission);
+        if (length <= 0)
+            goto done;
+        text[length] = 0;
+        if (strtol(text, NULL, 10) != -ESTALE)
+            goto done;
+        permission = open("/sys/module/ssd_fwlab_native_pci/parameters/native_cut_permission_bit",
+                          O_RDONLY | O_CLOEXEC);
+        if (permission < 0)
+            goto done;
+        length = read(permission, text, sizeof(text) - 1);
+        close(permission);
+        if (length <= 0)
+            goto done;
+        text[length] = 0;
+        if (strtoul(text, NULL, 10) != (point == 1 ? 4u : 2u))
+            goto done;
+        printf("NATIVE_PERMISSION_BLOCK bit=%u result=%d\n", point == 1 ? 4u : 2u, -ESTALE);
+    }
     /* Restore the existing journey's baseline through the same NVMe path. */
     if (point == 3) {
         test.seed = cases[0].seed;
@@ -229,27 +266,98 @@ done:
     return success;
 }
 
+static int masked_pba_journey(int fd, const char *bdf, uint8_t *buffer)
+{
+    char path[128];
+    int config = -1, resource = -1, status, result = 0;
+    uint8_t original[2], masked[2];
+    int mask_written = 0;
+    uint8_t *bar = MAP_FAILED;
+    pid_t child = -1;
+    unsigned iteration;
+
+    snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/config", bdf);
+    config = open(path, O_RDWR | O_CLOEXEC);
+    snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/resource0", bdf);
+    resource = open(path, O_RDONLY | O_CLOEXEC);
+    if (config < 0 || resource < 0 || pread(config, original, 2, 0xa2) != 2 ||
+        !(original[1] & 0x80) || (original[1] & 0x40)) goto done;
+    bar = mmap(NULL, 16384, PROT_READ, MAP_SHARED, resource, 0);
+    if (bar == MAP_FAILED || *(volatile uint64_t *)(bar + 0x3000)) goto done;
+    memcpy(masked, original, 2);
+    masked[1] |= 0x40;
+    if (pwrite(config, masked, 2, 0xa2) != 2) goto done;
+    mask_written = 1;
+    child = fork();
+    if (child < 0) goto done;
+    if (!child)
+        _exit(read_compare(fd, &cases[0], buffer, 0, 0) ? 0 : 1);
+    for (iteration = 0; iteration < 5000; ++iteration) {
+        if (*(volatile uint64_t *)(bar + 0x3000) & 1) break;
+        usleep(100);
+    }
+    if (iteration == 5000) goto done;
+    {
+        pid_t reaped = waitpid(child, &status, WNOHANG);
+        if (reaped == child || (reaped < 0 && errno == ECHILD)) child = -1;
+        if (reaped != 0) goto done;
+    }
+    if (pwrite(config, original, 2, 0xa2) != 2) goto done;
+    mask_written = 0;
+    for (iteration = 0; iteration < 2000; ++iteration) {
+        pid_t reaped = waitpid(child, &status, WNOHANG);
+        if (reaped == child) { child = -1; break; }
+        if (reaped < 0) goto done;
+        usleep(1000);
+    }
+    if (child > 0 || !WIFEXITED(status) || WEXITSTATUS(status) ||
+        *(volatile uint64_t *)(bar + 0x3000)) goto done;
+    result = 1;
+done:
+    if (mask_written && pwrite(config, original, 2, 0xa2) != 2) result = 0;
+    if (child > 0) { kill(child, SIGTERM); waitpid(child, NULL, 0); }
+    if (bar != MAP_FAILED) munmap(bar, 16384);
+    if (resource >= 0) close(resource);
+    if (config >= 0) close(config);
+    if (result) puts("NATIVE_PBA_PASS masked_pending=1 premature_completion=0 unmask_delivery=1 pending_cleared=1");
+    else fputs("masked PBA journey failed\n", stderr);
+    return result;
+}
+
 int main(int argc, char **argv)
 {
     uint8_t *allocation;
-    int fd, write_mode, result = 1;
+    int fd, write_mode, result = 1, guest = 0, guest_phase = 0, guest_hold = 0, pba = 0;
     uint32_t index, iteration, cut = 0;
 
+    if (argc == 7 && !strcmp(argv[1], "owner-qemu"))
+        return native_owner_qemu_journey(argv[2], argv[3], argv[4], argv[5], argv[6], 0);
+    if (argc == 7 && !strcmp(argv[1], "owner-prekill"))
+        return native_owner_qemu_journey(argv[2], argv[3], argv[4], argv[5], argv[6], 1);
+    if (argc == 7 && !strcmp(argv[1], "owner-postkill"))
+        return native_owner_postkill_journey(argv[2], argv[3], argv[4], argv[5], argv[6]);
+    if (argc == 4 && !strcmp(argv[1], "owner-host"))
+        return native_owner_host_journey(argv[2], argv[3]);
     if (argc == 4 && strlen(argv[1]) == 4 && !strncmp(argv[1], "cut", 3) &&
         argv[1][3] >= '1' && argv[1][3] <= '3')
         cut = (uint32_t)(argv[1][3] - '0');
-    if (argc != 4 || (!cut && strcmp(argv[1], "write") && strcmp(argv[1], "verify"))) {
-        fprintf(stderr, "usage: %s write|verify|cut1|cut2|cut3 /dev/nvmeXn1 BDF\n", argv[0]);
+    guest_hold = argc == 4 && !strcmp(argv[1], "guest-hold");
+    pba = argc == 4 && !strcmp(argv[1], "pba");
+    guest = guest_hold || (argc == 4 && !strcmp(argv[1], "guest-ab"));
+    if (argc != 4 || (!cut && !guest && !pba && strcmp(argv[1], "write") &&
+                      strcmp(argv[1], "verify") && strcmp(argv[1], "verify-b"))) {
+        fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3 /dev/nvmeXn1 BDF\n", argv[0]);
         return 2;
     }
+    pattern_delta = !strcmp(argv[1], "verify-b") ? 0x33 : 0;
     write_mode = cut != 0 || !strcmp(argv[1], "write");
-    fd = open(argv[2], (write_mode ? O_RDWR : O_RDONLY) |
+    fd = open(argv[2], (write_mode || guest ? O_RDWR : O_RDONLY) |
                         O_EXCL | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) {
         perror("exclusive namespace open");
         return 1;
     }
-    if (!identity_guard(fd, argv[3])) {
+    if (!identity_guard(fd, argv[3], guest)) {
         close(fd);
         return 1;
     }
@@ -262,6 +370,11 @@ int main(int argc, char **argv)
         result = cut_journey(fd, argv[2], argv[3], cut, allocation) ? 0 : 1;
         goto done;
     }
+    if (pba) {
+        result = masked_pba_journey(fd, argv[3], allocation) ? 0 : 1;
+        goto done;
+    }
+guest_again:
     for (index = 0; index < sizeof(cases) / sizeof(cases[0]); ++index) {
         const struct native_case *test = &cases[index];
         uint8_t *buffer = allocation + test->offset;
@@ -287,7 +400,22 @@ int main(int argc, char **argv)
     for (iteration = 0; iteration < 64; ++iteration)
         if (!read_compare(fd, &cases[0], allocation, 0, 0))
             goto done;
-    printf("NATIVE_IO_PASS mode=%s shapes=3 continued_reads=64\n", argv[1]);
+    if (guest && !guest_phase) {
+        puts("NATIVE_GUEST_A_READ_OK shapes=3 data=exact");
+        if (guest_hold) {
+            puts("NATIVE_GUEST_HOLD");
+            fflush(stdout);
+            for (;;) pause();
+        }
+        guest_phase = 1;
+        pattern_delta = 0x33;
+        write_mode = 1;
+        goto guest_again;
+    }
+    if (guest)
+        puts("NATIVE_GUEST_AB_PASS host_A=exact guest_B=durable shapes=3");
+    else
+        printf("NATIVE_IO_PASS mode=%s shapes=3 continued_reads=64\n", argv[1]);
     result = 0;
 done:
     free(allocation);

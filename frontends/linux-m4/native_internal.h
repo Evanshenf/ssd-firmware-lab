@@ -9,6 +9,14 @@
 
 #define NATIVE_COMMANDS 32u
 
+struct native_media {
+    int directory_fd;
+    void *arena;
+    struct fwlab_file_nand_v0 *file;
+    struct fwlab_file_nand_holder_v0 holder;
+    uint8_t uuid[16];
+};
+
 struct native_slot {
     struct fwlab_m4_native_message capture;
     struct fwlab_nvme_command command;
@@ -58,6 +66,11 @@ struct native_context {
     uint32_t epoch;
     uint32_t generation;
     uint32_t close_epoch;
+    struct j0_close_status last_closed;
+    uint64_t last_ftl_nonce;
+    uint64_t last_nfc_nonce;
+    uint32_t last_closed_epoch;
+    uint64_t next_runtime_seed;
     int descriptor;
     uint8_t closing;
 };
@@ -70,5 +83,9 @@ int native_exchange(struct native_context *context,
 enum fwlab_spine_result_v0 native_host_bind(
     void *context, const struct fwlab_controller_buffer_port_v0 *buffer,
     uint32_t generation, struct j0_host_binding *binding);
+int native_runtime_create(struct native_context *context,
+                          struct native_media *media, int format);
+enum fwlab_spine_result_v0 native_runtime_close_step(
+    struct native_context *context, uint32_t budget);
 
 #endif /* FWLAB_LINUX_M4_NATIVE_INTERNAL_H */

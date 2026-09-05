@@ -356,6 +356,38 @@ out_endpoint:
 }
 EXPORT_SYMBOL_GPL(fwlab_m4_dma_transfer);
 
+int fwlab_m4_domain_identity(struct device *dev,
+			    struct fwlab_m4_domain_identity *identity)
+{
+	struct fwlab_m4_endpoint *endpoint = dev_iommu_priv_get(dev);
+	struct fwlab_m4_domain_identity result = {};
+	struct iommu_domain *domain;
+	int ret = 0;
+
+	if (!endpoint || endpoint->dev != dev || !identity)
+		return -EINVAL;
+	mutex_lock(&endpoint->attach_lock);
+	domain = endpoint->attached_domain;
+	if (!domain || domain->ops != &fwlab_m4_domain_ops) {
+		ret = -ENODEV;
+		goto out;
+	}
+	result.nonce = fwlab_m4_to_domain(domain)->nonce;
+	result.attach_generation = endpoint->attach_generation;
+	if (domain->type & __IOMMU_DOMAIN_DMA_API)
+		result.kind = 1;
+	else if (domain->type == IOMMU_DOMAIN_UNMANAGED)
+		result.kind = 2;
+	else
+		ret = -EINVAL;
+	if (!ret)
+		*identity = result;
+out:
+	mutex_unlock(&endpoint->attach_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(fwlab_m4_domain_identity);
+
 int fwlab_m4_mapping_capture(struct device *dev, dma_addr_t iova, u32 length,
 			     enum fwlab_m4_dma_direction direction,
 			     struct fwlab_m4_mapping *mapping)

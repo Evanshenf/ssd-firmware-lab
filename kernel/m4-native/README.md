@@ -66,3 +66,29 @@ terminate the worker gracefully, then unload the PCI module and IOMMU module
 in that order. A stopped attached process quarantines the endpoint; reload its
 module before attaching a new worker. Preserve the media file for recovery.
 The later M5 owner-switch journey is not established by J1 native I/O.
+
+## J2 owner-control binding
+
+The native worker can expose a root-private control socket with `--owner-dir`.
+The directory must already exist with private ownership; no existing socket
+is overwritten. The socket is a coordinator lease, not an ordinary status
+connection: disconnecting the active coordinator initiates revoke. Kernel
+effect gates and retained transition/certificate/grant records are authoritative;
+the userspace binding implements the existing `owner_control_v0` contract using
+actual lifecycle/Block/NFC drain results. NO_OWNER does not rebuild a runtime.
+Grant creates its exact successor only after old-epoch zero certification.
+
+The same native integration client has `owner-host`, `owner-qemu`,
+`owner-prekill` and `owner-postkill` journeys. The QEMU client requires an explicit
+kernel, generated RAM-only initramfs and private working directory. It starts
+QEMU with KVM, upstream vfio-pci/IOMMUFD and paused CPUs, verifies QMP state,
+grants the VFIO owner, then starts execution. The guest first reads Host A,
+writes and flushes B, and the restored native Host reads B. A child QEMU's
+parent-death signal prevents a killed coordinator from leaving that guest
+running. All paths terminate at explicit NO_OWNER after their checks.
+
+The initial binding supports DRAIN_ONLY; durable-frontier revoke policy is
+rejected before its LP. Use explicit native FUA/Flush before transfer. Stable
+identity is function nonce, media UUID/format and an externally recorded build
+manifest; volatile caches and controller epochs can be reconstructed. The
+separate J3 stale-alias and architecture-freeze requirements still apply.

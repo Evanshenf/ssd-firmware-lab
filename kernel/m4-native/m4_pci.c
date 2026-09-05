@@ -27,6 +27,7 @@
 #endif
 
 #include "m4_internal.h"
+#include "fwlab/unstable/m4_owner_native.h"
 
 static unsigned long long bar_start = FWLAB_M4_BAR_DEFAULT_START;
 module_param(bar_start, ullong, 0444);
@@ -41,7 +42,13 @@ static void fwlab_m4_irq_work(struct irq_work *work)
 {
 	struct fwlab_m4_pci_ctx *ctx = container_of(
 		work, struct fwlab_m4_pci_ctx, irq_work);
-	unsigned int virq = READ_ONCE(ctx->pending_virq);
+	unsigned long flags;
+	unsigned int virq;
+
+	spin_lock_irqsave(&ctx->config_lock, flags);
+	virq = ctx->effects_open && ctx->owner_phase == FWLAB_M4_OWNER_OWNED &&
+		ctx->irq_owner_epoch == ctx->owner_epoch ? ctx->pending_virq : 0;
+	spin_unlock_irqrestore(&ctx->config_lock, flags);
 
 	if (virq) {
 		int ret;
@@ -62,11 +69,15 @@ static void fwlab_m4_update_msix(struct fwlab_m4_pci_ctx *ctx, bool raised)
 
 	spin_lock_irqsave(&ctx->config_lock, flags);
 	if (raised) {
-		ctx->irq_pending = true;
+		ctx->irq_pending = ctx->effects_open &&
+			ctx->owner_phase == FWLAB_M4_OWNER_OWNED;
 		ctx->irq_generation = ctx->access_generation;
 		ctx->irq_epoch = ctx->bar_epoch;
+		ctx->irq_owner_epoch = ctx->owner_epoch;
 	}
-	if (ctx->irq_generation != ctx->access_generation ||
+	if (!ctx->effects_open || ctx->owner_phase != FWLAB_M4_OWNER_OWNED ||
+	    ctx->irq_owner_epoch != ctx->owner_epoch ||
+	    ctx->irq_generation != ctx->access_generation ||
 	    ctx->irq_epoch != ctx->bar_epoch)
 		ctx->irq_pending = false;
 	msix_flags = get_unaligned_le16(
@@ -84,10 +95,9 @@ static void fwlab_m4_update_msix(struct fwlab_m4_pci_ctx *ctx, bool raised)
 	}
 	writeq(ctx->irq_pending ? 1 : 0,
 	       ctx->bar_mapping + FWLAB_M4_MSIX_PBA_OFFSET);
-	spin_unlock_irqrestore(&ctx->config_lock, flags);
-
 	if (virq)
 		irq_work_queue(&ctx->irq_work);
+	spin_unlock_irqrestore(&ctx->config_lock, flags);
 }
 
 void fwlab_m4_raise_msix(struct fwlab_m4_pci_ctx *ctx)
@@ -111,6 +121,18 @@ void fwlab_m4_clear_msix(struct fwlab_m4_pci_ctx *ctx)
 		writeq(0, ctx->bar_mapping + FWLAB_M4_MSIX_PBA_OFFSET);
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
 	irq_work_sync(&ctx->irq_work);
+}
+
+void fwlab_m4_close_effects(struct fwlab_m4_pci_ctx *ctx)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&ctx->config_lock, flags);
+	ctx->effects_open = false;
+	spin_unlock_irqrestore(&ctx->config_lock, flags);
+	/* Owner/controller revoke publishes its epoch LP only after any handler
+	 * which already crossed the old gate has returned. */
+	fwlab_m4_clear_msix(ctx);
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
