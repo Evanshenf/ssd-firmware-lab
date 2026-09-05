@@ -371,6 +371,23 @@ static uint32_t storage_free_pages(const struct j0_runtime *runtime)
     return pages;
 }
 
+static int recovered_roles_valid(const struct j0_runtime *runtime)
+{
+    uint32_t block, lpn, reserves = 0;
+    for (block = 0; block < M3P_BLOCKS; ++block)
+        reserves += runtime->m3p->block_role[block] == M3P_ROLE_RESERVE;
+    CHECK(reserves == 1);
+    block = runtime->m3p->reserve_block;
+    CHECK(block < M3P_BLOCKS);
+    CHECK(runtime->m3p->block_role[block] == M3P_ROLE_RESERVE);
+    CHECK(runtime->m3p->block_health[block] == FWLAB_NFC_BLOCK_GOOD);
+    CHECK(runtime->m3p->block_next_page[block] == 0);
+    for (lpn = 0; lpn < M3P_LPN_COUNT; ++lpn)
+        if (runtime->m3p->durable[lpn].state == M3P_L2P_VALUE)
+            CHECK(runtime->m3p->block_role[runtime->m3p->durable[lpn].block] == M3P_ROLE_DATA);
+    return 1;
+}
+
 static int storage_open_image(struct image_context *image)
 {
     CHECK(image_create(image));
@@ -473,10 +490,49 @@ static int practical_storage_journey(void)
     free(runtime);
     CHECK(storage_reopen_image(&image));
     CHECK(lab_runtime_open(&runtime, &image, J0_MEDIA_RECOVER, 32));
+    CHECK(recovered_roles_valid(runtime));
     for (lpn = 0; lpn < M3P_LPN_COUNT; ++lpn) {
         CHECK(storage_io(runtime, uid++, 2, lpn * 8u, 8, bytes, 0));
         CHECK(!memcmp(bytes, expected + lpn * 4096u, 4096));
     }
+    uid += uid & 1u; /* Ordinary write, without FUA. */
+    memset(bytes, 0xd9, 4096);
+    CHECK(storage_io(runtime, uid++, 1, 0, 8, bytes, 0));
+    memcpy(expected, bytes, 4096);
+    CHECK(storage_io(runtime, uid++, 0, 0, 0, NULL, 0));
+    CHECK(storage_io(runtime, uid++, 2, 0, 8, bytes, 0));
+    CHECK(!memcmp(bytes, expected, 4096));
+    /* Normal writes, not a private checkpoint trigger, cover the last switch. */
+    for (iteration = 0;
+         !(runtime->m3p->journal_page == 0 &&
+           runtime->m3p->checkpoint_covered_sequence == runtime->m3p->map_sequence) &&
+         iteration < 64; ++iteration) {
+        uid += uid & 1u;
+        memset(bytes, (int)(0x80u + iteration), 4096);
+        CHECK(storage_io(runtime, uid++, 1, 0, 8, bytes, 0));
+        memcpy(expected, bytes, 4096);
+    }
+    CHECK(runtime->m3p->journal_page == 0 &&
+          runtime->m3p->checkpoint_covered_sequence == runtime->m3p->map_sequence);
+    CHECK(runtime_close(runtime, &closed));
+    free(runtime);
+    CHECK(storage_reopen_image(&image));
+    CHECK(lab_runtime_open(&runtime, &image, J0_MEDIA_RECOVER, 34));
+    CHECK(recovered_roles_valid(runtime));
+    for (iteration = 0; iteration < 64; ++iteration) {
+        uid += uid & 1u;
+        memset(bytes, (int)(0x40u + iteration), 4096);
+        CHECK(storage_io(runtime, uid++, 1, 0, 8, bytes, 0));
+        memcpy(expected, bytes, 4096);
+        CHECK(storage_io(runtime, uid++, 0, 0, 0, NULL, 0));
+        CHECK(storage_io(runtime, uid++, 2, 0, 8, bytes, 0));
+        CHECK(!memcmp(bytes, expected, 4096));
+    }
+    for (lpn = 0; lpn < M3P_LPN_COUNT; ++lpn) {
+        CHECK(storage_io(runtime, uid++, 2, lpn * 8u, 8, bytes, 0));
+        CHECK(!memcmp(bytes, expected + lpn * 4096u, 4096));
+    }
+    puts("COVERED_GC_RECOVERY_PASS ordinary_overwrites=64 flush=64 all_page_readback=256 roles=restored");
     CHECK(trace_window_sequence(runtime, uid++));
     CHECK(runtime_close(runtime, &closed));
     free(runtime);
@@ -627,6 +683,8 @@ static int reference_budget_terminal(void)
 int main(int argc, char **argv)
 {
     setvbuf(stdout, NULL, _IOLBF, 0);
+    if (argc == 2 && !strcmp(argv[1], "--practical-storage"))
+        return practical_storage_journey() ? 0 : 1;
     if (argc == 2 && !strcmp(argv[1], "--automatic-gc"))
         return automatic_gc_recovery() ? 0 : 1;
     if (argc != 1) return 2;

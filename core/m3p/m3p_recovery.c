@@ -304,6 +304,68 @@ static int apply_recovered_record(struct fwlab_m3p *m3p,
     return 1;
 }
 
+static int recovered_reserve_eligible(const struct fwlab_m3p *m3p,
+                                      uint8_t block)
+{
+    uint8_t page;
+    uint16_t lpn;
+
+    if (block >= M3P_BLOCKS ||
+        m3p->block_role[block] != M3P_ROLE_DATA ||
+        m3p->block_health[block] != FWLAB_NFC_BLOCK_GOOD ||
+        m3p->block_next_page[block] != 0) return 0;
+    for (page = 0; page < M3P_PAGES_PER_BLOCK; ++page)
+        if (m3p->p2l[m3p_physical_index(block, page)] != M3P_P2L_FREE)
+            return 0;
+    for (lpn = 0; lpn < M3P_LPN_COUNT; ++lpn)
+        if (m3p->durable[lpn].state == M3P_L2P_VALUE &&
+            m3p->durable[lpn].block == block) return 0;
+    return 1;
+}
+
+/* A checkpoint stores durable mapping, not the initial DATA/RESERVE labels.
+ * Rebuild those labels from the scanned media and explicit GC replay. */
+static int reconstruct_recovered_roles(struct fwlab_m3p *m3p)
+{
+    uint8_t block, selected = m3p->reserve_block;
+    uint8_t replacement = m3p->replacement_block;
+
+    for (block = 0; block < M3P_BLOCKS; ++block) {
+        if (block >= 10 && block < 14) continue;
+        if (m3p->block_health[block] != FWLAB_NFC_BLOCK_GOOD ||
+            m3p->block_role[block] == M3P_ROLE_UNAVAILABLE) {
+            m3p->block_role[block] = M3P_ROLE_UNAVAILABLE;
+            if (block != replacement) m3p->replacement_used = 1;
+        } else if (block != replacement) {
+            m3p->block_role[block] = M3P_ROLE_DATA;
+        }
+    }
+    if (replacement >= M3P_BLOCKS) return 0;
+    if (m3p->block_next_page[replacement] != 0)
+        m3p->replacement_used = 1;
+    if (m3p->block_role[replacement] != M3P_ROLE_UNAVAILABLE)
+        m3p->block_role[replacement] = m3p->replacement_used ?
+            M3P_ROLE_DATA : M3P_ROLE_REPLACEMENT;
+
+    if (m3p->work_kind == FWLAB_M3P_MAINTENANCE_GC) {
+        /* Replay owns this identity even while its destination is staged or
+         * its old source still awaits erase. Do not alter the in-flight GC. */
+        if (selected >= M3P_BLOCKS ||
+            m3p->block_role[selected] != M3P_ROLE_DATA) return 0;
+    } else if (!recovered_reserve_eligible(m3p, selected)) {
+        selected = UINT8_MAX;
+        for (block = 0; block < M3P_BLOCKS; ++block)
+            if (recovered_reserve_eligible(m3p, block)) {
+                selected = block;
+                break;
+            }
+        if (selected == UINT8_MAX) return 0;
+    }
+    m3p->reserve_block = selected;
+    m3p->block_role[selected] = M3P_ROLE_RESERVE;
+    return 1;
+}
+
 static int finalize_recovery(struct fwlab_m3p *m3p)
 {
     uint32_t current;
@@ -554,6 +616,7 @@ static int finalize_recovery(struct fwlab_m3p *m3p)
         m3p->recovery_resume_gc = 1;
         m3p->ready = 0;
     }
+    if (!reconstruct_recovered_roles(m3p)) return 0;
     if (m3p->block_next_page[m3p->inactive_journal_block] != 0) {
         m3p->recovery_journal_cleanup = 1;
     }
