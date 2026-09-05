@@ -92,3 +92,25 @@ rejected before its LP. Use explicit native FUA/Flush before transfer. Stable
 identity is function nonce, media UUID/format and an externally recorded build
 manifest; volatile caches and controller epochs can be reconstructed. The
 separate J3 stale-alias and architecture-freeze requirements still apply.
+
+## J3 stale-authority journey
+
+`j1_native_io owner-stale OWNER_DIRECTORY BDF` requires this exact synthetic
+function, no bound native driver, and the worker's private owner-control socket.
+It uses the normal upstream VFIO cdev/IOMMUFD interfaces for two sequential
+owner epochs, each with its own IOAS and backing allocation. The function and
+NAND identity are retained; the old IOAS/device ownership is released before
+the second owner is granted. Retained old user memory/eventfd snapshots are
+observations, not live DMA pins or interrupt routes.
+
+The four cases cover old DMA authority at reused IOVA, an old mapping reference,
+old firmware/kernel completion identities at a reused CQ slot, and an old IRQ
+ticket against the replacement eventfd route. They require stale rejection,
+unchanged buffers/CQ/PBA, no eventfd delivery, then successful current Identify
+data/CQE and delivery only to the current route. The final revoke must return a
+zero-reference certificate. This is software owner-epoch evidence, not a
+physical DMA-master or arbitrary-configuration claim.
+
+The kernel IRQ publisher uses a private ticket bound to owner, bus, effect,
+BAR and route generations. Only the exact live ticket may alter pending/PBA
+state. These private controls do not widen the portable firmware ABI.

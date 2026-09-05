@@ -84,4 +84,8 @@ clean:
 		build/thread/c41_portable_tests build/thread/c41_portable_model
 	@rmdir build/clang build/sanitize build/thread build 2>/dev/null || true
 
+# C4.1 callers legitimately supply an absolute BUILD_DIR. The separate C43
+# reference lane's directory contract applies only when that lane is requested.
+ifneq ($(strip $(filter c43-% check-c43% fake-link-c43 clean-c43 clean,$(MAKECMDGOALS))$(findstring /c43/,$(MAKECMDGOALS))),)
 include c43.mk
+endif

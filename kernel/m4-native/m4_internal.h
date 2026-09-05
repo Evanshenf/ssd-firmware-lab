@@ -56,6 +56,15 @@
 #define FWLAB_M4_PCIE_CAP 0x40
 #define FWLAB_M4_MSIX_CAP 0xa0
 
+struct fwlab_m4_irq_ticket {
+	u64 owner_epoch;
+	u64 bus_generation;
+	u64 effects_generation;
+	u64 route_generation;
+	u32 bar_epoch;
+	u32 virq;
+};
+
 struct fwlab_m4_pci_ctx {
 	/* pci_bus::sysdata must point at this object on x86. */
 	struct pci_sysdata sysdata;
@@ -73,9 +82,9 @@ struct fwlab_m4_pci_ctx {
 	struct fwnode_handle *msi_fwnode;
 	struct irq_work irq_work;
 	unsigned int pending_virq;
-	u64 irq_generation;
-	u64 irq_owner_epoch;
-	u32 irq_epoch;
+	struct fwlab_m4_irq_ticket irq_ticket;
+	u64 effects_generation;
+	u64 route_generation;
 	bool irq_pending;
 	bool effects_open;
 	u64 owner_epoch;
@@ -94,7 +103,11 @@ struct fwlab_m4_pci_ctx {
 	bool mem_window_inserted;
 };
 
-void fwlab_m4_raise_msix(struct fwlab_m4_pci_ctx *ctx);
+int fwlab_m4_prepare_msix(struct fwlab_m4_pci_ctx *ctx, u64 owner_epoch,
+			  u64 bus_generation, u32 bar_epoch,
+			  struct fwlab_m4_irq_ticket *ticket);
+int fwlab_m4_raise_msix(struct fwlab_m4_pci_ctx *ctx,
+			const struct fwlab_m4_irq_ticket *ticket);
 void fwlab_m4_flush_msix(struct fwlab_m4_pci_ctx *ctx);
 void fwlab_m4_clear_msix(struct fwlab_m4_pci_ctx *ctx);
 void fwlab_m4_close_effects(struct fwlab_m4_pci_ctx *ctx);

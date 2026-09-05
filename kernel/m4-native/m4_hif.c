@@ -14,6 +14,7 @@
 #include "m4_internal.h"
 #include "fwlab/unstable/m4_native.h"
 #include "fwlab/unstable/m4_owner_native.h"
+#include "fwlab/unstable/m4_canary_native.h"
 
 #define NATIVE_DEPTH 32U
 #define NATIVE_QUEUES 2U
@@ -142,6 +143,14 @@ struct fwlab_m4_hif {
 	struct fwlab_m4_owner_message grant_key;
 	struct fwlab_m4_owner_message grant_result;
 	struct fwlab_m4_domain_identity owner_domain;
+	struct {
+		struct fwlab_m4_native_message dma, publication;
+		struct fwlab_m4_mapping mapping;
+		struct fwlab_m4_irq_ticket irq;
+		u64 cq_iova, owner_epoch, new_origin;
+		u32 flags;
+		bool armed, hold;
+	} canary;
 	bool registered;
 	bool opened;
 	bool attached;
@@ -356,6 +365,8 @@ static int native_enable(struct fwlab_m4_hif *hif, u32 cc)
 	u16 command;
 	int ret;
 
+	if (hif->pci->effects_generation == U64_MAX)
+		return -EOVERFLOW;
 	if ((cc & ~CC_SHUTDOWN) != 0x00460001 ||
 	    (aqa & 0xf000f000) || hif->faulted)
 		return -EINVAL;
@@ -621,6 +632,24 @@ static int native_shape(struct fwlab_m4_hif *hif,
 	request->mappings = count;
 	request->dma_state = FWLAB_M4_NATIVE_DMA_RESERVED;
 	request->shaped = true;
+	if (hif->canary.armed && !hif->canary.flags && request->sqid == 0 &&
+	    request->sqe[0] == 6 && request->direction == 2 && request->bytes == PAGE_SIZE) {
+		struct fwlab_m4_native_message *old = &hif->canary.dma;
+		memset(old, 0, sizeof(*old));
+		old->version = FWLAB_M4_NATIVE_VERSION;
+		old->size = sizeof(*old);
+		old->operation = FWLAB_M4_NATIVE_DMA;
+		old->function_nonce = hif->function_nonce;
+		old->origin_uid = request->uid;
+		old->controller_epoch = request->epoch;
+		old->authority_uid = request->authority_uid;
+		old->dma_uid = request->dma_uid;
+		old->bytes = request->bytes;
+		old->direction = request->direction;
+		hif->canary.mapping = request->data_mapping[0];
+		hif->canary.owner_epoch = request->owner_epoch;
+		hif->canary.flags = 1;
+	}
 result:
 	message->authority_uid = request->authority_uid;
 	message->dma_uid = request->dma_uid;
@@ -765,6 +794,7 @@ static int native_publish(struct fwlab_m4_hif *hif,
 			  struct fwlab_m4_native_message *message, bool query)
 {
 	struct native_queue *cq;
+	struct fwlab_m4_irq_ticket irq;
 	u8 bytes[16] = {};
 	u16 status;
 	int ret;
@@ -808,6 +838,10 @@ static int native_publish(struct fwlab_m4_hif *hif,
 	cq = &hif->cq[hif->sq[request->sqid].cqid];
 	if (!cq->valid || !cq->pending)
 		return -EINVAL;
+	ret = fwlab_m4_prepare_msix(hif->pci, request->owner_epoch,
+		request->bus_generation, hif->seen_flr_epoch, &irq);
+	if (ret)
+		return ret;
 	request->completion_uid = message->completion_uid;
 	memcpy(request->completion, bytes, sizeof(bytes));
 	put_unaligned_le16(status | cq->phase, bytes + 14);
@@ -830,7 +864,16 @@ static int native_publish(struct fwlab_m4_hif *hif,
 		cq->phase ^= 1;
 	}
 	wmb();
-	fwlab_m4_raise_msix(hif->pci);
+	(void)fwlab_m4_raise_msix(hif->pci, &irq);
+	if (hif->canary.armed && hif->canary.flags == 1 &&
+	    request->uid == hif->canary.dma.origin_uid) {
+		hif->canary.publication = *message;
+		hif->canary.publication.operation = FWLAB_M4_NATIVE_PUBLISH;
+		hif->canary.cq_iova = cq->mapping.iova;
+		hif->canary.irq = irq;
+		hif->canary.flags = 7;
+		hif->canary.armed = false;
+	}
 	message->publication = request->publication;
 	return 0;
 }
@@ -1180,11 +1223,113 @@ static int native_owner_exchange(struct fwlab_m4_hif *hif,
 	return -EINVAL;
 }
 
+static noinline_for_stack int native_canary_exchange(struct fwlab_m4_hif *hif,
+				  struct fwlab_m4_canary_message *message)
+{
+	struct native_request *new_request = NULL;
+	u32 index;
+
+	if (!hif->attached || message->function_nonce != hif->function_nonce)
+		return -ESTALE;
+	if (message->operation == FWLAB_M4_CANARY_ARM) {
+		if (hif->canary.armed || hif->canary.hold)
+			return -EBUSY;
+		memset(&hif->canary, 0, sizeof(hif->canary));
+		hif->canary.armed = true;
+	} else if (message->operation == FWLAB_M4_CANARY_HOLD) {
+		if (hif->canary.flags != 7 || hif->canary.owner_epoch == hif->pci->owner_epoch)
+			return -ESTALE;
+		hif->canary.hold = true;
+	} else if (message->operation == FWLAB_M4_CANARY_HELD) {
+		new_request = native_find(hif, message->origin_uid, message->controller_epoch);
+		if (!hif->canary.hold || !new_request || new_request->sqid ||
+		    !new_request->shaped || new_request->bytes != PAGE_SIZE || new_request->direction != 2)
+			return -ESTALE;
+		hif->canary.new_origin = new_request->uid;
+	} else if (message->operation == FWLAB_M4_CANARY_RELEASE) {
+		hif->canary.hold = false;
+	} else if (message->operation == FWLAB_M4_CANARY_DISARM) {
+		memset(&hif->canary, 0, sizeof(hif->canary));
+	} else if (message->operation != FWLAB_M4_CANARY_QUERY &&
+		   message->operation != FWLAB_M4_CANARY_PROBE) {
+		return -EINVAL;
+	}
+	for (index = 0; index < NATIVE_DEPTH; index++)
+		if (hif->request[index].active && hif->request[index].uid == hif->canary.new_origin)
+			new_request = &hif->request[index];
+	message->flags = hif->canary.flags;
+	message->held = new_request && hif->canary.hold;
+	message->old_origin = hif->canary.dma.origin_uid;
+	message->old_owner_epoch = hif->canary.owner_epoch;
+	message->old_controller = hif->canary.dma.controller_epoch;
+	message->old_domain = hif->canary.mapping.domain_nonce;
+	message->old_data_iova = hif->canary.mapping.iova;
+	message->old_cq_iova = hif->canary.cq_iova;
+	message->old_completion_uid = hif->canary.publication.completion_uid;
+	message->old_route_generation = hif->canary.irq.route_generation;
+	message->old_virq = hif->canary.irq.virq;
+	if (new_request) {
+		struct fwlab_m4_irq_ticket irq;
+		message->new_origin = new_request->uid;
+		message->new_owner_epoch = new_request->owner_epoch;
+		message->new_controller = new_request->epoch;
+		message->new_domain = new_request->data_mapping[0].domain_nonce;
+		message->new_data_iova = new_request->data_mapping[0].iova;
+		message->new_cq_iova = hif->cq[0].mapping.iova;
+		if (!fwlab_m4_prepare_msix(hif->pci, new_request->owner_epoch,
+			new_request->bus_generation, hif->seen_flr_epoch, &irq)) {
+			message->new_route_generation = irq.route_generation;
+			message->new_virq = irq.virq;
+		}
+	}
+	if (message->operation == FWLAB_M4_CANARY_PROBE) {
+		struct fwlab_m4_native_message replay = hif->canary.dma;
+		struct native_guard context;
+		struct fwlab_m4_copy_guard guard;
+		u8 *bytes;
+
+		if (!new_request || !hif->canary.hold || hif->canary.flags != 7 ||
+		    new_request->owner_epoch == hif->canary.owner_epoch ||
+		    message->old_data_iova != message->new_data_iova ||
+		    message->old_cq_iova != message->new_cq_iova)
+			return -EINVAL;
+		bytes = kmalloc(PAGE_SIZE, GFP_KERNEL);
+		if (!bytes)
+			return -ENOMEM;
+		memset(bytes, 0x3c, PAGE_SIZE);
+		replay.data_pointer = message->data_pointer;
+		message->dma_result = native_exchange(hif, &replay);
+		context = (struct native_guard){ hif, new_request->bus_generation,
+			new_request->epoch, new_request->owner_epoch };
+		guard = (struct fwlab_m4_copy_guard){ &hif->pci->config_lock,
+			native_access_locked, &context };
+		message->mapping_result = fwlab_m4_mapping_copy(&hif->pci->pdev->dev,
+			&hif->canary.mapping, 0, bytes, PAGE_SIZE, &guard);
+		replay = hif->canary.publication;
+		message->publication_result = native_exchange(hif, &replay);
+		message->irq_result = fwlab_m4_raise_msix(hif->pci, &hif->canary.irq);
+		kfree(bytes);
+	}
+	return 0;
+}
+
 static long native_ioctl(struct file *file, unsigned int command, unsigned long arg)
 {
 	struct fwlab_m4_hif *hif = file->private_data;
 	struct fwlab_m4_native_message message;
 
+	if (command == FWLAB_M4_CANARY_EXCHANGE) {
+		struct fwlab_m4_canary_message canary;
+		if (copy_from_user(&canary, (void __user *)arg, sizeof(canary)))
+			return -EFAULT;
+		if (canary.version != FWLAB_M4_CANARY_VERSION || canary.size != sizeof(canary) ||
+		    memchr_inv(canary.reserved, 0, sizeof(canary.reserved)))
+			return -EINVAL;
+		mutex_lock(&hif->lock);
+		canary.result = hif->stopped ? -ENODEV : native_canary_exchange(hif, &canary);
+		mutex_unlock(&hif->lock);
+		return copy_to_user((void __user *)arg, &canary, sizeof(canary)) ? -EFAULT : 0;
+	}
 	if (command == FWLAB_M4_OWNER_EXCHANGE) {
 		struct fwlab_m4_owner_message owner;
 		u32 operation;
@@ -1272,6 +1417,7 @@ int fwlab_m4_hif_create(struct fwlab_m4_pci_ctx *pci, struct fwlab_m4_hif **out)
 	pci->owner_epoch = 1;
 	pci->owner_kind = 1;
 	pci->owner_phase = FWLAB_M4_OWNER_OWNED;
+	pci->effects_generation = 1;
 	hif->seen_flr_epoch = pci->bar_epoch;
 	hif->requested_flr_epoch = pci->bar_epoch;
 	native_registers_init(hif);

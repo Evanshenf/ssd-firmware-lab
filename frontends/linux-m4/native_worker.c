@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -259,6 +260,47 @@ static int publication_observe(struct native_context *context,
     return 1;
 }
 
+int native_canary_control(struct native_context *context,
+                          struct fwlab_m4_canary_message *message)
+{
+    uint32_t operation = message->operation;
+    int result;
+
+    message->version = FWLAB_M4_CANARY_VERSION;
+    message->size = (uint32_t)sizeof(*message);
+    message->function_nonce = context->function_nonce;
+    message->result = INT32_MIN;
+    memset(context->canary.probe_bytes, 0x3c, sizeof(context->canary.probe_bytes));
+    message->data_pointer = (uintptr_t)context->canary.probe_bytes;
+    result = ioctl(context->descriptor, FWLAB_M4_CANARY_EXCHANGE, message);
+    if (result < 0 || message->result)
+        return -1;
+    if (operation == FWLAB_M4_CANARY_ARM) {
+        memset(&context->canary, 0, sizeof(context->canary));
+        context->canary.capture = 1;
+    } else if (operation == FWLAB_M4_CANARY_HOLD) {
+        if (!context->canary.saved)
+            return -1;
+        context->canary.hold = 1;
+        context->canary.held_origin = 0;
+    } else if (operation == FWLAB_M4_CANARY_RELEASE) {
+        context->canary.hold = 0;
+    } else if (operation == FWLAB_M4_CANARY_DISARM) {
+        memset(&context->canary, 0, sizeof(context->canary));
+    }
+    if (operation == FWLAB_M4_CANARY_PROBE) {
+        if (!context->runtime || !context->canary.saved || !context->canary.held_origin)
+            return -1;
+        message->firmware_lease_result = (int32_t)j0_runtime_publication_finish(
+            context->runtime, &context->canary.ticket, &context->canary.lease,
+            FWLAB_SPINE_PUBLICATION_V1_COMMITTED);
+    }
+    message->old_completion_uid = context->canary.saved ? context->canary.lease.lease_uid : 0;
+    message->new_completion_uid = context->canary.new_lease_uid;
+    message->data_pointer = 0;
+    return 0;
+}
+
 static int finish_commands(struct native_context *context, int closing)
 {
     uint32_t index;
@@ -279,6 +321,28 @@ static int finish_commands(struct native_context *context, int closing)
             if (result != FWLAB_SPINE_V0_OK)
                 return 0;
             slot->completion_acquired = 1;
+            if (context->canary.capture && !context->canary.saved &&
+                !slot->capture.queue_id && slot->command.opcode == 6 && slot->bytes == 4096) {
+                context->canary.ticket = slot->ticket;
+                context->canary.lease = slot->completion;
+                context->canary.saved = 1;
+                context->canary.capture = 0;
+            }
+        }
+        if (!closing && context->canary.hold && !slot->capture.queue_id &&
+            slot->command.opcode == 6 && slot->bytes == 4096) {
+            if (!context->canary.held_origin) {
+                struct fwlab_m4_canary_message held = { 0 };
+                held.operation = FWLAB_M4_CANARY_HELD;
+                held.origin_uid = slot->capture.origin_uid;
+                held.controller_epoch = slot->capture.controller_epoch;
+                if (native_canary_control(context, &held))
+                    return 0;
+                context->canary.held_origin = slot->capture.origin_uid;
+                context->canary.new_lease_uid = slot->completion.lease_uid;
+            }
+            if (context->canary.held_origin == slot->capture.origin_uid)
+                continue;
         }
         if (!slot->publication_known && !publication_observe(context, slot, closing))
             return 0;

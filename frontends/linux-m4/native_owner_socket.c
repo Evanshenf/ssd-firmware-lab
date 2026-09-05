@@ -100,6 +100,11 @@ static int handle_request(struct native_owner_server *server)
     case NATIVE_OWNER_GRANT_QUERY:
         result = ops->grant_query(owner, &request.grant_key, &response.grant_status);
         break;
+    case NATIVE_OWNER_CANARY:
+        response.canary = request.canary;
+        result = native_canary_control(owner->native, &response.canary) == 0
+                     ? FWLAB_SPINE_V0_OK : FWLAB_SPINE_V0_INVALID;
+        break;
     default:
         result = FWLAB_SPINE_V0_INVALID;
         break;

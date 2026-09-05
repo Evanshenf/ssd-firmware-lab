@@ -1,8 +1,9 @@
 /* SPDX-FileCopyrightText: 2026 Evanshenf */
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-/* One bounded native journey. No firmware symbols or synthetic media model
- * are linked here: every operation uses the installed Linux nvme driver. */
+/* Bounded native/owner journeys use the installed Linux nvme driver. The J3
+ * case additionally uses a literal VFIO Admin-queue producer. Neither path
+ * links a firmware executor or a synthetic media model into this client. */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
@@ -25,6 +26,7 @@
 
 struct native_case { uint32_t lba, bytes, offset; uint8_t seed; };
 int native_owner_host_journey(const char *directory, const char *bdf);
+int native_owner_stale_journey(const char *directory, const char *bdf);
 int native_owner_qemu_journey(const char *directory, const char *bdf,
                               const char *kernel, const char *initrd, const char *workdir, unsigned cut);
 int native_owner_postkill_journey(const char *directory, const char *bdf,
@@ -338,6 +340,8 @@ int main(int argc, char **argv)
         return native_owner_postkill_journey(argv[2], argv[3], argv[4], argv[5], argv[6]);
     if (argc == 4 && !strcmp(argv[1], "owner-host"))
         return native_owner_host_journey(argv[2], argv[3]);
+    if (argc == 4 && !strcmp(argv[1], "owner-stale"))
+        return native_owner_stale_journey(argv[2], argv[3]);
     if (argc == 4 && strlen(argv[1]) == 4 && !strncmp(argv[1], "cut", 3) &&
         argv[1][3] >= '1' && argv[1][3] <= '3')
         cut = (uint32_t)(argv[1][3] - '0');

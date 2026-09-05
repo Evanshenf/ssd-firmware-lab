@@ -3,6 +3,7 @@
 
 #define _GNU_SOURCE
 #include "../native_owner_rpc.h"
+#include "vfio_epoch.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -493,5 +494,159 @@ int native_owner_postkill_journey(const char *directory, const char *bdf,
 done:
     if (control >= 0) close(control);
     if (result) fputs("post-grant coordinator kill recovery failed\n", stderr);
+    return result;
+}
+
+static int canary_call(int control, uint32_t operation,
+                       struct fwlab_m4_canary_message *result)
+{
+    struct native_owner_packet packet = { 0 };
+    packet.operation = NATIVE_OWNER_CANARY;
+    packet.canary.operation = operation;
+    if (packet_call(control, &packet) || packet.canary.result) return 0;
+    *result = packet.canary;
+    return 1;
+}
+
+int native_owner_stale_journey(const char *directory, const char *bdf)
+{
+    struct sockaddr_un address;
+    struct native_owner_packet packet, observed;
+    struct fwlab_owner_stable_identity_v0 stable;
+    struct fwlab_owner_revoke_status_v0 revoked;
+    struct fwlab_m4_canary_message canary;
+    struct j3_vfio_epoch old, fresh;
+    uint8_t old_snapshot[J3_VFIO_MEMORY_BYTES], fresh_snapshot[J3_VFIO_MEMORY_BYTES];
+    const uint8_t empty_cqe[16] = { 0 };
+    char pci_path[128], resolved[PATH_MAX];
+    unsigned domain, bus, slot, function, iteration;
+    int used = 0, control = -1, old_irq = -1, reused_irq = -1, bound = 0, result = 1;
+    const char *stage = "identity";
+
+    j3_vfio_init(&old);
+    j3_vfio_init(&fresh);
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    if (sscanf(bdf, "%4x:%2x:%2x.%1x%n", &domain, &bus, &slot, &function, &used) != 4 ||
+        bdf[used] || domain < 0x7000 || domain > 0x7fff || bus || slot || function) return 1;
+    snprintf(pci_path, sizeof(pci_path), "/sys/bus/pci/devices/%s", bdf);
+    if (!realpath(pci_path, resolved) || !strstr(resolved, "/ssd_fwlab_native_pci/")) return 1;
+    memset(&address, 0, sizeof(address));
+    address.sun_family = AF_UNIX;
+    if (snprintf(address.sun_path, sizeof(address.sun_path), "%s/owner.sock", directory) >=
+        (int)sizeof(address.sun_path)) return 1;
+    control = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+    if (control < 0 || connect(control, (struct sockaddr *)&address, sizeof(address))) goto done;
+    memset(&packet, 0, sizeof(packet));
+    packet.operation = NATIVE_OWNER_OBSERVE;
+    if (packet_call(control, &packet)) goto done;
+    stable = packet.stable;
+    if (packet.current.phase == FWLAB_OWNER_V0_OWNED) {
+        /* No currently bound driver may be displaced by this fixed experiment. */
+        char driver[160];
+        struct stat st;
+        snprintf(driver, sizeof(driver), "/sys/bus/pci/devices/%s/driver", bdf);
+        if (!lstat(driver, &st) || errno != ENOENT ||
+            !revoke_and_drain(control, client_uid(), &observed, &revoked)) goto done;
+    } else if (packet.current.phase == FWLAB_OWNER_V0_NO_OWNER &&
+               packet.revoke_status.certificate_valid) {
+        revoked = packet.revoke_status;
+    } else goto done;
+
+    stage = "first VFIO attachment";
+    if (!bind_driver(bdf, "vfio-pci")) goto done;
+    bound = 1;
+    if (!j3_vfio_open(&old, bdf, -1) ||
+        !grant_owner(control, FWLAB_OWNER_V0_VFIO, &revoked, &stable) ||
+        !canary_call(control, FWLAB_M4_CANARY_ARM, &canary)) goto done;
+    stage = "first real Identify";
+    if (!j3_vfio_identify(&old, 0x41) || !j3_vfio_complete(&old, 0x41) ||
+        !j3_vfio_quiet(&old, -1) ||
+        !canary_call(control, FWLAB_M4_CANARY_QUERY, &canary) || canary.flags != 7 ||
+        !canary.old_origin || !canary.old_completion_uid || !canary.old_route_generation)
+        goto done;
+    printf("J3_OLD_CAPTURE origin=%" PRIu64 " owner=%" PRIu64 " completion=%" PRIu64
+           " route=%" PRIu64 " eventfd=%d Identify=exact\n",
+           (uint64_t)canary.old_origin, (uint64_t)canary.old_owner_epoch,
+           (uint64_t)canary.old_completion_uid, (uint64_t)canary.old_route_generation, old.irq);
+    reused_irq = old.irq;
+    old_irq = fcntl(old.irq, F_DUPFD_CLOEXEC, 128);
+    if (old_irq < 0) goto done;
+    memcpy(old_snapshot, old.memory, sizeof(old_snapshot));
+    stage = "old revoke and detach";
+    if (!revoke_and_drain(control, client_uid(), &observed, &revoked) ||
+        !j3_vfio_close(&old)) goto done;
+    stage = "second VFIO attachment";
+    if (!j3_vfio_open(&fresh, bdf, reused_irq) || fresh.memory == old.memory ||
+        !grant_owner(control, FWLAB_OWNER_V0_VFIO, &revoked, &stable) ||
+        !canary_call(control, FWLAB_M4_CANARY_HOLD, &canary)) goto done;
+    stage = "second real Identify held before publication";
+    if (!j3_vfio_identify(&fresh, 0x42)) goto done;
+    for (iteration = 0; iteration < 4000; ++iteration) {
+        if (!canary_call(control, FWLAB_M4_CANARY_QUERY, &canary)) goto done;
+        if (canary.held) break;
+        usleep(1000);
+    }
+    if (!canary.held || !j3_vfio_data_valid(&fresh) ||
+        memcmp(fresh.memory + 4096, empty_cqe, sizeof(empty_cqe)) ||
+        !j3_vfio_quiet(&fresh, old_irq) ||
+        memcmp(old.memory, old_snapshot, sizeof(old_snapshot))) goto done;
+    memcpy(fresh_snapshot, fresh.memory, sizeof(fresh_snapshot));
+    stage = "four stale production entrypoints";
+    if (!canary_call(control, FWLAB_M4_CANARY_PROBE, &canary) ||
+        canary.dma_result != -ESTALE || canary.mapping_result != -ESTALE ||
+        canary.publication_result != -ESTALE || canary.irq_result != -ESTALE ||
+        canary.firmware_lease_result != FWLAB_SPINE_V0_STALE ||
+        canary.old_owner_epoch >= canary.new_owner_epoch ||
+        canary.old_controller >= canary.new_controller ||
+        canary.old_domain == canary.new_domain ||
+        canary.old_data_iova != canary.new_data_iova ||
+        canary.new_data_iova != J3_VFIO_IOVA + 8192 ||
+        canary.old_cq_iova != canary.new_cq_iova ||
+        canary.new_cq_iova != J3_VFIO_IOVA + 4096 ||
+        !canary.old_completion_uid || canary.old_completion_uid != canary.new_completion_uid ||
+        canary.old_route_generation >= canary.new_route_generation ||
+        memcmp(fresh.memory, fresh_snapshot, sizeof(fresh_snapshot)) ||
+        memcmp(old.memory, old_snapshot, sizeof(old_snapshot)) ||
+        !j3_vfio_quiet(&fresh, old_irq)) goto done;
+    printf("J3_STALE_REJECTED dma=%d map=%d publication=%d firmware_lease=%d irq=%d "
+           "old_owner=%" PRIu64 " new_owner=%" PRIu64 " old_domain=%" PRIu64
+           " new_domain=%" PRIu64 " reused_completion=%" PRIu64 " old_route=%" PRIu64
+           " new_route=%" PRIu64 " eventfd=%d vector=0 CQ_slot=0 bytes=unchanged\n",
+           canary.dma_result, canary.mapping_result, canary.publication_result,
+           canary.firmware_lease_result, canary.irq_result,
+           (uint64_t)canary.old_owner_epoch, (uint64_t)canary.new_owner_epoch,
+           (uint64_t)canary.old_domain, (uint64_t)canary.new_domain,
+           (uint64_t)canary.new_completion_uid, (uint64_t)canary.old_route_generation,
+           (uint64_t)canary.new_route_generation, fresh.irq);
+    stage = "current positive completion";
+    if (!canary_call(control, FWLAB_M4_CANARY_RELEASE, &canary) ||
+        !j3_vfio_complete(&fresh, 0x42) || !j3_vfio_quiet(&fresh, old_irq) ||
+        memcmp(old.memory, old_snapshot, sizeof(old_snapshot))) goto done;
+    stage = "final zero and cleanup";
+    if (!revoke_and_drain(control, client_uid(), &observed, &revoked) ||
+        memcmp(&observed.stable, &stable, sizeof(stable)) ||
+        !j3_vfio_close(&fresh) || !sysfs_write(bdf, "driver/unbind", bdf)) goto done;
+    bound = 0;
+    if (!canary_call(control, FWLAB_M4_CANARY_DISARM, &canary)) goto done;
+    printf("J3_FOUR_AUTHORITY_PASS function=%" PRIu64 " cases=4 current_Identify=exact "
+           "current_CQE=exact current_IRQ=1 old_IRQ=0 cleanup=NO_OWNER\n",
+           stable.function_instance_nonce);
+    result = 0;
+done:
+    if (result) {
+        fprintf(stderr, "J3 failed stage=%s errno=%d\n", stage, errno);
+        if (control >= 0) {
+            memset(&packet, 0, sizeof(packet));
+            packet.operation = NATIVE_OWNER_OBSERVE;
+            if (!packet_call(control, &packet) && packet.current.phase == FWLAB_OWNER_V0_OWNED)
+                (void)revoke_and_drain(control, client_uid(), &observed, &revoked);
+        }
+    }
+    if (!j3_vfio_close(&fresh) || !j3_vfio_close(&old)) result = 1;
+    if (bound && !sysfs_write(bdf, "driver/unbind", bdf)) result = 1;
+    if (old_irq >= 0) close(old_irq);
+    if (control >= 0) close(control);
+    j3_vfio_memory_free(&fresh);
+    j3_vfio_memory_free(&old);
     return result;
 }

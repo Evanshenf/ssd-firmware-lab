@@ -37,11 +37,11 @@ worker:
 
 native-io:
 	mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_native_io.c tests/owner_journey.c -o build/j1_native_io
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_native_io.c tests/owner_journey.c tests/vfio_epoch.c -o build/j1_native_io
 
 native-io-static:
 	mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) -static tests/test_native_io.c tests/owner_journey.c -o build/j1_native_io_static
+	$(CC) $(CPPFLAGS) $(CFLAGS) -static tests/test_native_io.c tests/owner_journey.c tests/vfio_epoch.c -o build/j1_native_io_static
 
 check-runtime:
 	mkdir -p build

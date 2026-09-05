@@ -38,6 +38,23 @@ module_param(bar_size, ullong, 0444);
 MODULE_PARM_DESC(bar_size, "Boot-reserved physical BAR0 size");
 
 
+static bool fwlab_m4_irq_valid_locked(struct fwlab_m4_pci_ctx *ctx,
+				      const struct fwlab_m4_irq_ticket *ticket)
+{
+	u16 command = get_unaligned_le16(&ctx->config[PCI_COMMAND]);
+
+	return ctx->effects_open && ctx->owner_phase == FWLAB_M4_OWNER_OWNED &&
+	       ticket->owner_epoch == ctx->owner_epoch &&
+	       ticket->bus_generation == ctx->access_generation &&
+	       ticket->effects_generation == ctx->effects_generation &&
+	       ticket->route_generation == ctx->route_generation &&
+	       ticket->bar_epoch == ctx->bar_epoch &&
+	       (command & (PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY)) ==
+		       (PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY) &&
+	       ctx->pdev && ctx->pdev->msix_enabled && ticket->virq &&
+	       msi_get_virq(&ctx->pdev->dev, 0) == ticket->virq;
+}
+
 static void fwlab_m4_irq_work(struct irq_work *work)
 {
 	struct fwlab_m4_pci_ctx *ctx = container_of(
@@ -46,8 +63,7 @@ static void fwlab_m4_irq_work(struct irq_work *work)
 	unsigned int virq;
 
 	spin_lock_irqsave(&ctx->config_lock, flags);
-	virq = ctx->effects_open && ctx->owner_phase == FWLAB_M4_OWNER_OWNED &&
-		ctx->irq_owner_epoch == ctx->owner_epoch ? ctx->pending_virq : 0;
+	virq = fwlab_m4_irq_valid_locked(ctx, &ctx->irq_ticket) ? ctx->pending_virq : 0;
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
 
 	if (virq) {
@@ -60,7 +76,8 @@ static void fwlab_m4_irq_work(struct irq_work *work)
 	}
 }
 
-static void fwlab_m4_update_msix(struct fwlab_m4_pci_ctx *ctx, bool raised)
+static int fwlab_m4_update_msix(struct fwlab_m4_pci_ctx *ctx,
+			       const struct fwlab_m4_irq_ticket *ticket)
 {
 	unsigned long flags;
 	unsigned int virq = 0;
@@ -68,17 +85,15 @@ static void fwlab_m4_update_msix(struct fwlab_m4_pci_ctx *ctx, bool raised)
 	u16 msix_flags;
 
 	spin_lock_irqsave(&ctx->config_lock, flags);
-	if (raised) {
-		ctx->irq_pending = ctx->effects_open &&
-			ctx->owner_phase == FWLAB_M4_OWNER_OWNED;
-		ctx->irq_generation = ctx->access_generation;
-		ctx->irq_epoch = ctx->bar_epoch;
-		ctx->irq_owner_epoch = ctx->owner_epoch;
+	if (ticket) {
+		if (!fwlab_m4_irq_valid_locked(ctx, ticket)) {
+			spin_unlock_irqrestore(&ctx->config_lock, flags);
+			return -ESTALE;
+		}
+		ctx->irq_pending = true;
+		ctx->irq_ticket = *ticket;
 	}
-	if (!ctx->effects_open || ctx->owner_phase != FWLAB_M4_OWNER_OWNED ||
-	    ctx->irq_owner_epoch != ctx->owner_epoch ||
-	    ctx->irq_generation != ctx->access_generation ||
-	    ctx->irq_epoch != ctx->bar_epoch)
+	if (!fwlab_m4_irq_valid_locked(ctx, &ctx->irq_ticket))
 		ctx->irq_pending = false;
 	msix_flags = get_unaligned_le16(
 		&ctx->config[FWLAB_M4_MSIX_CAP + PCI_MSIX_FLAGS]);
@@ -88,7 +103,7 @@ static void fwlab_m4_update_msix(struct fwlab_m4_pci_ctx *ctx, bool raised)
 	    (msix_flags & PCI_MSIX_FLAGS_ENABLE) &&
 	    !(msix_flags & PCI_MSIX_FLAGS_MASKALL) &&
 	    !(vector_ctrl & PCI_MSIX_ENTRY_CTRL_MASKBIT))
-		virq = msi_get_virq(&ctx->pdev->dev, 0);
+		virq = ctx->irq_ticket.virq;
 	if (virq) {
 		ctx->irq_pending = false;
 		WRITE_ONCE(ctx->pending_virq, virq);
@@ -98,16 +113,42 @@ static void fwlab_m4_update_msix(struct fwlab_m4_pci_ctx *ctx, bool raised)
 	if (virq)
 		irq_work_queue(&ctx->irq_work);
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
+	return 0;
 }
 
-void fwlab_m4_raise_msix(struct fwlab_m4_pci_ctx *ctx)
+int fwlab_m4_prepare_msix(struct fwlab_m4_pci_ctx *ctx, u64 owner_epoch,
+			  u64 bus_generation, u32 bar_epoch,
+			  struct fwlab_m4_irq_ticket *ticket)
 {
-	fwlab_m4_update_msix(ctx, true);
+	struct fwlab_m4_irq_ticket candidate = {};
+	unsigned long flags;
+	bool valid;
+
+	if (!ticket)
+		return -EINVAL;
+	spin_lock_irqsave(&ctx->config_lock, flags);
+	candidate.owner_epoch = owner_epoch;
+	candidate.bus_generation = bus_generation;
+	candidate.bar_epoch = bar_epoch;
+	candidate.effects_generation = ctx->effects_generation;
+	candidate.route_generation = ctx->route_generation;
+	candidate.virq = ctx->pdev ? msi_get_virq(&ctx->pdev->dev, 0) : 0;
+	valid = fwlab_m4_irq_valid_locked(ctx, &candidate);
+	if (valid)
+		*ticket = candidate;
+	spin_unlock_irqrestore(&ctx->config_lock, flags);
+	return valid ? 0 : -ESTALE;
+}
+
+int fwlab_m4_raise_msix(struct fwlab_m4_pci_ctx *ctx,
+			const struct fwlab_m4_irq_ticket *ticket)
+{
+	return ticket ? fwlab_m4_update_msix(ctx, ticket) : -EINVAL;
 }
 
 void fwlab_m4_flush_msix(struct fwlab_m4_pci_ctx *ctx)
 {
-	fwlab_m4_update_msix(ctx, false);
+	(void)fwlab_m4_update_msix(ctx, NULL);
 }
 
 void fwlab_m4_clear_msix(struct fwlab_m4_pci_ctx *ctx)
@@ -116,6 +157,7 @@ void fwlab_m4_clear_msix(struct fwlab_m4_pci_ctx *ctx)
 
 	spin_lock_irqsave(&ctx->config_lock, flags);
 	ctx->irq_pending = false;
+	memset(&ctx->irq_ticket, 0, sizeof(ctx->irq_ticket));
 	WRITE_ONCE(ctx->pending_virq, 0);
 	if (ctx->bar_mapping)
 		writeq(0, ctx->bar_mapping + FWLAB_M4_MSIX_PBA_OFFSET);
@@ -128,6 +170,8 @@ void fwlab_m4_close_effects(struct fwlab_m4_pci_ctx *ctx)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ctx->config_lock, flags);
+	if (ctx->effects_open && ctx->effects_generation != U64_MAX)
+		ctx->effects_generation++;
 	ctx->effects_open = false;
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
 	/* Owner/controller revoke publishes its epoch LP only after any handler
@@ -213,8 +257,17 @@ static int fwlab_m4_irq_domain_alloc(struct irq_domain *domain,
 				     unsigned int nr_irqs, void *arg)
 {
 	unsigned int i;
+	struct fwlab_m4_pci_ctx *ctx = domain->host_data;
+	unsigned long flags;
 
 	(void)arg;
+	spin_lock_irqsave(&ctx->config_lock, flags);
+	if (ctx->route_generation == U64_MAX) {
+		spin_unlock_irqrestore(&ctx->config_lock, flags);
+		return -EOVERFLOW;
+	}
+	ctx->route_generation++;
+	spin_unlock_irqrestore(&ctx->config_lock, flags);
 	for (i = 0; i < nr_irqs; i++) {
 		irq_domain_set_hwirq_and_chip(domain, virq + i, i,
 					      &fwlab_m4_msi_chip,
@@ -229,6 +282,16 @@ static void fwlab_m4_irq_domain_free(struct irq_domain *domain,
 				     unsigned int virq,
 				     unsigned int nr_irqs)
 {
+	struct fwlab_m4_pci_ctx *ctx = domain->host_data;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ctx->config_lock, flags);
+	if (ctx->route_generation != U64_MAX)
+		ctx->route_generation++;
+	ctx->irq_pending = false;
+	ctx->pending_virq = 0;
+	memset(&ctx->irq_ticket, 0, sizeof(ctx->irq_ticket));
+	spin_unlock_irqrestore(&ctx->config_lock, flags);
 	irq_domain_free_irqs_common(domain, virq, nr_irqs);
 }
 

@@ -6,6 +6,7 @@
 
 #include "../headless-j0/j0_internal.h"
 #include "fwlab/unstable/m4_native.h"
+#include "fwlab/unstable/m4_canary_native.h"
 
 #define NATIVE_COMMANDS 32u
 
@@ -71,6 +72,14 @@ struct native_context {
     uint64_t last_nfc_nonce;
     uint32_t last_closed_epoch;
     uint64_t next_runtime_seed;
+    struct {
+        struct fwlab_spine_command_ticket_v0 ticket;
+        struct fwlab_completion_lease_v0 lease;
+        uint64_t held_origin;
+        uint64_t new_lease_uid;
+        uint8_t capture, saved, hold;
+        uint8_t probe_bytes[4096];
+    } canary;
     int descriptor;
     uint8_t closing;
 };
@@ -87,5 +96,7 @@ int native_runtime_create(struct native_context *context,
                           struct native_media *media, int format);
 enum fwlab_spine_result_v0 native_runtime_close_step(
     struct native_context *context, uint32_t budget);
+int native_canary_control(struct native_context *context,
+                          struct fwlab_m4_canary_message *message);
 
 #endif /* FWLAB_LINUX_M4_NATIVE_INTERNAL_H */

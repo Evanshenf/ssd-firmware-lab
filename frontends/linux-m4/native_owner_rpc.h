@@ -5,13 +5,15 @@
 #define FWLAB_NATIVE_OWNER_RPC_H
 
 #include "fwlab/contracts/owner_control_v0.h"
+#include "fwlab/unstable/m4_canary_native.h"
 
 /* Local native-ABI control packet, never a guest or firmware data command. */
-#define NATIVE_OWNER_RPC_VERSION 1u
+#define NATIVE_OWNER_RPC_VERSION 2u
 enum native_owner_rpc_operation {
     NATIVE_OWNER_OBSERVE = 1, NATIVE_OWNER_REVOKE = 2,
     NATIVE_OWNER_REVOKE_QUERY = 3, NATIVE_OWNER_DRAIN = 4,
-    NATIVE_OWNER_GRANT = 5, NATIVE_OWNER_GRANT_QUERY = 6
+    NATIVE_OWNER_GRANT = 5, NATIVE_OWNER_GRANT_QUERY = 6,
+    NATIVE_OWNER_CANARY = 7
 };
 
 struct native_owner_packet {
@@ -26,6 +28,7 @@ struct native_owner_packet {
     struct fwlab_owner_grant_key_v0 grant_key;
     struct fwlab_owner_grant_status_v0 grant_status;
     struct fwlab_owner_step_result_v0 step;
+    struct fwlab_m4_canary_message canary;
 };
 
 #endif /* FWLAB_NATIVE_OWNER_RPC_H */
