@@ -99,12 +99,22 @@ struct j0_host_factory {
     void *context;
 };
 
+/* Construction-time physical media binding. The port context stays live until
+ * runtime finalization; geometry and UUID describe that same media instance. */
+struct j0_media_binding {
+    struct fwlab_nand_media media;
+    struct fwlab_nfc_geometry geometry;
+    uint8_t media_uuid[16];
+};
+
 struct j0_runtime_config {
     uint16_t version;
     uint16_t size;
     uint32_t reserved0;
     uint8_t media_uuid[16];
     struct fwlab_file_nand_v0 *file;
+    /* Select exactly one of the legacy file or an explicit physical binding. */
+    const struct j0_media_binding *media_binding;
     uint32_t media_mode;
     uint32_t generation;
     uint32_t execution_epoch;

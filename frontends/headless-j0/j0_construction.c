@@ -20,14 +20,15 @@ static void *arena_allocate(size_t alignment, size_t size)
     return aligned_alloc(alignment, rounded);
 }
 
-static struct fwlab_nfc_model_config nfc_config(uint32_t budget_profile)
+static struct fwlab_nfc_model_config nfc_config(
+    uint32_t budget_profile, const struct fwlab_nfc_geometry *geometry)
 {
     struct fwlab_nfc_model_config config;
 
     memset(&config, 0, sizeof(config));
     config.version = FWLAB_NFC_CONTRACT_VERSION;
     config.size = (uint16_t)sizeof(config);
-    config.geometry = fwlab_file_nand_v0_geometry();
+    config.geometry = *geometry;
     config.ecc.version = FWLAB_NFC_CONTRACT_VERSION;
     config.ecc.size = (uint16_t)sizeof(config.ecc);
     config.ecc.main_covered_bytes = M3P_PAGE_BYTES;
@@ -142,12 +143,35 @@ static struct fwlab_host_lifecycle_config_v0 lifecycle_config(
     return config;
 }
 
+static int media_binding_valid(const struct j0_media_binding *binding,
+                               const uint8_t media_uuid[16])
+{
+    const struct fwlab_nfc_geometry expected = fwlab_file_nand_v0_geometry();
+    const struct fwlab_nand_media_ops *ops;
+
+    if (binding == NULL || binding->media.context == NULL ||
+        binding->media.ops == NULL ||
+        memcmp(binding->media_uuid, media_uuid, 16) != 0 ||
+        memcmp(&binding->geometry, &expected, sizeof(expected)) != 0) {
+        return 0;
+    }
+    /* This seam selects a substrate, not a larger FTL/namespace profile. */
+    ops = binding->media.ops;
+    return ops->version == FWLAB_NFC_CONTRACT_VERSION &&
+           ops->size == sizeof(*ops) && ops->reserved == 0 &&
+           ops->read_page != NULL && ops->program != NULL &&
+           ops->erase != NULL && ops->mark_runtime_bad != NULL &&
+           ops->hash != NULL;
+}
+
 static int runtime_config_valid(const struct j0_runtime_config *config)
 {
     return config != NULL && config->version == J0_RUNTIME_VERSION &&
            config->size == sizeof(*config) && config->reserved0 == 0 &&
            !j0_bytes_zero(config->media_uuid, sizeof(config->media_uuid)) &&
-           config->file != NULL &&
+           ((config->file != NULL) != (config->media_binding != NULL)) &&
+           (config->media_binding == NULL ||
+            media_binding_valid(config->media_binding, config->media_uuid)) &&
            (config->media_mode == J0_MEDIA_FORMAT ||
             config->media_mode == J0_MEDIA_RECOVER) &&
            config->generation != 0 && config->execution_epoch != 0 &&
@@ -501,6 +525,7 @@ enum fwlab_spine_result_v0 j0_runtime_init(
     struct fwlab_nfc_model_config nfc;
     struct fwlab_nfc_buffer_provider staging;
     struct fwlab_nand_media media;
+    struct fwlab_nfc_geometry geometry;
     struct fwlab_host_lifecycle_config_v0 lifecycle;
     size_t m3p_size;
     size_t nfc_size;
@@ -592,7 +617,10 @@ enum fwlab_spine_result_v0 j0_runtime_init(
     }
 
     m3p = m3p_config(runtime);
-    nfc = nfc_config(config->budget_profile);
+    geometry = config->media_binding != NULL
+                   ? config->media_binding->geometry
+                   : fwlab_file_nand_v0_geometry();
+    nfc = nfc_config(config->budget_profile, &geometry);
     m3p_size = fwlab_m3p_arena_size(&m3p);
     nfc_size = fwlab_nfc_model_arena_size(&nfc);
     runtime->m3p_arena = arena_allocate(fwlab_m3p_arena_alignment(), m3p_size);
@@ -603,7 +631,9 @@ enum fwlab_spine_result_v0 j0_runtime_init(
         goto failed;
     }
     staging = m3p_staging_provider(runtime->m3p_arena);
-    media = fwlab_file_nand_v0_media(config->file);
+    media = config->media_binding != NULL
+                ? config->media_binding->media
+                : fwlab_file_nand_v0_media(config->file);
     if (fwlab_nfc_model_init(
             runtime->nfc_arena, nfc_size, &nfc,
             runtime->nfc_instance_nonce, &staging, &media,
