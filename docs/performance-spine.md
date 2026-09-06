@@ -93,6 +93,44 @@ Actual full-path tests use the explicitly provisioned, capped tmpfs described
 by the scaled FTL documentation. Missing media configuration must not silently
 fall back to a slow system-disk test.
 
+## Measured cost and bounded P1 repair
+
+The existing headless-scale entry now has an opt-in `--cost` mode. It forwards
+the real byte-substrate calls unchanged and reports calls/bytes, NAND commits,
+NFC children and maintenance. It is instrumented diagnosis, not a paired
+throughput-acceptance benchmark. The test uses a fresh small tmpfs image and
+checks SELF, reopen/readback and close; it does not run on an existing image.
+
+| Real path | Before P1 read/write/sync calls | After P1 | Substrate bytes written |
+|---|---:|---:|---:|
+| Aligned 8 KiB Write | 24 / 40 / 20 | 16 / 32 / 20 | 160 KiB |
+| 512 B RMW Write | 21 / 30 / 15 | 15 / 24 / 15 | 120 KiB |
+| Aligned 8 KiB Read | 6 / 0 / 0 | 6 / 0 / 0 | 0 |
+
+These are substrate API counts, not syscall traces. P1 coalesces contiguous
+redo BODY writes and reuses metadata already read and validated in the same
+serialized program operation. It preserves checksums, exact format bytes,
+all five commit barriers, neighboring metadata and partial-write recovery.
+There is no cross-operation metadata cache or disabled integrity check.
+
+A 32 MiB sequential write diagnosis still writes 745119744 substrate bytes,
+with 91365 sync calls and 17 checkpoints. The single x86 observation changed
+from 2.144 to 2.090 seconds; this small unpaired difference does not establish
+a reproducible throughput gain. The amplification remains about 22.21 times.
+The changed path passed actual reopen/readback plus the existing ten real-path
+interruption cases under Clang ASan/UBSan. Direct media tests cover all five
+redo cuts, including an exact interior prefix of a coalesced BODY write.
+
+```sh
+make -C frontends/headless-scale -f ftl.mk check-cost
+```
+
+Use only the documented independently provisioned capped tmpfs. This diagnosis
+does not weaken sync semantics or replace disk persistence qualification.
+The next priority is the retained-parent and within-parent batch mechanism,
+not another sequence of small CRC/syscall tweaks. Native multi-queue remains
+planned, but cannot fix this headless storage amplification.
+
 ## Staged route
 
 | Stage | Deliverable | Boundary |

@@ -5,6 +5,7 @@
 #include "scale_storage.h"
 #include "ftl_scale_internal.h"
 #include "compact_nand.h"
+#include "compact_nand_internal.h"
 #include "fwlab/portable/nvme_codec.h"
 
 #include <fcntl.h>
@@ -510,8 +511,9 @@ static void full_journey(struct fixture *f)
 /* Named process-cut cases share this real fixture; no production observer or
  * synthetic Block/NFC executor is introduced. */
 #include "ftl_cuts.inc"
+#include "ftl_cost.inc"
 
-static void journey(uint32_t mib, int full, int cuts)
+static void journey(uint32_t mib, int full, int cuts, int cost)
 {
     struct fixture f = {0};
     struct fwlab_ftl_scale_status s;
@@ -547,6 +549,10 @@ static void journey(uint32_t mib, int full, int cuts)
     CHECK(media_sequence == 0); /* Construction and starts did not perform IO. */
     wait_ready(&f);
     identify(&f);
+    if (cost) {
+        cost_journey(&f);
+        goto finish;
+    }
     memset(bytes, 0x31, 4096);
     command_profile(&f, J0_PROFILE_C43_P1, 1, 0, 8, bytes, NULL, 0, 0);
     memcpy(expected, bytes, 4096);
@@ -626,8 +632,11 @@ finish:
     medium_report(&f, 1);
     CHECK(unlinkat(f.directory_fd, "nand.bin", 0) == 0);
     CHECK(close(f.directory_fd) == 0 && rmdir(f.directory) == 0);
-    printf("SCALE_FTL_PASS|logical_mib=%u|identify=1|edge=1|range_no_effect=1|rmw3=1|witness=1|gc=1|checkpoint_recycle=1|recovery=1|early_close=1|full=%d|medium=%s\n",
-           mib, full, medium_name(&f));
+    if (cost)
+        puts("SCALE_COST_CLOSED|early_close=1|owned_image_removed=1");
+    else
+        printf("SCALE_FTL_PASS|logical_mib=%u|identify=1|edge=1|range_no_effect=1|rmw3=1|witness=1|gc=1|checkpoint_recycle=1|recovery=1|early_close=1|full=%d|medium=%s\n",
+               mib, full, medium_name(&f));
 }
 
 int main(int argc, char **argv)
@@ -636,9 +645,10 @@ int main(int argc, char **argv)
     int cuts = argc == 2 && strcmp(argv[1], "--cuts") == 0;
     int large = argc == 2 && strcmp(argv[1], "--full-64g") == 0;
     int plan = argc == 2 && strcmp(argv[1], "--plan-64g") == 0;
+    int cost = argc == 2 && strcmp(argv[1], "--cost") == 0;
     CHECK(setvbuf(stdout, NULL, _IOLBF, 0) == 0);
     CHECK(setvbuf(stderr, NULL, _IOLBF, 0) == 0);
-    CHECK(argc == 1 || full || cuts || large || plan);
+    CHECK(argc == 1 || full || cuts || large || plan || cost);
     if (plan) {
         struct fwlab_file_nand_v1_config config = {0};
         config.geometry = geometry(65536);
@@ -648,10 +658,11 @@ int main(int argc, char **argv)
         return 0;
     }
     if (large) {
-        journey(65536, 1, 0);
+        journey(65536, 1, 0, 0);
         return 0;
     }
-    journey(64, full, cuts);
-    journey(256, full, 0);
+    journey(64, full, cuts, cost);
+    if (!cost)
+        journey(256, full, 0, 0);
     return 0;
 }

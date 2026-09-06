@@ -163,17 +163,23 @@ static int read_bytes(struct fwlab_file_nand_v1 *m, uint64_t offset,
     return 1;
 }
 
-static int write_sector(struct fwlab_file_nand_v1 *m, uint64_t offset,
-                        const uint8_t *bytes)
+static int write_sectors(struct fwlab_file_nand_v1 *m, uint64_t offset,
+                         const void *bytes, size_t length)
 {
-    if (offset % FNV1_SECTOR || offset > m->image_bytes ||
-        FNV1_SECTOR > m->image_bytes - offset ||
-        m->io.write(m->io.context, offset, bytes, FNV1_SECTOR) !=
+    if (offset % FNV1_SECTOR || !length || length % FNV1_SECTOR ||
+        offset > m->image_bytes || length > m->image_bytes - offset ||
+        m->io.write(m->io.context, offset, bytes, length) !=
             FWLAB_NFC_API_OK) {
         m->quarantined = 1;
         return 0;
     }
     return 1;
+}
+
+static int write_sector(struct fwlab_file_nand_v1 *m, uint64_t offset,
+                        const uint8_t *bytes)
+{
+    return write_sectors(m, offset, bytes, FNV1_SECTOR);
 }
 
 static int barrier(struct fwlab_file_nand_v1 *m)
@@ -305,11 +311,17 @@ static uint64_t page_sector(const struct fwlab_file_nand_v1 *m, uint32_t id)
     return m->page_metadata_offset + (uint64_t)(id / 16u) * FNV1_SECTOR;
 }
 
+static int block_read_into(struct fwlab_file_nand_v1 *m, uint32_t id,
+                           struct fnv1_block *block, uint8_t *sector)
+{
+    return read_bytes(m, block_sector(m, id), sector, FNV1_SECTOR) &&
+           block_decode(m, sector + (id % 64u) * FNV1_BLOCK_BYTES, id, block);
+}
+
 static int block_read(struct fwlab_file_nand_v1 *m, uint32_t id,
                       struct fnv1_block *block)
 {
-    return read_bytes(m, block_sector(m, id), m->work, FNV1_SECTOR) &&
-           block_decode(m, m->work + (id % 64u) * FNV1_BLOCK_BYTES, id, block);
+    return block_read_into(m, id, block, m->work);
 }
 
 static int install_redo(struct fwlab_file_nand_v1 *m, uint64_t sequence)
@@ -356,13 +368,12 @@ static enum fwlab_nfc_api_result commit_redo(struct fwlab_file_nand_v1 *m)
     digest = hash_bytes(UINT64_C(1469598103934665603), m->work, FNV1_SECTOR);
     if (!write_sector(m, bank, m->work))
         return broken(m);
-    for (i = 0; i < m->redo_count; ++i) {
+    for (i = 0; i < m->redo_count; ++i)
         digest = hash_bytes(digest, m->redo[i], FNV1_SECTOR);
-        if (!write_sector(m, bank + (uint64_t)(i + 1u) * FNV1_SECTOR,
-                          m->redo[i]))
-            return broken(m);
-    }
-    if (!barrier(m))
+    /* Payload sectors are contiguous in memory and in this BODY phase.
+     * The descriptor, seal and all five barriers retain their ordering. */
+    if (!write_sectors(m, bank + FNV1_SECTOR, m->redo,
+                       (size_t)m->redo_count * FNV1_SECTOR) || !barrier(m))
         return broken(m);
     sequence_record(m, FNV1_SEAL, sequence, digest);
     if (!write_sector(m, bank + 4u * FNV1_SECTOR, m->work) || !barrier(m) ||
@@ -517,10 +528,11 @@ enum fwlab_nfc_api_result fnv1_engine_open(
     return FWLAB_NFC_API_OK;
 }
 
-static enum fwlab_nfc_api_result media_read(
+static enum fwlab_nfc_api_result media_read_into(
     void *opaque, const struct fwlab_nfc_ppa *ppa,
     uint8_t *main, uint32_t main_length, uint8_t *oob, uint32_t oob_length,
-    struct fwlab_nand_page_info *page, struct fwlab_nand_block_info *block)
+    struct fwlab_nand_page_info *page, struct fwlab_nand_block_info *block,
+    uint8_t *page_metadata, uint8_t *block_metadata)
 {
     struct fwlab_file_nand_v1 *m = opaque;
     struct fnv1_block b;
@@ -531,7 +543,7 @@ static enum fwlab_nfc_api_result media_read(
         main_length != 4096 || oob_length != 128 ||
         !ppa_ids(m, ppa, &bid, &pid))
         return FWLAB_NFC_API_INVALID_CONTRACT;
-    if (!block_read(m, bid, &b))
+    if (!block_read_into(m, bid, &b, block_metadata))
         return broken(m);
     *block = b.info;
     memset(page, 0, sizeof(*page));
@@ -545,9 +557,9 @@ static enum fwlab_nfc_api_result media_read(
         page->state = FWLAB_NAND_PAGE_TORN;
         return FWLAB_NFC_API_OK;
     }
-    if (!read_bytes(m, page_sector(m, pid), m->work, FNV1_SECTOR))
+    if (!read_bytes(m, page_sector(m, pid), page_metadata, FNV1_SECTOR))
         return broken(m);
-    record = m->work + (pid % 16u) * FNV1_RECORD_BYTES;
+    record = page_metadata + (pid % 16u) * FNV1_RECORD_BYTES;
     if (zero(record, FNV1_RECORD_BYTES)) {
         if (ppa->page < b.info.next_program_page)
             return broken(m);
@@ -587,6 +599,18 @@ static enum fwlab_nfc_api_result media_read(
     return FWLAB_NFC_API_OK;
 }
 
+static enum fwlab_nfc_api_result media_read(
+    void *opaque, const struct fwlab_nfc_ppa *ppa,
+    uint8_t *main, uint32_t main_length, uint8_t *oob, uint32_t oob_length,
+    struct fwlab_nand_page_info *page, struct fwlab_nand_block_info *block)
+{
+    struct fwlab_file_nand_v1 *m = opaque;
+    if (!live(m))
+        return FWLAB_NFC_API_INVALID_CONTRACT;
+    return media_read_into(m, ppa, main, main_length, oob, oob_length,
+                           page, block, m->work, m->work);
+}
+
 static void no_effect(struct fwlab_nand_media_result *result,
                        const struct fwlab_nand_block_info *block)
 {
@@ -619,8 +643,11 @@ static enum fwlab_nfc_api_result media_program(
          integrity != FWLAB_NFC_INTEGRITY_TORN) ||
         !ppa_ids(m, ppa, &bid, &pid))
         return FWLAB_NFC_API_INVALID_CONTRACT;
-    status = media_read(m, ppa, m->redo[0], main_length, old_oob,
-                        oob_length, &page, &b.info);
+    /* The same validated pre-read supplies this operation's postimages.
+     * No metadata survives as a cache across calls or bypasses validation. */
+    status = media_read_into(m, ppa, m->redo[0], main_length, old_oob,
+                             oob_length, &page, &b.info,
+                             m->redo[1], m->redo[2]);
     if (status != FWLAB_NFC_API_OK)
         return status;
     no_effect(result, &b.info);
@@ -648,9 +675,6 @@ static enum fwlab_nfc_api_result media_program(
     m->redo_target[0] = FNV1_HOME_BASE + (uint64_t)pid * FNV1_SECTOR;
     m->redo_target[1] = page_sector(m, pid);
     m->redo_target[2] = block_sector(m, bid);
-    if (!read_bytes(m, m->redo_target[1], m->redo[1], FNV1_SECTOR) ||
-        !read_bytes(m, m->redo_target[2], m->redo[2], FNV1_SECTOR))
-        return broken(m);
     record = m->redo[1] + (pid % 16u) * FNV1_RECORD_BYTES;
     memset(record, 0, FNV1_RECORD_BYTES);
     put32(record, FNV1_PAGE);

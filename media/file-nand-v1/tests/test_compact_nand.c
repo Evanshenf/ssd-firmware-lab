@@ -76,12 +76,16 @@ static enum fwlab_nfc_api_result bytes_write(
         ++f->bank_writes[0];
     if (offset == FNV1_BANK_BASE + FNV1_BANK_BYTES)
         ++f->bank_writes[1];
-    if (f->write_armed && offset == f->fail_offset) {
+    if (f->write_armed && f->fail_offset >= offset &&
+        f->fail_offset - offset < size) {
         if (f->skip != 0) {
             --f->skip;
         } else {
-            CHECK(f->prefix <= size);
-            prefix = f->prefix;
+            /* A coalesced write can contain the selected sector internally.
+             * Persist its exact leading bytes through that sector's prefix. */
+            prefix = (size_t)(f->fail_offset - offset);
+            CHECK(f->prefix <= size - prefix);
+            prefix += f->prefix;
             memcpy(f->working + (size_t)offset, buffer, prefix);
             memcpy(f->durable + (size_t)offset, buffer, prefix);
             f->write_armed = 0;
@@ -449,7 +453,11 @@ static void cut_unsealed(void)
     for (variant = 0; variant < 3; ++variant) {
         struct fixture *f = fixture_new();
         struct fwlab_nand_media_result result;
+        uint8_t body_before[FNV1_MAX_POSTIMAGES * FNV1_SECTOR];
+        uint64_t body;
         program_ok(f, 0, 71);
+        body = next_bank(f) + FNV1_SECTOR;
+        memcpy(body_before, f->durable + (size_t)body, sizeof(body_before));
         if (variant == 0)
             arm_write(f, next_bank(f) + 2u * FNV1_SECTOR, 0, 127);
         else if (variant == 1)
@@ -458,6 +466,13 @@ static void cut_unsealed(void)
             arm_sync(f, 2, 0);
         CHECK(program(f, 0, 1, 72, 4096, 128, FWLAB_NFC_INTEGRITY_COMPLETE,
                       &result) != FWLAB_NFC_API_OK);
+        if (variant == 0) {
+            size_t prefix = FNV1_SECTOR + 127u;
+            CHECK(memcmp(f->durable + (size_t)body, f->arena.redo,
+                         prefix) == 0);
+            CHECK(memcmp(f->durable + (size_t)body + prefix,
+                         body_before + prefix, sizeof(body_before) - prefix) == 0);
+        }
         expect_closed_admission(f);
         reboot(f);
         CHECK(fwlab_file_nand_v1_sequence(f->media) == 1);

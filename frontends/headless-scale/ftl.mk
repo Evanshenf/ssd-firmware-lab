@@ -33,7 +33,7 @@ PROGRAM := $(BUILD)/test_scale_ftl
 CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 	$(BUILD)/frontends/headless-scale/test_crc.o
 CRC_PROGRAM := $(BUILD)/test_crc
-.PHONY: all check check-crc check-full check-cuts plan-64g check-64g
+.PHONY: all check check-crc check-full check-cuts check-cost plan-64g check-64g
 all: $(PROGRAM)
 check: check-crc $(PROGRAM)
 	$(PROGRAM)
@@ -43,6 +43,8 @@ check-full: $(PROGRAM)
 	$(PROGRAM) --full
 check-cuts: $(PROGRAM)
 	$(PROGRAM) --cuts
+check-cost: $(PROGRAM)
+	$(PROGRAM) --cost
 plan-64g: $(PROGRAM)
 	$(PROGRAM) --plan-64g
 check-64g: $(PROGRAM)
