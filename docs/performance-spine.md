@@ -163,6 +163,36 @@ windows, followed by bounded dirty-segment checkpoints and matched measurement.
 Do not silently omit v1's exported digest or assert that byte-cost arithmetic
 proves a 1–3% throughput loss.
 
+## Explicit native CRC build profile
+
+The optional `FWLAB_CRC_NATIVE=1` build uses the build machine's instruction
+set (`-march=native`). The CRC helper selects x86-64 SSE4.2 or little-endian
+ARM CRC when the compiler enables it, otherwise the existing portable table.
+There is no runtime CPU detection or guarantee that a native binary runs on a
+different CPU. Generic and native default build directories are separate; use
+fresh explicit `BUILD` directories when changing compiler/options yourself.
+
+```sh
+make -C frontends/headless-scale -f ftl.mk check-crc-fast
+make -C frontends/headless-scale -f ftl.mk FWLAB_CRC_NATIVE=1 check-crc-fast
+make -C frontends/headless-scale -f ftl.mk FWLAB_CRC_NATIVE=1 check-media-v2-cost
+```
+
+Four independent 1-KiB raw CRC lanes and immutable GF(2) combination preserve
+the exact checksum, unaligned access, complements and four-zero-byte field
+semantics. All eight GCC/Clang generic/native strict/sanitizer runs pass 48635
+cases; native paths additionally check all 1024 shift-table entries. ARM CRC
+execution under local QEMU passed too, but is not native ARM performance data.
+Only the unfrozen FTL-scale and physical-v2 CRC callers select the helper;
+FNV, persistent bytes, synchronization and C3 semantics remain unchanged.
+
+An unpaired x86 native-build observation of the same 8-KiB-QD1 32-MiB workload
+took 0.623 s for Write and 0.171 s for Read, versus the earlier generic v2
+1.072/0.318 s. The native Write remains about 54 MB/s; it retains exactly the
+same 107873088 backend bytes, 54819 syncs and 17 checkpoints. Compiler native
+flags can also affect other generated code: do not attribute every timing
+change exclusively to CRC or treat this as a paired 10-GB/s acceptance result.
+
 ## Staged route
 
 | Stage | Deliverable | Boundary |

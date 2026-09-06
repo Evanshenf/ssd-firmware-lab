@@ -12,7 +12,8 @@ TEST := $(BUILD_DIR)/physical_nand_test
 SOURCES := physical_nand.c physical_nand_codec.c tests/test_physical_nand.c
 HEADERS := physical_nand.h physical_nand_internal.h physical_nand_codec.h \
 	../../include/fwlab/contracts/nand_media.h \
-	../../include/fwlab/portable/nfc_types.h ../../include/fwlab/portable/crc32c.h
+	../../include/fwlab/portable/nfc_types.h ../../include/fwlab/portable/crc32c.h \
+	../../include/fwlab/portable/crc32c_fast.h ../../include/fwlab/portable/crc32c_shift1024.h
 
 .PHONY: all check
 all: $(TEST)

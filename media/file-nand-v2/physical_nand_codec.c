@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 Evanshenf */
 /* SPDX-License-Identifier: BSD-3-Clause */
 #include "physical_nand_codec.h"
-#include "fwlab/portable/crc32c.h"
+#include "fwlab/portable/crc32c_fast.h"
 #include <string.h>
 
 uint16_t fnv2_get16(const uint8_t *p)
@@ -18,7 +18,7 @@ void fnv2_put64(uint8_t *p, uint64_t v)
 { fnv2_put32(p, (uint32_t)v); fnv2_put32(p + 4, (uint32_t)(v >> 32)); }
 bool fnv2_all(const uint8_t *p, size_t n, uint8_t value)
 { for (size_t i = 0; i < n; ++i) if (p[i] != value) return false; return true; }
-uint32_t fnv2_crc(const uint8_t *p, size_t n) { return fwlab_crc32c(p, n); }
+uint32_t fnv2_crc(const uint8_t *p, size_t n) { return fwlab_crc32c_fast(p, n); }
 bool fnv2_record_crc(const uint8_t *p, size_t n)
 { return n >= 4 && fnv2_get32(p + n - 4) == fnv2_crc(p, n - 4); }
 static void seal(uint8_t *p, size_t n) { fnv2_put32(p + n - 4, fnv2_crc(p, n - 4)); }

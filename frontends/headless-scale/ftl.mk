@@ -5,7 +5,16 @@ CPPFLAGS += -I../../include -I../../core/ftl-scale -I../../core/m3p \
 	-I../../core/command-spine -I../../media/file-nand-v0 \
 	-I../../media/file-nand-v1 -I../../media/file-nand-v2 -I../../nfc
 CFLAGS ?= -std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic -fno-common
+FWLAB_CRC_NATIVE ?= 0
+ifeq ($(FWLAB_CRC_NATIVE),1)
+override CFLAGS += -march=native
+BUILD ?= build/scale-ftl-native
+else
+ifneq ($(FWLAB_CRC_NATIVE),0)
+$(error FWLAB_CRC_NATIVE must be 0 or 1)
+endif
 BUILD ?= build/scale-ftl
+endif
 FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
 export FWLAB_TEST_MEDIA_DIR
 SOURCES := \
@@ -39,12 +48,16 @@ PARENT_PROGRAM := $(BUILD)/test_scale_parent
 CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 	$(BUILD)/frontends/headless-scale/test_crc.o
 CRC_PROGRAM := $(BUILD)/test_crc
-.PHONY: all check check-crc check-full check-cuts check-cost check-parent check-media-v2 check-media-v2-cuts check-media-v2-cost plan-64g check-64g
+FAST_CRC_PROGRAM := $(BUILD)/test_crc_fast
+FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
+.PHONY: all check check-crc check-crc-fast check-full check-cuts check-cost check-parent check-media-v2 check-media-v2-cuts check-media-v2-cost plan-64g check-64g
 all: $(PROGRAM)
-check: check-crc $(PROGRAM)
+check: check-crc check-crc-fast $(PROGRAM)
 	$(PROGRAM)
 check-crc: $(CRC_PROGRAM)
 	$(CRC_PROGRAM)
+check-crc-fast: $(FAST_CRC_PROGRAM)
+	$(FAST_CRC_PROGRAM)
 check-full: $(PROGRAM)
 	$(PROGRAM) --full
 check-cuts: $(PROGRAM)
@@ -67,9 +80,11 @@ $(PROGRAM): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LDLIBS)
 $(CRC_PROGRAM): $(CRC_OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(CRC_OBJECTS) $(LDLIBS)
+$(FAST_CRC_PROGRAM): $(FAST_CRC_OBJECT)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FAST_CRC_OBJECT) $(LDLIBS)
 $(PARENT_PROGRAM): $(PARENT_OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PARENT_OBJECTS) $(LDLIBS)
 $(BUILD)/%.o: ../../%.c ftl.mk
 	mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
--include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d) $(PARENT_OBJECTS:.o=.d)
+-include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d) $(PARENT_OBJECTS:.o=.d) $(FAST_CRC_OBJECT:.o=.d)
