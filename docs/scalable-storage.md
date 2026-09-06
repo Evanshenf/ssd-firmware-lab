@@ -30,6 +30,11 @@ Use `make -C frontends/headless-scale -f ftl.mk check` for the functional path;
 the README above describes full-volume and named-cut commands and their scope.
 The released native worker still uses its original 1-MiB profile.
 
+The next implementation route is described in the
+[single-core performance and multi-queue roadmap](performance-spine.md).
+Its throughput targets are not current capability claims; the first completed
+repair is byte-equivalent CRC acceleration with the existing real-path checks.
+
 The same full workload also passes as explicitly labeled tmpfs **functional**
 regression. A dedicated 1-GiB mount and serial execution keep the observed
 filesystem high-water at 339.1 MiB, separate from 5.7 MiB process maximum RSS.
