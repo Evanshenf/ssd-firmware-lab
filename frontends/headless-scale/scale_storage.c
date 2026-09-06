@@ -1,0 +1,255 @@
+/* SPDX-FileCopyrightText: 2026 Evanshenf */
+/* SPDX-License-Identifier: BSD-3-Clause */
+
+#include "scale_storage.h"
+#include "ftl_scale_internal.h"
+#include "fwlab/private/nfc_scaled_model.h"
+#include "fwlab/private/nfc_trace_window.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#define SCALE_STORAGE_MAGIC UINT64_C(0x5343414c4542494e)
+#define SCALE_NFC_TRACE_ENTRIES 4096u
+
+struct scale_storage {
+    uint64_t magic;
+    void *ftl_arena;
+    void *nfc_arena;
+    struct fwlab_ftl_scale *ftl;
+    struct fwlab_nfc_model *nfc;
+    uint64_t trace_windows;
+};
+
+static struct fwlab_nfc_model_config nfc_configuration(
+    const struct fwlab_nfc_geometry *geometry)
+{
+    struct fwlab_nfc_model_config c;
+    memset(&c, 0, sizeof(c));
+    c.version = FWLAB_NFC_CONTRACT_VERSION;
+    c.size = (uint16_t)sizeof(c);
+    c.geometry = *geometry;
+    c.ecc.version = FWLAB_NFC_CONTRACT_VERSION;
+    c.ecc.size = (uint16_t)sizeof(c.ecc);
+    c.ecc.main_covered_bytes = SF_PAGE_BYTES;
+    c.ecc.oob_covered_bytes = SF_OOB_BYTES;
+    c.ecc.main_step_bytes = 512;
+    c.ecc.oob_step_bytes = 16;
+    c.ecc.main_strength_bits = 8;
+    c.ecc.oob_strength_bits = 4;
+    c.ecc.max_retry_step = 3;
+    c.timing.version = FWLAB_NFC_CONTRACT_VERSION;
+    c.timing.size = (uint16_t)sizeof(c.timing);
+    c.timing.command_ticks = 1;
+    c.timing.transfer_ticks_per_unit = 1;
+    c.timing.read_array_ticks = 8;
+    c.timing.program_setup_ticks = 2;
+    c.timing.program_ticks_per_unit = 4;
+    c.timing.program_status_ticks = 1;
+    c.timing.erase_setup_ticks = 2;
+    c.timing.erase_ticks_per_page = 2;
+    c.timing.erase_status_ticks = 1;
+    c.timing.status_ticks = 1;
+    c.fault.version = FWLAB_NFC_FAULT_PROFILE_VERSION;
+    c.fault.size = (uint16_t)sizeof(c.fault);
+    c.fault.profile_version = 1;
+    c.fault.seed = UINT64_C(0x5343414c454e4643);
+    c.capacity.version = FWLAB_NFC_CONTRACT_VERSION;
+    c.capacity.size = (uint16_t)sizeof(c.capacity);
+    c.capacity.operations = 4;
+    c.capacity.request_registry = 4;
+    c.capacity.terminal_events = 4;
+    c.capacity.result_slots = 4;
+    c.capacity.trace_entries = SCALE_NFC_TRACE_ENTRIES;
+    c.capacity.scratch_main_bytes = SF_PAGE_BYTES;
+    c.capacity.scratch_oob_bytes = SF_OOB_BYTES;
+    c.capacity.operation_generation_limit = UINT32_MAX;
+    c.capacity.cache_generation_limit = UINT32_MAX;
+    c.capacity.controller_epoch_limit = UINT32_MAX;
+    c.capacity.submit_sequence_limit = UINT32_MAX;
+    c.capacity.operation_uid_limit = UINT64_MAX;
+    c.capacity.virtual_tick_limit = UINT64_MAX / 2u;
+    c.successful_erase_limit = UINT16_MAX;
+    return c;
+}
+
+static void storage_release(void *opaque)
+{
+    struct scale_storage *storage = opaque;
+    if (!storage)
+        return;
+    free(storage->nfc_arena);
+    free(storage->ftl_arena);
+    storage->magic = 0;
+    free(storage);
+}
+
+static enum fwlab_spine_result_v0 storage_step(
+    void *opaque, uint32_t budget, uint32_t *used)
+{
+    struct scale_storage *storage = opaque;
+    uint32_t total = 0;
+    if (!storage || storage->magic != SCALE_STORAGE_MAGIC || !used || !budget)
+        return FWLAB_SPINE_V0_INVALID;
+    while (total < budget) {
+        uint32_t one = 0;
+        enum fwlab_spine_result_v0 result =
+            fwlab_ftl_scale_step(storage->ftl, 1, &one);
+        if (result != FWLAB_SPINE_V0_OK && result != FWLAB_SPINE_V0_IN_PROGRESS) {
+            *used = total + one;
+            return result;
+        }
+        if (fwlab_nfc_model_trace_count(storage->nfc) >=
+            SCALE_NFC_TRACE_ENTRIES - 1024u) {
+            uint32_t retired = 0;
+            enum fwlab_nfc_api_result trace =
+                fwlab_nfc_trace_window_retire(storage->nfc, &retired);
+            if (trace == FWLAB_NFC_API_OK && retired)
+                ++storage->trace_windows;
+            else if (trace != FWLAB_NFC_API_OK &&
+                     trace != FWLAB_NFC_API_WRONG_STATE) {
+                *used = total + one;
+                return FWLAB_SPINE_V0_POISONED;
+            }
+        }
+        ++total;
+    }
+    *used = total;
+    return FWLAB_SPINE_V0_OK;
+}
+
+static enum fwlab_spine_result_v0 storage_volume(
+    void *opaque, struct fwlab_block_volume_binding_v0 *binding)
+{
+    struct scale_storage *storage = opaque;
+    return storage && storage->magic == SCALE_STORAGE_MAGIC
+        ? fwlab_ftl_scale_volume_query(storage->ftl, binding)
+        : FWLAB_SPINE_V0_INVALID;
+}
+
+static enum fwlab_spine_result_v0 storage_fini(void *opaque)
+{
+    struct scale_storage *storage = opaque;
+    return storage && storage->magic == SCALE_STORAGE_MAGIC
+        ? fwlab_ftl_scale_fini(storage->ftl) : FWLAB_SPINE_V0_INVALID;
+}
+
+static enum fwlab_spine_result_v0 storage_bind(
+    void *opaque, const struct j0_runtime_config *config,
+    const struct fwlab_controller_buffer_port_v0 *buffer,
+    const struct fwlab_block_namespace_ref_v0 *namespace_ref,
+    uint64_t lifecycle_nonce, uint64_t ftl_nonce, uint64_t nfc_nonce,
+    struct j0_storage_runner *runner, struct fwlab_block_service_v0 *service)
+{
+    const struct scale_storage_options *options = opaque;
+    struct scale_storage *storage;
+    struct fwlab_ftl_scale_config f;
+    struct fwlab_nfc_model_config n;
+    struct fwlab_nfc_buffer_provider staging;
+    struct fwlab_nfc_provider provider;
+    enum fwlab_spine_result_v0 result;
+    size_t ftl_bytes, nfc_bytes;
+    uint32_t blocks, pages;
+    (void)lifecycle_nonce;
+    if (!config || !config->media_binding || !buffer || !namespace_ref ||
+        !runner || !service ||
+        !sf_geometry_counts(&config->media_binding->geometry, &blocks, &pages))
+        return FWLAB_SPINE_V0_INVALID;
+    memset(&f, 0, sizeof(f));
+    f.version = FWLAB_FTL_SCALE_VERSION;
+    f.size = (uint16_t)sizeof(f);
+    f.geometry = config->media_binding->geometry;
+    memcpy(f.media_uuid, config->media_uuid, sizeof(f.media_uuid));
+    f.namespace_ref = *namespace_ref;
+    f.instance_nonce = ftl_nonce;
+    f.provider_nonce = J0_M3P_PROVIDER_NONCE + config->volatile_nonce_seed;
+    f.nfc_instance_nonce = nfc_nonce;
+    f.nfc_operation_uid_limit = UINT64_MAX;
+    f.host_sequence_limit = UINT64_MAX - 1u;
+    f.record_sequence_limit = UINT64_MAX - 1u;
+    f.mapping_slots = options && options->mapping_slots ? options->mapping_slots : pages;
+    f.generation = config->generation;
+    f.execution_epoch = config->execution_epoch;
+    f.nfc_epoch = 1;
+    n = nfc_configuration(&f.geometry);
+    ftl_bytes = fwlab_ftl_scale_arena_size(&f);
+    nfc_bytes = fwlab_nfc_scaled_arena_size(&n);
+    if (!ftl_bytes || !nfc_bytes)
+        return FWLAB_SPINE_V0_INVALID;
+    storage = calloc(1, sizeof(*storage));
+    if (!storage)
+        return FWLAB_SPINE_V0_NO_CAPACITY;
+    storage->ftl_arena = calloc(1, ftl_bytes);
+    storage->nfc_arena = calloc(1, nfc_bytes);
+    result = FWLAB_SPINE_V0_NO_CAPACITY;
+    if (!storage->ftl_arena || !storage->nfc_arena)
+        goto failed;
+    staging = fwlab_ftl_scale_staging_provider(storage->ftl_arena, ftl_bytes);
+    result = FWLAB_SPINE_V0_INVALID;
+    if (!staging.ops || fwlab_nfc_scaled_init(
+            storage->nfc_arena, nfc_bytes, &n, nfc_nonce, &staging,
+            &config->media_binding->media, &storage->nfc) != FWLAB_NFC_API_OK)
+        goto failed;
+    provider = fwlab_nfc_model_provider(storage->nfc);
+    result = fwlab_ftl_scale_init(storage->ftl_arena, ftl_bytes, &f,
+                                  buffer, &provider, &storage->ftl);
+    if (result != FWLAB_SPINE_V0_OK)
+        goto failed;
+    result = config->media_mode == J0_MEDIA_FORMAT
+        ? fwlab_ftl_scale_format_start(storage->ftl, config->format_lba_count)
+        : fwlab_ftl_scale_recover_start(storage->ftl, config->expected_lba_count);
+    if (result != FWLAB_SPINE_V0_OK)
+        goto failed;
+    storage->magic = SCALE_STORAGE_MAGIC;
+    memset(runner, 0, sizeof(*runner));
+    runner->context = storage;
+    runner->step = storage_step;
+    runner->volume_query = storage_volume;
+    runner->fini = storage_fini;
+    runner->release = storage_release;
+    *service = fwlab_ftl_scale_block_service(storage->ftl);
+    return FWLAB_SPINE_V0_OK;
+failed:
+    /* bind/start perform no IO; the lower model has accepted no operation. */
+    storage_release(storage);
+    return result;
+}
+
+void scale_storage_factory_init(struct j0_storage_factory *factory,
+                                 struct scale_storage_options *options)
+{
+    factory->context = options;
+    factory->bind = storage_bind;
+}
+
+static struct scale_storage *from_runtime(const struct j0_runtime *runtime)
+{
+    struct scale_storage *storage;
+    if (!runtime || runtime->storage.step != storage_step)
+        return NULL;
+    storage = runtime->storage.context;
+    return storage && storage->magic == SCALE_STORAGE_MAGIC ? storage : NULL;
+}
+
+enum fwlab_spine_result_v0 scale_storage_query(
+    const struct j0_runtime *runtime, struct fwlab_ftl_scale_status *status)
+{
+    struct scale_storage *storage = from_runtime(runtime);
+    return storage ? fwlab_ftl_scale_query(storage->ftl, status)
+                   : FWLAB_SPINE_V0_INVALID;
+}
+
+enum fwlab_spine_result_v0 scale_storage_checkpoint(struct j0_runtime *runtime)
+{
+    struct scale_storage *storage = from_runtime(runtime);
+    return storage ? fwlab_ftl_scale_checkpoint_start(storage->ftl)
+                   : FWLAB_SPINE_V0_INVALID;
+}
+
+enum fwlab_spine_result_v0 scale_storage_gc(
+    struct j0_runtime *runtime, uint32_t needed_pages)
+{
+    struct scale_storage *storage = from_runtime(runtime);
+    return storage ? fwlab_ftl_scale_gc_start(storage->ftl, needed_pages)
+                   : FWLAB_SPINE_V0_INVALID;
+}

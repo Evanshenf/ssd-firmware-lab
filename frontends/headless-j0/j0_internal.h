@@ -22,6 +22,7 @@
 #define J0_MAX_TRANSFER_BYTES 8192u
 #define J0_BUDGET_REFERENCE 0u
 #define J0_BUDGET_LAB 1u
+#define J0_BUDGET_SCALE 2u
 
 #define J0_LIFECYCLE_NONCE UINT64_C(0x4a304c4946450001)
 #define J0_C43_ADAPTER_NONCE UINT64_C(0x4a30433433000001)
@@ -108,6 +109,37 @@ struct j0_media_binding {
     uint8_t media_uuid[16];
 };
 
+struct j0_runtime_config;
+
+/* Private construction owner; IO and epoch drain use runtime.block only.
+ * step owns its NFC scheduling and trace retirement. volume_query returns
+ * IN_PROGRESS until recovery/format is complete and the volume is READY.
+ * release performs no lower IO and is valid before the first step, or after
+ * successful fini. The physical media binding remains caller-owned. */
+struct j0_storage_runner {
+    void *context;
+    enum fwlab_spine_result_v0 (*step)(
+        void *context, uint32_t budget, uint32_t *used);
+    enum fwlab_spine_result_v0 (*volume_query)(
+        void *context, struct fwlab_block_volume_binding_v0 *binding);
+    enum fwlab_spine_result_v0 (*fini)(void *context);
+    void (*release)(void *context);
+};
+
+struct j0_storage_factory {
+    /* Validate the actual geometry, construct, and start format/recovery.
+     * No lower IO is permitted before step. Failure cleans all partial state;
+     * success transfers runner ownership to J0 until release. */
+    enum fwlab_spine_result_v0 (*bind)(
+        void *context, const struct j0_runtime_config *config,
+        const struct fwlab_controller_buffer_port_v0 *buffer,
+        const struct fwlab_block_namespace_ref_v0 *namespace_ref,
+        uint64_t lifecycle_nonce, uint64_t ftl_nonce, uint64_t nfc_nonce,
+        struct j0_storage_runner *runner,
+        struct fwlab_block_service_v0 *service);
+    void *context;
+};
+
 struct j0_runtime_config {
     uint16_t version;
     uint16_t size;
@@ -123,9 +155,12 @@ struct j0_runtime_config {
     const struct j0_host_factory *host_factory;
     uint32_t budget_profile;
     /* Creation request and recovery expectation are deliberately separate.
-     * Zero creation count selects the legacy format; zero expectation discovers. */
+     * Zero creation count selects the legacy format on the default M3P path;
+     * zero expectation discovers the persisted capacity. */
     uint64_t format_lba_count;
     uint64_t expected_lba_count;
+    /* NULL preserves the legacy M3P constructor. Requires explicit media. */
+    const struct j0_storage_factory *storage_factory;
     uint32_t reserved1[4];
 };
 
@@ -278,6 +313,7 @@ struct j0_runtime {
     struct fwlab_nfc_provider nfc_provider;
     uint32_t nfc_trace_windows;
     struct fwlab_m3p *m3p;
+    struct j0_storage_runner storage;
     struct fwlab_block_service_v0 block;
     struct fwlab_block_namespace_ref_v0 namespace_ref;
     struct fwlab_block_volume_desc_v0 volume;

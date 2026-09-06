@@ -139,22 +139,28 @@ static struct fwlab_host_lifecycle_config_v0 lifecycle_config(
         config.action_uid.maximum = 524288;
         config.abort_uid.maximum = 74536;
         config.completion_lease_uid.maximum = 77536;
+    } else if (runtime->config.budget_profile == J0_BUDGET_SCALE) {
+        /* Large monotonic budgets; in-flight capacities remain unchanged. */
+        config.command_uid.maximum = UINT64_C(0x0000ffffffffffff);
+        config.action_uid.maximum = UINT64_C(0x0000ffffffffffff);
+        config.abort_uid.maximum = UINT64_C(0x0000ffffffffffff);
+        config.completion_lease_uid.maximum = UINT64_C(0x0000ffffffffffff);
     }
     return config;
 }
 
 static int media_binding_valid(const struct j0_media_binding *binding,
-                               const uint8_t media_uuid[16])
+                               const uint8_t media_uuid[16], int legacy)
 {
     const struct fwlab_nand_media_ops *ops;
 
     if (binding == NULL || binding->media.context == NULL ||
         binding->media.ops == NULL ||
         memcmp(binding->media_uuid, media_uuid, 16) != 0 ||
-        !fwlab_m3p_geometry_supported(&binding->geometry)) {
+        (legacy && !fwlab_m3p_geometry_supported(&binding->geometry))) {
         return 0;
     }
-    /* This seam selects a substrate, not a larger FTL/namespace profile. */
+    /* An explicit storage constructor validates its own physical geometry. */
     ops = binding->media.ops;
     return ops->version == FWLAB_NFC_CONTRACT_VERSION &&
            ops->size == sizeof(*ops) && ops->reserved == 0 &&
@@ -170,7 +176,11 @@ static int runtime_config_valid(const struct j0_runtime_config *config)
            !j0_bytes_zero(config->media_uuid, sizeof(config->media_uuid)) &&
            ((config->file != NULL) != (config->media_binding != NULL)) &&
            (config->media_binding == NULL ||
-            media_binding_valid(config->media_binding, config->media_uuid)) &&
+            media_binding_valid(config->media_binding, config->media_uuid,
+                                config->storage_factory == NULL)) &&
+           (config->storage_factory == NULL ||
+            (config->storage_factory->bind != NULL &&
+             config->media_binding != NULL)) &&
            (config->media_mode == J0_MEDIA_FORMAT ||
             config->media_mode == J0_MEDIA_RECOVER) &&
            (config->media_mode != J0_MEDIA_FORMAT ||
@@ -180,12 +190,18 @@ static int runtime_config_valid(const struct j0_runtime_config *config)
            config->generation != 0 && config->execution_epoch != 0 &&
            config->volatile_nonce_seed != 0 &&
            config->volatile_nonce_seed < UINT64_C(0x100000) &&
-           config->budget_profile <= J0_BUDGET_LAB &&
+           config->budget_profile <= J0_BUDGET_SCALE &&
+           (config->budget_profile != J0_BUDGET_SCALE ||
+            config->storage_factory != NULL) &&
            j0_bytes_zero(config->reserved1, sizeof(config->reserved1));
 }
 
 static void arena_release(struct j0_runtime *runtime)
 {
+    if (runtime->storage.context != NULL && runtime->storage.release != NULL) {
+        runtime->storage.release(runtime->storage.context);
+        memset(&runtime->storage, 0, sizeof(runtime->storage));
+    }
     free(runtime->m3p_arena);
     free(runtime->nfc_arena);
     free(runtime->linux_arena);
@@ -196,6 +212,13 @@ static void arena_release(struct j0_runtime *runtime)
     runtime->linux_arena = NULL;
     runtime->c43_arena = NULL;
     runtime->lifecycle_arena = NULL;
+}
+
+static int storage_runner_valid(const struct j0_storage_runner *runner)
+{
+    return runner->context != NULL && runner->step != NULL &&
+           runner->volume_query != NULL && runner->fini != NULL &&
+           runner->release != NULL;
 }
 
 static const struct fwlab_spine_profile_binding_v0 *profile_binding(
@@ -611,37 +634,54 @@ enum fwlab_spine_result_v0 j0_runtime_init(
         goto failed;
     }
 
-    m3p = m3p_config(runtime);
-    geometry = config->media_binding != NULL
-                   ? config->media_binding->geometry
-                   : fwlab_file_nand_v0_geometry();
-    nfc = nfc_config(config->budget_profile, &geometry);
-    m3p_size = fwlab_m3p_arena_size(&m3p);
-    nfc_size = fwlab_nfc_model_arena_size(&nfc);
-    runtime->m3p_arena = arena_allocate(fwlab_m3p_arena_alignment(), m3p_size);
-    runtime->nfc_arena = arena_allocate(
-        fwlab_nfc_model_arena_alignment(), nfc_size);
-    if (runtime->m3p_arena == NULL || runtime->nfc_arena == NULL) {
-        result = FWLAB_SPINE_V0_NO_CAPACITY;
-        goto failed;
+    if (config->storage_factory != NULL) {
+        result = config->storage_factory->bind(
+            config->storage_factory->context, config, &runtime->buffer.port,
+            &runtime->namespace_ref, runtime->lifecycle_instance_nonce,
+            runtime->m3p_instance_nonce, runtime->nfc_instance_nonce,
+            &runtime->storage, &runtime->block);
+        if (result != FWLAB_SPINE_V0_OK) {
+            /* Failed bind owns cleanup; none of its outputs are live. */
+            memset(&runtime->storage, 0, sizeof(runtime->storage));
+            goto failed;
+        }
+        result = FWLAB_SPINE_V0_INVALID;
+        if (!storage_runner_valid(&runtime->storage)) {
+            goto failed;
+        }
+    } else {
+        m3p = m3p_config(runtime);
+        geometry = config->media_binding != NULL
+                       ? config->media_binding->geometry
+                       : fwlab_file_nand_v0_geometry();
+        nfc = nfc_config(config->budget_profile, &geometry);
+        m3p_size = fwlab_m3p_arena_size(&m3p);
+        nfc_size = fwlab_nfc_model_arena_size(&nfc);
+        runtime->m3p_arena = arena_allocate(fwlab_m3p_arena_alignment(), m3p_size);
+        runtime->nfc_arena = arena_allocate(
+            fwlab_nfc_model_arena_alignment(), nfc_size);
+        if (runtime->m3p_arena == NULL || runtime->nfc_arena == NULL) {
+            result = FWLAB_SPINE_V0_NO_CAPACITY;
+            goto failed;
+        }
+        staging = m3p_staging_provider(runtime->m3p_arena);
+        media = config->media_binding != NULL
+                    ? config->media_binding->media
+                    : fwlab_file_nand_v0_media(config->file);
+        if (fwlab_nfc_model_init(
+                runtime->nfc_arena, nfc_size, &nfc,
+                runtime->nfc_instance_nonce, &staging, &media,
+                &runtime->nfc_model) != FWLAB_NFC_API_OK) {
+            goto failed;
+        }
+        runtime->nfc_provider = fwlab_nfc_model_provider(runtime->nfc_model);
+        if (fwlab_m3p_init(
+                runtime->m3p_arena, m3p_size, &m3p, &runtime->buffer.port,
+                &runtime->nfc_provider, &runtime->m3p) != FWLAB_SPINE_V0_OK) {
+            goto failed;
+        }
+        runtime->block = fwlab_m3p_block_service(runtime->m3p);
     }
-    staging = m3p_staging_provider(runtime->m3p_arena);
-    media = config->media_binding != NULL
-                ? config->media_binding->media
-                : fwlab_file_nand_v0_media(config->file);
-    if (fwlab_nfc_model_init(
-            runtime->nfc_arena, nfc_size, &nfc,
-            runtime->nfc_instance_nonce, &staging, &media,
-            &runtime->nfc_model) != FWLAB_NFC_API_OK) {
-        goto failed;
-    }
-    runtime->nfc_provider = fwlab_nfc_model_provider(runtime->nfc_model);
-    if (fwlab_m3p_init(
-            runtime->m3p_arena, m3p_size, &m3p, &runtime->buffer.port,
-            &runtime->nfc_provider, &runtime->m3p) != FWLAB_SPINE_V0_OK) {
-        goto failed;
-    }
-    runtime->block = fwlab_m3p_block_service(runtime->m3p);
     if (!fwlab_block_service_v0_valid(&runtime->block)) {
         goto failed;
     }
@@ -661,6 +701,10 @@ enum fwlab_spine_result_v0 j0_runtime_init(
             fwlab_spine_lifecycle_v0_arena_size(), &lifecycle,
             &runtime->drivers) != FWLAB_SPINE_V0_OK) {
         goto failed;
+    }
+    if (runtime->storage.context != NULL) {
+        /* The selected constructor already started its format/recovery. */
+        return FWLAB_SPINE_V0_OK;
     }
     if (config->media_mode == J0_MEDIA_FORMAT) {
         result = config->format_lba_count == 0
@@ -914,7 +958,10 @@ static enum fwlab_spine_result_v0 bind_ready_volume(struct j0_runtime *runtime)
     struct fwlab_block_volume_binding_v0 binding;
     enum fwlab_spine_result_v0 result;
 
-    result = fwlab_m3p_volume_query(runtime->m3p, &binding);
+    result = runtime->storage.context != NULL
+                 ? runtime->storage.volume_query(
+                       runtime->storage.context, &binding)
+                 : fwlab_m3p_volume_query(runtime->m3p, &binding);
     if (result != FWLAB_SPINE_V0_OK)
         return result;
     if (!fwlab_block_volume_desc_v0_valid(&binding.volume) ||
@@ -965,16 +1012,27 @@ enum fwlab_spine_result_v0 j0_runtime_step(
                 runtime->poisoned = 1;
             }
         } else if (runtime->fair_cursor == 1) {
-            struct fwlab_m3p_step_result step;
+            if (runtime->storage.context != NULL) {
+                uint32_t storage_units = 0;
+                enum fwlab_spine_result_v0 result = runtime->storage.step(
+                    runtime->storage.context, 1, &storage_units);
 
-            if (fwlab_m3p_step(runtime->m3p, 1, &step) !=
-                FWLAB_SPINE_V0_OK) {
-                runtime->poisoned = 1;
+                if ((result != FWLAB_SPINE_V0_OK &&
+                     result != FWLAB_SPINE_V0_IN_PROGRESS) || storage_units > 1)
+                    runtime->poisoned = 1;
+            } else {
+                struct fwlab_m3p_step_result step;
+
+                if (fwlab_m3p_step(runtime->m3p, 1, &step) !=
+                    FWLAB_SPINE_V0_OK) {
+                    runtime->poisoned = 1;
+                }
             }
         } else {
             (void)close_reap_one(runtime);
         }
-        if (runtime->config.budget_profile == J0_BUDGET_LAB &&
+        if (runtime->storage.context == NULL &&
+            runtime->config.budget_profile == J0_BUDGET_LAB &&
             fwlab_nfc_model_trace_count(runtime->nfc_model) >= UINT16_MAX - 4096u) {
             uint32_t retired = 0;
             enum fwlab_nfc_api_result trace_result =
@@ -994,7 +1052,8 @@ enum fwlab_spine_result_v0 j0_runtime_step(
                 runtime->poisoned = 1;
         }
         if (runtime->poisoned || runtime->host.poisoned ||
-            runtime->buffer.poisoned || runtime->m3p->quarantined) {
+            runtime->buffer.poisoned ||
+            (runtime->storage.context == NULL && runtime->m3p->quarantined)) {
             runtime->poisoned = 1;
             break;
         }
@@ -1224,7 +1283,9 @@ enum fwlab_spine_result_v0 j0_runtime_fini(struct j0_runtime *runtime)
         runtime->profiles_retired = 1;
         runtime->lifecycle_finished = 1;
     }
-    result = fwlab_m3p_fini(runtime->m3p);
+    result = runtime->storage.context != NULL
+                 ? runtime->storage.fini(runtime->storage.context)
+                 : fwlab_m3p_fini(runtime->m3p);
     if (result != FWLAB_SPINE_V0_OK) {
         runtime->poisoned = 1;
         return result;

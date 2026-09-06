@@ -4,12 +4,39 @@
 # Scalable storage development
 
 This plan extends the [vertical-spine preview](results/2026-09-05-vertical-spine-preview.md).
-It does not change that release's tested envelope or claim that a large-capacity
-SSD has already been implemented. The first real full-workload target is 64 GiB;
+It does not change that release's tested envelope or claim that the 64-GiB
+workload has already been qualified. The first large full-workload target is 64 GiB;
 128 GiB depends on provisioned storage and memory. Larger capacities are design
 and arithmetic targets until actually exercised.
 
-## Current interface checkpoint: SCALE-B1
+## Current implementation: SCALE-B2 bounded qualification
+
+The [new scalable FTL](../core/ftl-scale/README.md) now connects to the same
+headless Linux profile, lifecycle, Block contract, NFC executor and compact
+physical NAND. Real 64-MiB and 256-MiB logical volumes passed disk-backed full
+fills, interleaved half-volume overwrites, restart and complete readback.
+The fixed interruption/active-close cases also passed. Neither a 64-GiB workload
+nor larger native-worker deployment is claimed here.
+
+The old M3P reference remains available for its existing formats. An explicit
+construction runner selects one FTL, while the same ready-only logical volume
+descriptor supplies Identify and request bounds. Scaling this implementation
+does not require changing the Linux profile, lifecycle, Host DMA or Block ABI.
+The new format uses a 16-byte committed map, indexed block summaries, streamed
+checkpoints, two independent journal rails and atomic whole-victim GC. It starts
+with write-through rather than a larger volatile mapping overlay.
+
+Use `make -C frontends/headless-scale -f ftl.mk check` for the functional path;
+the README above describes full-volume and named-cut commands and their scope.
+The released native worker still uses its original 1-MiB profile.
+
+The same full workload also passes as explicitly labeled tmpfs **functional**
+regression. A dedicated 1-GiB mount and serial execution keep the observed
+filesystem high-water at 339.1 MiB, separate from 5.7 MiB process maximum RSS.
+FTL/NFC and synchronization calls are unchanged. These RAM-backed results do
+not replace disk persistence, power-loss or storage-performance qualification.
+
+## Completed interface checkpoint: SCALE-B1
 
 The same headless program now creates and recovers two real logical volumes,
 512 KiB and 1 MiB. FTL format 2 persists logical capacity and physical geometry;
@@ -31,10 +58,10 @@ media execution code. Physical 80-MiB and 320-MiB address journeys exercise bloc
 319 and linear page 81919, readback after restart, erase/reprogram and a modeled
 partial-erase cut. The original constructor retains its small-profile limits.
 
-These are **different evidence scopes**: the FTL still uses its current
+These were **different evidence scopes**: the reference FTL uses its
 256-entry representation ceiling, and the large physical-address tests do not
 pass through a large namespace. Neither is a 64-GiB or fully populated storage
-result. Scalable mapping, checkpoint and GC representation remains next.
+result. SCALE-B2 above supplies the separate scalable representation.
 
 Run the bounded checks as an ordinary user:
 
@@ -69,9 +96,10 @@ Use established techniques first, then measure possible optimizations:
   provisional 16-byte entry per 4-KiB logical page costs 256 MiB at 64 GiB,
   512 MiB at 128 GiB and 4 GiB at 1 TiB. These are arithmetic, not observed peak
   memory; block metadata, buffers and filesystem cache are additional.
-- Commit pending updates in ordered prefixes when the overlay fills. It must
-  not grow until the Host sends Flush. Preserve old committed pages until their
-  replacement is logically durable.
+- Any later volatile overlay must commit bounded ordered prefixes rather than
+  growing until the Host sends Flush. The initial SCALE-B2 policy needs only
+  the current uncommitted group and commits it before returning success.
+  Preserve old committed pages until their replacement is logically durable.
 - Greedy GC with per-block live/reclaimable/pinned summaries and bounded victim
   work. Read victim OOB for reverse logical identity, then validate its exact
   physical/data incarnation against the map. Do not scan the entire logical
@@ -104,7 +132,8 @@ claimed by adopting these baseline ideas.
 | D | A useful algorithm study, matched-semantic comparisons and reproduction package | Fixed-source research candidate, with benefits, costs and limitations reported |
 
 The [compact media implementation](../media/file-nand-v1/README.md) is slice A.
-It does not remove current M3P/NFC geometry limits. Firmware mapping formats and
+It does not itself remove reference M3P/NFC geometry limits. B1 supplied the
+separate scaled NFC constructor, and B2 supplies the larger FTL. Mapping formats and
 physical media formats have separate version/compatibility boundaries. Old
 preview images use the old executable/format; no implicit conversion is offered.
 
