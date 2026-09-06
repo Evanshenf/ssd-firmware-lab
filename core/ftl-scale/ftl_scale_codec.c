@@ -1,6 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 Evanshenf */
 /* SPDX-License-Identifier: BSD-3-Clause */
 #include "ftl_scale_codec.h"
+#include "fwlab/portable/crc32c.h"
 #include <string.h>
 
 #define SF_ROOT_TAG UINT32_C(0x31524653)
@@ -31,13 +32,7 @@ bool sf_bytes_ff(const uint8_t *p, size_t size)
 }
 uint32_t sf_crc32c(const uint8_t *p, size_t size)
 {
-    uint32_t crc = UINT32_MAX; size_t i; unsigned bit;
-    for (i = 0; i < size; ++i) {
-        crc ^= p[i];
-        for (bit = 0; bit < 8; ++bit)
-            crc = (crc >> 1) ^ (UINT32_C(0x82f63b78) & (0u - (crc & 1u)));
-    }
-    return ~crc;
+    return fwlab_crc32c(p, size);
 }
 uint64_t sf_digest(uint64_t prior, const uint8_t *p, size_t size)
 {

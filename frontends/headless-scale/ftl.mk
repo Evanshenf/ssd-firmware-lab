@@ -30,10 +30,15 @@ SOURCES := \
 	frontends/headless-scale/scale_storage.c frontends/headless-scale/test_ftl.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 PROGRAM := $(BUILD)/test_scale_ftl
-.PHONY: all check check-full check-cuts plan-64g check-64g
+CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
+	$(BUILD)/frontends/headless-scale/test_crc.o
+CRC_PROGRAM := $(BUILD)/test_crc
+.PHONY: all check check-crc check-full check-cuts plan-64g check-64g
 all: $(PROGRAM)
-check: $(PROGRAM)
+check: check-crc $(PROGRAM)
 	$(PROGRAM)
+check-crc: $(CRC_PROGRAM)
+	$(CRC_PROGRAM)
 check-full: $(PROGRAM)
 	$(PROGRAM) --full
 check-cuts: $(PROGRAM)
@@ -44,7 +49,9 @@ check-64g: $(PROGRAM)
 	$(PROGRAM) --full-64g
 $(PROGRAM): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LDLIBS)
+$(CRC_PROGRAM): $(CRC_OBJECTS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(CRC_OBJECTS) $(LDLIBS)
 $(BUILD)/%.o: ../../%.c ftl.mk
 	mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
--include $(OBJECTS:.o=.d)
+-include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d)

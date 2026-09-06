@@ -18,6 +18,7 @@ HEADERS := ../../nfc/nfc_internal.h \
            ../../include/fwlab/private/nfc_scaled_model.h \
            ../../include/fwlab/private/nfc_trace_window.h \
            ../../include/fwlab/portable/nfc_model.h \
+           ../../include/fwlab/portable/crc32c.h \
            ../../include/fwlab/portable/nfc_types.h \
            ../../include/fwlab/contracts/nfc_provider.h \
            ../../include/fwlab/contracts/nand_media.h \

@@ -12,6 +12,7 @@ TEST := $(BUILD_DIR)/compact_nand_test
 SOURCES := compact_nand.c tests/test_compact_nand.c
 HEADERS := compact_nand.h compact_nand_internal.h \
            ../../include/fwlab/contracts/nand_media.h \
+           ../../include/fwlab/portable/crc32c.h \
            ../../include/fwlab/portable/nfc_types.h
 
 .PHONY: all check

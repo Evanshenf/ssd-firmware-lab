@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include "compact_nand_internal.h"
+#include "fwlab/portable/crc32c.h"
 
 #include <stdalign.h>
 #include <string.h>
@@ -67,16 +68,7 @@ static int zero(const uint8_t *p, size_t length)
 
 static uint32_t crc(const uint8_t *p, size_t length, size_t omitted)
 {
-    uint32_t value = UINT32_MAX;
-    size_t i;
-    unsigned bit;
-    for (i = 0; i < length; ++i) {
-        value ^= (i >= omitted && i - omitted < 4u) ? 0u : p[i];
-        for (bit = 0; bit < 8; ++bit)
-            value = (value >> 1) ^
-                (UINT32_C(0x82f63b78) & (0u - (value & 1u)));
-    }
-    return ~value;
+    return fwlab_crc32c_zero_field(p, length, omitted);
 }
 
 static uint64_t hash_bytes(uint64_t hash, const uint8_t *p, size_t length)
