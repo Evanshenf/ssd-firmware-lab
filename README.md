@@ -1,89 +1,148 @@
 <!-- SPDX-FileCopyrightText: 2026 Evanshenf -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
-# ssd-firmware-lab
+# NVMe FWLab — SSD Firmware Development and Simulation
 
-`ssd-firmware-lab` is a pre-alpha, AI-assisted, open-source laboratory for developing portable SSD controller firmware, a programmable NAND flash controller model, and crash-consistent persistent media.
+[English](README.md) · [简体中文](README.zh-CN.md) ·
+[Project website](https://evanshenf.github.io/ssd-firmware-lab/) ·
+[Getting started](docs/getting-started.md) ·
+[Preview release](https://github.com/Evanshenf/ssd-firmware-lab/releases/tag/v0.1.0-spine-preview.1)
 
-The repository contains an experimental Host-visible software PCI/NVMe controller,
-portable firmware/FTL/NFC, persistent file-NAND and sequential QEMU ownership
-journeys. This is not production firmware, a physical endpoint or a performance
-result. Implementation and individual test results are not reviewed milestone
-graduation; exact release evidence must state its source and remaining limits.
+**NVMe FWLab (`ssd-firmware-lab`) is an open-source NVMe SSD firmware development
+and simulation lab on Linux.** Study and modify portable C firmware, a flash
+translation layer (FTL), garbage collection (GC), a NAND flash controller (NFC)
+model, and persistent NAND page/OOB storage without a dedicated SSD development
+board. 开源 NVMe SSD 固件开发与仿真实验室：在 Linux 中研究 FTL、垃圾回收、NAND 控制器与持久化恢复。
 
-Current preview: **v0.1.0-spine-preview.1**, a reviewed fixed-profile software
-baseline. See the [source-bound results and limitations](docs/results/2026-09-05-vertical-spine-preview.md)
-for the 1-MiB/file-NAND envelope, native/QEMU results and remaining risks.
+An experimental software PCI/NVMe controller already connects the native Linux
+NVMe driver to this firmware/storage path. A QEMU guest can become the alternate,
+exclusive owner of the same software function. This is **pre-alpha research
+software**, not firmware to flash onto a commercial SSD.
 
-## What we are building
+The current release, **v0.1.0-spine-preview.1**, is a reviewed, fixed-profile
+software preview: **one 1-MiB namespace, file-backed NAND and finite runtime
+budgets**. Large-capacity and production-readiness claims are not made. See the
+[exact-source results and remaining limits](docs/results/2026-09-05-vertical-spine-preview.md).
 
-```text
-Linux storage driver
-        │
-        ▼
-transport / ownership adapter
-        │  canonical commands + bounded capabilities
-        ▼
-portable firmware core
-protocol policy · request lifecycle · FTL · GC/WL · recovery
-        │  NAND-controller descriptors
-        ▼
-custom NFC model
-timing · channel/LUN/plane scheduling · ECC/fault outcomes
-        │
-        ▼
-persistent physical media
-page/OOB truth · wear/bad-block state · physical-operation WAL
+## Try the software path on Linux
+
+Start with an ordinary, unprivileged Linux user. You need Git, GNU Make and a
+C11 compiler with Linux/POSIX development headers. No FPGA, kernel module, KVM
+or raw disk is required for this first check.
+
+```sh
+git clone --branch v0.1.0-spine-preview.1 https://github.com/Evanshenf/ssd-firmware-lab.git
+cd ssd-firmware-lab
+make -C frontends/linux-m4 check-runtime
 ```
 
-The current vertical path uses the portable firmware/NFC stack and persistent
-file-NAND, exposed through a headless binding or the experimental native PCI/HIF.
-Raw-block backing is deferred. A `vfio-user` guest adapter is also optional and
-deferred, not a release prerequisite. The project roadmap includes:
+This builds and runs existing headless integration checks through the real
+firmware, FTL, NFC and temporary file-NAND. It covers ordinary I/O, repeated
+overwrites, GC, Flush, recovery and bounded resource handling. It **does not
+create `/dev/nvme*`**; `native_hif=not_connected` is expected in this test.
 
-- a host synthetic PCI function that the native Linux storage driver can use;
-- a destructive, sequential Host-to-Guest ownership switch of that same function through upstream `vfio-pci`, IOMMUFD and QEMU;
-- the same portable protocol/media firmware core running behind a real FPGA or endpoint-SoC adapter.
+The [getting-started guide](docs/getting-started.md) explains dependencies, output,
+the broader software check, and the separate privileged native NVMe experiment.
 
-Host and Guest never own the same controller concurrently. A Host-to-Guest transition must stop application writes, Flush/unmount/close holders, unbind the Host driver, revoke all old capabilities, prove references are zero, reset the controller, and only then publish a new Guest owner.
+## What works in the current preview
 
-The project does not implement a custom VFIO userspace ABI or a QEMU NVMe device model for this path. M4 Host-native operation and M5 upstream-VFIO assignment share one synthetic endpoint and trusted HIF, but remain separate graduation claims. See [ADR-0009](docs/adr/0009-upstream-vfio-route-and-milestones.md) and [ADR-0010](docs/adr/0010-linux-hif-portable-executor-contract.md).
+| Capability | Executed software behavior |
+| --- | --- |
+| NVMe command path | Linux initialization, Identify, minimal SMART, queue setup, Read, Write, Flush and write FUA |
+| FTL and reclamation | Logical-to-physical mapping, partial-page read-modify-write, out-of-place writes and foreground GC |
+| NAND controller model | Staged physical operations, channel/LUN/plane scheduling, modeled ECC/retry and deterministic faults |
+| Persistent media | NAND pages, out-of-band (OOB) data, health state and physical-operation write-ahead log |
+| Recovery | Same-image recovery, checkpoint/GC interruption cases and continued writes after restart |
+| Native and guest ownership | Native Linux and sequential Host → QEMU Guest → Host journeys through the same firmware/storage implementation |
 
-## Storage separation
+These are scoped results, not a full NVMe implementation, silicon-accurate timing
+or real hardware power-loss qualification. Detailed case coverage and tested
+build identities are in the [release results](docs/results/2026-09-05-vertical-spine-preview.md).
 
-- PCI configuration, BAR state, queue shadows and controller DRAM live in volatile memory.
-- NAND pages, OOB, wear/bad-block truth and recovery records currently live in a persistent file image; dedicated raw-block backing is later work.
-- A synthetic `/dev/nvmeXnY` is the tested namespace. Its backing image is private implementation media and must never be mounted or used for unrelated data.
+## The NVMe-to-NAND data path
 
-Raw block media would be destructive. Its future initializer must verify
-whole-device identity, serial, exact size and operator approval; it is not
-implemented by the current worker. The file worker creates a new image only
-with explicit `--format` and otherwise recovers the existing UUID-bound image.
+```text
+Native Linux nvme / alternate QEMU guest nvme
+  → synthetic PCI/HIF: BAR, queues, Host transfers, completion and IRQ
+  → NVMe profile + shared command lifecycle
+  → Block service → FTL / GC / mapping journal / recovery
+  → NAND flash controller model
+  → persistent physical NAND pages + OOB + health/WAL
+  → completion intent → HIF CQE / IRQ
+```
 
-## Authenticity boundary
+BAR and controller state live in volatile memory. `nand.bin` is the persistent
+**simulated physical NAND medium**, not executable firmware and not an LBA image
+that bypasses FTL/NFC. Logical namespace reads and writes traverse the firmware,
+FTL, NFC and NAND model.
 
-The project separates four evidence levels: behavioral model, host-native portable firmware, ISA/SoC-profile firmware in an ISS, and a real PCI endpoint. Results are labeled with the level actually tested. Nested KVM can validate functional behavior, but cannot graduate bare-metal BAR, DMA, IRQ or power-failure claims.
+The native adapter consists of Linux kernel PCI/HIF modules and a userspace
+firmware process. Guest assignment uses upstream `vfio-pci`, IOMMUFD and QEMU,
+not a second QEMU NVMe executor or a custom VFIO ABI. Host and Guest never own
+the function concurrently. Ownership transfer requires stopping writers,
+explicit Flush/FUA, holder cleanup, revoke/drain and zero-reference checks
+before the next grant. See the [native guide](kernel/m4-native/README.md).
 
-This independent project is not affiliated with, endorsed by, recognized by, or certified by NVM Express. Open-source publication does not require official recognition. That is separate from the license/provenance or patent basis of particular third-party material and implementations, which contributors must review. The project does not use an official logo or claim certification.
+## Where to read and change the firmware
 
-## Start here
+| Area | Source entry |
+| --- | --- |
+| NVMe profile policy and payloads | [Linux-profile-v1 adapter](core/command-spine/profiles/linux_profile_v1_adapter.c) |
+| Command lifetime and completion | [Shared lifecycle](core/command-spine/spine_lifecycle.c) |
+| FTL mapping and media metadata | [Mapping](core/m3p/m3p_mapping.c), [codec](core/m3p/m3p_codec.c) |
+| Garbage collection and restart | [GC](core/m3p/m3p_gc.c), [recovery](core/m3p/m3p_recovery.c) |
+| NAND controller behavior | [NFC model](nfc/README.md) |
+| Persistent NAND substrate | [File-NAND implementation](media/file-nand-v0/) |
+| Linux runtime and device binding | [Firmware frontend](frontends/linux-m4/README.md), [PCI/HIF](kernel/m4-native/README.md) |
 
-- [Requirements](docs/requirements.md)
-- [Architecture](docs/architecture.md)
-- [Current native firmware/data path and bounded checks](frontends/linux-m4/README.md)
-- [Portable command lifecycle core](core/README.md)
-- [Executable persistence model](core/c32/README.md)
-- [Programmable NAND/NFC model](nfc/README.md)
-- [Integrated headless firmware graduation](frontends/headless-c35/README.md)
-- [Portable NVMe policy boundary](core/c4-nvme/README.md)
-- [Headless memory-transport reference](frontends/headless-c4/README.md)
-- [Milestone-0 risk plan](docs/m0-plan.md)
-- [Roadmap](docs/roadmap.md)
+## Current limits and future work
+
+- The preview has one 1-MiB namespace, 512-byte LBAs, an 8-KiB transfer limit and
+  one I/O queue pair of depth 32. It is not a general-purpose disk for real data.
+- Command/record/media-operation budgets are finite. Reopening an image does
+  not erase persistent history or establish indefinite endurance.
+- Native integration was tested on a disposable x86-64 Linux VM with Ubuntu
+  `7.0.0-30-generic` and a specifically reserved 16-KiB BAR aperture. It is not
+  a drop-in module for arbitrary Linux kernels or production hosts.
+- Scalable capacity, richer FTL/wear-leveling, exclusive raw-block backing,
+  RTOS ports and real FPGA/SoC/NAND adapters are future work, not released features.
+- Physical NAND requires a concrete metadata/erase-generation recovery contract;
+  simply replacing the file backend does not prove hardware portability.
+- The release records an unconfirmed concurrent-FLR publication-window risk;
+  successful named reset tests do not establish exhaustive race coverage.
+
+The worker creates a new NAND image only with explicit `--format`; normal
+startup recovers an existing UUID-bound image. Do not point experiments at a
+physical SSD or unrelated data. Read [SECURITY.md](SECURITY.md) before native work.
+
+## Contribute or report a reproduction
+
+[Open an issue](https://github.com/Evanshenf/ssd-firmware-lab/issues) with the
+release/commit, Linux environment, command, expected result and actual output.
+Please redact host identities and private paths. Useful contributions include
+reproducible examples, documentation and bounded firmware/FTL improvements.
+Follow [CONTRIBUTING.md](CONTRIBUTING.md) for source boundaries and sign-off.
+
+Development is AI-assisted; see [AI_ASSISTED.md](AI_ASSISTED.md). AI assistance
+does not replace source review, executed tests or accurate capability claims.
+
+## Architecture and historical records
+
+Start with the [current release evidence](docs/results/2026-09-05-vertical-spine-preview.md).
+Earlier component checkpoints are historical references, not additional current
+capability claims.
+
+- [Requirements](docs/requirements.md), [architecture](docs/architecture.md) and [roadmap](docs/roadmap.md)
 - [Architecture decisions](docs/adr/README.md)
-- [Generic nested-KVM lab topology](docs/lab/pve-nested-kvm.md)
-- [Contribution and source-boundary rules](CONTRIBUTING.md)
-- [Security and raw-media warning](SECURITY.md)
+- [Upstream VFIO route](docs/adr/0009-upstream-vfio-route-and-milestones.md) and [Linux HIF boundary](docs/adr/0010-linux-hif-portable-executor-contract.md)
+- [Earlier lifecycle](core/README.md), [persistence](core/c32/README.md), [headless firmware](frontends/headless-c35/README.md), [NVMe policy](core/c4-nvme/README.md) and [queue/HIF reference](frontends/headless-c4/README.md)
+- [Initial risk plan](docs/m0-plan.md) and [nested-KVM topology](docs/lab/pve-nested-kvm.md)
 
-## License
+## License and independence
 
-Original user-space source, schemas, scripts and tests use BSD-3-Clause. Future Linux kernel source under `kernel/` uses GPL-2.0-only. Documentation uses CC-BY-4.0. See [LICENSES.md](LICENSES.md) and per-file SPDX identifiers.
+Original userspace source, schemas, scripts and tests use **BSD-3-Clause**;
+Linux kernel source under `kernel/` uses **GPL-2.0-only**; Markdown documentation
+uses **CC-BY-4.0**. See [LICENSES.md](LICENSES.md) and per-file SPDX identifiers.
+
+This independent project is not affiliated with, endorsed by or certified by
+NVM Express. It uses no official logo and makes no certification claim.

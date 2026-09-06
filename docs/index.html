@@ -1,0 +1,146 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 Evanshenf -->
+<!-- SPDX-License-Identifier: BSD-3-Clause -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NVMe FWLab | Open-source SSD firmware development and simulation</title>
+  <meta name="description" content="Develop and study NVMe SSD firmware on Linux: portable C, FTL, garbage collection, NAND controller modeling and persistent recovery. 开源 SSD 固件开发与仿真实验室。">
+  <meta name="robots" content="index,follow">
+  <link rel="canonical" href="https://evanshenf.github.io/ssd-firmware-lab/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="NVMe FWLab — SSD Firmware Development and Simulation">
+  <meta property="og:description" content="An experimental NVMe-to-FTL-to-NAND software path on Linux. Read the C firmware, run the headless checks, and explore persistent recovery.">
+  <meta property="og:url" content="https://evanshenf.github.io/ssd-firmware-lab/">
+  <meta property="og:site_name" content="NVMe FWLab">
+  <meta name="twitter:card" content="summary">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "NVMe FWLab",
+    "alternateName": ["SSD Firmware Lab", "ssd-firmware-lab", "NVMe SSD 固件开发与仿真实验室"],
+    "description": "Open-source NVMe SSD firmware development and simulation on Linux, with portable C firmware, FTL, garbage collection, a NAND controller model and persistent simulated NAND media. Experimental fixed-profile preview, not production SSD firmware.",
+    "url": "https://evanshenf.github.io/ssd-firmware-lab/",
+    "codeRepository": "https://github.com/Evanshenf/ssd-firmware-lab",
+    "programmingLanguage": "C",
+    "runtimePlatform": "Linux",
+    "version": "v0.1.0-spine-preview.1"
+  }
+  </script>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172d39; background: #f5f7fa; line-height: 1.65; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header, main, footer { max-width: 1040px; margin: auto; padding: 24px; }
+    header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-bottom: 1px solid #d6dfe7; }
+    nav { display: flex; flex-wrap: wrap; gap: 20px; }
+    a { color: #14559b; text-underline-offset: 3px; }
+    a:focus-visible { outline: 3px solid #167a6e; outline-offset: 4px; }
+    h1 { font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.1; letter-spacing: -.04em; margin: 16px 0; }
+    h2 { line-height: 1.25; margin-top: 0; }
+    h3 { margin-bottom: 8px; }
+    .hero { padding: 40px 0 24px; }
+    .lead { font-size: 1.25rem; max-width: 760px; }
+    .eyebrow { color: #116354; font-weight: 650; }
+    .links { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 24px 0; }
+    .notice { border-left: 4px solid #a95f10; background: #fff5e6; padding: 16px 20px; }
+    section { margin: 32px 0; scroll-margin-top: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 20px; }
+    .card { padding: 24px; background: white; border: 1px solid #d6dfe7; border-radius: 8px; }
+    pre { padding: 20px; background: #172d39; color: #f5fafc; overflow-x: auto; border-radius: 8px; line-height: 1.6; }
+    code { font-family: ui-monospace, monospace; font-size: .9em; }
+    li { margin: 8px 0; }
+    footer { border-top: 1px solid #d6dfe7; color: #425762; font-size: .9rem; }
+    @media (max-width: 540px) { header, main, footer { padding: 18px; } .hero { padding-top: 24px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>NVMe FWLab / SSD Firmware Lab</strong>
+    <nav aria-label="Main navigation">
+      <a href="#try">Try it</a>
+      <a href="#source">Source map</a>
+      <a href="#chinese" lang="zh-CN">中文</a>
+      <a href="https://github.com/Evanshenf/ssd-firmware-lab">GitHub</a>
+    </nav>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="title">
+      <p class="eyebrow">Open-source · Linux · Portable C firmware</p>
+      <h1 id="title">NVMe FWLab</h1>
+      <p class="lead">SSD firmware development and simulation, from the NVMe command to the NAND page.</p>
+      <p>Study and modify a flash translation layer (FTL), garbage collection, NAND controller behavior and persistent recovery without a dedicated SSD development board. The repository is <strong>ssd-firmware-lab</strong>.</p>
+      <div class="links">
+        <a href="https://github.com/Evanshenf/ssd-firmware-lab">Read the firmware source</a>
+        <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/docs/getting-started.md">Getting started</a>
+        <a href="https://github.com/Evanshenf/ssd-firmware-lab/releases/tag/v0.1.0-spine-preview.1">Download the preview source</a>
+      </div>
+      <p class="notice"><strong>Pre-alpha developer preview:</strong> v0.1.0-spine-preview.1 has one <strong>1-MiB namespace</strong>, file-backed simulated NAND and finite runtime budgets. It is not production firmware, a capacity/performance benchmark or an image to flash onto a commercial SSD.</p>
+    </section>
+    <section aria-labelledby="path-title">
+      <h2 id="path-title">One firmware-to-media path</h2>
+      <pre>Linux NVMe driver / alternate QEMU guest
+  → synthetic PCI/HIF
+  → NVMe policy + shared command lifecycle
+  → FTL / GC / mapping journal / recovery
+  → NAND flash controller model
+  → persistent NAND pages + OOB + health/WAL
+  → completion intent → CQE / IRQ</pre>
+      <p>BAR and controller state use volatile memory. The <code>nand.bin</code> image holds simulated physical NAND state; namespace I/O does not bypass the FTL and NAND controller to access that file by logical LBA.</p>
+      <div class="grid">
+        <article class="card">
+          <h3>Firmware and FTL</h3>
+          <p>Read and change the C implementation of command policy, command lifetime, logical-to-physical mapping, partial-page read-modify-write, foreground GC and recovery.</p>
+        </article>
+        <article class="card">
+          <h3>NAND and persistence</h3>
+          <p>Explore modeled read/program/erase operations, ECC/retry, page and out-of-band (OOB) metadata, write-ahead logging and restart behavior.</p>
+        </article>
+        <article class="card">
+          <h3>Native and guest experiments</h3>
+          <p>A dedicated Linux VM can expose the experimental software PCI/NVMe function to its native driver or, sequentially, a QEMU guest through upstream VFIO/IOMMUFD. Both use the same firmware/storage implementation.</p>
+        </article>
+      </div>
+      <p>Read the <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/docs/results/2026-09-05-vertical-spine-preview.md">published case coverage, exact source identities and remaining risks</a>. Software checks do not establish real hardware timing, physical DMA-master isolation or real NAND power-loss behavior.</p>
+    </section>
+    <section id="try" aria-labelledby="try-title">
+      <h2 id="try-title">Start with the Linux software check</h2>
+      <p>Use an ordinary Linux user with Git, GNU Make and a C11 compiler with Linux/POSIX development headers. No FPGA, root, KVM or raw disk is needed for this check.</p>
+      <pre><code>git clone --branch v0.1.0-spine-preview.1 https://github.com/Evanshenf/ssd-firmware-lab.git
+cd ssd-firmware-lab
+make -C frontends/linux-m4 check-runtime</code></pre>
+      <p>This runs existing integration checks through the real firmware, FTL, NFC and temporary file-NAND. Require a successful exit, including the storage/recovery checks. The marker <code>native_hif=not_connected</code> is expected: this entry point does <strong>not</strong> create a system NVMe device.</p>
+      <p>See <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/docs/getting-started.md">dependencies and output explained</a>. Creating a native namespace is a separate, privileged <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/kernel/m4-native/README.md">disposable-VM experiment with a pinned kernel and reserved BAR memory</a>, not a production-host installation.</p>
+    </section>
+    <section id="source" aria-labelledby="source-title">
+      <h2 id="source-title">Read the implementation</h2>
+      <ul>
+        <li><a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/core/command-spine/profiles/linux_profile_v1_adapter.c">NVMe command policy and payloads</a></li>
+        <li><a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/core/command-spine/spine_lifecycle.c">Shared command lifecycle</a></li>
+        <li><a href="https://github.com/Evanshenf/ssd-firmware-lab/tree/main/core/m3p">FTL mapping, garbage collection and recovery</a></li>
+        <li><a href="https://github.com/Evanshenf/ssd-firmware-lab/tree/main/nfc">NAND flash controller model</a></li>
+        <li><a href="https://github.com/Evanshenf/ssd-firmware-lab/tree/main/media/file-nand-v0">Persistent NAND media implementation</a></li>
+      </ul>
+    </section>
+    <section aria-labelledby="limits-title">
+      <h2 id="limits-title">Scope before scale</h2>
+      <p>The release supports a fixed 1-MiB namespace, 512-byte LBAs, an 8-KiB maximum transfer and one depth-32 I/O queue pair. Persistent operation budgets are finite. Scalable capacity, advanced wear-leveling, raw-block backing, RTOS ports and physical NAND/FPGA/SoC adapters are future work, not delivered features.</p>
+      <p>Physical NAND erase-generation recovery remains a hardware-porting contract gap. A concurrent FLR/publication-window risk is recorded as unconfirmed. The <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/docs/results/2026-09-05-vertical-spine-preview.md">versioned results</a> are the authority for what was tested.</p>
+      <p>Development is <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/AI_ASSISTED.md">AI-assisted</a>; that is not a substitute for review or execution. To help, <a href="https://github.com/Evanshenf/ssd-firmware-lab/issues">report a reproduction or ask a firmware question</a>, including the exact version and redacted output.</p>
+    </section>
+    <section id="chinese" lang="zh-CN" aria-labelledby="chinese-title">
+      <h2 id="chinese-title">开源 NVMe SSD 固件开发与仿真</h2>
+      <p>NVMe FWLab（SSD Firmware Lab）是一个运行于 Linux 的 SSD 固件开发实验室，公开 C 固件源码，覆盖 FTL 闪存地址转换、GC 垃圾回收、NFC NAND 控制器模型、页与 OOB 元数据，以及持久化日志和重启恢复。</p>
+      <p>当前已打通软件 NVMe → 固件 → FTL → NFC → NAND 介质的纵向路径，并完成指定的原生 Linux 和 QEMU 所有权切换实验。初步软件检查不需要专用开发板；原生设备实验需要另行配置专用虚拟机。</p>
+      <p><strong>目前仍是 1 MiB namespace、有限运行预算的 pre-alpha 预览。</strong>128 GB、512 GB、1 TB、RTOS 及实体 NAND 适配均不能作为已完成能力。它不是商用 SSD 刷机固件，也不适合保存真实业务数据。</p>
+      <p><a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/README.zh-CN.md">阅读完整中文介绍和源码导航</a> · <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/docs/getting-started.md">查看入门步骤</a></p>
+    </section>
+  </main>
+  <footer>
+    <p>Independent project by the public GitHub alias <a href="https://github.com/Evanshenf">Evanshenf</a>. Not affiliated with or certified by NVM Express.</p>
+    <p><a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/LICENSES.md">Repository licenses</a> · <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/SECURITY.md">Safety and scope</a> · <a href="sitemap.xml">Sitemap</a></p>
+  </footer>
+</body>
+</html>
