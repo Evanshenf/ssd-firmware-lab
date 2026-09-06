@@ -13,8 +13,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <sys/vfs.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #define CHECK(x) do { if (!(x)) { \
@@ -37,9 +39,118 @@ struct fixture {
     uint64_t uid;
     uint64_t incarnation;
     int medium_is_tmpfs;
+    const char *stage;
+    uint64_t stage_done;
+    uint64_t stage_total;
+    uint64_t started;
+    uint64_t last_report;
+    uint32_t progress_ticks;
     void (*cut_observer)(struct fixture *fixture);
     uint32_t cut_kind;
 };
+
+static uint64_t now_seconds(void)
+{
+    struct timespec now;
+    CHECK(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
+    return (uint64_t)now.tv_sec;
+}
+
+static uint32_t step_limit(const struct fixture *f)
+{
+    /* Construction/recovery stream capacity-sized metadata. This changes the
+     * test's iteration allowance, never a firmware budget or transition. */
+    return f->lbas > UINT64_C(256) * 2048u ? UINT32_C(1000000000) : STEP_LIMIT;
+}
+
+static void progress(struct fixture *f, int force)
+{
+    uint64_t now = now_seconds();
+    struct fwlab_ftl_scale_status s = {0};
+    struct rusage usage;
+    uint32_t work = 0, meta = 0, erase = 0, ordinal = 0;
+    if (!force && now - f->last_report < 30u)
+        return;
+    if (f->runtime && f->runtime->block.context) {
+        const struct fwlab_ftl_scale *lower = f->runtime->block.context;
+        CHECK(scale_storage_query(f->runtime, &s) == FWLAB_SPINE_V0_OK);
+        work = lower->work.phase;
+        meta = lower->meta.phase;
+        erase = lower->meta.erase_index;
+        ordinal = lower->meta.ordinal;
+    }
+    CHECK(getrusage(RUSAGE_SELF, &usage) == 0);
+    fprintf(stderr, "SCALE_PROGRESS|pid=%ld|lbas=%llu|stage=%s|done_bytes=%llu|total_bytes=%llu|elapsed_s=%llu|gc=%llu|cp=%llu|nfc_started=%llu|work=%u|meta=%u|erase_cursor=%u|page_cursor=%u|maxrss_kib=%ld\n",
+            (long)getpid(), (unsigned long long)f->lbas,
+            f->stage ? f->stage : "startup",
+            (unsigned long long)f->stage_done,
+            (unsigned long long)f->stage_total,
+            (unsigned long long)(now - f->started),
+            (unsigned long long)s.garbage_collections,
+            (unsigned long long)s.checkpoints,
+            (unsigned long long)s.nfc_children,
+            work, meta, erase, ordinal, usage.ru_maxrss);
+    f->last_report = now;
+}
+
+static void stage_start(struct fixture *f, const char *name, uint64_t total)
+{
+    f->stage = name;
+    f->stage_done = 0;
+    f->stage_total = total;
+    progress(f, 1);
+}
+
+static uint64_t available_memory(void)
+{
+    FILE *stream = fopen("/proc/meminfo", "r");
+    char line[256];
+    unsigned long long kib = 0;
+    CHECK(stream);
+    while (fgets(line, sizeof(line), stream))
+        if (sscanf(line, "MemAvailable: %llu kB", &kib) == 1)
+            break;
+    CHECK(fclose(stream) == 0 && kib && kib <= UINT64_MAX / 1024u);
+    return (uint64_t)kib * 1024u;
+}
+
+static void media_preflight(const char *directory, uint32_t mib,
+                             const struct fwlab_file_nand_v1_config *config)
+{
+    struct statfs fs;
+    uint64_t image_bytes = fwlab_file_nand_v1_image_bytes(config);
+    uint64_t available, total, ram = available_memory();
+    uint64_t reserve = mib > 256 ? UINT64_C(2) << 30 : UINT64_C(128) << 20;
+    int fd;
+    if (!directory || directory[0] != '/') {
+        fputs("SCALE_PREFLIGHT_ERROR|absolute_FWLAB_TEST_MEDIA_DIR_required|no_disk_fallback=1\n", stderr);
+        exit(EXIT_FAILURE);
+    }
+    fd = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) {
+        fprintf(stderr, "SCALE_PREFLIGHT_ERROR|missing_media_directory=%s|no_disk_fallback=1\n", directory);
+        exit(EXIT_FAILURE);
+    }
+    CHECK(fstatfs(fd, &fs) == 0 && fs.f_bsize > 0);
+    CHECK(close(fd) == 0);
+    total = (uint64_t)fs.f_blocks * (uint64_t)fs.f_bsize;
+    available = (uint64_t)fs.f_bavail * (uint64_t)fs.f_bsize;
+    /* This entry is explicitly functional/tmpfs-only. An unmounted directory
+     * must never silently become a slow disk qualification. */
+    if (fs.f_type != TMPFS_MAGIC || !image_bytes ||
+        available < image_bytes + (UINT64_C(64) << 20) ||
+        ram < image_bytes + reserve ||
+        total > (mib > 256 ? UINT64_C(90) << 30 : UINT64_C(1) << 30)) {
+        fprintf(stderr, "SCALE_PREFLIGHT_ERROR|fs_type=%lx|image_bytes=%llu|fs_available=%llu|mem_available=%llu|fs_limit=%llu|no_disk_fallback=1\n",
+                (unsigned long)fs.f_type, (unsigned long long)image_bytes,
+                (unsigned long long)available, (unsigned long long)ram,
+                (unsigned long long)total);
+        exit(EXIT_FAILURE);
+    }
+    printf("SCALE_PREFLIGHT_OK|medium=tmpfs|logical_mib=%u|image_bytes=%llu|fs_available=%llu|mem_available=%llu|fs_limit=%llu\n",
+           mib, (unsigned long long)image_bytes, (unsigned long long)available,
+           (unsigned long long)ram, (unsigned long long)total);
+}
 
 static const char *medium_name(const struct fixture *f)
 {
@@ -76,7 +187,9 @@ static struct fwlab_nfc_geometry geometry(uint32_t logical_mib)
     g.channels = logical_mib == 64 ? 1 : 2;
     g.luns_per_channel = g.channels;
     g.planes_per_lun = g.channels;
-    g.blocks_per_plane = logical_mib == 64 ? 320 : 160;
+    CHECK(logical_mib == 64 || logical_mib == 256 || logical_mib == 65536);
+    g.blocks_per_plane = logical_mib == 64 ? 320 :
+                        (logical_mib == 256 ? 160 : 40960);
     g.pages_per_block = 64;
     g.plane_parallelism_per_lun = g.planes_per_lun;
     g.main_bytes_per_page = SF_PAGE_BYTES;
@@ -125,6 +238,8 @@ static void tick(struct fixture *f)
                 (unsigned long long)s.map_sequence, s.free_blocks);
     }
     CHECK(result == FWLAB_SPINE_V0_OK && used == 3);
+    if ((++f->progress_ticks & 1023u) == 0)
+        progress(f, 0);
     if (f->cut_observer)
         f->cut_observer(f);
 }
@@ -132,9 +247,9 @@ static void tick(struct fixture *f)
 static void wait_ready(struct fixture *f)
 {
     uint32_t i;
-    for (i = 0; i < STEP_LIMIT && !f->runtime->ready; ++i)
+    for (i = 0; i < step_limit(f) && !f->runtime->ready; ++i)
         tick(f);
-    CHECK(i < STEP_LIMIT && f->runtime->namespace_bound);
+    CHECK(i < step_limit(f) && f->runtime->namespace_bound);
     CHECK(f->runtime->m3p == NULL && f->runtime->nfc_model == NULL);
     CHECK(f->runtime->volume.lba_count == f->lbas);
     CHECK(f->runtime->block.context != NULL);
@@ -158,6 +273,7 @@ static void runtime_start(struct fixture *f, int format, uint64_t expectation)
     f->runtime = calloc(1, sizeof(*f->runtime));
     CHECK(f->runtime);
     CHECK(j0_runtime_init(f->runtime, &c) == FWLAB_SPINE_V0_OK);
+    stage_start(f, format ? "format" : "recovery", 0);
 }
 
 static void runtime_close(struct fixture *f)
@@ -166,7 +282,8 @@ static void runtime_close(struct fixture *f)
     uint32_t i;
     int unbound = !f->runtime->namespace_bound;
     CHECK(j0_runtime_close_start(f->runtime) == FWLAB_SPINE_V0_OK);
-    for (i = 0; i < STEP_LIMIT; ++i) {
+    stage_start(f, "close", 0);
+    for (i = 0; i < step_limit(f); ++i) {
         CHECK(j0_runtime_close_query(f->runtime, &s) == FWLAB_SPINE_V0_OK);
         if (s.quiescent)
             break;
@@ -174,7 +291,7 @@ static void runtime_close(struct fixture *f)
         if (unbound)
             CHECK(!f->runtime->namespace_bound && !f->runtime->linux_adapter.ops);
     }
-    CHECK(i < STEP_LIMIT);
+    CHECK(i < step_limit(f));
     /* Effectful quiescence can precede the existing bounded profile-record
      * retirement. fini explicitly reports IN_PROGRESS for that bookkeeping. */
     for (i = 0; i < 256; ++i) {
@@ -252,7 +369,7 @@ static void command_profile(struct fixture *f, uint32_t profile,
     }
     CHECK(j0_runtime_admit_start(r, profile, &c, &transfer,
                                  &ticket) == FWLAB_SPINE_V0_OK);
-    for (i = 0; i < STEP_LIMIT; ++i) {
+    for (i = 0; i < step_limit(f); ++i) {
         enum fwlab_spine_result_v0 result =
             j0_runtime_intent_read(r, &ticket, &intent);
         if (result == FWLAB_SPINE_V0_OK)
@@ -260,7 +377,7 @@ static void command_profile(struct fixture *f, uint32_t profile,
         CHECK(result == FWLAB_SPINE_V0_IN_PROGRESS);
         tick(f);
     }
-    CHECK(i < STEP_LIMIT);
+    CHECK(i < step_limit(f));
     if (intent.status_code != expected_status)
         fprintf(stderr, "command uid=%llu op=%u lba=%llu status=%u expected=%u\n",
                 (unsigned long long)f->uid, opcode, (unsigned long long)lba,
@@ -320,13 +437,13 @@ static void wait_idle(struct fixture *f)
 {
     uint32_t i;
     struct fwlab_ftl_scale_status s;
-    for (i = 0; i < STEP_LIMIT; ++i) {
+    for (i = 0; i < step_limit(f); ++i) {
         CHECK(scale_storage_query(f->runtime, &s) == FWLAB_SPINE_V0_OK);
         if (!s.busy)
             break;
         tick(f);
     }
-    CHECK(i < STEP_LIMIT && !s.quarantined);
+    CHECK(i < step_limit(f) && !s.quarantined);
 }
 
 static void fill_pattern(uint8_t bytes[8192], uint64_t lba, uint8_t version)
@@ -344,22 +461,28 @@ static void full_journey(struct fixture *f)
     uint8_t bytes[8192], output[8192];
     uint64_t lba, overwritten = f->lbas / 2u;
     struct fwlab_ftl_scale_status s;
+    stage_start(f, "fill", f->lbas * 512u);
     fprintf(stderr, "full-fill %llu bytes\n", (unsigned long long)f->lbas * 512u);
     for (lba = 0; lba < f->lbas; lba += 16) {
         fill_pattern(bytes, lba, 1);
         command(f, 1, lba, 16, bytes, NULL, 0, 0);
-        if ((lba & UINT64_C(0x7fff)) == 0)
-            fprintf(stderr, "fill LBA %llu/%llu\n", (unsigned long long)lba,
-                    (unsigned long long)f->lbas);
+        f->stage_done = (lba + 16u) * 512u;
+        progress(f, 0);
     }
+    progress(f, 1);
     /* Interleave replaced and retained8KiB groups. Sequential half-volume
      * overwrite can yield zero-live victims and legitimately need no copies. */
     fprintf(stderr, "full-overwrite interleaved %llu bytes\n",
             (unsigned long long)overwritten * 512u);
+    stage_start(f, "overwrite", overwritten * 512u);
     for (lba = 0; lba < f->lbas; lba += 32) {
         fill_pattern(bytes, lba, 2);
         command(f, 1, lba, 16, bytes, NULL, 1, 0);
+        f->stage_done += 8192u;
+        progress(f, 0);
     }
+    progress(f, 1);
+    stage_start(f, "flush", 0);
     command(f, 0, 0, 0, NULL, NULL, 0, 0);
     CHECK(scale_storage_query(f->runtime, &s) == FWLAB_SPINE_V0_OK);
     fprintf(stderr, "full-reclaim gc=%llu cp=%llu\n",
@@ -367,11 +490,15 @@ static void full_journey(struct fixture *f)
             (unsigned long long)s.checkpoints);
     CHECK(s.garbage_collections > 0 && s.checkpoints > 1);
     reopen(f);
+    stage_start(f, "readback", f->lbas * 512u);
     for (lba = 0; lba < f->lbas; lba += 16) {
         fill_pattern(bytes, lba, lba % 32u == 0 ? 2 : 1);
         command(f, 2, lba, 16, NULL, output, 0, 0);
         CHECK(memcmp(bytes, output, sizeof(bytes)) == 0);
+        f->stage_done = (lba + 16u) * 512u;
+        progress(f, 0);
     }
+    progress(f, 1);
     printf("SCALE_FTL_FULL_PASS|lbas=%llu|fill_bytes=%llu|overwrite_bytes=%llu|readback_bytes=%llu|gc=%llu|cp=%llu|medium=%s\n",
            (unsigned long long)f->lbas, (unsigned long long)f->lbas * 512u,
            (unsigned long long)overwritten * 512u,
@@ -394,8 +521,16 @@ static void journey(uint32_t mib, int full, int cuts)
     uint32_t i;
     const char *media_parent = getenv("FWLAB_TEST_MEDIA_DIR");
     int length;
-    if (!media_parent || !*media_parent)
-        media_parent = "/tmp";
+    f.started = now_seconds();
+    f.media_config.geometry = geometry(mib);
+    memcpy(f.media_config.media_uuid, "SCALE-B2-NAND-001", 16);
+    f.media_config.media_uuid[15] = (uint8_t)(mib / 64u);
+    f.lbas = (uint64_t)mib * 2048u;
+    if (!media_parent || !*media_parent) {
+        fputs("SCALE_PREFLIGHT_ERROR|FWLAB_TEST_MEDIA_DIR_required|no_disk_fallback=1\n", stderr);
+        exit(EXIT_FAILURE);
+    }
+    media_preflight(media_parent, mib, &f.media_config);
     CHECK(media_parent[0] == '/');
     length = snprintf(f.directory, sizeof(f.directory),
                       "%s/fwlab-scale-ftl.XXXXXX", media_parent);
@@ -405,10 +540,6 @@ static void journey(uint32_t mib, int full, int cuts)
     f.directory_fd = open(f.directory, O_DIRECTORY | O_CLOEXEC | O_RDONLY);
     CHECK(f.directory_fd >= 0);
     medium_report(&f, 0);
-    f.media_config.geometry = geometry(mib);
-    memcpy(f.media_config.media_uuid, "SCALE-B2-NAND-001", 16);
-    f.media_config.media_uuid[15] = (uint8_t)(mib / 64u);
-    f.lbas = (uint64_t)mib * 2048u;
     scale_storage_factory_init(&f.factory, &f.options);
     media_open(&f, 1);
     runtime_start(&f, 1, 0);
@@ -431,6 +562,18 @@ static void journey(uint32_t mib, int full, int cuts)
     memset(bytes, 0x5a, sizeof(bytes));
     command(&f, 1, 7, 16, bytes, NULL, 0, 0);
     memcpy(expected + 7u * 512u, bytes, sizeof(bytes));
+    if (mib > 256) {
+        /* Full-size qualification itself drives reclamation and bank reuse;
+         * do not pretend1100 tiny writes fill a64K-slot large journal. */
+        CHECK(full && !cuts);
+        for (i = 0; i < 2; ++i) {
+            command(&f, 2, i * 16u, 16, NULL, output, 0, 0);
+            CHECK(memcmp(expected + i * 8192u, output, sizeof(output)) == 0);
+        }
+        full_journey(&f);
+        goto finish;
+    }
+    stage_start(&f, "small-regression", 0);
     for (i = 0; i < 70; ++i) {
         uint32_t page = i % 16u;
         memset(bytes, (int)(i + 1u), 4096);
@@ -471,6 +614,7 @@ static void journey(uint32_t mib, int full, int cuts)
         full_journey(&f);
     if (cuts)
         cuts_journey(&f);
+finish:
     runtime_close(&f);
     media_close(&f);
     media_open(&f, 0);
@@ -490,7 +634,23 @@ int main(int argc, char **argv)
 {
     int full = argc == 2 && strcmp(argv[1], "--full") == 0;
     int cuts = argc == 2 && strcmp(argv[1], "--cuts") == 0;
-    CHECK(argc == 1 || full || cuts);
+    int large = argc == 2 && strcmp(argv[1], "--full-64g") == 0;
+    int plan = argc == 2 && strcmp(argv[1], "--plan-64g") == 0;
+    CHECK(setvbuf(stdout, NULL, _IOLBF, 0) == 0);
+    CHECK(setvbuf(stderr, NULL, _IOLBF, 0) == 0);
+    CHECK(argc == 1 || full || cuts || large || plan);
+    if (plan) {
+        struct fwlab_file_nand_v1_config config = {0};
+        config.geometry = geometry(65536);
+        memcpy(config.media_uuid, "SCALE-B2-NAND-001", 16);
+        media_preflight(getenv("FWLAB_TEST_MEDIA_DIR"), 65536, &config);
+        puts("SCALE_PLAN_ONLY|no_NAND_io=1|no_runtime_pass_claim=1");
+        return 0;
+    }
+    if (large) {
+        journey(65536, 1, 0);
+        return 0;
+    }
     journey(64, full, cuts);
     journey(256, full, 0);
     return 0;

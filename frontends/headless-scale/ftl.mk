@@ -6,6 +6,8 @@ CPPFLAGS += -I../../include -I../../core/ftl-scale -I../../core/m3p \
 	-I../../media/file-nand-v1 -I../../nfc
 CFLAGS ?= -std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic -fno-common
 BUILD ?= build/scale-ftl
+FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
+export FWLAB_TEST_MEDIA_DIR
 SOURCES := \
 	core/command-spine/spine_contracts.c \
 	core/command-spine/spine_lifecycle.c \
@@ -28,12 +30,18 @@ SOURCES := \
 	frontends/headless-scale/scale_storage.c frontends/headless-scale/test_ftl.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 PROGRAM := $(BUILD)/test_scale_ftl
-.PHONY: all check check-full
+.PHONY: all check check-full check-cuts plan-64g check-64g
 all: $(PROGRAM)
 check: $(PROGRAM)
 	$(PROGRAM)
 check-full: $(PROGRAM)
 	$(PROGRAM) --full
+check-cuts: $(PROGRAM)
+	$(PROGRAM) --cuts
+plan-64g: $(PROGRAM)
+	$(PROGRAM) --plan-64g
+check-64g: $(PROGRAM)
+	$(PROGRAM) --full-64g
 $(PROGRAM): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LDLIBS)
 $(BUILD)/%.o: ../../%.c ftl.mk

@@ -161,7 +161,10 @@ It is deliberately separate from the quick iteration target and may take a
 substantial time when the backing filesystem has slow synchronous writes.
 
 For faster **functional-only** regression, the same test accepts
-`FWLAB_TEST_MEDIA_DIR` as an absolute parent directory; the default is `/tmp`.
+`FWLAB_TEST_MEDIA_DIR` as an absolute parent directory. The Make entry defaults
+to `/run/fwlab-test-media`; direct invocation requires the variable explicitly.
+Missing, non-tmpfs or insufficient-capacity media is an error, never a fallback
+to the system disk. This functional entry does not launch disk qualification.
 Only the disposable NAND image directory changes. FTL, NFC, physical redo and
 all synchronization calls remain identical. For the 64/256-MiB profiles, use
 an isolated tmpfs with a 1-GiB size limit, run one invocation at a time, and
@@ -181,6 +184,30 @@ Do not move an active image, silently use tmpfs for disk qualification, or treat
 tmpfs functional/process-restart results as disk persistence, host power-loss
 or storage-performance evidence. The mount limit is not a whole-process RAM
 limit, and this permission does not extend to a 64-GiB image.
+
+### Explicit 64-GiB functional profile
+
+An isolated validation branch also provides `--plan-64g` and `--full-64g`.
+The first checks sizing/resources without NAND I/O; the second runs a64-GiB
+namespace over80GiB modeled main area on an explicitly selected large tmpfs.
+It requires separately approved memory provisioning. The small regression's
+1-GiB mount is not enlarged or reused automatically. Large preflight checks the
+actual image size, free filesystem space and MemAvailable, with a90-GiB maximum
+mount size and headroom for runtime/OS memory.
+
+The large entry preserves the production firmware, NFC, media format, locks
+and synchronization calls. It skips the tiny1100-write journal-rollover setup
+because the large journal has64K slots; full fill plus interleaved half-volume
+overwrite must actually cause GC/checkpoint reuse before restart/readback can
+pass. It is not a sparse high-address-only qualification.
+
+Stage transitions and30-second progress report completed Host bytes, elapsed
+time, GC/checkpoint counts, NFC starts and private maintenance cursors. Increased
+iteration allowance applies only to the test's large initialization/recovery;
+no firmware transition or resource limit is relaxed. A wall-time overrun calls
+for read-only CPU/I/O/memory inspection and an explicit report, not automatic
+whole-run retries. A started large run is not a pass, and tmpfs never proves
+real-disk persistence or SSD performance.
 
 These commands create private regular files in uniquely named temporary
 directories. Successful journeys remove their own test image; failed journeys
