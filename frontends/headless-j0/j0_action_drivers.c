@@ -374,7 +374,8 @@ static enum fwlab_spine_result_v0 block_submit_action(
     struct fwlab_block_submit_result_v0 submitted;
     enum fwlab_spine_result_v0 lower;
 
-    if (admission == NULL) {
+    if (admission == NULL || !runtime->namespace_bound ||
+        action->argument.namespace_id != runtime->namespace_id) {
         return FWLAB_SPINE_V0_POISONED;
     }
     if (!action->lower_token_valid) {
@@ -393,7 +394,7 @@ static enum fwlab_spine_result_v0 block_submit_action(
             runtime->block.provider_nonce;
         action->block_request.operation_token.generation =
             runtime->block.generation;
-        action->block_request.namespace_ref = runtime->namespace_ref;
+        action->block_request.namespace_ref = runtime->volume.namespace_ref;
         action->block_request.lba = action->argument.lba;
         action->block_request.lba_count = action->argument.lba_count;
         action->block_request.operation = block_operation(action->token.kind);

@@ -7,6 +7,7 @@
 #include "compact_nand.h"
 #include "compact_nand_internal.h"
 #include "m3p_internal.h"
+#include "fwlab/portable/nvme_codec.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -143,21 +144,21 @@ static int binding_rejections(const struct image *image)
     return 1;
 }
 
-static int runtime_open(struct image *image, uint32_t mode, uint64_t salt,
-                        struct j0_runtime **output)
+static int runtime_open_config(const struct j0_runtime_config *config,
+                               struct j0_runtime **output)
 {
-    struct j0_runtime_config config = runtime_config(image, mode, salt);
     struct j0_runtime *runtime = calloc(1, sizeof(*runtime));
     uint32_t iteration;
 
     CHECK(runtime != NULL);
-    CHECK(j0_runtime_init(runtime, &config) == FWLAB_SPINE_V0_OK);
+    CHECK(j0_runtime_init(runtime, config) == FWLAB_SPINE_V0_OK);
     for (iteration = 0; iteration < STEP_LIMIT; ++iteration) {
         uint32_t used;
 
         CHECK(j0_runtime_step(runtime, 3, &used) == FWLAB_SPINE_V0_OK);
         CHECK(used == 3);
         if (runtime->ready) {
+            CHECK(runtime->namespace_bound);
             CHECK(runtime->config.file == NULL);
             CHECK(runtime->block.context == runtime->m3p);
             CHECK(runtime->block.ops == fwlab_m3p_block_service(runtime->m3p).ops);
@@ -170,16 +171,28 @@ static int runtime_open(struct image *image, uint32_t mode, uint64_t salt,
     CHECK(0 && "runtime readiness budget exhausted");
 }
 
+static int runtime_open(struct image *image, uint32_t mode, uint64_t salt,
+                        struct j0_runtime **output)
+{
+    struct j0_runtime_config config = runtime_config(image, mode, salt);
+    return runtime_open_config(&config, output);
+}
+
 static int runtime_close(struct j0_runtime *runtime)
 {
     struct j0_close_status status;
     uint32_t iteration;
+    int initially_unbound = !runtime->namespace_bound;
 
     CHECK(j0_runtime_close_start(runtime) == FWLAB_SPINE_V0_OK);
     for (iteration = 0; iteration < STEP_LIMIT; ++iteration) {
         uint32_t used;
 
         CHECK(j0_runtime_close_query(runtime, &status) == FWLAB_SPINE_V0_OK);
+        if (initially_unbound) {
+            CHECK(!runtime->ready && !runtime->namespace_bound);
+            CHECK(runtime->linux_adapter.ops == NULL);
+        }
         if (status.quiescent) break;
         CHECK(j0_runtime_step(runtime, 3, &used) == FWLAB_SPINE_V0_OK);
     }
@@ -200,9 +213,10 @@ static int runtime_close(struct j0_runtime *runtime)
     return 1;
 }
 
-static int command_run_flags(struct j0_runtime *runtime, uint64_t uid,
-                             uint8_t opcode, uint64_t lba, uint32_t lbas,
-                             const uint8_t *input, uint8_t *output, int fua)
+static int command_run_status(struct j0_runtime *runtime, uint64_t uid,
+                              uint8_t opcode, uint64_t lba, uint32_t lbas,
+                              const uint8_t *input, uint8_t *output, int fua,
+                              uint8_t expected_status)
 {
     struct fwlab_nvme_command command = {0};
     struct j0_host_transfer transfer = {0};
@@ -225,13 +239,17 @@ static int command_run_flags(struct j0_runtime *runtime, uint64_t uid,
     command.safety_generation = 1;
     command.namespace_id = 1;
     command.opcode = opcode;
-    command.queue_class = FWLAB_NVME_QUEUE_IO;
+    command.queue_class = opcode == 6 ? FWLAB_NVME_QUEUE_ADMIN : FWLAB_NVME_QUEUE_IO;
     command.fuse = FWLAB_NVME_FUSE_NONE;
     command.data_pointer_format = FWLAB_NVME_DATA_POINTER_PRP;
     command.data_address_present = (uint8_t)(opcode != 0);
     transfer.version = J0_RUNTIME_VERSION;
     transfer.size = (uint16_t)sizeof(transfer);
-    if (opcode != 0) {
+    if (opcode == 6) {
+        /* Identify Namespace: CNS=0, NSID=1 and a 4096-byte payload. */
+        transfer.direction = FWLAB_HOST_DATA_V0_CONTROLLER_TO_HOST;
+        transfer.exact_bytes = 4096;
+    } else if (opcode != 0) {
         command.command_dword10_15[0] = (uint32_t)lba;
         command.command_dword10_15[1] = (uint32_t)(lba >> 32);
         command.command_dword10_15[2] = lbas - 1u;
@@ -243,6 +261,13 @@ static int command_run_flags(struct j0_runtime *runtime, uint64_t uid,
     if (fua) {
         CHECK(opcode == 1);
         command.command_dword10_15[2] |= UINT32_C(1) << 30;
+    }
+    if (expected_status != 0) {
+        /* The SQE still declares data, but rejected policy has a zero-byte
+         * action plan and must not acquire a Host data transfer. */
+        transfer.direction = 0;
+        transfer.exact_bytes = 0;
+        transfer.input = NULL;
     }
     CHECK(j0_runtime_admit_start(runtime, J0_PROFILE_LINUX_V1, &command,
                                  &transfer, &ticket) == FWLAB_SPINE_V0_OK);
@@ -257,7 +282,7 @@ static int command_run_flags(struct j0_runtime *runtime, uint64_t uid,
         CHECK(j0_runtime_step(runtime, 3, &used) == FWLAB_SPINE_V0_OK);
     }
     CHECK(iteration < STEP_LIMIT);
-    CHECK(intent.status_code == 0 && intent.status_code_type == 0);
+    CHECK(intent.status_code == expected_status && intent.status_code_type == 0);
     if (fua) {
         const struct j0_admission_record *record = NULL;
         for (iteration = 0; iteration < J0_MAX_COMMANDS; ++iteration) {
@@ -283,6 +308,14 @@ static int command_run_flags(struct j0_runtime *runtime, uint64_t uid,
     CHECK(j0_runtime_publication_finish(runtime, &ticket, &lease,
           FWLAB_SPINE_PUBLICATION_V1_COMMITTED) == FWLAB_SPINE_V0_OK);
     return 1;
+}
+
+static int command_run_flags(struct j0_runtime *runtime, uint64_t uid,
+                             uint8_t opcode, uint64_t lba, uint32_t lbas,
+                             const uint8_t *input, uint8_t *output, int fua)
+{
+    return command_run_status(runtime, uid, opcode, lba, lbas, input, output,
+                              fua, 0);
 }
 
 static int command_run(struct j0_runtime *runtime, uint64_t uid,
@@ -486,6 +519,232 @@ static int force_gc(struct j0_runtime *runtime)
     return 1;
 }
 
+static uint64_t get_u64(const uint8_t *bytes)
+{
+    return (uint64_t)m3p_get_le32(bytes) |
+           ((uint64_t)m3p_get_le32(bytes + 4) << 32);
+}
+
+static int volume_check(struct image *image, struct j0_runtime *runtime,
+                        uint64_t *uid, uint64_t lbas, uint16_t format)
+{
+    struct fwlab_block_volume_binding_v0 binding;
+    struct fwlab_nand_page_info page;
+    struct fwlab_nand_block_info block;
+    struct fwlab_nfc_ppa ppa = {0};
+    uint8_t bytes[4096], oob[128];
+
+    CHECK(fwlab_m3p_volume_query(runtime->m3p, &binding) == FWLAB_SPINE_V0_OK);
+    CHECK(fwlab_block_volume_desc_v0_valid(&binding.volume));
+    CHECK(binding.volume.lba_count == lbas && binding.volume.lba_bytes == 512);
+    CHECK(runtime->namespace_bound && runtime->namespace_id == 1);
+    CHECK(memcmp(&binding.volume, &runtime->volume,
+                 sizeof(binding.volume)) == 0);
+    CHECK(binding.service.ops == runtime->block.ops &&
+          binding.service.context == runtime->block.context &&
+          binding.service.provider_nonce == runtime->block.provider_nonce &&
+          binding.service.generation == runtime->block.generation);
+    CHECK(command_run(runtime, (*uid)++, 6, 0, 0, NULL, bytes));
+    CHECK(get_u64(bytes) == lbas && get_u64(bytes + 8) == lbas &&
+          get_u64(bytes + 16) == lbas && bytes[130] == 9);
+    CHECK(runtime->m3p->volume_format == format);
+    CHECK(runtime->m3p->checkpoint_page >= 2);
+    ppa.block = runtime->m3p->active_checkpoint_block;
+    ppa.page = (uint16_t)(runtime->m3p->checkpoint_page - 1u);
+    CHECK(image->binding.media.ops->read_page(image->binding.media.context,
+        &ppa, bytes, sizeof(bytes), oob, sizeof(oob), &page, &block) == FWLAB_NFC_API_OK);
+    CHECK(m3p_get_le32(bytes) == M3P_CHECKPOINT_COMMIT_MAGIC);
+    CHECK(m3p_get_le16(bytes + 4) == format);
+    if (format == 1) {
+        CHECK(m3p_get_le16(bytes + 6) == 64 && m3p_bytes_zero(bytes + 56, 4040));
+    } else {
+        CHECK(m3p_get_le16(bytes + 6) == 96 && get_u64(bytes + 56) == lbas &&
+              m3p_get_le32(bytes + 64) == 512);
+    }
+    return 1;
+}
+
+static int illegal_lba_rejected(struct image *image, struct j0_runtime *runtime,
+                                uint64_t *uid, uint64_t lbas)
+{
+    uint64_t media_sequence = fwlab_file_nand_v1_sequence(image->media);
+    uint32_t children = runtime->m3p->child_starts;
+    uint32_t records = runtime->m3p->record_sequence;
+    uint32_t maps = runtime->m3p->map_sequence;
+    uint32_t hosts = runtime->m3p->host_sequence;
+
+    CHECK(command_run_status(runtime, (*uid)++, 1, lbas, 1, NULL, NULL, 0, 0x80));
+    CHECK(fwlab_file_nand_v1_sequence(image->media) == media_sequence);
+    CHECK(runtime->m3p->child_starts == children &&
+          runtime->m3p->record_sequence == records &&
+          runtime->m3p->map_sequence == maps && runtime->m3p->host_sequence == hosts);
+    return 1;
+}
+
+static int wrong_expectation_child(struct image *image, uint64_t expected,
+                                   uint64_t media_sequence)
+{
+    struct j0_runtime *runtime = calloc(1, sizeof(*runtime));
+    struct j0_runtime_config config;
+    uint32_t iteration;
+
+    CHECK(runtime != NULL && media_open(image, 0));
+    CHECK(fwlab_file_nand_v1_sequence(image->media) == media_sequence);
+    config = runtime_config(image, J0_MEDIA_RECOVER, 505);
+    config.expected_lba_count = expected;
+    CHECK(j0_runtime_init(runtime, &config) == FWLAB_SPINE_V0_OK);
+    for (iteration = 0; iteration < STEP_LIMIT; ++iteration) {
+        uint32_t used;
+        enum fwlab_spine_result_v0 result = j0_runtime_step(runtime, 3, &used);
+
+        if (result == FWLAB_SPINE_V0_POISONED) break;
+        CHECK(result == FWLAB_SPINE_V0_OK);
+        CHECK(!runtime->ready && !runtime->namespace_bound);
+    }
+    CHECK(iteration < STEP_LIMIT && !runtime->ready && !runtime->namespace_bound);
+    CHECK(runtime->linux_adapter.ops == NULL);
+    CHECK(runtime->m3p->quarantined && runtime->m3p->recovery_fault_code == 16);
+    CHECK(fwlab_file_nand_v1_sequence(image->media) == media_sequence);
+    /* Poisoned startup is contained by this disposable process. */
+    return 1;
+}
+
+static int wrong_expectation_rejected(struct image *image, uint64_t lbas,
+                                      uint64_t media_sequence)
+{
+    pid_t child, waited;
+    int status;
+
+    CHECK(image->media == NULL && image->arena == NULL);
+    child = fork();
+    CHECK(child >= 0);
+    if (child == 0)
+        _exit(wrong_expectation_child(image, lbas == 1024 ? 2048 : 1024,
+                                      media_sequence) ? 73 : 74);
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    CHECK(waited == child && WIFEXITED(status) && WEXITSTATUS(status) == 73);
+    return 1;
+}
+
+static int startup_boundaries(struct image *image, uint64_t lbas)
+{
+    struct j0_runtime *runtime = calloc(1, sizeof(*runtime));
+    struct j0_runtime_config config = runtime_config(image, J0_MEDIA_RECOVER, 606);
+    struct fwlab_block_volume_binding_v0 binding;
+    struct fwlab_nvme_command flush = {0};
+    struct j0_host_transfer transfer = {0};
+    struct fwlab_spine_command_ticket_v0 ticket;
+    uint64_t sequence = fwlab_file_nand_v1_sequence(image->media);
+
+    CHECK(runtime != NULL);
+    config.format_lba_count = lbas;
+    CHECK(j0_runtime_init(runtime, &config) == FWLAB_SPINE_V0_INVALID);
+    CHECK(runtime->magic == 0 && fwlab_file_nand_v1_sequence(image->media) == sequence);
+    config.format_lba_count = 0;
+    CHECK(j0_runtime_init(runtime, &config) == FWLAB_SPINE_V0_OK);
+    CHECK(!runtime->ready && !runtime->namespace_bound && runtime->linux_adapter.ops == NULL);
+    CHECK(fwlab_m3p_volume_query(runtime->m3p, &binding) == FWLAB_SPINE_V0_IN_PROGRESS);
+    flush.version = FWLAB_NVME_COMMAND_VERSION;
+    flush.size = (uint16_t)sizeof(flush);
+    flush.handle.instance_nonce = UINT64_C(0x5343414c45424f4f);
+    flush.handle.command_uid = 1;
+    flush.handle.controller_epoch = 1;
+    flush.handle.generation = 1;
+    flush.origin.word[0] = 2;
+    flush.origin.word[1] = 1;
+    flush.trace_cookie = 1;
+    flush.safety_generation = 1;
+    flush.namespace_id = 1;
+    flush.queue_class = FWLAB_NVME_QUEUE_IO;
+    flush.fuse = FWLAB_NVME_FUSE_NONE;
+    flush.data_pointer_format = FWLAB_NVME_DATA_POINTER_PRP;
+    transfer.version = J0_RUNTIME_VERSION;
+    transfer.size = (uint16_t)sizeof(transfer);
+    CHECK(fwlab_nvme_command_valid(&flush));
+    CHECK(j0_runtime_admit_start(runtime, J0_PROFILE_LINUX_V1, &flush,
+        &transfer, &ticket) == FWLAB_SPINE_V0_INVALID);
+    CHECK(runtime->active_admissions == 0 && runtime->retained_intents == 0);
+    CHECK(runtime->m3p->child_starts == 0 && !runtime->namespace_bound);
+    CHECK(fwlab_file_nand_v1_sequence(image->media) == sequence);
+    CHECK(runtime_close(runtime));
+    return 1;
+}
+
+static int volume_journey(uint64_t lbas)
+{
+    char directory[] = "/tmp/fwlab-scale-volume.XXXXXX";
+    struct image image = {0};
+    struct j0_runtime *runtime;
+    struct j0_runtime_config config;
+    uint8_t expected[16384] = {0};
+    uint8_t last[512], output[512], patch[1536];
+    uint64_t uid = 1, sequence;
+    uint32_t checkpoint, iteration;
+
+    CHECK(mkdtemp(directory) != NULL);
+    fprintf(stderr, "SCALE volume %llu LBAs: %s/nand.bin\n",
+            (unsigned long long)lbas, directory);
+    image.directory_fd = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    CHECK(image.directory_fd >= 0);
+    image.config.geometry = fwlab_file_nand_v0_geometry();
+    memcpy(image.config.media_uuid, "SCALE-B-VOLUME-01", 16);
+    image.config.media_uuid[15] = (uint8_t)(lbas / 1024);
+    CHECK(media_open(&image, 1));
+    config = runtime_config(&image, J0_MEDIA_FORMAT, 404);
+    config.format_lba_count = lbas;
+    CHECK(runtime_open_config(&config, &runtime));
+    CHECK(volume_check(&image, runtime, &uid, lbas, 2));
+    memset(expected, 0x41, 512);
+    memset(last, 0xb1, sizeof(last));
+    CHECK(command_run_flags(runtime, uid++, 1, 0, 1, expected, NULL, 1));
+    CHECK(command_run_flags(runtime, uid++, 1, lbas - 1, 1, last, NULL, 1));
+    CHECK(command_run(runtime, uid++, 2, lbas - 1, 1, NULL, output));
+    CHECK(memcmp(last, output, sizeof(last)) == 0);
+    CHECK(illegal_lba_rejected(&image, runtime, &uid, lbas));
+    memset(patch, 0x6b, sizeof(patch));
+    CHECK(command_run(runtime, uid++, 1, 7, 3, patch, NULL));
+    memcpy(expected + 7u * 512u, patch, sizeof(patch));
+    CHECK(command_run(runtime, uid++, 0, 0, 0, NULL, NULL));
+    CHECK(readback(runtime, &uid, expected));
+    checkpoint = runtime->m3p->checkpoint_generation;
+    for (iteration = 0; iteration < 40; ++iteration) {
+        memset(expected, (int)(iteration + 3u), 512);
+        CHECK(command_run(runtime, uid++, 1, 0, 1, expected, NULL));
+        CHECK(command_run(runtime, uid++, 0, 0, 0, NULL, NULL));
+    }
+    CHECK(runtime->m3p->checkpoint_generation > checkpoint);
+    CHECK(volume_check(&image, runtime, &uid, lbas, 2));
+    CHECK(force_gc(runtime));
+    memset(expected, 0x95, 512);
+    CHECK(command_run_flags(runtime, uid++, 1, 0, 1, expected, NULL, 1));
+    CHECK(readback(runtime, &uid, expected));
+    CHECK(command_run(runtime, uid++, 2, lbas - 1, 1, NULL, output));
+    CHECK(memcmp(last, output, sizeof(last)) == 0);
+    CHECK(runtime_close(runtime));
+    sequence = fwlab_file_nand_v1_sequence(image.media);
+    CHECK(media_close(&image));
+    CHECK(wrong_expectation_rejected(&image, lbas, sequence));
+    CHECK(media_open(&image, 0));
+    CHECK(fwlab_file_nand_v1_sequence(image.media) == sequence);
+    CHECK(startup_boundaries(&image, lbas));
+    config = runtime_config(&image, J0_MEDIA_RECOVER, 707);
+    CHECK(runtime_open_config(&config, &runtime));
+    CHECK(volume_check(&image, runtime, &uid, lbas, 2));
+    CHECK(readback(runtime, &uid, expected));
+    CHECK(command_run(runtime, uid++, 2, lbas - 1, 1, NULL, output));
+    CHECK(memcmp(last, output, sizeof(last)) == 0);
+    CHECK(illegal_lba_rejected(&image, runtime, &uid, lbas));
+    CHECK(runtime_close(runtime));
+    CHECK(media_close(&image));
+    CHECK(unlinkat(image.directory_fd, "nand.bin", 0) == 0);
+    CHECK(close(image.directory_fd) == 0 && rmdir(directory) == 0);
+    printf("SCALE_VOLUME_PASS|lbas=%llu|identify=1|edge_io=1|range_no_effect=1|rmw=1|checkpoint=1|gc=1|recovery=1|expectation_no_write=1|early_close=1\n",
+           (unsigned long long)lbas);
+    return 1;
+}
+
 static int journey(void)
 {
     char directory[] = "/tmp/fwlab-scale-media.XXXXXX";
@@ -511,6 +770,7 @@ static int journey(void)
     CHECK(media_open(&image, 1));
     CHECK(binding_rejections(&image));
     CHECK(runtime_open(&image, J0_MEDIA_FORMAT, 101, &runtime));
+    CHECK(volume_check(&image, runtime, &uid, 2048, 1));
     sequence = fwlab_file_nand_v1_sequence(image.media);
     for (index = 0; index < sizeof(expected); ++index)
         expected[index] = (uint8_t)(index * 17u + index / 512u + 3u);
@@ -561,6 +821,7 @@ static int journey(void)
 
     CHECK(media_open(&image, 0));
     CHECK(runtime_open(&image, J0_MEDIA_RECOVER, 303, &runtime));
+    CHECK(volume_check(&image, runtime, &uid, 2048, 1));
     CHECK(readback(runtime, &uid, expected));
     puts("SCALE_MEDIA_FUA|self_witness=1|no_later_flush=1|recovered_readback=1");
     CHECK(runtime_close(runtime));
@@ -574,5 +835,6 @@ static int journey(void)
 
 int main(void)
 {
-    return journey() ? EXIT_SUCCESS : EXIT_FAILURE;
+    return journey() && volume_journey(1024) && volume_journey(2048)
+        ? EXIT_SUCCESS : EXIT_FAILURE;
 }

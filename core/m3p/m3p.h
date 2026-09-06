@@ -10,6 +10,7 @@
 #include "fwlab/contracts/block_service_v0.h"
 #include "fwlab/contracts/controller_buffer_v0.h"
 #include "fwlab/contracts/nfc_provider.h"
+#include "fwlab/private/block_volume_v0.h"
 
 #define FWLAB_M3P_VERSION 1u
 #define FWLAB_M3P_NAMESPACE_LBAS 2048u
@@ -94,6 +95,7 @@ struct fwlab_m3p_step_result {
 };
 
 int fwlab_m3p_config_valid(const struct fwlab_m3p_config *config);
+int fwlab_m3p_geometry_supported(const struct fwlab_nfc_geometry *geometry);
 size_t fwlab_m3p_arena_alignment(void);
 size_t fwlab_m3p_arena_size(const struct fwlab_m3p_config *config);
 
@@ -107,7 +109,14 @@ enum fwlab_spine_result_v0 fwlab_m3p_init(
 );
 
 enum fwlab_spine_result_v0 fwlab_m3p_format_start(struct fwlab_m3p *m3p);
+enum fwlab_spine_result_v0 fwlab_m3p_format_volume_start(
+    struct fwlab_m3p *m3p, uint64_t lba_count);
 enum fwlab_spine_result_v0 fwlab_m3p_recover_start(struct fwlab_m3p *m3p);
+enum fwlab_spine_result_v0 fwlab_m3p_recover_volume_start(
+    struct fwlab_m3p *m3p, uint64_t expected_lba_count);
+enum fwlab_spine_result_v0 fwlab_m3p_volume_query(
+    const struct fwlab_m3p *m3p,
+    struct fwlab_block_volume_binding_v0 *binding);
 enum fwlab_spine_result_v0 fwlab_m3p_recovery_query(
     const struct fwlab_m3p *m3p,
     struct fwlab_m3p_recovery_status *status

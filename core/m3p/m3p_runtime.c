@@ -112,7 +112,7 @@ static int request_valid(const struct fwlab_m3p *m3p,
         return 0;
     }
     end = request->lba + request->lba_count;
-    if (end > FWLAB_M3P_NAMESPACE_LBAS || end < request->lba) {
+    if (end > m3p->volume_lba_count || end < request->lba) {
         return 0;
     }
     if (request->operation == FWLAB_BLOCK_V0_TRIM) {
@@ -604,6 +604,41 @@ int fwlab_m3p_config_valid(const struct fwlab_m3p_config *config)
            m3p_bytes_zero(config->reserved1, sizeof(config->reserved1));
 }
 
+struct fwlab_nfc_geometry m3p_geometry(void)
+{
+    struct fwlab_nfc_geometry geometry;
+
+    memset(&geometry, 0, sizeof(geometry));
+    geometry.version = FWLAB_NFC_CONTRACT_VERSION;
+    geometry.size = (uint16_t)sizeof(geometry);
+    geometry.channels = 1;
+    geometry.luns_per_channel = 1;
+    geometry.planes_per_lun = 1;
+    geometry.blocks_per_plane = M3P_BLOCKS;
+    geometry.pages_per_block = M3P_PAGES_PER_BLOCK;
+    geometry.plane_parallelism_per_lun = 1;
+    geometry.main_bytes_per_page = M3P_PAGE_BYTES;
+    geometry.oob_bytes_per_page = M3P_OOB_BYTES;
+    geometry.max_programs_per_erase = 1;
+    geometry.program_order = FWLAB_NFC_PROGRAM_ASCENDING;
+    return geometry;
+}
+
+int fwlab_m3p_geometry_supported(const struct fwlab_nfc_geometry *geometry)
+{
+    const struct fwlab_nfc_geometry expected = m3p_geometry();
+
+    return geometry != NULL &&
+           memcmp(geometry, &expected, sizeof(expected)) == 0;
+}
+
+int m3p_volume_lba_count_valid(uint64_t lba_count)
+{
+    return lba_count >= M3P_SECTORS_PER_PAGE &&
+           lba_count <= FWLAB_M3P_NAMESPACE_LBAS &&
+           lba_count % M3P_SECTORS_PER_PAGE == 0;
+}
+
 size_t fwlab_m3p_arena_alignment(void)
 {
     return alignof(max_align_t);
@@ -675,6 +710,10 @@ enum fwlab_spine_result_v0 fwlab_m3p_init(
     m3p->service.generation = config->generation;
     m3p->next_child_uid = config->next_nfc_operation_uid;
     m3p_mapping_reset(m3p);
+    /* Preserve pre-ready admission validation for the legacy constructor.
+     * Only format/recovery can make these logical facts queryable. */
+    m3p->volume_format = M3P_FORMAT_VERSION;
+    m3p->volume_lba_count = FWLAB_M3P_NAMESPACE_LBAS;
     m3p->initialized = 1;
     *m3p_out = m3p;
     return FWLAB_SPINE_V0_OK;
@@ -686,6 +725,41 @@ struct fwlab_block_service_v0 fwlab_m3p_block_service(struct fwlab_m3p *m3p)
 
     memset(&empty, 0, sizeof(empty));
     return m3p_live(m3p) ? m3p->service : empty;
+}
+
+enum fwlab_spine_result_v0 fwlab_m3p_volume_query(
+    const struct fwlab_m3p *m3p, struct fwlab_block_volume_binding_v0 *binding)
+{
+    struct fwlab_block_volume_binding_v0 result;
+
+    if (m3p == NULL || m3p->magic != M3P_MAGIC || !m3p->initialized ||
+        binding == NULL) {
+        return FWLAB_SPINE_V0_INVALID;
+    }
+    if (m3p->quarantined) return FWLAB_SPINE_V0_QUARANTINED;
+    if (m3p->admission_closed) return FWLAB_SPINE_V0_WRONG_STATE;
+    if (!m3p->ready || m3p->work_kind == FWLAB_M3P_MAINTENANCE_FORMAT ||
+        m3p->work_kind == FWLAB_M3P_MAINTENANCE_RECOVERY) {
+        return FWLAB_SPINE_V0_IN_PROGRESS;
+    }
+    memset(&result, 0, sizeof(result));
+    result.volume.version = FWLAB_BLOCK_VOLUME_V0_VERSION;
+    result.volume.size = (uint16_t)sizeof(result.volume);
+    result.volume.namespace_ref = m3p->config.namespace_ref;
+    result.volume.lba_count = m3p->volume_lba_count;
+    result.volume.lba_bytes = FWLAB_M3P_LBA_BYTES;
+    result.service = m3p->service;
+    *binding = result;
+    return FWLAB_SPINE_V0_OK;
+}
+
+static void checkpoint_volume_fields(const struct fwlab_m3p *m3p,
+                                     struct m3p_checkpoint_commit *commit)
+{
+    commit->format_version = m3p->volume_format;
+    commit->lba_count = m3p->volume_lba_count;
+    commit->lba_bytes = FWLAB_M3P_LBA_BYTES;
+    commit->geometry = m3p_geometry();
 }
 
 static void prepare_metadata_oob(struct fwlab_m3p *m3p, uint8_t page_type,
@@ -756,6 +830,7 @@ static int start_format_commit(struct fwlab_m3p *m3p)
     commit.journal_generation = 1;
     commit.commit_record_sequence = m3p->record_sequence + 1u;
     memcpy(commit.media_uuid, m3p->config.media_uuid, 16);
+    checkpoint_volume_fields(m3p, &commit);
     m3p_encode_checkpoint_commit(m3p->frame_main[0], &commit);
     m3p->child.ppa = ppa;
     prepare_metadata_oob(m3p, M3P_PAGE_CHECKPOINT_COMMIT,
@@ -763,7 +838,8 @@ static int start_format_commit(struct fwlab_m3p *m3p)
     return m3p_child_program_start(m3p, 0, ppa) == FWLAB_SPINE_V0_OK;
 }
 
-enum fwlab_spine_result_v0 fwlab_m3p_format_start(struct fwlab_m3p *m3p)
+static enum fwlab_spine_result_v0 format_start(
+    struct fwlab_m3p *m3p, uint64_t lba_count, uint16_t format_version)
 {
     if (!m3p_live(m3p) || m3p->ready || m3p->admission_closed ||
         m3p->work_kind != FWLAB_M3P_MAINTENANCE_NONE ||
@@ -772,9 +848,24 @@ enum fwlab_spine_result_v0 fwlab_m3p_format_start(struct fwlab_m3p *m3p)
         return FWLAB_SPINE_V0_WRONG_STATE;
     }
     m3p_mapping_reset(m3p);
+    m3p->volume_format = format_version;
+    m3p->volume_lba_count = lba_count;
+    m3p->expected_lba_count = 0;
     m3p->work_kind = FWLAB_M3P_MAINTENANCE_FORMAT;
     m3p->work_state = M3P_FORMAT_BODY;
     return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 fwlab_m3p_format_start(struct fwlab_m3p *m3p)
+{
+    return format_start(m3p, FWLAB_M3P_NAMESPACE_LBAS, M3P_FORMAT_VERSION);
+}
+
+enum fwlab_spine_result_v0 fwlab_m3p_format_volume_start(
+    struct fwlab_m3p *m3p, uint64_t lba_count)
+{
+    if (!m3p_volume_lba_count_valid(lba_count)) return FWLAB_SPINE_V0_INVALID;
+    return format_start(m3p, lba_count, M3P_VOLUME_FORMAT_VERSION);
 }
 
 static int format_drive(struct fwlab_m3p *m3p)
@@ -1072,6 +1163,7 @@ static int checkpoint_prepare_commit(struct fwlab_m3p *m3p)
     commit.journal_generation = m3p->journal_generation + 1u;
     commit.commit_record_sequence = record;
     memcpy(commit.media_uuid, m3p->config.media_uuid, 16);
+    checkpoint_volume_fields(m3p, &commit);
     m3p_encode_checkpoint_commit(m3p->frame_main[0], &commit);
     memset(&oob, 0, sizeof(oob));
     oob.page_type = M3P_PAGE_CHECKPOINT_COMMIT;

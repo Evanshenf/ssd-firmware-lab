@@ -3,6 +3,7 @@
 
 #include "spine_internal.h"
 #include "fwlab/contracts/block_service_v0.h"
+#include "fwlab/private/block_volume_v0.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -85,6 +86,8 @@ struct linux_adapter {
     uint64_t next_uid;
     uint32_t generation;
     uint32_t retire_delay;
+    uint32_t namespace_id;
+    struct fwlab_block_volume_desc_v0 volume;
     struct linux_record record[LINUX_RECORDS];
 };
 
@@ -292,6 +295,7 @@ static int data_required(uint32_t kind)
 }
 
 static int namespace_valid(
+    const struct linux_adapter *adapter,
     uint32_t kind,
     const struct fwlab_nvme_command *command)
 {
@@ -300,12 +304,13 @@ static int namespace_valid(
     }
     if (kind == LINUX_KIND_IDENTIFY_NAMESPACE || kind == LINUX_KIND_READ ||
         kind == LINUX_KIND_WRITE || kind == LINUX_KIND_FLUSH) {
-        return command->namespace_id == 1;
+        return command->namespace_id == adapter->namespace_id;
     }
     return command->namespace_id == 0;
 }
 
 static int dwords_valid(
+    const struct linux_adapter *adapter,
     uint32_t kind,
     const struct fwlab_nvme_command *command,
     struct linux_semantic *semantic)
@@ -355,13 +360,13 @@ static int dwords_valid(
              !(kind == LINUX_KIND_READ && dword[3] == 7))) {
             return 0;
         }
-        if (lba_count > 16 || slba >= 2048 ||
-            slba > UINT64_MAX - lba_count || slba + lba_count > 2048) {
+        if (lba_count > 16 || slba >= adapter->volume.lba_count ||
+            lba_count > adapter->volume.lba_count - slba) {
             semantic->status = LINUX_STATUS_LBA_RANGE;
             semantic->dnr = 1;
             return 1;
         }
-        bytes = lba_count * UINT64_C(512);
+        bytes = lba_count * adapter->volume.lba_bytes;
         if (bytes > 8192 || bytes > UINT32_MAX) {
             semantic->status = LINUX_STATUS_LBA_RANGE;
             semantic->dnr = 1;
@@ -405,6 +410,7 @@ static void transport_status(
 }
 
 static void sanitize(
+    const struct linux_adapter *adapter,
     const struct fwlab_nvme_command *command,
     struct linux_semantic *semantic)
 {
@@ -439,12 +445,12 @@ static void sanitize(
         semantic->dnr = 1;
         return;
     }
-    if (!namespace_valid(kind, command)) {
+    if (!namespace_valid(adapter, kind, command)) {
         semantic->status = LINUX_STATUS_INVALID_NAMESPACE;
         semantic->dnr = 1;
         return;
     }
-    if (!dwords_valid(kind, command, semantic)) {
+    if (!dwords_valid(adapter, kind, command, semantic)) {
         semantic->status = LINUX_STATUS_INVALID_FIELD;
         semantic->dnr = 1;
     }
@@ -500,7 +506,8 @@ static void add_action(
     ++program->action_count;
 }
 
-static void encode_payload(struct linux_record *record)
+static void encode_payload(const struct linux_adapter *adapter,
+                           struct linux_record *record)
 {
     static const char serial[] = "FWLABLINUXV1-0000001";
     static const char model[] = "SSD Firmware Lab Linux-profile-v1";
@@ -525,9 +532,9 @@ static void encode_payload(struct linux_record *record)
         break;
     case LINUX_KIND_IDENTIFY_NAMESPACE:
         record->payload_bytes = LINUX_PAYLOAD_BYTES;
-        put_u64(payload, 0, 2048);
-        put_u64(payload, 8, 2048);
-        put_u64(payload, 16, 2048);
+        put_u64(payload, 0, adapter->volume.lba_count);
+        put_u64(payload, 8, adapter->volume.lba_count);
+        put_u64(payload, 16, adapter->volume.lba_count);
         payload[130] = 9;
         break;
     case LINUX_KIND_SMART:
@@ -555,7 +562,7 @@ static void build_actions(
     case LINUX_KIND_IDENTIFY_CONTROLLER:
     case LINUX_KIND_IDENTIFY_NAMESPACE:
     case LINUX_KIND_SMART:
-        encode_payload(record);
+        encode_payload(adapter, record);
         add_action(adapter, program, FWLAB_HOST_ACTION_V0_PAYLOAD_FILL, 0, 0);
         add_action(adapter, program, FWLAB_HOST_ACTION_V0_DMA_OUT,
                    UINT32_C(1), FWLAB_HOST_WITNESS_V0_PAYLOAD_READY);
@@ -708,7 +715,7 @@ static enum fwlab_spine_result_v0 linux_plan(
         !fwlab_nvme_command_valid(command)) {
         return FWLAB_SPINE_V0_INVALID;
     }
-    sanitize(command, &semantic);
+    sanitize(adapter, command, &semantic);
     record = find_identity(adapter, command);
     if (record != NULL) {
         if (!handle_equal(&record->program.command, &command->handle) ||
@@ -1205,18 +1212,21 @@ size_t fwlab_linux_profile_v1_adapter_arena_alignment(void)
     return _Alignof(struct linux_adapter);
 }
 
-enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init(
+enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init_volume(
     void *arena,
     size_t arena_size,
     uint64_t instance_nonce,
     uint32_t generation,
+    uint32_t namespace_id,
+    const struct fwlab_block_volume_desc_v0 *volume,
     struct fwlab_host_profile_adapter_v0 *adapter)
 {
     struct linux_adapter *context = arena;
 
     if (arena == NULL || adapter == NULL || arena_size != sizeof(*context) ||
         ((uintptr_t)arena % _Alignof(struct linux_adapter)) != 0 ||
-        instance_nonce == 0 || generation == 0) {
+        instance_nonce == 0 || generation == 0 || namespace_id != 1 ||
+        !fwlab_block_volume_desc_v0_valid(volume) || volume->lba_bytes != 512) {
         return FWLAB_SPINE_V0_INVALID;
     }
     memset(context, 0, sizeof(*context));
@@ -1224,11 +1234,30 @@ enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init(
     context->instance_nonce = instance_nonce;
     context->generation = generation;
     context->next_uid = 1;
+    context->namespace_id = namespace_id;
+    context->volume = *volume;
     memset(adapter, 0, sizeof(*adapter));
     adapter->ops = &linux_ops;
     adapter->context = arena;
     adapter->generation = generation;
     return FWLAB_SPINE_V0_OK;
+}
+
+/* Compatibility for the standalone fixed-profile reference. Real J0/native
+ * construction uses the ready FTL volume initializer above, never this value. */
+enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init(
+    void *arena, size_t arena_size, uint64_t instance_nonce,
+    uint32_t generation, struct fwlab_host_profile_adapter_v0 *adapter)
+{
+    const struct fwlab_block_volume_desc_v0 legacy = {
+        .version = FWLAB_BLOCK_VOLUME_V0_VERSION,
+        .size = sizeof(struct fwlab_block_volume_desc_v0),
+        .namespace_ref = {{1, 0}},
+        .lba_count = 2048,
+        .lba_bytes = 512,
+    };
+    return fwlab_linux_profile_v1_adapter_init_volume(
+        arena, arena_size, instance_nonce, generation, 1, &legacy, adapter);
 }
 
 enum fwlab_spine_result_v0 fwlab_linux_profile_v1_binding_v0(

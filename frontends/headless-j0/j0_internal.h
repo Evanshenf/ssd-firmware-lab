@@ -13,6 +13,7 @@
 #include "file_nand.h"
 #include "fwlab/contracts/host_data_v0.h"
 #include "fwlab/portable/nfc_model.h"
+#include "fwlab/private/block_volume_v0.h"
 
 #define J0_RUNTIME_VERSION 1u
 #define J0_RUNTIME_MAGIC UINT64_C(0x4a30484541444c53)
@@ -121,6 +122,10 @@ struct j0_runtime_config {
     uint64_t volatile_nonce_seed;
     const struct j0_host_factory *host_factory;
     uint32_t budget_profile;
+    /* Creation request and recovery expectation are deliberately separate.
+     * Zero creation count selects the legacy format; zero expectation discovers. */
+    uint64_t format_lba_count;
+    uint64_t expected_lba_count;
     uint32_t reserved1[4];
 };
 
@@ -275,6 +280,9 @@ struct j0_runtime {
     struct fwlab_m3p *m3p;
     struct fwlab_block_service_v0 block;
     struct fwlab_block_namespace_ref_v0 namespace_ref;
+    struct fwlab_block_volume_desc_v0 volume;
+    uint32_t namespace_id;
+    uint8_t namespace_bound;
     struct j0_admission_record admission[J0_MAX_COMMANDS];
     struct j0_lower_close_record host_close;
     struct j0_lower_close_record block_close;
@@ -331,6 +339,11 @@ size_t fwlab_linux_profile_v1_adapter_arena_alignment(void);
 enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init(
     void *arena, size_t arena_size, uint64_t instance_nonce,
     uint32_t generation, struct fwlab_host_profile_adapter_v0 *adapter);
+enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init_volume(
+    void *arena, size_t arena_size, uint64_t instance_nonce,
+    uint32_t generation, uint32_t namespace_id,
+    const struct fwlab_block_volume_desc_v0 *volume,
+    struct fwlab_host_profile_adapter_v0 *adapter);
 enum fwlab_spine_result_v0 fwlab_linux_profile_v1_binding_v0(
     const struct fwlab_host_profile_adapter_v0 *adapter, uint32_t role,
     struct fwlab_spine_profile_binding_v0 *binding);

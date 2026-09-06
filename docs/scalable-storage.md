@@ -9,6 +9,47 @@ SSD has already been implemented. The first real full-workload target is 64 GiB;
 128 GiB depends on provisioned storage and memory. Larger capacities are design
 and arithmetic targets until actually exercised.
 
+## Current interface checkpoint: SCALE-B1
+
+The same headless program now creates and recovers two real logical volumes,
+512 KiB and 1 MiB. FTL format 2 persists logical capacity and physical geometry;
+recognized format 1 keeps its old 1-MiB meaning and encoding. The FTL exports a
+volume descriptor only after recovery/cleanup succeeds. J0 pairs it with the
+actual Block service and then constructs the Linux profile: Identify and range
+checks consume the same immutable logical capacity. A recovery expectation is
+an assertion, not a replacement capacity or an instruction to format.
+
+There is one stored Block service for submit/query/cancel/retire. A logical
+descriptor contains no file offsets, NAND allocation policy or Host address.
+The companion interface remains private/provisional; two capacities are not
+evidence of multiple independent FTL implementations. The lifecycle, Host DMA,
+Block request ABI and kernel ownership implementation are unchanged.
+
+Separately, an NFC-owned scaled constructor initializes the existing NFC model
+with its real geometry. It reuses the original provider, scheduler, fault and
+media execution code. Physical 80-MiB and 320-MiB address journeys exercise block
+319 and linear page 81919, readback after restart, erase/reprogram and a modeled
+partial-erase cut. The original constructor retains its small-profile limits.
+
+These are **different evidence scopes**: the FTL still uses its current
+256-entry representation ceiling, and the large physical-address tests do not
+pass through a large namespace. Neither is a 64-GiB or fully populated storage
+result. Scalable mapping, checkpoint and GC representation remains next.
+
+Run the bounded checks as an ordinary user:
+
+```sh
+make -C frontends/headless-scale check
+make -C frontends/headless-scale -f nfc_geometry.mk check
+```
+
+The first command includes legacy-format preservation, both volume capacities,
+Identify, boundary I/O, FUA, RMW, checkpoint rollover, GC, recovery expectation
+rejection and close-before-ready. The second uses private regular files and
+reports their paths and actual allocation. Those sparse physical-test images
+are retained for inspection; their apparent sizes are not full-capacity proof.
+Neither command loads a module, accesses a raw disk or changes the live lab.
+
 ## Preserve the existing data path
 
 Profile -> shared lifecycle -> aggregate Block -> FTL -> NFC -> physical NAND

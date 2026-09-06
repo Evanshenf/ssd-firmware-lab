@@ -13,8 +13,13 @@ static int recovery_credit_available(const struct fwlab_m3p *m3p)
                                  m3p->next_child_uid;
 }
 
-enum fwlab_spine_result_v0 fwlab_m3p_recover_start(struct fwlab_m3p *m3p)
+enum fwlab_spine_result_v0 fwlab_m3p_recover_volume_start(
+    struct fwlab_m3p *m3p, uint64_t expected_lba_count)
 {
+    if (expected_lba_count != 0 &&
+        !m3p_volume_lba_count_valid(expected_lba_count)) {
+        return FWLAB_SPINE_V0_INVALID;
+    }
     if (m3p == NULL || m3p->magic != M3P_MAGIC || !m3p->initialized ||
         m3p->quarantined || m3p->ready || m3p->admission_closed ||
         m3p->work_kind != FWLAB_M3P_MAINTENANCE_NONE ||
@@ -23,6 +28,9 @@ enum fwlab_spine_result_v0 fwlab_m3p_recover_start(struct fwlab_m3p *m3p)
         return FWLAB_SPINE_V0_WRONG_STATE;
     }
     m3p_mapping_reset(m3p);
+    m3p->expected_lba_count = expected_lba_count;
+    m3p->volume_format = 0;
+    m3p->volume_lba_count = 0;
     memset(m3p->recovered_map, 0, sizeof(m3p->recovered_map));
     memset(m3p->recovered_checkpoint, 0,
            sizeof(m3p->recovered_checkpoint));
@@ -48,6 +56,11 @@ enum fwlab_spine_result_v0 fwlab_m3p_recover_start(struct fwlab_m3p *m3p)
     return FWLAB_SPINE_V0_OK;
 }
 
+enum fwlab_spine_result_v0 fwlab_m3p_recover_start(struct fwlab_m3p *m3p)
+{
+    return fwlab_m3p_recover_volume_start(m3p, 0);
+}
+
 static int bytes_erased(const uint8_t *bytes, size_t size)
 {
     size_t index;
@@ -64,6 +77,7 @@ static int accept_checkpoint_commit(struct fwlab_m3p *m3p,
                                     const struct m3p_oob *oob)
 {
     struct m3p_checkpoint_commit commit;
+    uint16_t lpn;
 
     if (!m3p->recovery_have_body ||
         !m3p_decode_checkpoint_commit(m3p->frame_main[0], &commit) ||
@@ -76,6 +90,25 @@ static int accept_checkpoint_commit(struct fwlab_m3p *m3p,
         commit.durable_frontier != oob->durable_frontier ||
         memcmp(commit.media_uuid, m3p->config.media_uuid, 16) != 0) {
         return 0;
+    }
+    /* Every valid checkpoint must describe this same immutable volume,
+     * including generations older than the selected map snapshot. */
+    if (m3p->recovery_have_commit &&
+        (commit.format_version != m3p->recovered_commit.format_version ||
+         commit.lba_count != m3p->recovered_commit.lba_count ||
+         commit.lba_bytes != m3p->recovered_commit.lba_bytes ||
+         memcmp(&commit.geometry, &m3p->recovered_commit.geometry,
+                sizeof(commit.geometry)) != 0)) {
+        return 0;
+    }
+    for (lpn = (uint16_t)(commit.lba_count / M3P_SECTORS_PER_PAGE);
+         lpn < M3P_LPN_COUNT; ++lpn) {
+        const struct m3p_map_entry *entry = &m3p->checkpoint_candidate[lpn];
+
+        if (entry->state != M3P_L2P_UNMAPPED || entry->valid_mask != 0 ||
+            entry->map_sequence != 0) {
+            return 0;
+        }
     }
     if (m3p->recovery_have_commit &&
         commit.generation == m3p->recovered_commit.generation &&
@@ -390,6 +423,27 @@ static int finalize_recovery(struct fwlab_m3p *m3p)
     if (!m3p->recovery_have_commit) {
         return 0;
     }
+    if (m3p->expected_lba_count != 0 &&
+        m3p->expected_lba_count != m3p->recovered_commit.lba_count) {
+        m3p->recovery_fault_code = 16;
+        return 0;
+    }
+    m3p->volume_lba_count = m3p->recovered_commit.lba_count;
+    m3p->volume_format = m3p->recovered_commit.format_version;
+    /* Validate all decoded journal deltas before any replay or cleanup,
+     * including checkpoint-covered records still present on the medium. */
+    for (index = 0; index < m3p->recovery_map_count; ++index) {
+        const struct m3p_recovery_record *record = &m3p->recovered_map[index];
+        uint8_t delta;
+
+        for (delta = 0; record->valid && delta < record->map.delta_count; ++delta) {
+            if (record->map.delta[delta].lpn >=
+                m3p->volume_lba_count / M3P_SECTORS_PER_PAGE) {
+                m3p->recovery_fault_code = 17;
+                return 0;
+            }
+        }
+    }
     memcpy(m3p->durable, m3p->recovered_checkpoint,
            sizeof(m3p->durable));
     memcpy(m3p->visible, m3p->durable, sizeof(m3p->visible));
@@ -512,6 +566,10 @@ static int finalize_recovery(struct fwlab_m3p *m3p)
         }
     }
     for (lpn = 0; lpn < M3P_LPN_COUNT; ++lpn) {
+        if (lpn >= m3p->volume_lba_count / M3P_SECTORS_PER_PAGE &&
+            m3p->durable[lpn].state != M3P_L2P_UNMAPPED) {
+            return 0;
+        }
         if (!data_record_matches(m3p, lpn, &m3p->durable[lpn])) {
             return 0;
         }

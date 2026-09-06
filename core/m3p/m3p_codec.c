@@ -406,10 +406,13 @@ int m3p_decode_checkpoint_body(
 void m3p_encode_checkpoint_commit(
     uint8_t bytes[4096], const struct m3p_checkpoint_commit *commit)
 {
+    uint16_t version = commit->format_version == 0 ?
+        M3P_FORMAT_VERSION : commit->format_version;
+
     memset(bytes, 0, 4096);
     m3p_put_le32(&bytes[0], M3P_CHECKPOINT_COMMIT_MAGIC);
-    m3p_put_le16(&bytes[4], M3P_FORMAT_VERSION);
-    m3p_put_le16(&bytes[6], 64);
+    m3p_put_le16(&bytes[4], version);
+    m3p_put_le16(&bytes[6], version == M3P_VOLUME_FORMAT_VERSION ? 96 : 64);
     m3p_put_le32(&bytes[8], commit->generation);
     bytes[12] = commit->body_block;
     bytes[13] = commit->body_page;
@@ -421,20 +424,47 @@ void m3p_encode_checkpoint_commit(
     m3p_put_le32(&bytes[32], commit->journal_generation);
     m3p_put_le32(&bytes[36], commit->commit_record_sequence);
     memcpy(&bytes[40], commit->media_uuid, 16);
+    if (version == M3P_VOLUME_FORMAT_VERSION) {
+        m3p_put_le32(&bytes[56], (uint32_t)commit->lba_count);
+        m3p_put_le32(&bytes[60], (uint32_t)(commit->lba_count >> 32));
+        m3p_put_le32(&bytes[64], commit->lba_bytes);
+        m3p_put_le16(&bytes[68], commit->geometry.channels);
+        m3p_put_le16(&bytes[70], commit->geometry.luns_per_channel);
+        m3p_put_le16(&bytes[72], commit->geometry.planes_per_lun);
+        m3p_put_le16(&bytes[74], commit->geometry.blocks_per_plane);
+        m3p_put_le16(&bytes[76], commit->geometry.pages_per_block);
+        bytes[78] = commit->geometry.max_programs_per_erase;
+        bytes[79] = commit->geometry.program_order;
+        m3p_put_le32(&bytes[80], commit->geometry.main_bytes_per_page);
+        m3p_put_le32(&bytes[84], commit->geometry.oob_bytes_per_page);
+    }
 }
 
 int m3p_decode_checkpoint_commit(
     const uint8_t bytes[4096], struct m3p_checkpoint_commit *commit)
 {
+    uint16_t version;
+
     if (bytes == NULL || commit == NULL ||
         m3p_get_le32(&bytes[0]) != M3P_CHECKPOINT_COMMIT_MAGIC ||
-        m3p_get_le16(&bytes[4]) != M3P_FORMAT_VERSION ||
-        m3p_get_le16(&bytes[6]) != 64 || m3p_get_le32(&bytes[8]) == 0 ||
-        m3p_get_le32(&bytes[36]) == 0 ||
-        !m3p_bytes_zero(&bytes[56], 4040)) {
+        m3p_get_le32(&bytes[8]) == 0 || m3p_get_le32(&bytes[36]) == 0) {
+        return 0;
+    }
+    version = m3p_get_le16(&bytes[4]);
+    if ((version == M3P_FORMAT_VERSION &&
+         (m3p_get_le16(&bytes[6]) != 64 ||
+          !m3p_bytes_zero(&bytes[56], 4040))) ||
+        (version == M3P_VOLUME_FORMAT_VERSION &&
+         (m3p_get_le16(&bytes[6]) != 96 ||
+          !m3p_bytes_zero(&bytes[88], 4008))) ||
+        (version != M3P_FORMAT_VERSION && version != M3P_VOLUME_FORMAT_VERSION)) {
         return 0;
     }
     memset(commit, 0, sizeof(*commit));
+    commit->format_version = version;
+    commit->lba_count = FWLAB_M3P_NAMESPACE_LBAS;
+    commit->lba_bytes = FWLAB_M3P_LBA_BYTES;
+    commit->geometry = m3p_geometry();
     commit->generation = m3p_get_le32(&bytes[8]);
     commit->body_block = bytes[12];
     commit->body_page = bytes[13];
@@ -446,6 +476,25 @@ int m3p_decode_checkpoint_commit(
     commit->journal_generation = m3p_get_le32(&bytes[32]);
     commit->commit_record_sequence = m3p_get_le32(&bytes[36]);
     memcpy(commit->media_uuid, &bytes[40], 16);
+    if (version == M3P_VOLUME_FORMAT_VERSION) {
+        commit->lba_count = (uint64_t)m3p_get_le32(&bytes[56]) |
+                           ((uint64_t)m3p_get_le32(&bytes[60]) << 32);
+        commit->lba_bytes = m3p_get_le32(&bytes[64]);
+        commit->geometry.channels = m3p_get_le16(&bytes[68]);
+        commit->geometry.luns_per_channel = m3p_get_le16(&bytes[70]);
+        commit->geometry.planes_per_lun = m3p_get_le16(&bytes[72]);
+        commit->geometry.blocks_per_plane = m3p_get_le16(&bytes[74]);
+        commit->geometry.pages_per_block = m3p_get_le16(&bytes[76]);
+        commit->geometry.max_programs_per_erase = bytes[78];
+        commit->geometry.program_order = bytes[79];
+        commit->geometry.main_bytes_per_page = m3p_get_le32(&bytes[80]);
+        commit->geometry.oob_bytes_per_page = m3p_get_le32(&bytes[84]);
+        if (!m3p_volume_lba_count_valid(commit->lba_count) ||
+            commit->lba_bytes != FWLAB_M3P_LBA_BYTES ||
+            !fwlab_m3p_geometry_supported(&commit->geometry)) {
+            return 0;
+        }
+    }
     return commit->body_block >= 12 && commit->body_block <= 13 &&
            commit->body_page < M3P_PAGES_PER_BLOCK;
 }

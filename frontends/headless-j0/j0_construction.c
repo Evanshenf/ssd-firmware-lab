@@ -146,13 +146,12 @@ static struct fwlab_host_lifecycle_config_v0 lifecycle_config(
 static int media_binding_valid(const struct j0_media_binding *binding,
                                const uint8_t media_uuid[16])
 {
-    const struct fwlab_nfc_geometry expected = fwlab_file_nand_v0_geometry();
     const struct fwlab_nand_media_ops *ops;
 
     if (binding == NULL || binding->media.context == NULL ||
         binding->media.ops == NULL ||
         memcmp(binding->media_uuid, media_uuid, 16) != 0 ||
-        memcmp(&binding->geometry, &expected, sizeof(expected)) != 0) {
+        !fwlab_m3p_geometry_supported(&binding->geometry)) {
         return 0;
     }
     /* This seam selects a substrate, not a larger FTL/namespace profile. */
@@ -174,6 +173,10 @@ static int runtime_config_valid(const struct j0_runtime_config *config)
             media_binding_valid(config->media_binding, config->media_uuid)) &&
            (config->media_mode == J0_MEDIA_FORMAT ||
             config->media_mode == J0_MEDIA_RECOVER) &&
+           (config->media_mode != J0_MEDIA_FORMAT ||
+            config->expected_lba_count == 0) &&
+           (config->media_mode != J0_MEDIA_RECOVER ||
+            config->format_lba_count == 0) &&
            config->generation != 0 && config->execution_epoch != 0 &&
            config->volatile_nonce_seed != 0 &&
            config->volatile_nonce_seed < UINT64_C(0x100000) &&
@@ -545,6 +548,7 @@ enum fwlab_spine_result_v0 j0_runtime_init(
         J0_NFC_INSTANCE_NONCE + config->volatile_nonce_seed;
     runtime->namespace_ref.word[0] = UINT64_C(0x4a304e5330303031);
     runtime->namespace_ref.word[1] = UINT64_C(0x4d33504e53303031);
+    runtime->namespace_id = 1;
     runtime->next_client_uid = UINT64_C(40001);
 
     j0_controller_buffer_init(
@@ -601,18 +605,9 @@ enum fwlab_spine_result_v0 j0_runtime_init(
             J0_C43_ADAPTER_NONCE + config->volatile_nonce_seed,
             config->generation, &runtime->c43_adapter) !=
             FWLAB_SPINE_V0_OK ||
-        fwlab_linux_profile_v1_adapter_init(
-            runtime->linux_arena,
-            fwlab_linux_profile_v1_adapter_arena_size(),
-            J0_LINUX_ADAPTER_NONCE + config->volatile_nonce_seed,
-            config->generation, &runtime->linux_adapter) !=
-            FWLAB_SPINE_V0_OK ||
         fwlab_c43_p1_binding_v0(
             &runtime->c43_adapter, FWLAB_SPINE_ROLE_V0_NORMAL,
-            &runtime->c43_binding) != FWLAB_SPINE_V0_OK ||
-        fwlab_linux_profile_v1_binding_v0(
-            &runtime->linux_adapter, FWLAB_SPINE_ROLE_V0_NORMAL,
-            &runtime->linux_binding) != FWLAB_SPINE_V0_OK) {
+            &runtime->c43_binding) != FWLAB_SPINE_V0_OK) {
         goto failed;
     }
 
@@ -667,9 +662,15 @@ enum fwlab_spine_result_v0 j0_runtime_init(
             &runtime->drivers) != FWLAB_SPINE_V0_OK) {
         goto failed;
     }
-    result = config->media_mode == J0_MEDIA_FORMAT
-                 ? fwlab_m3p_format_start(runtime->m3p)
-                 : fwlab_m3p_recover_start(runtime->m3p);
+    if (config->media_mode == J0_MEDIA_FORMAT) {
+        result = config->format_lba_count == 0
+                     ? fwlab_m3p_format_start(runtime->m3p)
+                     : fwlab_m3p_format_volume_start(
+                           runtime->m3p, config->format_lba_count);
+    } else {
+        result = fwlab_m3p_recover_volume_start(
+            runtime->m3p, config->expected_lba_count);
+    }
     if (result != FWLAB_SPINE_V0_OK) {
         goto failed;
     }
@@ -908,6 +909,39 @@ static int close_reap_one(struct j0_runtime *runtime)
     return 0;
 }
 
+static enum fwlab_spine_result_v0 bind_ready_volume(struct j0_runtime *runtime)
+{
+    struct fwlab_block_volume_binding_v0 binding;
+    enum fwlab_spine_result_v0 result;
+
+    result = fwlab_m3p_volume_query(runtime->m3p, &binding);
+    if (result != FWLAB_SPINE_V0_OK)
+        return result;
+    if (!fwlab_block_volume_desc_v0_valid(&binding.volume) ||
+        !fwlab_block_service_v0_valid(&binding.service) ||
+        binding.service.ops != runtime->block.ops ||
+        binding.service.context != runtime->block.context ||
+        binding.service.provider_nonce != runtime->block.provider_nonce ||
+        binding.service.generation != runtime->block.generation)
+        return FWLAB_SPINE_V0_POISONED;
+    result = fwlab_linux_profile_v1_adapter_init_volume(
+        runtime->linux_arena, fwlab_linux_profile_v1_adapter_arena_size(),
+        J0_LINUX_ADAPTER_NONCE + runtime->config.volatile_nonce_seed,
+        runtime->config.generation, runtime->namespace_id,
+        &binding.volume, &runtime->linux_adapter);
+    if (result != FWLAB_SPINE_V0_OK)
+        return result;
+    result = fwlab_linux_profile_v1_binding_v0(
+        &runtime->linux_adapter, FWLAB_SPINE_ROLE_V0_NORMAL,
+        &runtime->linux_binding);
+    if (result != FWLAB_SPINE_V0_OK)
+        return result;
+    runtime->volume = binding.volume;
+    runtime->namespace_ref = binding.volume.namespace_ref;
+    runtime->namespace_bound = 1;
+    return FWLAB_SPINE_V0_OK;
+}
+
 enum fwlab_spine_result_v0 j0_runtime_step(
     struct j0_runtime *runtime, uint32_t budget, uint32_t *units)
 {
@@ -952,9 +986,12 @@ enum fwlab_spine_result_v0 j0_runtime_step(
         }
         runtime->fair_cursor = (runtime->fair_cursor + 1u) % 3u;
         ++used;
-        if (!runtime->ready && runtime->m3p->ready &&
-            runtime->m3p->work_kind == FWLAB_M3P_MAINTENANCE_NONE) {
-            runtime->ready = 1;
+        if (!runtime->ready && !runtime->close_started) {
+            enum fwlab_spine_result_v0 bound = bind_ready_volume(runtime);
+            if (bound == FWLAB_SPINE_V0_OK)
+                runtime->ready = 1;
+            else if (bound != FWLAB_SPINE_V0_IN_PROGRESS)
+                runtime->poisoned = 1;
         }
         if (runtime->poisoned || runtime->host.poisoned ||
             runtime->buffer.poisoned || runtime->m3p->quarantined) {

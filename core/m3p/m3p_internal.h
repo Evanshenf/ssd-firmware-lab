@@ -27,6 +27,7 @@
 
 #define M3P_OOB_MAGIC UINT32_C(0x4d335031)
 #define M3P_FORMAT_VERSION 1u
+#define M3P_VOLUME_FORMAT_VERSION 2u
 #define M3P_OOB_HEADER_BYTES 128u
 #define M3P_MAP_MAIN_MAGIC UINT32_C(0x4d545831)
 #define M3P_CHECKPOINT_COMMIT_MAGIC UINT32_C(0x43504331)
@@ -161,6 +162,10 @@ struct m3p_checkpoint_commit {
     uint32_t journal_generation;
     uint32_t commit_record_sequence;
     uint8_t media_uuid[16];
+    uint16_t format_version;
+    uint64_t lba_count;
+    uint32_t lba_bytes;
+    struct fwlab_nfc_geometry geometry;
 };
 
 enum m3p_child_kind {
@@ -268,6 +273,9 @@ struct fwlab_m3p {
     struct fwlab_controller_buffer_port_v0 controller_buffer;
     struct fwlab_nfc_provider nfc;
     struct fwlab_block_service_v0 service;
+    uint64_t volume_lba_count;
+    uint64_t expected_lba_count;
+    uint16_t volume_format;
     uint8_t initialized;
     uint8_t ready;
     uint8_t admission_closed;
@@ -359,6 +367,8 @@ struct fwlab_m3p {
 };
 
 uint32_t m3p_crc32c(const uint8_t *bytes, size_t size);
+struct fwlab_nfc_geometry m3p_geometry(void);
+int m3p_volume_lba_count_valid(uint64_t lba_count);
 uint64_t m3p_hash64(const uint8_t *bytes, size_t size);
 uint16_t m3p_get_le16(const uint8_t *bytes);
 uint32_t m3p_get_le32(const uint8_t *bytes);
