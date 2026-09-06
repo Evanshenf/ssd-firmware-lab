@@ -46,6 +46,15 @@ int fwlab_ftl_scale_config_valid(const struct fwlab_ftl_scale_config *c)
         arena_bytes(c, blocks, pages) != 0;
 }
 
+int fwlab_ftl_scale_extended_config_valid(const struct fwlab_ftl_scale_extended_config *c)
+{
+    return c && c->version == FWLAB_FTL_SCALE_EXTENDED_VERSION &&
+        c->size == sizeof(*c) && !c->reserved0 &&
+        sf_bytes_zero(c->reserved1, sizeof(c->reserved1)) &&
+        fwlab_ftl_scale_config_valid(&c->base) && c->max_transfer_lbas &&
+        c->max_transfer_lbas <= FWLAB_FTL_SCALE_EXTENDED_MAX_LBAS;
+}
+
 size_t fwlab_ftl_scale_arena_alignment(void) { return alignof(max_align_t); }
 
 size_t fwlab_ftl_scale_arena_size(const struct fwlab_ftl_scale_config *c)
@@ -54,6 +63,11 @@ size_t fwlab_ftl_scale_arena_size(const struct fwlab_ftl_scale_config *c)
     if (!fwlab_ftl_scale_config_valid(c) || !sf_geometry_counts(&c->geometry, &blocks, &pages))
         return 0;
     return arena_bytes(c, blocks, pages);
+}
+
+size_t fwlab_ftl_scale_extended_arena_size(const struct fwlab_ftl_scale_extended_config *c)
+{
+    return fwlab_ftl_scale_extended_config_valid(c) ? fwlab_ftl_scale_arena_size(&c->base) : 0;
 }
 
 static void submit_result(struct fwlab_block_submit_result_v0 *out,
@@ -82,7 +96,7 @@ static bool request_valid(const struct fwlab_ftl_scale *f,
     if (r->operation == FWLAB_BLOCK_V0_FLUSH) return true;
     if (r->operation != FWLAB_BLOCK_V0_READ && r->operation != FWLAB_BLOCK_V0_WRITE)
         return false;
-    return r->lba_count <= FWLAB_FTL_SCALE_MAX_LBAS &&
+    return r->lba_count <= f->max_transfer_lbas &&
         r->lba < f->root.layout.lba_count &&
         r->lba_count <= f->root.layout.lba_count - r->lba &&
         r->buffer.issuer_nonce == f->controller_buffer.issuer_nonce &&
@@ -94,10 +108,10 @@ static enum fwlab_spine_result_v0 block_submit(void *opaque,
     const struct fwlab_block_request_v0 *r, struct fwlab_block_submit_result_v0 *out)
 {
     struct fwlab_ftl_scale *f = opaque;
-    struct sf_work *w;
-    uint32_t pages = 0;
+    struct sf_parent *p;
+    enum fwlab_spine_result_v0 result;
     if (!live(f) || !r || !out) return FWLAB_SPINE_V0_INVALID;
-    w = &f->work;
+    p = &f->parent;
     if (f->quarantined) return FWLAB_SPINE_V0_QUARANTINED;
     if (f->admission_closed || !f->ready) {
         submit_result(out, r, FWLAB_HOST_ACTION_V0_BACKPRESSURE, 0);
@@ -107,15 +121,15 @@ static enum fwlab_spine_result_v0 block_submit(void *opaque,
         submit_result(out, r, FWLAB_HOST_ACTION_V0_REJECTED, SF_FAULT_STATE);
         return FWLAB_SPINE_V0_OK;
     }
-    if (w->occupied && token_equal(&w->request.operation_token, &r->operation_token)) {
-        if (memcmp(&w->request, r, sizeof(*r)) != 0) {
+    if (p->owned && token_equal(&p->request.operation_token, &r->operation_token)) {
+        if (memcmp(&p->request, r, sizeof(*r)) != 0) {
             sf_fail(f, SF_FAULT_STATE);
             return FWLAB_SPINE_V0_POISONED;
         }
         submit_result(out, r, FWLAB_HOST_ACTION_V0_ACCEPTED, 0);
         return FWLAB_SPINE_V0_OK;
     }
-    if (w->retired_valid && token_equal(&w->retired.operation_token, &r->operation_token)) {
+    if (p->retired_valid && token_equal(&p->retired.operation_token, &r->operation_token)) {
         submit_result(out, r, FWLAB_HOST_ACTION_V0_REJECTED, SF_FAULT_STATE);
         return FWLAB_SPINE_V0_OK;
     }
@@ -123,62 +137,12 @@ static enum fwlab_spine_result_v0 block_submit(void *opaque,
         submit_result(out, r, FWLAB_HOST_ACTION_V0_BACKPRESSURE, 0);
         return FWLAB_SPINE_V0_OK;
     }
-    if (r->operation != FWLAB_BLOCK_V0_FLUSH)
-        pages = (uint32_t)((r->lba % SF_SECTORS_PER_PAGE + r->lba_count +
-                           SF_SECTORS_PER_PAGE - 1u) / SF_SECTORS_PER_PAGE);
-    if (r->operation == FWLAB_BLOCK_V0_WRITE) {
-        if (f->durable_frontier >= f->config.host_sequence_limit ||
-            !sf_child_credit(f, (uint64_t)pages * 4u + 4u) || !sf_record_space(f, 1)) {
-            if (f->durable_frontier < f->config.host_sequence_limit &&
-                sf_child_credit(f, (uint64_t)pages * 4u + 4u) &&
-                sf_checkpoint_start(f) == FWLAB_SPINE_V0_OK)
-                submit_result(out, r, FWLAB_HOST_ACTION_V0_BACKPRESSURE, 0);
-            else submit_result(out, r, FWLAB_HOST_ACTION_V0_REJECTED, FWLAB_BLOCK_V0_FAULT_RESOURCE);
-            return FWLAB_SPINE_V0_OK;
-        }
-        if (f->host_head == SF_NONE ||
-            pages > (uint32_t)f->config.geometry.pages_per_block -
-                        f->blocks[f->host_head].disk.allocation_end) {
-            enum fwlab_spine_result_v0 result = sf_space_start(f, pages, false);
-            submit_result(out, r, result == FWLAB_SPINE_V0_OK ?
-                FWLAB_HOST_ACTION_V0_BACKPRESSURE : FWLAB_HOST_ACTION_V0_REJECTED,
-                FWLAB_BLOCK_V0_FAULT_RESOURCE);
-            return FWLAB_SPINE_V0_OK;
-        }
-        if (f->controller_buffer.ops->read(f->controller_buffer.context,
-            &r->buffer, &r->buffer_span, w->host_bytes, r->buffer_span.length) !=
-            FWLAB_CONTROLLER_BUFFER_V0_OK) {
-            submit_result(out, r, FWLAB_HOST_ACTION_V0_REJECTED, SF_FAULT_STATE);
-            return FWLAB_SPINE_V0_OK;
-        }
-        f->blocks[f->host_head].reserved_pages = (uint16_t)pages;
-    } else if (r->operation == FWLAB_BLOCK_V0_READ && !sf_child_credit(f, pages * 2u)) {
-        submit_result(out, r, FWLAB_HOST_ACTION_V0_REJECTED, FWLAB_BLOCK_V0_FAULT_RESOURCE);
-        return FWLAB_SPINE_V0_OK;
-    }
-    w->request = *r;
-    memset(&w->status, 0, sizeof(w->status));
-    w->status.version = FWLAB_BLOCK_SERVICE_V0_VERSION;
-    w->status.size = (uint16_t)sizeof(w->status);
-    w->status.operation_token = r->operation_token;
-    w->status.state = FWLAB_BLOCK_V0_STATE_ACCEPTED;
-    w->occupied = 1;
-    w->cancelled = w->effect_seen = 0;
-    w->kind = SF_WORK_HOST;
-    w->phase = r->operation == FWLAB_BLOCK_V0_READ ? SF_W_READ_PAGE : SF_W_HOST_PAGE;
-    w->first_lpn = (uint32_t)(r->lba / SF_SECTORS_PER_PAGE);
-    w->page_count = pages;
-    w->page_index = 0;
-    w->host_sequence = f->durable_frontier + (r->operation == FWLAB_BLOCK_V0_WRITE ? 1u : 0u);
-    memset(&w->record, 0, sizeof(w->record));
-    if (r->operation == FWLAB_BLOCK_V0_WRITE) {
-        w->record.kind = SF_MAP_GROUP;
-        w->record.block = f->host_head;
-        w->record.block_uid = f->blocks[f->host_head].disk.block_uid;
-        w->record.count = (uint16_t)pages;
-        w->record.durable_frontier = w->host_sequence;
-    }
-    submit_result(out, r, FWLAB_HOST_ACTION_V0_ACCEPTED, 0);
+    result = sf_parent_admit(f, r);
+    if (result == FWLAB_SPINE_V0_QUARANTINED) return result;
+    submit_result(out, r, result == FWLAB_SPINE_V0_OK ? FWLAB_HOST_ACTION_V0_ACCEPTED :
+                  result == FWLAB_SPINE_V0_IN_PROGRESS ? FWLAB_HOST_ACTION_V0_BACKPRESSURE :
+                  FWLAB_HOST_ACTION_V0_REJECTED,
+                  result == FWLAB_SPINE_V0_INVALID ? SF_FAULT_STATE : FWLAB_BLOCK_V0_FAULT_RESOURCE);
     return FWLAB_SPINE_V0_OK;
 }
 
@@ -187,12 +151,12 @@ static enum fwlab_spine_result_v0 block_query(void *opaque,
 {
     struct fwlab_ftl_scale *f = opaque;
     if (!live(f) || !token || !out) return FWLAB_SPINE_V0_INVALID;
-    if (f->work.occupied && token_equal(token, &f->work.request.operation_token)) {
-        *out = f->work.status;
+    if (f->parent.owned && token_equal(token, &f->parent.request.operation_token)) {
+        *out = f->parent.status;
         return FWLAB_SPINE_V0_OK;
     }
-    if (f->work.retired_valid && token_equal(token, &f->work.retired.operation_token)) {
-        *out = f->work.retired;
+    if (f->parent.retired_valid && token_equal(token, &f->parent.retired.operation_token)) {
+        *out = f->parent.retired;
         return FWLAB_SPINE_V0_OK;
     }
     return FWLAB_SPINE_V0_STALE;
@@ -203,9 +167,9 @@ static enum fwlab_spine_result_v0 block_cancel(void *opaque,
 {
     struct fwlab_ftl_scale *f = opaque;
     if (!live(f) || !token) return FWLAB_SPINE_V0_INVALID;
-    if (!f->work.occupied || !token_equal(token, &f->work.request.operation_token))
+    if (!f->parent.owned || !token_equal(token, &f->parent.request.operation_token))
         return FWLAB_SPINE_V0_STALE;
-    f->work.cancelled = 1;
+    f->parent.cancelled = 1;
     return FWLAB_SPINE_V0_OK;
 }
 
@@ -214,14 +178,14 @@ static enum fwlab_spine_result_v0 block_retire_start(void *opaque,
 {
     struct fwlab_ftl_scale *f = opaque;
     if (!live(f) || !token) return FWLAB_SPINE_V0_INVALID;
-    if (f->work.retired_valid && token_equal(token, &f->work.retired.operation_token))
+    if (f->parent.retired_valid && token_equal(token, &f->parent.retired.operation_token))
         return FWLAB_SPINE_V0_OK;
-    if (!f->work.occupied || !token_equal(token, &f->work.request.operation_token))
+    if (!f->parent.owned || !token_equal(token, &f->parent.request.operation_token))
         return FWLAB_SPINE_V0_STALE;
-    if (f->work.status.state == FWLAB_BLOCK_V0_STATE_ACCEPTED)
+    if (f->parent.status.state == FWLAB_BLOCK_V0_STATE_ACCEPTED)
         return FWLAB_SPINE_V0_WRONG_STATE;
     if (f->quarantined) return FWLAB_SPINE_V0_QUARANTINED;
-    f->work.status.state = FWLAB_BLOCK_V0_STATE_DRAINING;
+    f->parent.status.state = FWLAB_BLOCK_V0_STATE_DRAINING;
     return FWLAB_SPINE_V0_OK;
 }
 
@@ -230,21 +194,21 @@ static enum fwlab_spine_result_v0 block_retire_query(void *opaque,
 {
     struct fwlab_ftl_scale *f = opaque;
     if (!live(f) || !token || !out) return FWLAB_SPINE_V0_INVALID;
-    if (f->work.retired_valid && token_equal(token, &f->work.retired.operation_token)) {
-        *out = f->work.retired;
+    if (f->parent.retired_valid && token_equal(token, &f->parent.retired.operation_token)) {
+        *out = f->parent.retired;
         return FWLAB_SPINE_V0_OK;
     }
-    if (!f->work.occupied || !token_equal(token, &f->work.request.operation_token))
+    if (!f->parent.owned || !token_equal(token, &f->parent.request.operation_token))
         return FWLAB_SPINE_V0_STALE;
-    if (f->work.status.state != FWLAB_BLOCK_V0_STATE_DRAINING)
+    if (f->parent.status.state != FWLAB_BLOCK_V0_STATE_DRAINING)
         return FWLAB_SPINE_V0_WRONG_STATE;
     if (f->work.kind != SF_WORK_NONE || sf_meta_busy(f) || !sf_io_idle(f))
         return FWLAB_SPINE_V0_IN_PROGRESS;
-    f->work.status.state = FWLAB_BLOCK_V0_STATE_RETIRED;
-    f->work.retired = f->work.status;
-    f->work.retired_valid = 1;
-    f->work.occupied = 0;
-    *out = f->work.retired;
+    f->parent.status.state = FWLAB_BLOCK_V0_STATE_RETIRED;
+    f->parent.retired = f->parent.status;
+    f->parent.retired_valid = 1;
+    f->parent.owned = 0;
+    *out = f->parent.retired;
     return FWLAB_SPINE_V0_OK;
 }
 
@@ -258,7 +222,7 @@ static enum fwlab_spine_result_v0 block_close(void *opaque, uint64_t nonce, uint
     f->admission_closed = 1;
     f->close_lifecycle_nonce = nonce;
     f->close_execution_epoch = epoch;
-    if (f->work.occupied) f->work.cancelled = 1;
+    if (f->parent.owned) f->parent.cancelled = 1;
     return FWLAB_SPINE_V0_OK;
 }
 
@@ -275,7 +239,7 @@ static enum fwlab_spine_result_v0 block_quiescent(void *opaque, uint64_t nonce,
     out->size = (uint16_t)sizeof(*out);
     out->lifecycle_instance_nonce = nonce;
     out->execution_epoch = epoch;
-    out->aggregate_operations = f->work.occupied;
+    out->aggregate_operations = f->parent.owned;
     out->admission_closed = 1;
     out->quiescent = (uint8_t)(!sf_work_busy(f) && !sf_meta_busy(f) &&
                              sf_io_idle(f) && f->nfc_quiescent);
@@ -317,6 +281,7 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init(void *arena, size_t size,
     f->nfc = *nfc;
     f->physical_blocks = b;
     f->physical_pages = p;
+    f->max_transfer_lbas = FWLAB_FTL_SCALE_MAX_LBAS;
     f->arena_bytes = bytes;
     cursor = (uint8_t *)arena + ((sizeof(*f) + alignment - 1u) & ~(alignment - 1u));
     f->map = (struct sf_map_entry *)cursor;
@@ -340,19 +305,23 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init(void *arena, size_t size,
     return FWLAB_SPINE_V0_OK;
 }
 
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_extended(void *arena, size_t size,
+    const struct fwlab_ftl_scale_extended_config *c,
+    const struct fwlab_controller_buffer_port_v0 *buffer,
+    const struct fwlab_nfc_provider *nfc, struct fwlab_ftl_scale **out)
+{
+    enum fwlab_spine_result_v0 result;
+    uint32_t maximum;
+    if (!fwlab_ftl_scale_extended_config_valid(c)) return FWLAB_SPINE_V0_INVALID;
+    maximum = c->max_transfer_lbas;
+    result = fwlab_ftl_scale_init(arena, size, &c->base, buffer, nfc, out);
+    if (result == FWLAB_SPINE_V0_OK) (*out)->max_transfer_lbas = maximum;
+    return result;
+}
+
 void sf_host_fail(struct fwlab_ftl_scale *f, uint32_t fault)
 {
-    struct sf_work *w = &f->work;
-    if (!w->occupied) return;
-    if (w->request.operation == FWLAB_BLOCK_V0_WRITE && f->host_head != SF_NONE)
-        f->blocks[f->host_head].reserved_pages = 0;
-    w->status.state = FWLAB_BLOCK_V0_STATE_TERMINAL;
-    w->status.outcome = w->cancelled ? FWLAB_BLOCK_V0_CANCELLED : FWLAB_BLOCK_V0_FAILED;
-    w->status.effect = w->effect_seen ? FWLAB_BLOCK_V0_EFFECT_UNKNOWN_PREFIX : FWLAB_BLOCK_V0_EFFECT_NONE;
-    w->status.fault_domain = 1;
-    w->status.fault_code = fault;
-    w->kind = SF_WORK_NONE;
-    w->phase = SF_W_IDLE;
+    sf_parent_fail(f, fault);
 }
 
 void sf_fail(struct fwlab_ftl_scale *f, uint32_t fault)
@@ -361,27 +330,6 @@ void sf_fail(struct fwlab_ftl_scale *f, uint32_t fault)
     f->ready = 0;
     f->fault_code = fault;
     sf_host_fail(f, fault);
-}
-
-static void host_success(struct fwlab_ftl_scale *f)
-{
-    struct sf_work *w = &f->work;
-    w->status.state = FWLAB_BLOCK_V0_STATE_TERMINAL;
-    w->status.outcome = FWLAB_BLOCK_V0_SUCCEEDED;
-    w->status.effect = FWLAB_BLOCK_V0_EFFECT_FULL;
-    w->status.completed_lbas = w->request.lba_count;
-    w->status.data_bytes = w->request.buffer_present ? w->request.buffer_span.length : 0;
-    if (w->request.operation == FWLAB_BLOCK_V0_WRITE) {
-        w->status.durability_witness = w->request.durability == FWLAB_BLOCK_V0_DURABILITY_SELF ?
-            FWLAB_BLOCK_V0_WITNESS_SELF_DURABLE : FWLAB_BLOCK_V0_WITNESS_VOLATILE;
-    } else if (w->request.operation == FWLAB_BLOCK_V0_FLUSH)
-        w->status.durability_witness = FWLAB_BLOCK_V0_WITNESS_FRONTIER_DURABLE;
-    if (w->status.durability_witness >= FWLAB_BLOCK_V0_WITNESS_SELF_DURABLE) {
-        w->status.frontier.word[0] = f->config.provider_nonce;
-        w->status.frontier.word[1] = w->host_sequence;
-    }
-    w->kind = SF_WORK_NONE;
-    w->phase = SF_W_IDLE;
 }
 
 static uint8_t requested_mask(const struct sf_work *w, uint32_t lpn)
@@ -426,13 +374,8 @@ static bool program_host_page(struct fwlab_ftl_scale *f)
                        f->io.main[0], f->io.oob[0]);
     if (sf_io_program_start(f, d->after.ppa, 0) != FWLAB_SPINE_V0_OK)
         sf_fail(f, SF_FAULT_IO);
-    else { w->effect_seen = 1; w->phase = SF_W_HOST_PROGRAM_WAIT; }
+    else w->phase = SF_W_HOST_PROGRAM_WAIT;
     return true;
-}
-
-bool sf_work_busy(const struct fwlab_ftl_scale *f)
-{
-    return f->work.kind != SF_WORK_NONE || f->work.occupied;
 }
 
 bool sf_work_step(struct fwlab_ftl_scale *f)
@@ -440,14 +383,15 @@ bool sf_work_step(struct fwlab_ftl_scale *f)
     struct sf_work *w = &f->work;
     struct sf_io_result io;
     uint32_t lpn = w->first_lpn + w->page_index;
-    if (f->quarantined || w->kind == SF_WORK_NONE) return false;
+    if (f->quarantined) return false;
+    if (w->kind == SF_WORK_NONE) return sf_parent_step(f);
     if (w->kind != SF_WORK_HOST) return sf_gc_step(f);
     if (sf_meta_busy(f)) return false;
-    if (w->cancelled && !w->effect_seen && sf_io_idle(f)) {
+    if (f->parent.cancelled && !w->effect_seen && sf_io_idle(f)) {
         sf_host_fail(f, FWLAB_NFC_REASON_CANCELLED);
         return true;
     }
-    if (w->request.operation == FWLAB_BLOCK_V0_FLUSH) { host_success(f); return true; }
+    if (w->request.operation == FWLAB_BLOCK_V0_FLUSH) { sf_parent_group_success(f); return true; }
     if (w->phase == SF_W_HOST_PAGE) {
         struct sf_delta *d;
         uint32_t b = f->host_head, page;
@@ -489,7 +433,7 @@ bool sf_work_step(struct fwlab_ftl_scale *f)
             return true;
         }
         clear_invalid(f->io.main[0], e->valid_mask);
-        if (w->cancelled && !w->effect_seen) {
+        if (f->parent.cancelled && !w->effect_seen) {
             sf_host_fail(f, FWLAB_NFC_REASON_CANCELLED);
             return true;
         }
@@ -507,7 +451,7 @@ bool sf_work_step(struct fwlab_ftl_scale *f)
     }
     if (w->phase == SF_W_HOST_MAP_WAIT) {
         if (sf_meta_result(f) != FWLAB_SPINE_V0_OK) sf_fail(f, SF_FAULT_METADATA);
-        else host_success(f);
+        else sf_parent_group_success(f);
         return true;
     }
     if (w->phase == SF_W_READ_PAGE) {
@@ -517,7 +461,7 @@ bool sf_work_step(struct fwlab_ftl_scale *f)
                 &w->request.buffer, &w->request.buffer_span, w->host_bytes,
                 w->request.buffer_span.length) != FWLAB_CONTROLLER_BUFFER_V0_OK)
                 sf_host_fail(f, SF_FAULT_STATE);
-            else host_success(f);
+            else sf_parent_group_success(f);
             return true;
         }
         e = &f->map[lpn];
@@ -647,6 +591,7 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_checkpoint_start(struct fwlab_ftl_sca
 enum fwlab_spine_result_v0 fwlab_ftl_scale_gc_start(struct fwlab_ftl_scale *f,
                                                  uint32_t needed)
 {
+    if (live(f) && sf_parent_owned(f)) return FWLAB_SPINE_V0_WRONG_STATE;
     return live(f) ? sf_space_start(f, needed, true) : FWLAB_SPINE_V0_INVALID;
 }
 

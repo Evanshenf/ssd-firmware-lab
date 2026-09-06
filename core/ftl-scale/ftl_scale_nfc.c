@@ -206,12 +206,31 @@ bool sf_io_step(struct fwlab_ftl_scale *ftl)
     bool first;
     if (io->phase == SF_IO_IDLE || io->phase == SF_IO_DONE)
         return false;
+    /* start() only prepares local requests. Before the first program transfer
+     * has been accepted, cancellation may discard that staged request without
+     * a lower effect. Never discard a later page: prior pages must still reach
+     * their mapping commit. Allocated operation UIDs remain consumed. */
+    if (io->phase == SF_IO_SUBMIT_FIRST && io->result.kind == SF_IO_PROGRAM &&
+        ftl->work.kind == SF_WORK_HOST && ftl->work.phase == SF_W_HOST_PROGRAM_WAIT &&
+        ftl->work.page_index == 0 && !ftl->work.effect_seen &&
+        ftl->parent.owned && (ftl->parent.cancelled || ftl->admission_closed)) {
+        ftl->parent.cancelled = 1;
+        io->phase = SF_IO_IDLE;
+        sf_host_fail(ftl, FWLAB_NFC_REASON_CANCELLED);
+        return true;
+    }
     first = io->phase == SF_IO_SUBMIT_FIRST || io->phase == SF_IO_WAIT_FIRST;
     request = first ? &io->first : &io->second;
     if (io->phase == SF_IO_SUBMIT_FIRST || io->phase == SF_IO_SUBMIT_SECOND) {
         struct fwlab_nfc_submit_result submit =
             ftl->nfc.ops->try_submit(ftl->nfc.context, request);
         if (submit.disposition == FWLAB_NFC_ACCEPTED) {
+            /* An accepted transfer owns lower cache/frame work even before
+             * PROGRAM_EXECUTE. From here the subgroup must reconcile/drain. */
+            if (first && io->result.kind == SF_IO_PROGRAM &&
+                ftl->work.kind == SF_WORK_HOST &&
+                ftl->work.phase == SF_W_HOST_PROGRAM_WAIT)
+                ftl->work.effect_seen = 1;
             io->phase = first ? SF_IO_WAIT_FIRST : SF_IO_WAIT_SECOND;
             return true;
         }

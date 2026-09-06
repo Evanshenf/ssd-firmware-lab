@@ -13,6 +13,8 @@
 #define FWLAB_FTL_SCALE_VERSION 1u
 #define FWLAB_FTL_SCALE_LBA_BYTES 512u
 #define FWLAB_FTL_SCALE_MAX_LBAS 16u
+#define FWLAB_FTL_SCALE_EXTENDED_VERSION 2u
+#define FWLAB_FTL_SCALE_EXTENDED_MAX_LBAS 2048u
 
 struct fwlab_ftl_scale;
 
@@ -38,6 +40,19 @@ struct fwlab_ftl_scale_config {
     uint32_t reserved1[4];
 };
 
+/* Explicit large-parent construction; the base contract and media format stay
+ * at version 1. The caller retains the original buffer lease until retirement
+ * and must not mutate Write input while the parent executes. This does not
+ * turn the legacy buffer lease into a sealed/immutable-span capability. */
+struct fwlab_ftl_scale_extended_config {
+    uint16_t version;
+    uint16_t size;
+    uint32_t reserved0;
+    struct fwlab_ftl_scale_config base;
+    uint32_t max_transfer_lbas;
+    uint32_t reserved1[3];
+};
+
 struct fwlab_ftl_scale_status {
     uint64_t record_sequence;
     uint64_t map_sequence;
@@ -57,8 +72,12 @@ struct fwlab_ftl_scale_status {
 };
 
 int fwlab_ftl_scale_config_valid(const struct fwlab_ftl_scale_config *config);
+int fwlab_ftl_scale_extended_config_valid(
+    const struct fwlab_ftl_scale_extended_config *config);
 size_t fwlab_ftl_scale_arena_alignment(void);
 size_t fwlab_ftl_scale_arena_size(const struct fwlab_ftl_scale_config *config);
+size_t fwlab_ftl_scale_extended_arena_size(
+    const struct fwlab_ftl_scale_extended_config *config);
 /* Obtain after allocating the arena, before constructing NFC. No operation
  * may execute until NFC and FTL initialization have both succeeded. */
 struct fwlab_nfc_buffer_provider fwlab_ftl_scale_staging_provider(
@@ -66,6 +85,12 @@ struct fwlab_nfc_buffer_provider fwlab_ftl_scale_staging_provider(
 enum fwlab_spine_result_v0 fwlab_ftl_scale_init(
     void *arena, size_t arena_size,
     const struct fwlab_ftl_scale_config *config,
+    const struct fwlab_controller_buffer_port_v0 *controller_buffer,
+    const struct fwlab_nfc_provider *nfc,
+    struct fwlab_ftl_scale **ftl);
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_extended(
+    void *arena, size_t arena_size,
+    const struct fwlab_ftl_scale_extended_config *config,
     const struct fwlab_controller_buffer_port_v0 *controller_buffer,
     const struct fwlab_nfc_provider *nfc,
     struct fwlab_ftl_scale **ftl);

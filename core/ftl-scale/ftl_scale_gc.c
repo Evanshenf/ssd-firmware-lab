@@ -45,7 +45,7 @@ enum fwlab_spine_result_v0 sf_space_start(struct fwlab_ftl_scale *f,
     uint32_t phase = SF_W_SPACE;
     uint32_t smallest, ppb;
     if (!f || !f->ready || f->quarantined || f->admission_closed ||
-        sf_work_busy(f) || sf_meta_busy(f) || !sf_io_idle(f) ||
+        !sf_maintenance_allowed(f) || sf_meta_busy(f) || !sf_io_idle(f) ||
         !needed || needed > SF_MAX_HOST_DELTAS)
         return FWLAB_SPINE_V0_WRONG_STATE;
     ppb = f->config.geometry.pages_per_block;

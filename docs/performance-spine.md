@@ -145,6 +145,14 @@ planned, but cannot fix this headless storage amplification.
 P1 and M1 can proceed independently. P2 and P3 share buffer, prefix and durability
 contracts. A merely faster CRC or a larger MDTS constant cannot close the gap.
 
+The lower P2-A seam is now implemented: an explicit extended FTL constructor
+retains one Block request up to 1 MiB, streams existing v1 subgroups and permits
+CP/GC at resolved boundaries. The real-media adjacent-buffer journey passes
+GCC and Clang ASan/UBSan, including prefix/cancel/recovery and live GC while owned.
+It adds 640 bytes of parent control state, not a per-command 1 MiB payload.
+This is not yet a large NVMe profile, native support or a throughput result.
+See the [FTL construction and test boundary](../core/ftl-scale/README.md).
+
 ### Multi-queue ownership
 
 Start with two I/O queues, depth32, Admin vector0 and I/O vectors1/2. Negotiate

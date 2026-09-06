@@ -18,7 +18,8 @@ SOURCES := \
 	core/m3p/m3p_gc.c core/m3p/m3p_recovery.c core/m3p/m3p_runtime.c \
 	core/ftl-scale/ftl_scale_codec.c core/ftl-scale/ftl_scale_recovery.c \
 	core/ftl-scale/ftl_scale_mapping.c core/ftl-scale/ftl_scale_gc.c \
-	core/ftl-scale/ftl_scale_runtime.c core/ftl-scale/ftl_scale_nfc.c \
+	core/ftl-scale/ftl_scale_runtime.c core/ftl-scale/ftl_scale_parent.c \
+	core/ftl-scale/ftl_scale_nfc.c \
 	core/nfc-runtime/nfc_trace_window.c core/nfc-runtime/nfc_scaled_model.c \
 	nfc/nfc_model.c nfc/nfc_scheduler.c nfc/nfc_fault.c nfc/nfc_media.c \
 	media/file-nand-v0/file_nand_codec.c media/file-nand-v0/file_nand_engine.c \
@@ -30,10 +31,13 @@ SOURCES := \
 	frontends/headless-scale/scale_storage.c frontends/headless-scale/test_ftl.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 PROGRAM := $(BUILD)/test_scale_ftl
+PARENT_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_ftl.o,$(OBJECTS)) \
+	$(BUILD)/frontends/headless-scale/test_parent.o
+PARENT_PROGRAM := $(BUILD)/test_scale_parent
 CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 	$(BUILD)/frontends/headless-scale/test_crc.o
 CRC_PROGRAM := $(BUILD)/test_crc
-.PHONY: all check check-crc check-full check-cuts check-cost plan-64g check-64g
+.PHONY: all check check-crc check-full check-cuts check-cost check-parent plan-64g check-64g
 all: $(PROGRAM)
 check: check-crc $(PROGRAM)
 	$(PROGRAM)
@@ -45,6 +49,8 @@ check-cuts: $(PROGRAM)
 	$(PROGRAM) --cuts
 check-cost: $(PROGRAM)
 	$(PROGRAM) --cost
+check-parent: $(PARENT_PROGRAM)
+	$(PARENT_PROGRAM)
 plan-64g: $(PROGRAM)
 	$(PROGRAM) --plan-64g
 check-64g: $(PROGRAM)
@@ -53,7 +59,9 @@ $(PROGRAM): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LDLIBS)
 $(CRC_PROGRAM): $(CRC_OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(CRC_OBJECTS) $(LDLIBS)
+$(PARENT_PROGRAM): $(PARENT_OBJECTS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PARENT_OBJECTS) $(LDLIBS)
 $(BUILD)/%.o: ../../%.c ftl.mk
 	mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
--include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d)
+-include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d) $(PARENT_OBJECTS:.o=.d)

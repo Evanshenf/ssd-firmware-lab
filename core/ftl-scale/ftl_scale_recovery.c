@@ -149,7 +149,8 @@ enum fwlab_spine_result_v0 sf_recover_start(struct fwlab_ftl_scale *f, uint64_t 
 
 enum fwlab_spine_result_v0 sf_checkpoint_start(struct fwlab_ftl_scale *f)
 {
-    if (!usable(f) || !f->ready || sf_work_busy(f) || !f->root.generation || f->erase_intent_sequence)
+    if (!usable(f) || !f->ready || !sf_maintenance_allowed(f) ||
+        !f->root.generation || f->erase_intent_sequence)
         return FWLAB_SPINE_V0_WRONG_STATE;
     memset(&f->meta, 0, sizeof(f->meta)); f->meta.result = FWLAB_SPINE_V0_IN_PROGRESS;
     return begin_checkpoint(f, false) ? FWLAB_SPINE_V0_OK : f->meta.result;

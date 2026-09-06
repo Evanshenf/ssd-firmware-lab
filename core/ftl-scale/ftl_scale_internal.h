@@ -138,6 +138,7 @@ struct sf_io {
  * embedded, never dynamically registered and never shared across FTL engines. */
 #include "ftl_scale_meta.h"
 #include "ftl_scale_work.h"
+#include "ftl_scale_parent.h"
 
 struct fwlab_ftl_scale {
     uint64_t magic;
@@ -157,6 +158,7 @@ struct fwlab_ftl_scale {
     uint32_t physical_blocks;
     uint32_t physical_pages;
     uint32_t journal_next;
+    uint32_t max_transfer_lbas;
     uint32_t fault_code;
     uint64_t record_sequence;
     uint64_t map_sequence;
@@ -181,6 +183,7 @@ struct fwlab_ftl_scale {
     struct sf_io io;
     struct sf_meta meta;
     struct sf_work work;
+    struct sf_parent parent;
 };
 
 /* NFC boundary: consumes only NFC completion facts, never media page_info. */

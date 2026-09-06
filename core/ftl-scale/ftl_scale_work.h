@@ -14,12 +14,11 @@ enum sf_work_phase {
     SF_W_ERASE_DONE_WAIT
 };
 struct sf_work {
+    /* Private execution span. Its token is never submitted as a second Block
+     * operation; externally visible ownership/status live in sf_parent. */
     struct fwlab_block_request_v0 request;
-    struct fwlab_block_status_v0 status;
-    struct fwlab_block_status_v0 retired;
     struct sf_record record;
     uint8_t host_bytes[8192];
-    uint64_t host_sequence;
     uint32_t kind;
     uint32_t phase;
     uint32_t step_cursor;
@@ -33,10 +32,7 @@ struct sf_work {
     uint32_t moved;
     uint32_t live_count;
     uint32_t reclaim_block;
-    uint8_t occupied;
-    uint8_t cancelled;
     uint8_t effect_seen;
-    uint8_t retired_valid;
     uint8_t force_gc;
 };
 

@@ -20,6 +20,7 @@ original 1-MiB profile; it has not silently gained larger capacity. A real
 | Code | Responsibility |
 |---|---|
 | `ftl_scale_runtime.c` | Arena construction, Block admission/status/drain, bounded Host RMW/read/write |
+| `ftl_scale_parent.c` | One complete Block request, bounded private subgroups, committed prefix and between-group maintenance |
 | `ftl_scale_mapping.c` | The single map-update implementation, validity bitmap, block summaries and indexed heaps |
 | `ftl_scale_gc.c` | Space reservation, live victim copy, atomic GC mapping commit, erase and free-block handoff |
 | `ftl_scale_codec.c` | Checked layout and explicit root/checkpoint/journal/DATA OOB serialization |
@@ -61,6 +62,39 @@ the enum's presence is not a support claim. One namespace, 512-byte LBAs and an
 8-KiB maximum transfer remain protocol-profile limits. FTL geometry is
 4-KiB main plus 128-byte OOB, ascending one-program pages, 32 or 64 pages/block.
 The two qualification profiles use 64 pages/block.
+
+An explicit `fwlab_ftl_scale_extended_config` construction (version 2) can now
+set a Block transfer limit up to 2048 LBAs (1 MiB). The legacy constructor still
+limits requests to 16 LBAs. This does not change namespace capacity, on-media
+format 1 or the current Linux protocol profile's 8-KiB limit. The larger Block
+path is qualified below the protocol layer; a larger NVMe profile and native
+transport are separate integration work.
+
+The parent retains its original token, buffer lease, request and final status.
+It streams existing <=8-KiB groups without embedding a 1-MiB payload in each
+FTL command. The caller retains the buffer lease until retirement and does not
+mutate Write input while it executes; the old lease itself is not a sealed,
+immutable-span capability. Private CP/GC may run between resolved groups while
+admission, public maintenance and epoch quiescence still count the parent.
+Non-final mapping records retain the old Host durability frontier; only the
+final successful group advances it. Known cancelled prefixes and uncertain
+mapping outcomes remain different. No whole-1-MiB atomicity is promised.
+
+The finite adjacent-buffer test uses the real FTL, scaled NFC and compact POSIX
+media. GCC and Clang ASan/UBSan pass aligned/unaligned 1-MiB Write/Read, neighbor
+preservation, SELF followed by reopen/readback without Flush, owned-parent CP,
+eight owned-parent live GCs with 129 relocated pages verified, cancellation,
+failed-Read status, uncertain mapping recovery and zero close. It does not
+prove Host DMA suppression or native performance through a fake transport.
+
+```sh
+make -C frontends/headless-scale -f ftl.mk check-parent
+```
+
+This entry uses the same explicitly provisioned capped tmpfs convention below,
+not an existing image or a raw device. Parent streaming is the prerequisite
+for physical batching; its unchanged v1 subgroups do not remove the measured
+20x normal Write amplification or establish the throughput objective.
 
 Disk-backed qualification completed full writes, interleaved half-volume
 overwrite and full readback after restart for both profiles. The 64-MiB run
