@@ -8,6 +8,7 @@
 #include "compact_nand_internal.h"
 #include "physical_nand.h"
 #include "physical_nand_internal.h"
+#include "physical_nand_batch.h"
 #include "fwlab/portable/nvme_codec.h"
 
 #include <fcntl.h>
@@ -35,6 +36,8 @@ struct fixture {
     struct fwlab_file_nand_v2 *media_v2;
     struct fwlab_file_nand_holder_v2 holder_v2;
     int use_media_v2;
+    int use_window_v2;
+    struct fwlab_nand_batch_v2 batch;
     struct fwlab_file_nand_holder_v1 holder;
     struct fwlab_file_nand_v1_config media_config;
     struct j0_media_binding media_binding;
@@ -234,6 +237,11 @@ static void media_open(struct fixture *f, int format)
                 f->directory_fd, "nand.bin", &c, &f->holder_v2,
                 &f->media_v2) == FWLAB_NFC_API_OK);
         f->media_binding.media = fwlab_file_nand_v2_media(f->media_v2);
+        if (f->use_window_v2) {
+            f->batch = fwlab_file_nand_v2_batch(f->media_v2);
+            CHECK(f->batch.ops && f->batch.scalar.context == f->media_binding.media.context);
+            f->options.page_v2_media = &f->batch;
+        }
     } else if (format)
         CHECK(fwlab_file_nand_v1_posix_format(f->media_arena, bytes,
             f->directory_fd, "nand.bin", &f->media_config, &f->media,
@@ -552,7 +560,7 @@ static void full_journey(struct fixture *f)
 #include "ftl_v2_tail.inc"
 #include "ftl_cost.inc"
 
-static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2)
+static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2, int window_v2)
 {
     struct fixture f = {0};
     struct fwlab_ftl_scale_status s;
@@ -564,6 +572,8 @@ static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2)
     int length;
     f.started = now_seconds();
     f.use_media_v2 = use_v2;
+    f.use_window_v2 = window_v2;
+    CHECK(!window_v2 || (use_v2 && !cuts));
     f.media_config.geometry = geometry(mib);
     memcpy(f.media_config.media_uuid, "SCALE-B2-NAND-001", 16);
     f.media_config.media_uuid[15] = (uint8_t)(mib / 64u);
@@ -582,15 +592,25 @@ static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2)
     f.directory_fd = open(f.directory, O_DIRECTORY | O_CLOEXEC | O_RDONLY);
     CHECK(f.directory_fd >= 0);
     medium_report(&f, 0);
-    printf("SCALE_MEDIA_FORMAT|version=%u|fresh_directory=1|batch_consumer=0\n",
-           use_v2 ? 2u : 1u);
-    scale_storage_factory_init(&f.factory, &f.options);
+    printf("SCALE_MEDIA_FORMAT|version=%u|ftl_format=%u|fresh_directory=1|batch_consumer=%u\n",
+           use_v2 ? 2u : 1u, window_v2 ? 2u : 1u, window_v2 ? 1u : 0u);
+    if (window_v2) scale_storage_window_v2_factory_init(&f.factory, &f.options);
+    else scale_storage_factory_init(&f.factory, &f.options);
     media_open(&f, 1);
     runtime_start(&f, 1, 0);
     prior_media_sequence = media_sequence(&f);
     CHECK(prior_media_sequence == 0); /* Construction/start did not perform IO. */
     wait_ready(&f);
     identify(&f);
+    if (window_v2) {
+        struct fwlab_ftl_scale *lower = f.runtime->block.context;
+        memset(bytes, 0x6d, sizeof(bytes));
+        command(&f, 1, 256, 16, bytes, NULL, 1, 0);
+        command(&f, 2, 256, 16, NULL, output, 0, 0);
+        CHECK(!memcmp(bytes, output, sizeof(bytes)) && lower->disk_format == 2 &&
+            lower->window.max_program_pages == 2 && lower->window.max_read_pages == 2);
+        puts("SCALE_WINDOW_BINDING_PASS|Linux_profile_lifecycle=1|same_Cprime_instance=1|FTL_format=2|NFC_PAGE2_R0=1|program_read_group_pages=2|fault_timing_not_claimed=1");
+    }
     if (cost) {
         cost_journey(&f);
         goto finish;
@@ -690,11 +710,14 @@ int main(int argc, char **argv)
                             strcmp(argv[1], "--media-v2-cuts") == 0);
     int large = argc == 2 && strcmp(argv[1], "--full-64g") == 0;
     int plan = argc == 2 && strcmp(argv[1], "--plan-64g") == 0;
+    int window_v2 = argc == 2 && (strcmp(argv[1], "--window-v2") == 0 ||
+                                  strcmp(argv[1], "--window-v2-cost") == 0);
     int cost = argc == 2 && (strcmp(argv[1], "--cost") == 0 ||
-                            strcmp(argv[1], "--media-v2-cost") == 0);
+                            strcmp(argv[1], "--media-v2-cost") == 0 ||
+                            strcmp(argv[1], "--window-v2-cost") == 0);
     int use_v2 = argc == 2 && (strcmp(argv[1], "--media-v2") == 0 ||
                               strcmp(argv[1], "--media-v2-cuts") == 0 ||
-                              strcmp(argv[1], "--media-v2-cost") == 0);
+                              strcmp(argv[1], "--media-v2-cost") == 0 || window_v2);
     CHECK(setvbuf(stdout, NULL, _IOLBF, 0) == 0);
     CHECK(setvbuf(stderr, NULL, _IOLBF, 0) == 0);
     CHECK(argc == 1 || full || cuts || large || plan || cost || use_v2);
@@ -707,11 +730,11 @@ int main(int argc, char **argv)
         return 0;
     }
     if (large) {
-        journey(65536, 1, 0, 0, 0);
+        journey(65536, 1, 0, 0, 0, 0);
         return 0;
     }
-    journey(64, full, cuts, cost, use_v2);
+    journey(64, full, cuts, cost, use_v2, window_v2);
     if (!cost)
-        journey(256, full, 0, 0, use_v2);
+        journey(256, full, 0, 0, use_v2, window_v2);
     return 0;
 }

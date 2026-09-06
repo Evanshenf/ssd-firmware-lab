@@ -199,8 +199,12 @@ bool sf_record_validate_apply(struct fwlab_ftl_scale *f, const struct sf_record 
 {
     uint32_t ppb = f->config.geometry.pages_per_block, i, j;
     struct sf_block *block;
-    bool mapping = r->kind == SF_MAP_GROUP || r->kind == SF_GC_COMMIT;
-    if (r->epoch != f->root.generation || r->predecessor != f->record_sequence ||
+    bool window = r->kind == SF_MAP_WINDOW;
+    bool mapping = r->kind == SF_MAP_GROUP || r->kind == SF_GC_COMMIT || window;
+    if (f->disk_format != f->root.disk_format ||
+        (f->disk_format != SF_FORMAT_VERSION && f->disk_format != SF_WINDOW_FORMAT_VERSION) ||
+        (window && f->disk_format != SF_WINDOW_FORMAT_VERSION) ||
+        r->epoch != f->root.generation || r->predecessor != f->record_sequence ||
         f->record_sequence == UINT64_MAX || r->sequence != f->record_sequence + 1u ||
         r->before_map_seq != f->map_sequence ||
         (mapping && f->map_sequence == UINT64_MAX) ||
@@ -224,11 +228,14 @@ bool sf_record_validate_apply(struct fwlab_ftl_scale *f, const struct sf_record 
             r->block_uid != block->disk.block_uid || block->reserved_pages) return false;
         break;
     case SF_MAP_GROUP:
+    case SF_MAP_WINDOW:
     case SF_GC_COMMIT: {
         uint32_t destination = r->kind == SF_GC_COMMIT ? r->other_block : r->block;
+        uint32_t max_count = window ? SF_MAX_DELTAS :
+            (r->kind == SF_GC_COMMIT ? 61u : SF_MAX_HOST_DELTAS);
         struct sf_block *dest;
         uint32_t start_page;
-        if (!r->count || r->count > (r->kind == SF_GC_COMMIT ? 61u : SF_MAX_HOST_DELTAS) ||
+        if (!r->count || r->count > max_count ||
             destination < f->root.layout.data_first_block || destination >= f->physical_blocks)
             return false;
         dest = &f->blocks[destination];
@@ -241,7 +248,7 @@ bool sf_record_validate_apply(struct fwlab_ftl_scale *f, const struct sf_record 
         } else if (dest->disk.role != SF_HOST_OPEN ||
                    r->block_uid != dest->disk.block_uid || f->host_head != destination)
             return false;
-        if (r->count > ppb - start_page) return false;
+        if (start_page > ppb || r->count > ppb - start_page) return false;
         for (i = 0; i < r->count; ++i) {
             const struct sf_delta *d = &r->delta[i];
             if (d->reserved || d->lpn >= f->root.layout.lpn_count ||
@@ -256,7 +263,9 @@ bool sf_record_validate_apply(struct fwlab_ftl_scale *f, const struct sf_record 
             if (r->kind == SF_GC_COMMIT &&
                 (d->before.state != SF_VALUE || d->before.ppa / ppb != r->block ||
                  d->after.valid_mask != d->before.valid_mask)) return false;
-            for (j = 0; j < i; ++j)
+            if (window) {
+                if ((uint64_t)d->lpn != (uint64_t)r->delta[0].lpn + i) return false;
+            } else for (j = 0; j < i; ++j)
                 if (r->delta[j].lpn == d->lpn) return false;
         }
         break;
@@ -295,6 +304,7 @@ bool sf_record_validate_apply(struct fwlab_ftl_scale *f, const struct sf_record 
         f->host_head = SF_NONE;
         break;
     case SF_MAP_GROUP:
+    case SF_MAP_WINDOW:
     case SF_GC_COMMIT:
         for (i = 0; i < r->count; ++i) {
             const struct sf_delta *d = &r->delta[i];
@@ -317,7 +327,15 @@ bool sf_record_validate_apply(struct fwlab_ftl_scale *f, const struct sf_record 
             f->host_head = r->other_block;
             sf_heap_refresh(f, r->other_block);
             ++f->garbage_collections;
-        } else block->reserved_pages = 0;
+        } else {
+            block->reserved_pages = 0;
+            /* A format-2 full window closes its head in the same atomic
+             * mapping transaction. Partial heads still use explicit CLOSE. */
+            if (window && block->disk.allocation_end == ppb) {
+                block->disk.role = SF_CLOSED;
+                f->host_head = SF_NONE;
+            }
+        }
         break;
     case SF_ERASE_INTENT:
         block->disk.role = SF_RECLAIM_PENDING;

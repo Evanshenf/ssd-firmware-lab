@@ -43,6 +43,18 @@ enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_restart(
 struct fwlab_nand_media fwlab_file_nand_v2_media(
     struct fwlab_file_nand_v2 *media);
 
+/* Physical read capability; does not change the format or write protocol.
+ * Main/OOB arrays and page facts cover exactly count contiguous same-block
+ * pages. API_OK can include ERASED or TORN physical states; the NFC caller
+ * determines validity/ECC and must not publish a failed group as valid data.
+ * Outputs are unspecified on API error and must remain caller-private. */
+enum fwlab_nfc_api_result fwlab_file_nand_v2_read_pages(
+    struct fwlab_file_nand_v2 *media, const struct fwlab_nfc_ppa *first,
+    uint32_t page_count, uint8_t *main, size_t main_bytes,
+    uint8_t *oob, size_t oob_bytes,
+    struct fwlab_nand_page_info *pages, size_t page_capacity,
+    struct fwlab_nand_block_info *block);
+
 /* One synchronous transaction of full pages, contiguous within one block.
  * main and oob are separate contiguous arrays of exactly page_count pages.
  * Caller keeps their bytes immutable until return. Results are published only

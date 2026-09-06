@@ -114,12 +114,13 @@ static struct fwlab_nfc_buffer_ref frame_ref(uint8_t frame, bool oob)
     return ref;
 }
 
-static enum fwlab_spine_result_v0 start(
-    struct fwlab_ftl_scale *ftl, uint32_t ppa, uint8_t frame, uint8_t kind)
+static enum fwlab_spine_result_v0 c3_start(
+    struct fwlab_ftl_scale *ftl, uint32_t ppa, uint8_t frame, uint8_t kind,
+    uint32_t pages, bool window)
 {
     uint32_t count = kind == SF_IO_ERASE ? 1u : 2u;
     struct sf_io *io;
-    if (!ftl || !ftl->initialized || !sf_io_idle(ftl) ||
+    if (!ftl || !ftl->initialized || !sf_io_idle(ftl) || pages != 1 || window ||
         frame >= SF_FRAMES || ppa >= ftl->physical_pages)
         return FWLAB_SPINE_V0_INVALID;
     io = &ftl->io;
@@ -132,6 +133,7 @@ static enum fwlab_spine_result_v0 start(
     io->result.kind = kind;
     io->result.ppa = ppa;
     io->result.frame = frame;
+    io->result.count = 1;
     if (kind == SF_IO_READ) {
         /* A failed read must not make stale prior staging bytes look erased. */
         memset(io->main[frame], 0, SF_PAGE_BYTES);
@@ -160,13 +162,15 @@ static enum fwlab_spine_result_v0 start(
 enum fwlab_spine_result_v0 sf_io_read_start(
     struct fwlab_ftl_scale *ftl, uint32_t ppa, uint8_t frame)
 {
-    return start(ftl, ppa, frame, SF_IO_READ);
+    return ftl && ftl->nfc_adapter ? ftl->nfc_adapter->start(ftl, ppa, frame, SF_IO_READ, 1, false) :
+        FWLAB_SPINE_V0_INVALID;
 }
 
 enum fwlab_spine_result_v0 sf_io_program_start(
     struct fwlab_ftl_scale *ftl, uint32_t ppa, uint8_t frame)
 {
-    return start(ftl, ppa, frame, SF_IO_PROGRAM);
+    return ftl && ftl->nfc_adapter ? ftl->nfc_adapter->start(ftl, ppa, frame, SF_IO_PROGRAM, 1, false) :
+        FWLAB_SPINE_V0_INVALID;
 }
 
 enum fwlab_spine_result_v0 sf_io_erase_start(
@@ -174,8 +178,8 @@ enum fwlab_spine_result_v0 sf_io_erase_start(
 {
     if (!ftl || block >= ftl->physical_blocks)
         return FWLAB_SPINE_V0_INVALID;
-    return start(ftl, block * (uint32_t)ftl->config.geometry.pages_per_block,
-                 0, SF_IO_ERASE);
+    return ftl->nfc_adapter->start(ftl, block * (uint32_t)ftl->config.geometry.pages_per_block,
+                                  0, SF_IO_ERASE, 1, false);
 }
 
 static bool token_equal(const struct fwlab_nfc_operation_token *a,
@@ -195,7 +199,7 @@ static void internal_failure(struct sf_io *io, uint8_t reason)
     io->phase = SF_IO_DONE;
 }
 
-bool sf_io_step(struct fwlab_ftl_scale *ftl)
+static bool c3_step(struct fwlab_ftl_scale *ftl)
 {
     struct sf_io *io = &ftl->io;
     struct fwlab_nfc_completion event;
@@ -266,7 +270,7 @@ bool sf_io_step(struct fwlab_ftl_scale *ftl)
     }
     if (!first && io->result.kind == SF_IO_READ) {
         /* READ_TRANSFER describes transfer, not new physical health truth. */
-        const struct fwlab_nfc_completion *trigger = &io->result.completion;
+        const struct sf_io_facts *trigger = &io->result.completion;
         event.base_erase_generation = trigger->base_erase_generation;
         event.final_erase_generation = trigger->final_erase_generation;
         event.block_health = trigger->block_health;
@@ -274,13 +278,23 @@ bool sf_io_step(struct fwlab_ftl_scale *ftl)
         event.corrected_main_bits = trigger->corrected_main_bits;
         event.corrected_oob_bits = trigger->corrected_oob_bits;
     }
-    io->result.completion = event;
+    io->result.completion = (struct sf_io_facts){
+        .base_erase_generation = event.base_erase_generation,
+        .final_erase_generation = event.final_erase_generation,
+        .corrected_main_bits = event.corrected_main_bits,
+        .corrected_oob_bits = event.corrected_oob_bits,
+        .terminal = event.terminal, .physical_outcome = event.physical_outcome,
+        .integrity = event.integrity, .reason = event.reason,
+        .block_health = event.block_health, .ecc_status = event.ecc_status,
+        .valid_region_mask = event.valid_region_mask, .available = 1
+    };
     if (event.terminal != FWLAB_NFC_TERMINAL_SUCCESS ||
         ((request->kind == FWLAB_NFC_PROGRAM_EXECUTE ||
           request->kind == FWLAB_NFC_ERASE) &&
          (event.physical_outcome != FWLAB_NFC_PHYS_APPLIED ||
           event.integrity != FWLAB_NFC_INTEGRITY_COMPLETE))) {
         io->result.result = FWLAB_SPINE_V0_QUARANTINED;
+        io->result.effect = io->result.kind == SF_IO_READ ? SF_EFFECT_NONE : SF_EFFECT_UNKNOWN;
         io->phase = SF_IO_DONE;
         return true;
     }
@@ -290,6 +304,7 @@ bool sf_io_step(struct fwlab_ftl_scale *ftl)
         return true;
     }
     io->result.result = FWLAB_SPINE_V0_OK;
+    io->result.effect = io->result.kind == SF_IO_READ ? SF_EFFECT_NONE : SF_EFFECT_COMPLETE;
     if (io->result.kind == SF_IO_READ) {
         io->result.read_valid = (uint8_t)(
             event.ecc_status != FWLAB_NFC_ECC_UNCORRECTABLE &&
@@ -300,6 +315,21 @@ bool sf_io_step(struct fwlab_ftl_scale *ftl)
     io->phase = SF_IO_DONE;
     return true;
 }
+
+static enum fwlab_nfc_api_result c3_reset(struct fwlab_ftl_scale *f)
+{ return f->nfc.ops->reset_begin(f->nfc.context, f->config.nfc_instance_nonce, f->config.nfc_epoch); }
+static enum fwlab_nfc_api_result c3_drive(struct fwlab_ftl_scale *f)
+{ struct fwlab_nfc_step_result step; return f->nfc.ops->step(f->nfc.context, 1, &step); }
+static enum fwlab_nfc_api_result c3_quiescent(struct fwlab_ftl_scale *f, bool *quiet)
+{ return f->nfc.ops->quiescent(f->nfc.context, f->config.nfc_instance_nonce, f->config.nfc_epoch, quiet); }
+const struct sf_nfc_adapter sf_nfc_c3_adapter = { c3_start, c3_step, c3_reset, c3_drive, c3_quiescent };
+
+bool sf_io_step(struct fwlab_ftl_scale *f)
+{ return f && f->nfc_adapter ? f->nfc_adapter->step(f) : false; }
+enum fwlab_spine_result_v0 sf_io_read_group_start(struct fwlab_ftl_scale *f, uint32_t ppa, uint32_t count)
+{ return f && f->nfc_adapter ? f->nfc_adapter->start(f, ppa, 0, SF_IO_READ, count, true) : FWLAB_SPINE_V0_INVALID; }
+enum fwlab_spine_result_v0 sf_io_program_group_start(struct fwlab_ftl_scale *f, uint32_t ppa, uint32_t count)
+{ return f && f->nfc_adapter ? f->nfc_adapter->start(f, ppa, 0, SF_IO_PROGRAM, count, true) : FWLAB_SPINE_V0_INVALID; }
 
 bool sf_io_take(struct fwlab_ftl_scale *ftl, struct sf_io_result *result)
 {

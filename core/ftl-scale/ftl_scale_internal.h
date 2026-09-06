@@ -8,6 +8,7 @@
 
 #define SF_MAGIC UINT64_C(0x5343414c4546544c)
 #define SF_FORMAT_VERSION 1u
+#define SF_WINDOW_FORMAT_VERSION 2u
 #define SF_PAGE_BYTES 4096u
 #define SF_OOB_BYTES 128u
 #define SF_SECTORS_PER_PAGE 8u
@@ -85,10 +86,11 @@ struct sf_root {
     uint64_t cp_digest;
     uint64_t rail_header_digest[2];
     uint32_t bank;
+    uint16_t disk_format;
 };
 enum sf_record_kind {
     SF_OPEN_HOST = 1, SF_OPEN_GC_DEST, SF_CLOSE, SF_MAP_GROUP,
-    SF_GC_COMMIT, SF_ERASE_INTENT, SF_ERASE_DONE
+    SF_GC_COMMIT, SF_ERASE_INTENT, SF_ERASE_DONE, SF_MAP_WINDOW
 };
 struct sf_record {
     uint64_t epoch;
@@ -115,21 +117,43 @@ enum sf_io_phase {
     SF_IO_IDLE = 0, SF_IO_SUBMIT_FIRST, SF_IO_WAIT_FIRST,
     SF_IO_SUBMIT_SECOND, SF_IO_WAIT_SECOND, SF_IO_DONE
 };
+/* Private consumed facts, never a synthesized public C3 completion/digest. */
+struct sf_io_facts {
+    uint16_t base_erase_generation;
+    uint16_t final_erase_generation;
+    uint16_t corrected_main_bits;
+    uint16_t corrected_oob_bits;
+    uint8_t terminal;
+    uint8_t physical_outcome;
+    uint8_t integrity;
+    uint8_t reason;
+    uint8_t block_health;
+    uint8_t ecc_status;
+    uint8_t valid_region_mask;
+    uint8_t available;
+};
+enum sf_io_effect { SF_EFFECT_NONE, SF_EFFECT_COMPLETE, SF_EFFECT_UNKNOWN };
 struct sf_io_result {
     enum fwlab_spine_result_v0 result;
-    struct fwlab_nfc_completion completion;
+    struct sf_io_facts completion;
     uint32_t ppa;
+    uint16_t count;
     uint8_t kind;
     uint8_t frame;
     uint8_t read_valid;
-    uint8_t reserved;
+    uint8_t effect;
 };
 struct sf_io {
     struct fwlab_nfc_request first;
     struct fwlab_nfc_request second;
+    struct fwlab_nfc_page_v2_request page_request;
     struct sf_io_result result;
+    struct sf_io_facts page_facts[SF_MAX_DELTAS];
     uint64_t next_uid;
     uint32_t phase;
+    uint8_t window_transfer;
+    uint8_t cancel_allowed;
+    uint8_t cancel_sent;
     uint8_t main[SF_FRAMES][SF_PAGE_BYTES];
     uint8_t oob[SF_FRAMES][SF_OOB_BYTES];
 };
@@ -139,12 +163,26 @@ struct sf_io {
 #include "ftl_scale_meta.h"
 #include "ftl_scale_work.h"
 #include "ftl_scale_parent.h"
+#include "ftl_scale_window.h"
+
+struct sf_nfc_adapter {
+    enum fwlab_spine_result_v0 (*start)(struct fwlab_ftl_scale *, uint32_t,
+        uint8_t, uint8_t, uint32_t, bool);
+    bool (*step)(struct fwlab_ftl_scale *);
+    enum fwlab_nfc_api_result (*reset)(struct fwlab_ftl_scale *);
+    enum fwlab_nfc_api_result (*drive)(struct fwlab_ftl_scale *);
+    enum fwlab_nfc_api_result (*quiescent)(struct fwlab_ftl_scale *, bool *);
+};
+extern const struct sf_nfc_adapter sf_nfc_c3_adapter;
+extern const struct sf_nfc_adapter sf_nfc_page2_adapter;
 
 struct fwlab_ftl_scale {
     uint64_t magic;
     struct fwlab_ftl_scale_config config;
     struct fwlab_controller_buffer_port_v0 controller_buffer;
     struct fwlab_nfc_provider nfc;
+    struct fwlab_nfc_page_v2_provider page_nfc;
+    const struct sf_nfc_adapter *nfc_adapter;
     struct fwlab_block_service_v0 service;
     struct sf_root root;
     struct sf_map_entry *map;
@@ -159,6 +197,7 @@ struct fwlab_ftl_scale {
     uint32_t physical_pages;
     uint32_t journal_next;
     uint32_t max_transfer_lbas;
+    uint16_t disk_format;
     uint32_t fault_code;
     uint64_t record_sequence;
     uint64_t map_sequence;
@@ -184,6 +223,7 @@ struct fwlab_ftl_scale {
     struct sf_meta meta;
     struct sf_work work;
     struct sf_parent parent;
+    struct sf_window window;
 };
 
 /* NFC boundary: consumes only NFC completion facts, never media page_info. */
@@ -196,6 +236,8 @@ enum fwlab_spine_result_v0 sf_io_erase_start(
 bool sf_io_idle(const struct fwlab_ftl_scale *ftl);
 bool sf_io_take(struct fwlab_ftl_scale *ftl, struct sf_io_result *result);
 bool sf_io_step(struct fwlab_ftl_scale *ftl);
+enum fwlab_spine_result_v0 sf_io_read_group_start(struct fwlab_ftl_scale *, uint32_t, uint32_t);
+enum fwlab_spine_result_v0 sf_io_program_group_start(struct fwlab_ftl_scale *, uint32_t, uint32_t);
 struct fwlab_nfc_ppa sf_ppa(const struct fwlab_ftl_scale *ftl, uint32_t linear);
 
 /* Geometry/codec and durable metadata runner. */

@@ -127,6 +127,7 @@ enum fwlab_spine_result_v0 sf_format_start(struct fwlab_ftl_scale *f, uint64_t l
     memset(&f->meta, 0, sizeof(f->meta)); f->meta.result = FWLAB_SPINE_V0_IN_PROGRESS;
     f->meta.mode = SF_M_FORMAT; f->meta.phase = SF_M_FORMAT_ERASE;
     reset_resident(f); memset(&f->root, 0, sizeof(f->root));
+    f->root.disk_format = f->disk_format;
     f->root.layout = layout; f->root.bank = 1; memcpy(f->root.media_uuid, f->config.media_uuid, 16);
     f->record_sequence = 0; f->map_sequence = 0; f->durable_frontier = 0; f->next_block_uid = 1;
     f->expected_lba_count = 0; f->journal_next = 1;
@@ -162,7 +163,8 @@ static enum fwlab_spine_result_v0 begin_journal(
     struct sf_meta *m = &f->meta; bool mapping;
     if (!record || !f->root.generation || f->journal_next >= f->root.layout.journal_slots)
         return FWLAB_SPINE_V0_NO_CAPACITY;
-    mapping = record->kind == SF_MAP_GROUP || record->kind == SF_GC_COMMIT;
+    mapping = record->kind == SF_MAP_GROUP || record->kind == SF_GC_COMMIT ||
+        record->kind == SF_MAP_WINDOW;
     if (f->record_sequence == UINT64_MAX || f->record_sequence >= f->config.record_sequence_limit ||
         (mapping && f->map_sequence == UINT64_MAX)) return FWLAB_SPINE_V0_COUNTER_EXHAUSTED;
     m->record = *record; m->record.epoch = f->root.generation;
@@ -194,12 +196,14 @@ static bool select_root(struct fwlab_ftl_scale *f)
     if (m->root_class[0] != SF_READ_VALID && m->root_class[1] != SF_READ_VALID) return false;
     if (m->root_class[0] == SF_READ_VALID && m->root_class[1] == SF_READ_VALID) {
         uint64_t a = m->roots[0].generation, b = m->roots[1].generation;
-        if (m->roots[0].layout.lba_count != m->roots[1].layout.lba_count || a == b ||
+        if (m->roots[0].disk_format != m->roots[1].disk_format ||
+            m->roots[0].layout.lba_count != m->roots[1].layout.lba_count || a == b ||
             (a > b ? a - b : b - a) != 1) return false;
     }
     selected = m->root_class[0] != SF_READ_VALID ||
         (m->root_class[1] == SF_READ_VALID && m->roots[1].generation > m->roots[0].generation) ? 1u : 0u;
-    if (f->expected_lba_count && f->expected_lba_count != m->roots[selected].layout.lba_count) return false;
+    if (m->roots[selected].disk_format != f->disk_format ||
+        (f->expected_lba_count && f->expected_lba_count != m->roots[selected].layout.lba_count)) return false;
     f->root = m->roots[selected]; f->record_sequence = f->root.covered_record_seq;
     f->map_sequence = f->root.covered_map_seq; f->durable_frontier = f->root.durable_frontier;
     f->next_block_uid = f->root.next_block_uid; f->journal_next = 1;

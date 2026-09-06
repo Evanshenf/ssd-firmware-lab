@@ -131,7 +131,7 @@ The next priority is the retained-parent and within-parent batch mechanism,
 not another sequence of small CRC/syscall tweaks. Native multi-queue remains
 planned, but cannot fix this headless storage amplification.
 
-## Physical v2: real path connected, batching consumer still pending
+## Physical v2 compatibility path: singleton measurements
 
 The [physical v2 media](../media/file-nand-v2/README.md) replaces payload/sector
 postimage redo with a bounded INTENT, direct-home installation and matching
@@ -157,9 +157,9 @@ write-byte ratio is about 3.215x including the same 17 checkpoints. This is
 substantial waste removal, but not completion of the performance objective.
 
 Direct component execution measured 280128 written bytes and three syncs for
-a full 64-page/256-KiB physical batch. The normal firmware binding does **not**
-yet consume that batch entry. Next are typed NFC-v2 and within-parent FTL
-windows, followed by bounded dirty-segment checkpoints and matched measurement.
+a full 64-page/256-KiB physical batch. The legacy C3 binding does **not**
+consume that batch entry. The explicit window construction below now does;
+dirty-segment checkpoints and matched measurement remain subsequent work.
 Do not silently omit v1's exported digest or assert that byte-cost arithmetic
 proves a 1–3% throughput loss.
 
@@ -192,6 +192,45 @@ took 0.623 s for Write and 0.171 s for Read, versus the earlier generic v2
 same 107873088 backend bytes, 54819 syncs and 17 checkpoints. Compiler native
 flags can also affect other generated code: do not attribute every timing
 change exclusively to CRC or treat this as a paired 10-GB/s acceptance result.
+
+## Actual FTL/NFC windows
+
+The explicit [format-2 FTL](../core/ftl-scale/README.md) and
+[NFC PAGE2-R0](../core/nfc-page-v2/README.md) construction now consumes physical
+batches inside one retained parent. It preserves physical main/OOB, checksums,
+generation, program order, DATA→A→B durability and cancellation/recovery. R0 is
+an explicitly functional model, not equivalence to the old C3 injected-fault,
+retry or timing machinery. Legacy constructors and formats remain separate.
+
+One actual 1-MiB Block Write used four 64-page DATA batches, four OPEN records,
+four MAP_WINDOW records, no explicit CLOSE, 1215744 backend bytes and 60 syncs.
+The real 32-MiB sequence used 39333696 backend bytes, 2163 syncs and one full
+checkpoint, rather than the older small-command path's many checkpoints.
+Reads used 128 batches of 64 pages and 384 backend reads for that sequence.
+
+One unpaired native-x86 diagnostic measured 20.08 ms Write and 9.70 ms Read for
+32 MiB via 1-MiB Block requests: about 1.67 and 3.46 decimal GB/s. Input pattern
+generation and readback checking are outside the accumulated command execution
+interval, while actual FTL/NFC/media work and induced checkpoint cost remain
+inside. The fixture and byte-call observers remain present. These short results
+do not prove 10 GB/s, a 1–3% loss, ARM performance, or native NVMe bandwidth.
+
+GCC and Clang ASan/UBSan pass real aligned/unaligned/RMW, SELF restart, holes,
+partial-window/live GC, pre-dispatch cancel, post-DATA A/B drain, UNKNOWN
+quarantine/recovery and both constructor-format rejection directions. The
+existing Linux-profile/lifecycle also consumes the new binding, but still
+limits commands to 8 KiB. No legacy lifecycle or native SQ/CQE executor has
+been duplicated to obtain a faster result.
+
+```sh
+make -C frontends/headless-scale -f ftl.mk FWLAB_CRC_NATIVE=1 check-parent-window-v2
+make -C frontends/headless-scale -f ftl.mk FWLAB_CRC_NATIVE=1 check-window-v2-cost
+```
+
+Use the same existing capped tmpfs, serially. None of these entries formats an
+existing image or qualifies physical persistence. Remaining work is matched
+measurement and the newly measured bottlenecks, plus the planned native large
+request/multi-queue path—not another expansion of the correctness framework.
 
 ## Staged route
 

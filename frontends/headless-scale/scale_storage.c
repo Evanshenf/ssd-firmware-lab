@@ -5,6 +5,7 @@
 #include "ftl_scale_internal.h"
 #include "fwlab/private/nfc_scaled_model.h"
 #include "fwlab/private/nfc_trace_window.h"
+#include "fwlab/private/nfc_page_v2_model.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,7 @@ struct scale_storage {
     void *nfc_arena;
     struct fwlab_ftl_scale *ftl;
     struct fwlab_nfc_model *nfc;
+    struct fwlab_nfc_page_v2_model *page_nfc;
     uint64_t trace_windows;
 };
 
@@ -99,7 +101,7 @@ static enum fwlab_spine_result_v0 storage_step(
             *used = total + one;
             return result;
         }
-        if (fwlab_nfc_model_trace_count(storage->nfc) >=
+        if (storage->nfc && fwlab_nfc_model_trace_count(storage->nfc) >=
             SCALE_NFC_TRACE_ENTRIES - 1024u) {
             uint32_t retired = 0;
             enum fwlab_nfc_api_result trace =
@@ -134,12 +136,13 @@ static enum fwlab_spine_result_v0 storage_fini(void *opaque)
         ? fwlab_ftl_scale_fini(storage->ftl) : FWLAB_SPINE_V0_INVALID;
 }
 
-static enum fwlab_spine_result_v0 storage_bind(
+static enum fwlab_spine_result_v0 storage_bind_common(
     void *opaque, const struct j0_runtime_config *config,
     const struct fwlab_controller_buffer_port_v0 *buffer,
     const struct fwlab_block_namespace_ref_v0 *namespace_ref,
     uint64_t lifecycle_nonce, uint64_t ftl_nonce, uint64_t nfc_nonce,
-    struct j0_storage_runner *runner, struct fwlab_block_service_v0 *service)
+    struct j0_storage_runner *runner, struct fwlab_block_service_v0 *service,
+    int window_v2)
 {
     const struct scale_storage_options *options = opaque;
     struct scale_storage *storage;
@@ -147,6 +150,7 @@ static enum fwlab_spine_result_v0 storage_bind(
     struct fwlab_nfc_model_config n;
     struct fwlab_nfc_buffer_provider staging;
     struct fwlab_nfc_provider provider;
+    struct fwlab_ftl_scale_extended_config extended = {0};
     enum fwlab_spine_result_v0 result;
     size_t ftl_bytes, nfc_bytes;
     uint32_t blocks, pages;
@@ -154,6 +158,14 @@ static enum fwlab_spine_result_v0 storage_bind(
     if (!config || !config->media_binding || !buffer || !namespace_ref ||
         !runner || !service ||
         !sf_geometry_counts(&config->media_binding->geometry, &blocks, &pages))
+        return FWLAB_SPINE_V0_INVALID;
+    if (window_v2 && (!options || !options->page_v2_media ||
+        options->page_v2_media->scalar.context != config->media_binding->media.context ||
+        options->page_v2_media->scalar.ops != config->media_binding->media.ops ||
+        memcmp(&options->page_v2_media->geometry, &config->media_binding->geometry,
+               sizeof(config->media_binding->geometry)) ||
+        memcmp(options->page_v2_media->media_uuid, config->media_binding->media_uuid, 16) ||
+        memcmp(options->page_v2_media->media_uuid, config->media_uuid, 16)))
         return FWLAB_SPINE_V0_INVALID;
     memset(&f, 0, sizeof(f));
     f.version = FWLAB_FTL_SCALE_VERSION;
@@ -172,8 +184,14 @@ static enum fwlab_spine_result_v0 storage_bind(
     f.execution_epoch = config->execution_epoch;
     f.nfc_epoch = 1;
     n = nfc_configuration(&f.geometry);
-    ftl_bytes = fwlab_ftl_scale_arena_size(&f);
-    nfc_bytes = fwlab_nfc_scaled_arena_size(&n);
+    extended.version = FWLAB_FTL_SCALE_EXTENDED_VERSION;
+    extended.size = sizeof(extended);
+    extended.base = f;
+    extended.max_transfer_lbas = FWLAB_FTL_SCALE_EXTENDED_MAX_LBAS;
+    ftl_bytes = window_v2 ? fwlab_ftl_scale_window_v2_arena_size(&extended) :
+                           fwlab_ftl_scale_arena_size(&f);
+    nfc_bytes = window_v2 ? fwlab_nfc_page_v2_arena_size() :
+                           fwlab_nfc_scaled_arena_size(&n);
     if (!ftl_bytes || !nfc_bytes)
         return FWLAB_SPINE_V0_INVALID;
     storage = calloc(1, sizeof(*storage));
@@ -184,15 +202,35 @@ static enum fwlab_spine_result_v0 storage_bind(
     result = FWLAB_SPINE_V0_NO_CAPACITY;
     if (!storage->ftl_arena || !storage->nfc_arena)
         goto failed;
-    staging = fwlab_ftl_scale_staging_provider(storage->ftl_arena, ftl_bytes);
     result = FWLAB_SPINE_V0_INVALID;
-    if (!staging.ops || fwlab_nfc_scaled_init(
+    if (window_v2) {
+        struct fwlab_nfc_page_v2_config page = {0};
+        struct fwlab_nfc_page_v2_provider page_provider;
+        page.version = FWLAB_NFC_PAGE_V2_VERSION;
+        page.size = sizeof(page);
+        page.profile = FWLAB_NFC_PAGE_V2_PROFILE_R0;
+        page.geometry = f.geometry;
+        memcpy(page.media_uuid, f.media_uuid, sizeof(page.media_uuid));
+        page.instance_nonce = nfc_nonce;
+        page.operation_uid_limit = f.nfc_operation_uid_limit;
+        page.controller_epoch = f.nfc_epoch;
+        page.generation = f.generation;
+        if (fwlab_nfc_page_v2_init(storage->nfc_arena, nfc_bytes, &page,
+                options->page_v2_media, &storage->page_nfc) != FWLAB_NFC_API_OK)
+            goto failed;
+        page_provider = fwlab_nfc_page_v2_provider(storage->page_nfc);
+        result = fwlab_ftl_scale_init_window_v2(storage->ftl_arena, ftl_bytes,
+            &extended, buffer, &page_provider, &storage->ftl);
+    } else {
+        staging = fwlab_ftl_scale_staging_provider(storage->ftl_arena, ftl_bytes);
+        if (!staging.ops || fwlab_nfc_scaled_init(
             storage->nfc_arena, nfc_bytes, &n, nfc_nonce, &staging,
             &config->media_binding->media, &storage->nfc) != FWLAB_NFC_API_OK)
-        goto failed;
-    provider = fwlab_nfc_model_provider(storage->nfc);
-    result = fwlab_ftl_scale_init(storage->ftl_arena, ftl_bytes, &f,
+            goto failed;
+        provider = fwlab_nfc_model_provider(storage->nfc);
+        result = fwlab_ftl_scale_init(storage->ftl_arena, ftl_bytes, &f,
                                   buffer, &provider, &storage->ftl);
+    }
     if (result != FWLAB_SPINE_V0_OK)
         goto failed;
     result = config->media_mode == J0_MEDIA_FORMAT
@@ -215,11 +253,39 @@ failed:
     return result;
 }
 
+static enum fwlab_spine_result_v0 storage_bind(
+    void *opaque, const struct j0_runtime_config *config,
+    const struct fwlab_controller_buffer_port_v0 *buffer,
+    const struct fwlab_block_namespace_ref_v0 *namespace_ref,
+    uint64_t lifecycle_nonce, uint64_t ftl_nonce, uint64_t nfc_nonce,
+    struct j0_storage_runner *runner, struct fwlab_block_service_v0 *service)
+{
+    return storage_bind_common(opaque, config, buffer, namespace_ref,
+        lifecycle_nonce, ftl_nonce, nfc_nonce, runner, service, 0);
+}
+static enum fwlab_spine_result_v0 storage_bind_window_v2(
+    void *opaque, const struct j0_runtime_config *config,
+    const struct fwlab_controller_buffer_port_v0 *buffer,
+    const struct fwlab_block_namespace_ref_v0 *namespace_ref,
+    uint64_t lifecycle_nonce, uint64_t ftl_nonce, uint64_t nfc_nonce,
+    struct j0_storage_runner *runner, struct fwlab_block_service_v0 *service)
+{
+    return storage_bind_common(opaque, config, buffer, namespace_ref,
+        lifecycle_nonce, ftl_nonce, nfc_nonce, runner, service, 1);
+}
+
 void scale_storage_factory_init(struct j0_storage_factory *factory,
                                  struct scale_storage_options *options)
 {
     factory->context = options;
     factory->bind = storage_bind;
+}
+
+void scale_storage_window_v2_factory_init(struct j0_storage_factory *factory,
+                                           struct scale_storage_options *options)
+{
+    factory->context = options;
+    factory->bind = storage_bind_window_v2;
 }
 
 static struct scale_storage *from_runtime(const struct j0_runtime *runtime)

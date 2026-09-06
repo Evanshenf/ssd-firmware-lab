@@ -73,6 +73,7 @@ static void cost_report(struct fixture *f, const char *phase,
 {
     uint64_t elapsed = cost_nanoseconds() - started;
     struct fwlab_ftl_scale_status after;
+    const struct fwlab_ftl_scale *lower = f->runtime->block.context;
     CHECK(scale_storage_query(f->runtime, &after) == FWLAB_SPINE_V0_OK);
     printf("SCALE_COST|phase=%s|host_bytes=%llu|elapsed_ns=%llu|read_calls=%llu|write_calls=%llu|sync_calls=%llu|read_bytes=%llu|write_bytes=%llu|media_commits=%llu|nfc_children=%llu|gc=%llu|cp=%llu|medium=%s|media_version=%u|instrumented=1|paired_acceptance=0\n",
            phase, (unsigned long long)host_bytes, (unsigned long long)elapsed,
@@ -84,6 +85,11 @@ static void cost_report(struct fixture *f, const char *phase,
            (unsigned long long)(after.garbage_collections - before->garbage_collections),
            (unsigned long long)(after.checkpoints - before->checkpoints),
            medium_name(f), f->use_media_v2 ? 2u : 1u);
+    if (f->use_window_v2)
+        printf("SCALE_WINDOW_COST|phase=%s|ftl_format=%u|program_groups_total=%llu|read_groups_total=%llu|max_program_pages=%u|max_read_pages=%u|NFC_PAGE2_R0=1\n",
+            phase, lower->disk_format, (unsigned long long)lower->window.program_groups,
+            (unsigned long long)lower->window.read_groups, lower->window.max_program_pages,
+            lower->window.max_read_pages);
 }
 
 /* The private byte substrates have identical callback signatures, not
@@ -159,7 +165,8 @@ static void cost_journey(struct fixture *f)
         command(f, 2, (uint64_t)i * 16u, 16, NULL, output, 0, 0);
         CHECK(memcmp(bytes, output, sizeof(bytes)) == 0);
     }
-    puts("SCALE_COST_PASS|path=Linux-profile-lifecycle-FTL-NFC-compact-NAND|SELF=1|reopen_readback=1|no_disk_durability_claim=1");
+    printf("SCALE_COST_PASS|path=Linux-profile-lifecycle-FTL-NFC-NAND|batch_consumer=%u|SELF=1|reopen_readback=1|no_disk_durability_claim=1\n",
+           f->use_window_v2 ? 1u : 0u);
 }
 #undef COST_SAVE_ATTACH
 #undef COST_RESTORE

@@ -28,14 +28,15 @@ SOURCES := \
 	core/ftl-scale/ftl_scale_codec.c core/ftl-scale/ftl_scale_recovery.c \
 	core/ftl-scale/ftl_scale_mapping.c core/ftl-scale/ftl_scale_gc.c \
 	core/ftl-scale/ftl_scale_runtime.c core/ftl-scale/ftl_scale_parent.c \
-	core/ftl-scale/ftl_scale_nfc.c \
+	core/ftl-scale/ftl_scale_nfc.c core/ftl-scale/ftl_scale_nfc_v2.c \
+	core/ftl-scale/ftl_scale_window.c core/nfc-page-v2/nfc_page_v2.c \
 	core/nfc-runtime/nfc_trace_window.c core/nfc-runtime/nfc_scaled_model.c \
 	nfc/nfc_model.c nfc/nfc_scheduler.c nfc/nfc_fault.c nfc/nfc_media.c \
 	media/file-nand-v0/file_nand_codec.c media/file-nand-v0/file_nand_engine.c \
 	media/file-nand-v0/file_nand_media.c media/file-nand-v0/file_nand_posix.c \
 	media/file-nand-v1/compact_nand.c media/file-nand-v1/compact_nand_posix.c \
 	media/file-nand-v2/physical_nand.c media/file-nand-v2/physical_nand_codec.c \
-	media/file-nand-v2/physical_nand_posix.c \
+	media/file-nand-v2/physical_nand_posix.c media/file-nand-v2/physical_nand_batch.c \
 	frontends/headless-j0/j0_controller_buffer.c \
 	frontends/headless-j0/j0_host_data.c frontends/headless-j0/j0_action_drivers.c \
 	frontends/headless-j0/j0_construction.c \
@@ -50,7 +51,7 @@ CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 CRC_PROGRAM := $(BUILD)/test_crc
 FAST_CRC_PROGRAM := $(BUILD)/test_crc_fast
 FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
-.PHONY: all check check-crc check-crc-fast check-full check-cuts check-cost check-parent check-media-v2 check-media-v2-cuts check-media-v2-cost plan-64g check-64g
+.PHONY: all check check-crc check-crc-fast check-full check-cuts check-cost check-parent check-parent-window-v2 check-media-v2 check-media-v2-cuts check-media-v2-cost check-window-v2 check-window-v2-cost plan-64g check-64g
 all: $(PROGRAM)
 check: check-crc check-crc-fast $(PROGRAM)
 	$(PROGRAM)
@@ -66,12 +67,18 @@ check-cost: $(PROGRAM)
 	$(PROGRAM) --cost
 check-parent: $(PARENT_PROGRAM)
 	$(PARENT_PROGRAM)
+check-parent-window-v2: $(PARENT_PROGRAM)
+	$(PARENT_PROGRAM) --window-v2
 check-media-v2: $(PROGRAM)
 	$(PROGRAM) --media-v2
 check-media-v2-cuts: $(PROGRAM)
 	$(PROGRAM) --media-v2-cuts
 check-media-v2-cost: $(PROGRAM)
 	$(PROGRAM) --media-v2-cost
+check-window-v2: $(PROGRAM)
+	$(PROGRAM) --window-v2
+check-window-v2-cost: $(PROGRAM)
+	$(PROGRAM) --window-v2-cost
 plan-64g: $(PROGRAM)
 	$(PROGRAM) --plan-64g
 check-64g: $(PROGRAM)

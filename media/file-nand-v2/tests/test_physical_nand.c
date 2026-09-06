@@ -1,6 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 Evanshenf */
 /* SPDX-License-Identifier: BSD-3-Clause */
 #include "physical_nand_internal.h"
+#include "physical_nand_batch.h"
 #include "fwlab/portable/crc32c.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -283,6 +284,25 @@ static void full_batch_cost(void)
     printf("CPRIME_BATCH_COST|pages=64|read_calls=%llu|write_calls=%llu|write_bytes=%llu|syncs=%llu|formula=4352*n+1600\n",
         (unsigned long long)(f->reads - reads), (unsigned long long)(f->writes - calls),
         (unsigned long long)(f->write_bytes - bytes), (unsigned long long)(f->syncs - syncs));
+    uint8_t *read_main = malloc(64 * PAGE_BYTES), *read_oob = malloc(64 * OOB_BYTES);
+    struct fwlab_nand_page_info pages[64]; struct fwlab_nand_block_info block;
+    struct fwlab_nand_batch_v2 batch = fwlab_file_nand_v2_batch(f->media);
+    CHECK(read_main && read_oob && batch.ops && batch.scalar.context == f->port.context);
+    CHECK(batch.scalar.ops == f->port.ops && !memcmp(batch.media_uuid, f->config.media_uuid, 16));
+    CHECK(!memcmp(&batch.geometry, &f->config.geometry, sizeof(batch.geometry)));
+    reads = f->reads; uint64_t read_bytes = f->read_bytes;
+    calls = f->writes; syncs = f->syncs;
+    CHECK(batch.ops->read_pages(batch.scalar.context, &first, 64, read_main, 64 * PAGE_BYTES,
+        read_oob, 64 * OOB_BYTES, pages, 64, &block) == FWLAB_NFC_API_OK);
+    CHECK(f->reads - reads == 3 && f->read_bytes - read_bytes == 278592);
+    CHECK(f->writes == calls && f->syncs == syncs);
+    CHECK(!memcmp(main, read_main, 64 * PAGE_BYTES) && !memcmp(oob, read_oob, 64 * OOB_BYTES));
+    CHECK(block.next_program_page == 64 && !block.erase_generation);
+    for (unsigned i = 0; i < 64; ++i)
+        CHECK(pages[i].state == FWLAB_NAND_PAGE_VALID && pages[i].program_count == 1 &&
+            !pages[i].erase_generation_seen);
+    puts("CPRIME_BATCH_READ_COST|pages=64|read_calls=3|read_bytes=278592|writes=0|syncs=0|same_instance_binding=1");
+    free(read_main); free(read_oob);
     for (unsigned i = 0; i < PAGES_PER_BLOCK; ++i) {
         CHECK(result[i].physical_outcome == FWLAB_NFC_PHYS_APPLIED && result[i].integrity == FWLAB_NFC_INTEGRITY_COMPLETE);
         CHECK(result[i].applied_main_bytes == PAGE_BYTES && result[i].applied_oob_bytes == OOB_BYTES);
@@ -354,6 +374,55 @@ static struct fixture *torn_successor_block(void)
     CHECK(program(f, 0, 1, 62, PAGE_BYTES, OOB_BYTES, FWLAB_NFC_INTEGRITY_COMPLETE, &result) != FWLAB_NFC_API_OK);
     CHECK(get32(f->durable + (size_t)block_meta(0) + 60) != fwlab_crc32c(f->durable + (size_t)block_meta(0), 60));
     quarantined(f); return f;
+}
+static void compare_read_group(struct fixture *f, uint16_t b, uint32_t count)
+{
+    uint8_t main[4 * PAGE_BYTES], oob[4 * OOB_BYTES];
+    struct fwlab_nand_page_info pages[4]; struct fwlab_nand_block_info block;
+    struct fwlab_nfc_ppa first = address(b, 0); CHECK(count <= 4);
+    uint64_t writes = f->writes, syncs = f->syncs;
+    CHECK(fwlab_file_nand_v2_read_pages(f->media, &first, count, main, count * PAGE_BYTES,
+        oob, count * OOB_BYTES, pages, 4, &block) == FWLAB_NFC_API_OK);
+    for (uint32_t p = 0; p < count; ++p) {
+        struct observed one; observe(f, b, (uint16_t)p, &one);
+        CHECK(!memcmp(main + p * PAGE_BYTES, one.main, PAGE_BYTES));
+        CHECK(!memcmp(oob + p * OOB_BYTES, one.oob, OOB_BYTES));
+        CHECK(!memcmp(&pages[p], &one.page, sizeof(one.page)));
+        CHECK(!memcmp(&block, &one.block, sizeof(block)));
+    }
+    CHECK(f->writes == writes && f->syncs == syncs);
+}
+static void batch_read_states(void)
+{
+    struct fixture *f = create(); struct fwlab_nand_media_result result;
+    CHECK(program(f, 0, 0, 19, 137, 19, FWLAB_NFC_INTEGRITY_TORN, &result) == FWLAB_NFC_API_OK);
+    program_ok(f, 0, 1, 20); program_ok(f, 0, 2, 21);
+    compare_read_group(f, 0, 4);
+    CHECK(erase(f, 0, 1, FWLAB_NFC_INTEGRITY_TORN, &result) == FWLAB_NFC_API_OK);
+    compare_read_group(f, 0, 4);
+    CHECK(erase(f, 0, 64, FWLAB_NFC_INTEGRITY_COMPLETE, &result) == FWLAB_NFC_API_OK);
+    compare_read_group(f, 0, 4);
+    uint8_t main[4 * PAGE_BYTES], oob[4 * OOB_BYTES];
+    struct fwlab_nand_page_info pages[4]; struct fwlab_nand_block_info block;
+    struct fwlab_nfc_ppa first = address(0, 0); uint64_t reads = f->reads;
+    CHECK(fwlab_file_nand_v2_read_pages(f->media, &first, 4, main, sizeof(main),
+        oob, sizeof(oob), pages, 4, &block) == FWLAB_NFC_API_OK);
+    CHECK(f->reads - reads == 2 && block.erase_generation == 1 && all(main, sizeof(main), 0xff));
+    reads = f->reads;
+    CHECK(fwlab_file_nand_v2_read_pages(f->media, &first, 0, main, 0, oob, 0,
+        pages, 4, &block) == FWLAB_NFC_API_INVALID_CONTRACT);
+    first.page = 63;
+    CHECK(fwlab_file_nand_v2_read_pages(f->media, &first, 4, main, sizeof(main),
+        oob, sizeof(oob), pages, 4, &block) == FWLAB_NFC_API_INVALID_CONTRACT);
+    CHECK(f->reads == reads); destroy(f);
+    f = torn_successor_block(); reboot(f); compare_read_group(f, 0, 3); destroy(f);
+    f = create(); program_ok(f, 0, 0, 61); program_ok(f, 0, 1, 62);
+    f->working[FNV2_HOME_BASE + PAGE_BYTES + 137] ^= 1; first = address(0, 0);
+    CHECK(fwlab_file_nand_v2_read_pages(f->media, &first, 2, main, 2 * PAGE_BYTES,
+        oob, 2 * OOB_BYTES, pages, 4, &block) != FWLAB_NFC_API_OK);
+    CHECK(!fwlab_file_nand_v2_media(f->media).ops);
+    CHECK(!fwlab_file_nand_v2_batch(f->media).ops); destroy(f);
+    puts("CPRIME_BATCH_READ_STATES_PASS|scalar_equivalence=1|partial_program=1|partial_erase=1|erased_generation=1|abort_unknown=1|CRC_failure_quarantines=1|bad_shape_no_IO=1");
 }
 static void cut_homes_and_abort(void)
 {
@@ -452,7 +521,7 @@ static void rejection(void)
 }
 int main(void)
 {
-    initial_format(); full_batch_cost(); singleton_semantics(); cut_intent(); cut_homes_and_abort();
+    initial_format(); full_batch_cost(); batch_read_states(); singleton_semantics(); cut_intent(); cut_homes_and_abort();
     cut_commit(); abort_erase_and_bad(); cut_bank_reuse(); rejection();
     puts("CPRIME_ADJACENT_PASS|bounded_working_durable_bytes=1|three_barriers=1|no_POSIX_powerloss_or_10GB_claim=1");
     return 0;

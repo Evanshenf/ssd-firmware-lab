@@ -318,6 +318,66 @@ static uint8_t program_reason(const struct fnv2_block *b, uint32_t page)
         return FWLAB_NFC_REASON_NOT_ERASED;
     return page != b->info.next_program_page ? FWLAB_NFC_REASON_PROGRAM_ORDER : 0;
 }
+
+enum fwlab_nfc_api_result fwlab_file_nand_v2_read_pages(struct fwlab_file_nand_v2 *m,
+    const struct fwlab_nfc_ppa *first, uint32_t count, uint8_t *main, size_t main_bytes,
+    uint8_t *oob, size_t oob_bytes, struct fwlab_nand_page_info *pages,
+    size_t page_capacity, struct fwlab_nand_block_info *block)
+{
+    struct fnv2_block b;
+    uint32_t bid, pid;
+    uint8_t states[FWLAB_FILE_NAND_V2_MAX_BATCH_PAGES];
+    bool needs_main = false;
+    if (!live(m) || !count || count > FWLAB_FILE_NAND_V2_MAX_BATCH_PAGES ||
+        !main || !oob || !pages || !block || page_capacity < count ||
+        main_bytes != (size_t)count * 4096u || oob_bytes != (size_t)count * 128u ||
+        !ppa_ids(m, first, &bid, &pid) ||
+        count > (uint32_t)m->config.geometry.pages_per_block - first->page)
+        return FWLAB_NFC_API_INVALID_CONTRACT;
+    m->busy = 1;
+    if (!load_block(m, bid, &b) ||
+        !read_bytes(m, page_at(m, pid), m->page_records,
+                    (size_t)count * FNV2_PAGE_RECORD_BYTES)) return broken(m);
+    for (uint32_t p = 0; p < count; ++p) {
+        struct fwlab_nand_page_info *info = &pages[p];
+        int state;
+        memset(info, 0, sizeof(*info));
+        info->version = FWLAB_NFC_CONTRACT_VERSION; info->size = sizeof(*info);
+        info->erase_generation_seen = b.info.erase_generation;
+        if (b.info.erase_state == FWLAB_NAND_ERASE_TORN &&
+            (uint32_t)first->page + p < b.erased_prefix) {
+            /* This physical prefix has unknown erased contents, not valid FF. */
+            states[p] = FNV2_UNKNOWN_PAGE;
+            info->state = FWLAB_NAND_PAGE_TORN;
+            continue;
+        }
+        state = page_class(m, &b, m->page_records[p], pid + p);
+        if (state < 0) return broken(m);
+        states[p] = (uint8_t)state;
+        info->state = state == FNV2_UNKNOWN_PAGE ? FWLAB_NAND_PAGE_TORN : (uint8_t)state;
+        info->program_count = (uint8_t)(state != FWLAB_NAND_PAGE_ERASED);
+        needs_main |= state == FWLAB_NAND_PAGE_VALID || state == FWLAB_NAND_PAGE_TORN;
+    }
+    /* One physical range read; erased/unknown bytes are replaced below before
+     * successful return. They are never treated as current data by this read. */
+    if (needs_main && !read_bytes(m, FNV2_HOME_BASE + (uint64_t)pid * 4096u,
+                                  main, main_bytes)) return broken(m);
+    for (uint32_t p = 0; p < count; ++p) {
+        uint8_t *page_main = main + (size_t)p * 4096u;
+        uint8_t *page_oob = oob + (size_t)p * 128u;
+        const uint8_t *record = m->page_records[p];
+        if (states[p] == FWLAB_NAND_PAGE_ERASED || states[p] == FNV2_UNKNOWN_PAGE) {
+            memset(page_main, 0xff, 4096); memset(page_oob, 0xff, 128);
+        } else {
+            if (fnv2_get32(record + 20) != fnv2_crc(page_main, 4096)) return broken(m);
+            memcpy(page_oob, record + 32, 128);
+        }
+    }
+    *block = b.info;
+    m->busy = 0;
+    return FWLAB_NFC_API_OK;
+}
+
 enum fwlab_nfc_api_result fwlab_file_nand_v2_program_pages(struct fwlab_file_nand_v2 *m,
     const struct fwlab_nfc_ppa *first, uint32_t count, const uint8_t *main, size_t main_bytes,
     const uint8_t *oob, size_t oob_bytes, struct fwlab_nand_media_result *results, size_t result_count)

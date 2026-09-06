@@ -8,6 +8,7 @@
 #include "fwlab/contracts/block_service_v0.h"
 #include "fwlab/contracts/controller_buffer_v0.h"
 #include "fwlab/contracts/nfc_provider.h"
+#include "fwlab/contracts/nfc_page_v2_provider.h"
 #include "fwlab/private/block_volume_v0.h"
 
 #define FWLAB_FTL_SCALE_VERSION 1u
@@ -78,6 +79,16 @@ size_t fwlab_ftl_scale_arena_alignment(void);
 size_t fwlab_ftl_scale_arena_size(const struct fwlab_ftl_scale_config *config);
 size_t fwlab_ftl_scale_extended_arena_size(
     const struct fwlab_ftl_scale_extended_config *config);
+/* Explicit disk-format2/PAGE2-R0 construction. No format conversion or C3
+ * fallback; the retained parent buffer has the same lifetime preconditions. */
+size_t fwlab_ftl_scale_window_v2_arena_size(
+    const struct fwlab_ftl_scale_extended_config *config);
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_window_v2(
+    void *arena, size_t arena_size,
+    const struct fwlab_ftl_scale_extended_config *config,
+    const struct fwlab_controller_buffer_port_v0 *controller_buffer,
+    const struct fwlab_nfc_page_v2_provider *nfc,
+    struct fwlab_ftl_scale **ftl);
 /* Obtain after allocating the arena, before constructing NFC. No operation
  * may execute until NFC and FTL initialization have both succeeded. */
 struct fwlab_nfc_buffer_provider fwlab_ftl_scale_staging_provider(

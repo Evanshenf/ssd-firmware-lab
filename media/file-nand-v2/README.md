@@ -53,10 +53,14 @@ The failure model permits partial effects within a requested byte range; it
 does not qualify arbitrary physical-sector collateral damage or host power loss.
 Tmpfs is functional/process-recovery evidence, not durable storage hardware.
 
-The existing C3 NFC can consume the compatibility interface one page at a time.
-That connection is not evidence that it uses the 64-page batch function. A new
-typed NFC binding and within-parent FTL windows are still needed for that
-performance path. Physical-NAND health/generation persistence on real hardware
+The existing C3 NFC consumes the compatibility interface one page at a time;
+it does not implicitly use the batch function. An explicit
+[NFC page-v2](../../core/nfc-page-v2/README.md) / FTL-window construction now
+consumes batches through `fwlab_file_nand_v2_batch`. Scalar and batch callbacks,
+geometry and UUID come from the same physical instance. A contiguous 64-page
+READ uses three reads totaling 278592 bytes, retaining page/main/OOB CRC,
+generation and physical-state checks. No writes or syncs are added to READ.
+Physical-NAND health/generation persistence on real hardware
 remains a separate portability contract, not a backend-only replacement claim.
 
 ## Run the bounded checks
@@ -73,6 +77,7 @@ described in the [scaled FTL guide](../../core/ftl-scale/README.md):
 ```sh
 make -C frontends/headless-scale -f ftl.mk check-media-v2-cuts
 make -C frontends/headless-scale -f ftl.mk check-media-v2-cost
+make -C frontends/headless-scale -f ftl.mk check-parent-window-v2
 ```
 
 The cost entry reports actual API calls/bytes and maintenance, with instrumented

@@ -70,6 +70,12 @@ size_t fwlab_ftl_scale_extended_arena_size(const struct fwlab_ftl_scale_extended
     return fwlab_ftl_scale_extended_config_valid(c) ? fwlab_ftl_scale_arena_size(&c->base) : 0;
 }
 
+size_t fwlab_ftl_scale_window_v2_arena_size(const struct fwlab_ftl_scale_extended_config *c)
+{
+    size_t base = fwlab_ftl_scale_extended_arena_size(c);
+    return base && base <= SIZE_MAX - SF_WINDOW_BYTES ? base + SF_WINDOW_BYTES : 0;
+}
+
 static void submit_result(struct fwlab_block_submit_result_v0 *out,
                           const struct fwlab_block_request_v0 *r,
                           uint32_t disposition, uint32_t fault)
@@ -258,27 +264,45 @@ static const struct fwlab_block_service_ops_v0 block_ops = {
     .epoch_close = block_close, .epoch_quiescent = block_quiescent
 };
 
-enum fwlab_spine_result_v0 fwlab_ftl_scale_init(void *arena, size_t size,
+static enum fwlab_spine_result_v0 initialize(void *arena, size_t size,
     const struct fwlab_ftl_scale_config *c,
     const struct fwlab_controller_buffer_port_v0 *buffer,
-    const struct fwlab_nfc_provider *nfc, struct fwlab_ftl_scale **out)
+    const struct fwlab_nfc_provider *nfc, const struct fwlab_nfc_page_v2_provider *page,
+    struct fwlab_ftl_scale **out)
 {
     struct fwlab_ftl_scale *f = arena;
     uint8_t *cursor;
     uint32_t b, p, i;
     size_t bytes = fwlab_ftl_scale_arena_size(c), alignment = alignof(max_align_t);
-    if (!arena || !out || !bytes || size < bytes || (uintptr_t)arena % alignment ||
-        !fwlab_controller_buffer_port_v0_valid(buffer) || !nfc || !nfc->context || !nfc->ops ||
+    size_t base_bytes = bytes;
+    if (page) {
+        if (!bytes || bytes > SIZE_MAX - SF_WINDOW_BYTES || !page->context || !page->ops ||
+            page->ops->version != FWLAB_NFC_PAGE_V2_VERSION || page->ops->size != sizeof(*page->ops) ||
+            page->ops->reserved || !page->ops->try_submit || !page->ops->cancel || !page->ops->step ||
+            !page->ops->take_result || !page->ops->reset_begin || !page->ops->quiescent)
+            return FWLAB_SPINE_V0_INVALID;
+        bytes += SF_WINDOW_BYTES;
+    } else if (!nfc || !nfc->context || !nfc->ops ||
         nfc->ops->version != FWLAB_NFC_CONTRACT_VERSION || nfc->ops->size != sizeof(*nfc->ops) ||
         nfc->ops->reserved || !nfc->ops->try_submit || !nfc->ops->cancel || !nfc->ops->step ||
-        !nfc->ops->poll || !nfc->ops->reset_begin || !nfc->ops->quiescent ||
+        !nfc->ops->poll || !nfc->ops->reset_begin || !nfc->ops->quiescent)
+        return FWLAB_SPINE_V0_INVALID;
+    if (!arena || !out || !bytes || size < bytes || (uintptr_t)arena % alignment ||
+        !fwlab_controller_buffer_port_v0_valid(buffer) ||
         c->provider_nonce == buffer->issuer_nonce || !sf_geometry_counts(&c->geometry, &b, &p))
         return FWLAB_SPINE_V0_INVALID;
     memset(arena, 0, bytes);
     f->magic = SF_MAGIC;
     f->config = *c;
     f->controller_buffer = *buffer;
-    f->nfc = *nfc;
+    if (page) {
+        f->page_nfc = *page; f->nfc_adapter = &sf_nfc_page2_adapter;
+        f->disk_format = SF_WINDOW_FORMAT_VERSION;
+        f->window.main = (uint8_t (*)[SF_PAGE_BYTES])((uint8_t *)arena + base_bytes);
+        f->window.oob = (uint8_t (*)[SF_OOB_BYTES])((uint8_t *)f->window.main + SF_MAX_DELTAS * SF_PAGE_BYTES);
+    } else {
+        f->nfc = *nfc; f->nfc_adapter = &sf_nfc_c3_adapter; f->disk_format = SF_FORMAT_VERSION;
+    }
     f->physical_blocks = b;
     f->physical_pages = p;
     f->max_transfer_lbas = FWLAB_FTL_SCALE_MAX_LBAS;
@@ -305,6 +329,12 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init(void *arena, size_t size,
     return FWLAB_SPINE_V0_OK;
 }
 
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init(void *arena, size_t size,
+    const struct fwlab_ftl_scale_config *c,
+    const struct fwlab_controller_buffer_port_v0 *buffer,
+    const struct fwlab_nfc_provider *nfc, struct fwlab_ftl_scale **out)
+{ return initialize(arena, size, c, buffer, nfc, NULL, out); }
+
 enum fwlab_spine_result_v0 fwlab_ftl_scale_init_extended(void *arena, size_t size,
     const struct fwlab_ftl_scale_extended_config *c,
     const struct fwlab_controller_buffer_port_v0 *buffer,
@@ -315,6 +345,20 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init_extended(void *arena, size_t siz
     if (!fwlab_ftl_scale_extended_config_valid(c)) return FWLAB_SPINE_V0_INVALID;
     maximum = c->max_transfer_lbas;
     result = fwlab_ftl_scale_init(arena, size, &c->base, buffer, nfc, out);
+    if (result == FWLAB_SPINE_V0_OK) (*out)->max_transfer_lbas = maximum;
+    return result;
+}
+
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_window_v2(void *arena, size_t size,
+    const struct fwlab_ftl_scale_extended_config *c,
+    const struct fwlab_controller_buffer_port_v0 *buffer,
+    const struct fwlab_nfc_page_v2_provider *nfc, struct fwlab_ftl_scale **out)
+{
+    enum fwlab_spine_result_v0 result;
+    uint32_t maximum;
+    if (!fwlab_ftl_scale_extended_config_valid(c) || !nfc) return FWLAB_SPINE_V0_INVALID;
+    maximum = c->max_transfer_lbas;
+    result = initialize(arena, size, &c->base, buffer, NULL, nfc, out);
     if (result == FWLAB_SPINE_V0_OK) (*out)->max_transfer_lbas = maximum;
     return result;
 }
@@ -386,6 +430,7 @@ bool sf_work_step(struct fwlab_ftl_scale *f)
     if (f->quarantined) return false;
     if (w->kind == SF_WORK_NONE) return sf_parent_step(f);
     if (w->kind != SF_WORK_HOST) return sf_gc_step(f);
+    if (f->disk_format == SF_WINDOW_FORMAT_VERSION) return sf_window_step(f);
     if (sf_meta_busy(f)) return false;
     if (f->parent.cancelled && !w->effect_seen && sf_io_idle(f)) {
         sf_host_fail(f, FWLAB_NFC_REASON_CANCELLED);
@@ -485,16 +530,14 @@ static bool close_step(struct fwlab_ftl_scale *f)
     if (!f->admission_closed || sf_work_busy(f) || sf_meta_busy(f) || !sf_io_idle(f))
         return false;
     if (!f->nfc_close_started) {
-        r = f->nfc.ops->reset_begin(f->nfc.context, f->config.nfc_instance_nonce, f->config.nfc_epoch);
+        r = f->nfc_adapter->reset(f);
         if (r != FWLAB_NFC_API_OK) sf_fail(f, SF_FAULT_IO);
         else f->nfc_close_started = 1;
         return true;
     }
     if (!f->nfc_quiescent) {
-        struct fwlab_nfc_step_result step;
-        r = f->nfc.ops->step(f->nfc.context, 1, &step);
-        if (r != FWLAB_NFC_API_OK || f->nfc.ops->quiescent(f->nfc.context,
-            f->config.nfc_instance_nonce, f->config.nfc_epoch, &quiescent) != FWLAB_NFC_API_OK)
+        r = f->nfc_adapter->drive(f);
+        if (r != FWLAB_NFC_API_OK || f->nfc_adapter->quiescent(f, &quiescent) != FWLAB_NFC_API_OK)
             sf_fail(f, SF_FAULT_IO);
         else f->nfc_quiescent = (uint8_t)quiescent;
         return true;

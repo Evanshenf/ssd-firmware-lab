@@ -26,6 +26,7 @@ original 1-MiB profile; it has not silently gained larger capacity. A real
 | `ftl_scale_codec.c` | Checked layout and explicit root/checkpoint/journal/DATA OOB serialization |
 | `ftl_scale_recovery.c` | Streamed checkpoint, two-rail journal, recovery and safe cleanup ordering |
 | `ftl_scale_nfc.c` | One actual NFC child at a time; no physical-media metadata side channel |
+| `ftl_scale_window.c` / `ftl_scale_nfc_v2.c` | Explicit format-2 windows and typed page-v2 NFC operations |
 
 Allocate the FTL arena from a resource configuration, obtain its staging-buffer
 view, construct NFC with that view and the actual physical geometry, initialize
@@ -134,6 +135,39 @@ the free heap. The GC diagnostic counts applied GC_COMMIT records, including
 recovery replay; it is not an independent physical erase/wear counter.
 
 ## Persistent authority
+
+### Explicit format-2 batch construction
+
+`fwlab_ftl_scale_init_window_v2` selects a separate on-media FTL format and the
+[NFC PAGE2-R0 model](../nfc-page-v2/README.md). Old constructors retain format 1
+and C3. Recovery rejects a constructor/format mismatch before FTL cleanup or
+formatting; there is no mixed-format root, auto-conversion or fallback.
+
+One additional 270336-byte FTL window stages up to 64 contiguous physical pages
+inside a retained parent, rather than putting a 1-MiB array in every command.
+Writes split at head/tail RMW and physical block boundaries. DATA is committed
+before journal A, then B, then the atomic MAP_WINDOW update. Full heads close
+implicitly through that record; OPEN remains durable before the first DATA.
+GC still guarantees at most three available pages at a time: a live-copy victim
+can produce a short window, never a hidden 64-page allocation requirement.
+Reads group only consecutive mapped LPN/PPA runs with matching generation;
+holes are zeroed by FTL, and all mapped page/OOB facts are checked before the
+group is copied to the controller buffer. Internal storage is not Host DMA
+authority, and accepted DATA still drains its A/B transaction after cancellation.
+
+Use the explicit headless factory or these existing test entries:
+
+```sh
+make -C frontends/headless-scale -f ftl.mk check-parent-window-v2
+make -C frontends/headless-scale -f ftl.mk check-window-v2
+make -C frontends/headless-scale -f ftl.mk FWLAB_CRC_NATIVE=1 check-window-v2-cost
+```
+
+The real Block parent entry covers 1 MiB; the existing Linux-profile/lifecycle
+entry still uses at most 8 KiB. Neither changes the native deployment or implies
+Host transport, multi-queue, physical power-loss or 10-GB/s qualification.
+
+### Root/checkpoint/journal persistence
 
 The FTL uses its own magic and format version, separate from both M3P's formats
 and [compact physical file-NAND](../../media/file-nand-v1/README.md). The latter
