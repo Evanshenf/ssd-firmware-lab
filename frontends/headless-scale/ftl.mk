@@ -3,7 +3,7 @@
 CC ?= cc
 CPPFLAGS += -I../../include -I../../core/ftl-scale -I../../core/m3p \
 	-I../../core/command-spine -I../../media/file-nand-v0 \
-	-I../../media/file-nand-v1 -I../../nfc
+	-I../../media/file-nand-v1 -I../../media/file-nand-v2 -I../../nfc
 CFLAGS ?= -std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic -fno-common
 BUILD ?= build/scale-ftl
 FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
@@ -25,6 +25,8 @@ SOURCES := \
 	media/file-nand-v0/file_nand_codec.c media/file-nand-v0/file_nand_engine.c \
 	media/file-nand-v0/file_nand_media.c media/file-nand-v0/file_nand_posix.c \
 	media/file-nand-v1/compact_nand.c media/file-nand-v1/compact_nand_posix.c \
+	media/file-nand-v2/physical_nand.c media/file-nand-v2/physical_nand_codec.c \
+	media/file-nand-v2/physical_nand_posix.c \
 	frontends/headless-j0/j0_controller_buffer.c \
 	frontends/headless-j0/j0_host_data.c frontends/headless-j0/j0_action_drivers.c \
 	frontends/headless-j0/j0_construction.c \
@@ -37,7 +39,7 @@ PARENT_PROGRAM := $(BUILD)/test_scale_parent
 CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 	$(BUILD)/frontends/headless-scale/test_crc.o
 CRC_PROGRAM := $(BUILD)/test_crc
-.PHONY: all check check-crc check-full check-cuts check-cost check-parent plan-64g check-64g
+.PHONY: all check check-crc check-full check-cuts check-cost check-parent check-media-v2 check-media-v2-cuts check-media-v2-cost plan-64g check-64g
 all: $(PROGRAM)
 check: check-crc $(PROGRAM)
 	$(PROGRAM)
@@ -51,6 +53,12 @@ check-cost: $(PROGRAM)
 	$(PROGRAM) --cost
 check-parent: $(PARENT_PROGRAM)
 	$(PARENT_PROGRAM)
+check-media-v2: $(PROGRAM)
+	$(PROGRAM) --media-v2
+check-media-v2-cuts: $(PROGRAM)
+	$(PROGRAM) --media-v2-cuts
+check-media-v2-cost: $(PROGRAM)
+	$(PROGRAM) --media-v2-cost
 plan-64g: $(PROGRAM)
 	$(PROGRAM) --plan-64g
 check-64g: $(PROGRAM)

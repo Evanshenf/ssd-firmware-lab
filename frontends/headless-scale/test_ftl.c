@@ -6,6 +6,8 @@
 #include "ftl_scale_internal.h"
 #include "compact_nand.h"
 #include "compact_nand_internal.h"
+#include "physical_nand.h"
+#include "physical_nand_internal.h"
 #include "fwlab/portable/nvme_codec.h"
 
 #include <fcntl.h>
@@ -30,6 +32,9 @@ struct fixture {
     int directory_fd;
     void *media_arena;
     struct fwlab_file_nand_v1 *media;
+    struct fwlab_file_nand_v2 *media_v2;
+    struct fwlab_file_nand_holder_v2 holder_v2;
+    int use_media_v2;
     struct fwlab_file_nand_holder_v1 holder;
     struct fwlab_file_nand_v1_config media_config;
     struct j0_media_binding media_binding;
@@ -115,11 +120,23 @@ static uint64_t available_memory(void)
     return (uint64_t)kib * 1024u;
 }
 
+static struct fwlab_file_nand_v2_config v2_configuration(
+    const struct fwlab_file_nand_v1_config *config)
+{
+    struct fwlab_file_nand_v2_config result = {0};
+    result.geometry = config->geometry;
+    memcpy(result.media_uuid, config->media_uuid, 16);
+    return result;
+}
+
 static void media_preflight(const char *directory, uint32_t mib,
-                             const struct fwlab_file_nand_v1_config *config)
+                             const struct fwlab_file_nand_v1_config *config,
+                             int media_v2)
 {
     struct statfs fs;
-    uint64_t image_bytes = fwlab_file_nand_v1_image_bytes(config);
+    struct fwlab_file_nand_v2_config c2 = v2_configuration(config);
+    uint64_t image_bytes = media_v2 ? fwlab_file_nand_v2_image_bytes(&c2) :
+                                    fwlab_file_nand_v1_image_bytes(config);
     uint64_t available, total, ram = available_memory();
     uint64_t reserve = mib > 256 ? UINT64_C(2) << 30 : UINT64_C(128) << 20;
     int fd;
@@ -202,10 +219,22 @@ static struct fwlab_nfc_geometry geometry(uint32_t logical_mib)
 
 static void media_open(struct fixture *f, int format)
 {
-    size_t bytes = fwlab_file_nand_v1_arena_size();
+    size_t bytes = f->use_media_v2 ? fwlab_file_nand_v2_arena_size() :
+                                   fwlab_file_nand_v1_arena_size();
     f->media_arena = calloc(1, bytes);
     CHECK(f->media_arena);
-    if (format)
+    if (f->use_media_v2) {
+        struct fwlab_file_nand_v2_config c = v2_configuration(&f->media_config);
+        if (format)
+            CHECK(fwlab_file_nand_v2_posix_format(f->media_arena, bytes,
+                f->directory_fd, "nand.bin", &c, &f->media_v2,
+                &f->holder_v2) == FWLAB_NFC_API_OK);
+        else
+            CHECK(fwlab_file_nand_v2_posix_restart(f->media_arena, bytes,
+                f->directory_fd, "nand.bin", &c, &f->holder_v2,
+                &f->media_v2) == FWLAB_NFC_API_OK);
+        f->media_binding.media = fwlab_file_nand_v2_media(f->media_v2);
+    } else if (format)
         CHECK(fwlab_file_nand_v1_posix_format(f->media_arena, bytes,
             f->directory_fd, "nand.bin", &f->media_config, &f->media,
             &f->holder) == FWLAB_NFC_API_OK);
@@ -213,17 +242,26 @@ static void media_open(struct fixture *f, int format)
         CHECK(fwlab_file_nand_v1_posix_restart(f->media_arena, bytes,
             f->directory_fd, "nand.bin", &f->media_config, &f->holder,
             &f->media) == FWLAB_NFC_API_OK);
-    f->media_binding.media = fwlab_file_nand_v1_media(f->media);
+    if (!f->use_media_v2)
+        f->media_binding.media = fwlab_file_nand_v1_media(f->media);
     f->media_binding.geometry = f->media_config.geometry;
     memcpy(f->media_binding.media_uuid, f->media_config.media_uuid, 16);
 }
 
 static void media_close(struct fixture *f)
 {
-    CHECK(fwlab_file_nand_v1_close(f->media) == FWLAB_NFC_API_OK);
+    CHECK((f->use_media_v2 ? fwlab_file_nand_v2_close(f->media_v2) :
+           fwlab_file_nand_v1_close(f->media)) == FWLAB_NFC_API_OK);
     free(f->media_arena);
     f->media = NULL;
+    f->media_v2 = NULL;
     f->media_arena = NULL;
+}
+
+static uint64_t media_sequence(const struct fixture *f)
+{
+    return f->use_media_v2 ? fwlab_file_nand_v2_sequence(f->media_v2) :
+                            fwlab_file_nand_v1_sequence(f->media);
 }
 
 static void tick(struct fixture *f)
@@ -511,19 +549,21 @@ static void full_journey(struct fixture *f)
 /* Named process-cut cases share this real fixture; no production observer or
  * synthetic Block/NFC executor is introduced. */
 #include "ftl_cuts.inc"
+#include "ftl_v2_tail.inc"
 #include "ftl_cost.inc"
 
-static void journey(uint32_t mib, int full, int cuts, int cost)
+static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2)
 {
     struct fixture f = {0};
     struct fwlab_ftl_scale_status s;
     uint8_t expected[65536] = {0};
     uint8_t bytes[8192], output[8192], last[512];
-    uint64_t media_sequence, cp;
+    uint64_t prior_media_sequence, cp;
     uint32_t i;
     const char *media_parent = getenv("FWLAB_TEST_MEDIA_DIR");
     int length;
     f.started = now_seconds();
+    f.use_media_v2 = use_v2;
     f.media_config.geometry = geometry(mib);
     memcpy(f.media_config.media_uuid, "SCALE-B2-NAND-001", 16);
     f.media_config.media_uuid[15] = (uint8_t)(mib / 64u);
@@ -532,7 +572,7 @@ static void journey(uint32_t mib, int full, int cuts, int cost)
         fputs("SCALE_PREFLIGHT_ERROR|FWLAB_TEST_MEDIA_DIR_required|no_disk_fallback=1\n", stderr);
         exit(EXIT_FAILURE);
     }
-    media_preflight(media_parent, mib, &f.media_config);
+    media_preflight(media_parent, mib, &f.media_config, use_v2);
     CHECK(media_parent[0] == '/');
     length = snprintf(f.directory, sizeof(f.directory),
                       "%s/fwlab-scale-ftl.XXXXXX", media_parent);
@@ -542,11 +582,13 @@ static void journey(uint32_t mib, int full, int cuts, int cost)
     f.directory_fd = open(f.directory, O_DIRECTORY | O_CLOEXEC | O_RDONLY);
     CHECK(f.directory_fd >= 0);
     medium_report(&f, 0);
+    printf("SCALE_MEDIA_FORMAT|version=%u|fresh_directory=1|batch_consumer=0\n",
+           use_v2 ? 2u : 1u);
     scale_storage_factory_init(&f.factory, &f.options);
     media_open(&f, 1);
     runtime_start(&f, 1, 0);
-    media_sequence = fwlab_file_nand_v1_sequence(f.media);
-    CHECK(media_sequence == 0); /* Construction and starts did not perform IO. */
+    prior_media_sequence = media_sequence(&f);
+    CHECK(prior_media_sequence == 0); /* Construction/start did not perform IO. */
     wait_ready(&f);
     identify(&f);
     if (cost) {
@@ -560,10 +602,10 @@ static void journey(uint32_t mib, int full, int cuts, int cost)
     command(&f, 1, f.lbas - 1, 1, last, NULL, 1, 0);
     command(&f, 2, f.lbas - 1, 1, NULL, output, 0, 0);
     CHECK(memcmp(last, output, sizeof(last)) == 0);
-    media_sequence = fwlab_file_nand_v1_sequence(f.media);
+    prior_media_sequence = media_sequence(&f);
     command(&f, 1, f.lbas, 1, last, NULL, 0, 0x80);
     command(&f, 2, f.lbas, 1, NULL, NULL, 0, 0x80);
-    CHECK(fwlab_file_nand_v1_sequence(f.media) == media_sequence);
+    CHECK(media_sequence(&f) == prior_media_sequence);
     /* One unaligned8KiB write really spans three NAND logical pages. */
     memset(bytes, 0x5a, sizeof(bytes));
     command(&f, 1, 7, 16, bytes, NULL, 0, 0);
@@ -620,14 +662,16 @@ static void journey(uint32_t mib, int full, int cuts, int cost)
         full_journey(&f);
     if (cuts)
         cuts_journey(&f);
+    if (cuts && use_v2)
+        v2_tail_journey(&f);
 finish:
     runtime_close(&f);
     media_close(&f);
     media_open(&f, 0);
     runtime_start(&f, 0, 0);
-    media_sequence = fwlab_file_nand_v1_sequence(f.media);
+    prior_media_sequence = media_sequence(&f);
     runtime_close(&f); /* Close before volume/profile readiness. */
-    CHECK(fwlab_file_nand_v1_sequence(f.media) == media_sequence);
+    CHECK(media_sequence(&f) == prior_media_sequence);
     media_close(&f);
     medium_report(&f, 1);
     CHECK(unlinkat(f.directory_fd, "nand.bin", 0) == 0);
@@ -642,27 +686,32 @@ finish:
 int main(int argc, char **argv)
 {
     int full = argc == 2 && strcmp(argv[1], "--full") == 0;
-    int cuts = argc == 2 && strcmp(argv[1], "--cuts") == 0;
+    int cuts = argc == 2 && (strcmp(argv[1], "--cuts") == 0 ||
+                            strcmp(argv[1], "--media-v2-cuts") == 0);
     int large = argc == 2 && strcmp(argv[1], "--full-64g") == 0;
     int plan = argc == 2 && strcmp(argv[1], "--plan-64g") == 0;
-    int cost = argc == 2 && strcmp(argv[1], "--cost") == 0;
+    int cost = argc == 2 && (strcmp(argv[1], "--cost") == 0 ||
+                            strcmp(argv[1], "--media-v2-cost") == 0);
+    int use_v2 = argc == 2 && (strcmp(argv[1], "--media-v2") == 0 ||
+                              strcmp(argv[1], "--media-v2-cuts") == 0 ||
+                              strcmp(argv[1], "--media-v2-cost") == 0);
     CHECK(setvbuf(stdout, NULL, _IOLBF, 0) == 0);
     CHECK(setvbuf(stderr, NULL, _IOLBF, 0) == 0);
-    CHECK(argc == 1 || full || cuts || large || plan || cost);
+    CHECK(argc == 1 || full || cuts || large || plan || cost || use_v2);
     if (plan) {
         struct fwlab_file_nand_v1_config config = {0};
         config.geometry = geometry(65536);
         memcpy(config.media_uuid, "SCALE-B2-NAND-001", 16);
-        media_preflight(getenv("FWLAB_TEST_MEDIA_DIR"), 65536, &config);
+        media_preflight(getenv("FWLAB_TEST_MEDIA_DIR"), 65536, &config, 0);
         puts("SCALE_PLAN_ONLY|no_NAND_io=1|no_runtime_pass_claim=1");
         return 0;
     }
     if (large) {
-        journey(65536, 1, 0, 0);
+        journey(65536, 1, 0, 0, 0);
         return 0;
     }
-    journey(64, full, cuts, cost);
+    journey(64, full, cuts, cost, use_v2);
     if (!cost)
-        journey(256, full, 0, 0);
+        journey(256, full, 0, 0, use_v2);
     return 0;
 }

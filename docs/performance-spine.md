@@ -131,6 +131,38 @@ The next priority is the retained-parent and within-parent batch mechanism,
 not another sequence of small CRC/syscall tweaks. Native multi-queue remains
 planned, but cannot fix this headless storage amplification.
 
+## Physical v2: real path connected, batching consumer still pending
+
+The [physical v2 media](../media/file-nand-v2/README.md) replaces payload/sector
+postimage redo with a bounded INTENT, direct-home installation and matching
+COMMIT or recovered ABORT. It retains three real group barriers and explicit
+physical page/OOB/generation state. The compatibility entry runs through the
+existing C3 NFC and FTL, including an actual reported INTENT-sync failure on
+journal A. Recovery observes A as ECC and B as complete erased data, preserves
+the earlier acknowledged bytes, rotates the journal and continues SELF writes.
+
+Current 8-KiB QD1 cost diagnosis, **still using singleton NFC programs**:
+
+| Quantity | v1 after P1 | v2 |
+|---|---:|---:|
+| Backend bytes per 8-KiB Write | 163840 | 23808 |
+| Sync calls per 8-KiB Write | 20 | 12 |
+| Backend bytes for 32-MiB sequential Write | 745119744 | 107873088 |
+| Sync calls in that 32-MiB case | 91365 | 54819 |
+| Instrumented Write-stage elapsed time | 2.090 s | 1.072 s |
+
+The observations are unpaired local x86 measurements, not new ARM or native
+performance results. The v2 Write stage is about 31 MB/s, not 10 GB/s. Its
+write-byte ratio is about 3.215x including the same 17 checkpoints. This is
+substantial waste removal, but not completion of the performance objective.
+
+Direct component execution measured 280128 written bytes and three syncs for
+a full 64-page/256-KiB physical batch. The normal firmware binding does **not**
+yet consume that batch entry. Next are typed NFC-v2 and within-parent FTL
+windows, followed by bounded dirty-segment checkpoints and matched measurement.
+Do not silently omit v1's exported digest or assert that byte-cost arithmetic
+proves a 1–3% throughput loss.
+
 ## Staged route
 
 | Stage | Deliverable | Boundary |

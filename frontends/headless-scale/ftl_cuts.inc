@@ -146,7 +146,7 @@ static void named_cut_observer(struct fixture *f)
     receipt.erased_generation = ftl->io.result.completion.final_erase_generation;
     receipt.record_sequence = ftl->record_sequence;
     receipt.map_sequence = ftl->map_sequence;
-    receipt.media_sequence = fwlab_file_nand_v1_sequence(f->media);
+    receipt.media_sequence = media_sequence(f);
     receipt.root_generation = ftl->root.generation;
     f->cut_observer = NULL;
     if (closing) {
@@ -282,7 +282,7 @@ static void wrong_expectation_cut(struct fixture *f)
         uint32_t i;
         struct fwlab_ftl_scale_status observed;
         media_open(f, 0);
-        before = fwlab_file_nand_v1_sequence(f->media);
+        before = media_sequence(f);
         runtime_start(f, 0, f->lbas - 8u);
         for (i = 0; i < STEP_LIMIT; ++i) {
             uint32_t used;
@@ -293,16 +293,16 @@ static void wrong_expectation_cut(struct fixture *f)
         }
         CHECK(i < STEP_LIMIT && observed.fault_code == SF_FAULT_METADATA);
         CHECK(!f->runtime->ready && !f->runtime->namespace_bound);
-        CHECK(fwlab_file_nand_v1_sequence(f->media) == before);
+        CHECK(media_sequence(f) == before);
         _exit(CUT_EXIT_BASE + CUT_WRONG_EXPECTATION);
     }
     do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
     CHECK(waited == child && WIFEXITED(status) && WEXITSTATUS(status) == CUT_EXIT_BASE + CUT_WRONG_EXPECTATION);
     f->incarnation += 2;
     media_open(f, 0);
-    before = fwlab_file_nand_v1_sequence(f->media);
+    before = media_sequence(f);
     runtime_start(f, 0, 0);
-    CHECK(fwlab_file_nand_v1_sequence(f->media) == before);
+    CHECK(media_sequence(f) == before);
     wait_ready(f);
     puts("SCALE_FTL_CUT_PASS|case=WRONG_EXPECTATION|metadata_before_cleanup=1|media_unchanged=1");
 }
