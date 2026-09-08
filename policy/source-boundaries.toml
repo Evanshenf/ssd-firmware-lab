@@ -51,6 +51,8 @@ portable_forbidden_include_prefixes = [
   "sysemu/",
   "uapi/linux/",
 ]
+# One stable public OS constant header, confined to the explicit byte adapter.
+posix_adapter_public_headers = { "media/file-nand-v2/physical_nand_posix.c" = ["linux/magic.h"] }
 portable_forbidden_include_basenames = [
   "iommufd.h",
   "libvfio-user.h",

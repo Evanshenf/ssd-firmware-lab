@@ -90,6 +90,9 @@ EXPECTED_ARCHITECTURE = {
         "sysemu/",
         "uapi/linux/",
     ],
+    "posix_adapter_public_headers": {
+        "media/file-nand-v2/physical_nand_posix.c": ["linux/magic.h"],
+    },
     "portable_forbidden_include_basenames": [
         "iommufd.h",
         "libvfio-user.h",
@@ -1265,8 +1268,14 @@ def check_portable_include(
     prefixes = EXPECTED_ARCHITECTURE["portable_forbidden_include_prefixes"]
     basenames = EXPECTED_ARCHITECTURE["portable_forbidden_include_basenames"]
     fragments = EXPECTED_ARCHITECTURE["portable_forbidden_include_fragments"]
+    # Only this exact literal angle include in the explicit OS byte adapter.
+    # It does not exempt other headers, other files or private dependencies.
+    public_os_header = not quoted and include in EXPECTED_ARCHITECTURE[
+        "posix_adapter_public_headers"
+    ].get(relative.as_posix(), [])
     forbidden = (
-        any(lowered.startswith(prefix) for prefix in prefixes)
+        (any(lowered.startswith(prefix) for prefix in prefixes)
+         and not public_os_header)
         or Path(lowered).name in basenames
         or any(fragment in lowered for fragment in fragments)
     )

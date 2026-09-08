@@ -34,7 +34,7 @@ static void window_io(struct fixture *f, uint32_t operation, uint64_t lba,
     if (operation == FWLAB_BLOCK_V0_WRITE)
         CHECK(f->ftl->window.program_groups > programs && f->ftl->window.max_program_pages > 1);
     else CHECK(f->ftl->window.read_groups > reads && f->ftl->window.max_read_pages > 1);
-    printf("PARENT_WINDOW_COUNTS|phase=%s-%uMiB|host_bytes=%u|elapsed_ns=%llu|read_calls=%llu|write_calls=%llu|sync_calls=%llu|read_bytes=%llu|write_bytes=%llu|media_commits=%llu|nfc_children=%llu|program_groups=%llu|read_groups=%llu|max_program_pages=%u|max_read_pages=%u|OPEN=%llu|CLOSE=%llu|MAP_WINDOW=%llu|CP=%llu|GC=%llu|buffer_reads=%u|buffer_writes=%u|ftl_window_bytes=%u|nfc_arena_bytes=%zu|snapshot_copy=1|payload_setup_in_timing=0|read_check_in_timing=0|paired_acceptance=0\n",
+    printf("PARENT_WINDOW_COUNTS|phase=%s-%uMiB|host_bytes=%u|elapsed_ns=%llu|read_calls=%llu|write_calls=%llu|sync_calls=%llu|read_bytes=%llu|write_bytes=%llu|media_commits=%llu|nfc_children=%llu|program_groups=%llu|read_groups=%llu|max_program_pages=%u|max_read_pages=%u|OPEN=%llu|CLOSE=%llu|MAP_WINDOW=%llu|CP=%llu|GC=%llu|buffer_reads=%u|buffer_writes=%u|ftl_window_bytes=%u|nfc_arena_bytes=%zu|snapshot_copy=1|payload_setup_in_timing=0|read_check_in_timing=0|paired_acceptance=0|runtime_io=%s|constructor_preparation_in_timing=0\n",
         operation == FWLAB_BLOCK_V0_WRITE ? "write" : "read", lbas / 2048u, lbas * 512u,
         (unsigned long long)elapsed,
         (unsigned long long)(f->counts.reads - before.reads),
@@ -53,7 +53,8 @@ static void window_io(struct fixture *f, uint32_t operation, uint64_t lba,
         (unsigned long long)(f->ftl->checkpoints - cp),
         (unsigned long long)(f->ftl->garbage_collections - gc),
         f->buffer.reads - buffer_reads, f->buffer.writes - buffer_writes,
-        SF_WINDOW_BYTES, fwlab_nfc_page_v2_arena_size());
+        SF_WINDOW_BYTES, fwlab_nfc_page_v2_arena_size(),
+        f->byte_profile == POSIX_BYTE_MAPPED ? "MAP_SHARED_prefaulted" : "POSIX");
 }
 
 static void window_holes(struct fixture *f)
@@ -75,9 +76,9 @@ static void window_holes(struct fixture *f)
     puts("PARENT_WINDOW_HOLES_PASS|mixed_values_holes_partial_page=1|unmapped_1MiB_zero=1|hole_no_physical_read=1");
 }
 
-static void cancel_after_data(int closing, int operation_v2)
+static void cancel_after_data(int closing, int byte_profile)
 {
-    struct fixture *f = create(1, operation_v2); uint32_t i;
+    struct fixture *f = create(1, byte_profile); uint32_t i;
     struct fwlab_block_request_v0 r;
     struct fwlab_block_status_v0 s;
     size_t map_bytes = (VOLUME_LBAS / 8u) * sizeof(struct sf_map_entry);
@@ -118,9 +119,9 @@ static void cancel_after_data(int closing, int operation_v2)
            closing ? "epoch_close" : "cancel", prefix);
 }
 
-static void format_mismatch(int written_window_v2, int operation_v2)
+static void format_mismatch(int written_window_v2, int byte_profile)
 {
-    struct fixture *f = create(1, operation_v2); int status;
+    struct fixture *f = create(1, byte_profile); int status;
     f->window_v2 = (uint8_t)written_window_v2;
     open_lower(f, 1, 1); io(f, FWLAB_BLOCK_V0_WRITE, 0, 16, 0x48); close_lower(f);
     CHECK(fflush(NULL) == 0); pid_t child = fork(); CHECK(child >= 0);

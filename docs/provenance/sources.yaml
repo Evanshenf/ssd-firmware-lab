@@ -3,6 +3,24 @@
 
 schema_version: 1
 sources:
+  - id: linux-v7.0-public-filesystem-magic
+    title: Linux v7.0 public filesystem type constants
+    url: https://raw.githubusercontent.com/torvalds/linux/v7.0/include/uapi/linux/magic.h
+    revision: "refs/tags/v7.0"
+    license: GPL-2.0-only WITH Linux-syscall-note
+    purpose: installed public UAPI header include for actual-FD tmpfs admission only; no header vendored, constant table copied or Linux-private interface included
+    code_copied: false
+    allowed_paths: [media/file-nand-v2/physical_nand_posix.c, docs, policy, scripts]
+
+  - id: linux-v7.0-mapped-file-sync
+    title: Linux v7.0 mapped-file and tmpfs synchronization paths
+    url: https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/+/refs/tags/v7.0/
+    revision: "refs/tags/v7.0; mm/msync.c, fs/sync.c, mm/shmem.c"
+    license: GPL-2.0-only
+    purpose: verify shared-mapping fdatasync ordering and tmpfs process-restart evidence limits; no implementation source copied
+    code_copied: false
+    allowed_paths: [docs]
+
   - id: ubuntu-26.04-release-notes
     title: Ubuntu 26.04 LTS release notes
     url: https://documentation.ubuntu.com/release-notes/26.04/summary-for-lts-users/

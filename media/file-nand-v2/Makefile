@@ -21,7 +21,7 @@ HEADERS := physical_nand.h physical_nand_internal.h physical_nand_codec.h physic
 	../../include/fwlab/portable/nfc_types.h ../../include/fwlab/portable/crc32c.h \
 	../../include/fwlab/portable/crc32c_fast.h ../../include/fwlab/portable/crc32c_shift1024.h
 
-.PHONY: all check check-operation
+.PHONY: all check check-operation check-mapped
 all: $(TEST)
 
 $(TEST): $(SOURCES) $(HEADERS) Makefile
@@ -38,7 +38,11 @@ $(OPERATION_TEST): $(OPERATION_SOURCES) $(HEADERS) Makefile \
 	../../include/fwlab/private/nfc_page_v2_model.h
 	mkdir -p "$(BUILD_DIR)"
 	$(CC) -I../../include -I. $(CPPFLAGS) $(CFLAGS) $(OPERATION_SOURCES) \
+		-Wl,--wrap=fallocate64,--wrap=mmap64,--wrap=madvise,--wrap=munmap,--wrap=close \
 		$(LDFLAGS) $(LDLIBS) -o "$@"
 
 check-operation: $(OPERATION_TEST)
 	"$(OPERATION_TEST)"
+
+check-mapped: $(OPERATION_TEST)
+	"$(OPERATION_TEST)" --mapped

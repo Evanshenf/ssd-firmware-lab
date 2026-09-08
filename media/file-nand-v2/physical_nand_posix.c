@@ -10,8 +10,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <linux/magic.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/vfs.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -23,9 +26,12 @@ struct fnv2_posix_context {
     uint64_t inode;
     uint64_t expected_size;
     uint8_t operation_active;
+    uint8_t *mapping;
+    size_t mapped_length;
 };
 
 #define FNV2_POSIX_MAGIC UINT64_C(0x464e5632504f5358)
+#define FNV2_MAPPED_MAX_BYTES (UINT64_C(600) * 1024u * 1024u)
 
 _Static_assert(sizeof(struct fnv2_posix_context) <= 128,
                "POSIX context fits persistent IO storage");
@@ -61,6 +67,94 @@ static int span_valid(uint64_t offset, size_t size, uint64_t file_size)
     return offset <= (uint64_t)INT64_MAX &&
            size <= (uint64_t)INT64_MAX - offset && offset <= file_size &&
            size <= file_size - offset;
+}
+
+static int mapped_size_valid(uint64_t size)
+{
+    return size != 0 && size <= FNV2_MAPPED_MAX_BYTES &&
+           size <= (uint64_t)SIZE_MAX && size <= (uint64_t)PTRDIFF_MAX &&
+           size <= (uint64_t)INT64_MAX;
+}
+
+static int mapped_file(int fd)
+{
+    struct statfs status;
+
+    return fstatfs(fd, &status) == 0 && status.f_type == TMPFS_MAGIC;
+}
+
+static enum fwlab_nfc_api_result mapped_prepare(
+    struct fnv2_posix_context *context)
+{
+    struct stat status;
+    void *mapping;
+    int result;
+
+    if (!context_stat(context, &status) || context->allow_resize ||
+        context->mapped_length != 0 ||
+        !mapped_size_valid(context->expected_size)) {
+        return FWLAB_NFC_API_INVALID_CONTRACT;
+    }
+    do {
+        result = fallocate(context->fd, FALLOC_FL_KEEP_SIZE, 0,
+                           (off_t)context->expected_size);
+    } while (result != 0 && errno == EINTR);
+    if (result != 0) {
+        return FWLAB_NFC_API_INVARIANT_FAILURE;
+    }
+    mapping = mmap(NULL, (size_t)context->expected_size,
+                   PROT_READ | PROT_WRITE, MAP_SHARED, context->fd, 0);
+    if (mapping == MAP_FAILED) {
+        return FWLAB_NFC_API_INVARIANT_FAILURE;
+    }
+    /* Own the mapping before any later preparation can fail. The caller's
+     * shared close path unmaps even a partially populated admission. */
+    context->mapping = mapping;
+    context->mapped_length = (size_t)context->expected_size;
+    if (mapping == NULL) {
+        return FWLAB_NFC_API_INVARIANT_FAILURE;
+    }
+    do {
+        result = madvise(mapping, context->mapped_length, MADV_POPULATE_WRITE);
+    } while (result != 0 && errno == EINTR);
+    return result == 0 && context_stat(context, &status) ? FWLAB_NFC_API_OK :
+                                          FWLAB_NFC_API_INVARIANT_FAILURE;
+}
+
+static enum fwlab_nfc_api_result mapped_read(
+    void *opaque, uint64_t offset, void *buffer, size_t size)
+{
+    struct fnv2_posix_context *context = opaque;
+
+    if (buffer == NULL || !callback_valid(context) ||
+        context->allow_resize || context->mapped_length == 0 ||
+        context->expected_size != context->mapped_length ||
+        offset > context->mapped_length ||
+        size > context->mapped_length - offset) {
+        return FWLAB_NFC_API_INVALID_CONTRACT;
+    }
+    if (size != 0) {
+        memcpy(buffer, context->mapping + (size_t)offset, size);
+    }
+    return FWLAB_NFC_API_OK;
+}
+
+static enum fwlab_nfc_api_result mapped_write(
+    void *opaque, uint64_t offset, const void *buffer, size_t size)
+{
+    struct fnv2_posix_context *context = opaque;
+
+    if (buffer == NULL || !callback_valid(context) ||
+        context->allow_resize || context->mapped_length == 0 ||
+        context->expected_size != context->mapped_length ||
+        offset > context->mapped_length ||
+        size > context->mapped_length - offset) {
+        return FWLAB_NFC_API_INVALID_CONTRACT;
+    }
+    if (size != 0) {
+        memcpy(context->mapping + (size_t)offset, buffer, size);
+    }
+    return FWLAB_NFC_API_OK;
 }
 
 static enum fwlab_nfc_api_result posix_read(
@@ -180,6 +274,20 @@ static enum fwlab_nfc_api_result posix_close(void *opaque)
     if (context == NULL || context->fd < 0 || context->operation_active) {
         return FWLAB_NFC_API_WRONG_STATE;
     }
+    if (context->mapped_length != 0) {
+        if (munmap(context->mapping, context->mapped_length) != 0) {
+            static const char message[] =
+                "file-NAND v2 mapped backend: munmap failed; terminating\n";
+            ssize_t written = write(STDERR_FILENO, message, sizeof(message) - 1u);
+
+            (void)written;
+            /* Generic media close consumes its instance even on error.
+             * Never return with a live mapping and retained OFD behind it. */
+            _exit(1);
+        }
+        context->mapping = NULL;
+        context->mapped_length = 0;
+    }
     fd = context->fd;
     context->fd = -1;
     context->allow_resize = 0;
@@ -235,7 +343,7 @@ static enum fwlab_nfc_api_result open_media(
     const struct fwlab_file_nand_v2_config *config,
     const struct fwlab_file_nand_holder_v2 *expected_holder,
     struct fwlab_file_nand_v2 **media_out,
-    struct fwlab_file_nand_holder_v2 *new_holder, int format)
+    struct fwlab_file_nand_holder_v2 *new_holder, int format, int mapped)
 {
     struct fnv2_posix_context context;
     struct fnv2_posix_context *stored;
@@ -265,7 +373,8 @@ static enum fwlab_nfc_api_result open_media(
         return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     image_bytes = fwlab_file_nand_v2_image_bytes(config);
-    if (image_bytes == 0 || image_bytes > (uint64_t)INT64_MAX) {
+    if (image_bytes == 0 || image_bytes > (uint64_t)INT64_MAX ||
+        (mapped && !mapped_size_valid(image_bytes))) {
         return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     if (format) {
@@ -291,7 +400,7 @@ static enum fwlab_nfc_api_result open_media(
         (uint64_t)status.st_size != (format ? 0 : image_bytes) ||
         (!format && ((uint64_t)status.st_dev != expected_holder->device ||
                      (uint64_t)status.st_ino != expected_holder->inode)) ||
-        !exclusive_lock(context.fd)) {
+        !exclusive_lock(context.fd) || (mapped && !mapped_file(context.fd))) {
         goto failed;
     }
     context.device = (uint64_t)status.st_dev;
@@ -327,6 +436,14 @@ static enum fwlab_nfc_api_result open_media(
         }
     }
     context.allow_resize = 0;
+    if (mapped) {
+        result = mapped_prepare(&context);
+        if (result != FWLAB_NFC_API_OK) {
+            goto failed;
+        }
+        media->io.read = mapped_read;
+        media->io.write = mapped_write;
+    }
     stored = (struct fnv2_posix_context *)media->io_storage;
     *stored = context;
     media->io.context = stored;
@@ -356,7 +473,7 @@ enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_format(
     struct fwlab_file_nand_holder_v2 *holder)
 {
     return open_media(arena, arena_size, directory_fd, name, config, NULL,
-                      media, holder, 1);
+                      media, holder, 1, 0);
 }
 
 enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_restart(
@@ -366,7 +483,27 @@ enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_restart(
     struct fwlab_file_nand_v2 **media)
 {
     return open_media(arena, arena_size, directory_fd, name, config, holder,
-                      media, NULL, 0);
+                      media, NULL, 0, 0);
+}
+
+enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_mapped_format(
+    void *arena, size_t arena_size, int directory_fd, const char *name,
+    const struct fwlab_file_nand_v2_config *config,
+    struct fwlab_file_nand_v2 **media,
+    struct fwlab_file_nand_holder_v2 *holder)
+{
+    return open_media(arena, arena_size, directory_fd, name, config, NULL,
+                      media, holder, 1, 1);
+}
+
+enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_mapped_restart(
+    void *arena, size_t arena_size, int directory_fd, const char *name,
+    const struct fwlab_file_nand_v2_config *config,
+    const struct fwlab_file_nand_holder_v2 *holder,
+    struct fwlab_file_nand_v2 **media)
+{
+    return open_media(arena, arena_size, directory_fd, name, config, holder,
+                      media, NULL, 0, 1);
 }
 
 /* These concrete POSIX wrappers alone mint/retire the short reuse scope.

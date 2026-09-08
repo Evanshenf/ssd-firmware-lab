@@ -113,3 +113,67 @@ make -C frontends/headless-scale -f ftl.mk check-window-v2-operation
 Use only the documented capped tmpfs for these fresh-image checks. No deployment
 switches automatically. The optimization changes neither physical write bytes
 nor barrier count, and does not add calibrated NAND hardware timings.
+
+## Optional fixed mapped BYTE profile
+
+`fwlab_file_nand_v2_posix_mapped_format/restart` explicitly selects bounded
+mapped copies beneath the same physical engine. The constructors require tmpfs
+on the actual opened FD and cap the entire image, including all metadata and
+transaction banks, at 600 MiB and the platform's size/pointer-difference limits.
+The existing ordinary-I/O constructors remain available without this profile.
+
+Strict ordinary-I/O format/recovery and directory synchronization run first.
+Recovery may repair an unresolved INTENT even if later mapped preparation fails;
+no external PROGRAM has been accepted at that point. With resizing frozen, the
+constructor preallocates the complete current extent using `FALLOC_FL_KEEP_SIZE`,
+creates one R/W `MAP_SHARED` mapping and requires `MADV_POPULATE_WRITE` to succeed.
+A final identity/EOF check precedes publishing the media or holder outputs.
+Admission failure publishes no media, cleans up resources and retains a newly
+created partial image for diagnosis. It does not fall back to ordinary I/O.
+
+Every mapped read/write checks the exact mapped extent before forming a pointer
+and copies to/from ordinary caller-owned buffers. No mapped pointer leaves the
+adapter. The existing operation-boundary descriptor selects the same validation
+interval on either BYTE implementation; the strict descriptor and diagnostic
+hash still validate each callback on a mapped instance. All encoded records,
+CRC/OOB checks, snapshots and three real `fdatasync` boundaries remain unchanged.
+There is no extra `msync`, altered erase operation or zero-copy claim.
+
+The file, FD and mapping require one executor and exclusive control through
+close: no independent writes, truncate, resize, hole punch or unlink. OFD locks
+coordinate cooperating owners and cannot prevent unrelated file modification.
+Preallocation and prefaulting do not guarantee immunity from later memory
+pressure or mapped-access faults. Returned validation/sync errors retain the
+existing UNKNOWN/quarantine and failed-Read-output rules. A mapped-access fault
+terminates the process; ordinary restart determines the state of the surviving
+image. No signal-to-error handler or completed-copy prefix is supplied.
+
+After the existing drain/close preconditions, cleanup unmaps first and closes
+the retained FD once. The same path handles partially prepared constructors.
+An unmap failure emits a diagnostic and terminates the process so a live mapping
+cannot remain behind a closed media instance. Linux close/EINTR handling is
+unchanged. Tmpfs results concern process restart while the filesystem survives;
+they do not establish disk or whole-machine power durability.
+
+The source policy permits only this POSIX adapter's literal
+`<linux/magic.h>` include for its actual-FD tmpfs check. Linux filesystem types
+and constants remain outside the physical engine and shared contracts. This
+bounded profile does not select 64-GiB mappings, arbitrary filesystems, raw
+storage or any native deployment automatically. Initialization and teardown
+costs must be reported separately from runtime throughput.
+
+Use the existing small capped tmpfs and run these entries serially:
+
+```sh
+make -C media/file-nand-v2 check-mapped
+make -C frontends/headless-scale -f ftl.mk check-parent-window-v2-mapped
+make -C frontends/headless-scale -f ftl.mk check-window-v2-mapped
+```
+
+These add only mapped-copy interruption/access-fault and construction-cleanup
+checks to the existing POSIX test. The existing real Linux 64-MiB recovery leg
+also hands the image back to ordinary I/O and continues reading/writing without
+reformatting. The 256-MiB journey remains mapped through recovery. The map is
+fully allocated/prefaulted, so resident and tmpfs usage reflect the whole image,
+not just the small subset written by a smoke test. Neither these checks nor the
+entry's diagnostic timings constitute the paired performance-adoption result.

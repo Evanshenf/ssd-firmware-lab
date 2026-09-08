@@ -38,6 +38,27 @@ enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_restart(
     const struct fwlab_file_nand_holder_v2 *holder,
     struct fwlab_file_nand_v2 **media);
 
+/* Explicit Linux/tmpfs BYTE-copy profile, at most 600 MiB for the whole image.
+ * Strict ordinary-I/O format/recovery precedes full preallocation, one fixed
+ * shared mapping and writable prefaulting, all before outputs are published.
+ * Failure never selects ordinary I/O implicitly. Geometry/format are unchanged.
+ * One executor exclusively controls the file/EOF until close: no independent
+ * writes, truncate, hole punch or unlink. OFD locks do not enforce that premise.
+ * Mapped pointers stay private. Returned errors keep the existing media rules;
+ * mapped-access faults and failed unmap terminate the process, not return an
+ * in-process error. Close unmaps before consuming the FD. Tmpfs supports only
+ * process restart while the filesystem survives, not host power durability. */
+enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_mapped_format(
+    void *arena, size_t arena_size, int directory_fd, const char *name,
+    const struct fwlab_file_nand_v2_config *config,
+    struct fwlab_file_nand_v2 **media,
+    struct fwlab_file_nand_holder_v2 *holder);
+enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_mapped_restart(
+    void *arena, size_t arena_size, int directory_fd, const char *name,
+    const struct fwlab_file_nand_v2_config *config,
+    const struct fwlab_file_nand_holder_v2 *holder,
+    struct fwlab_file_nand_v2 **media);
+
 /* Compatibility consumer: the existing physical NAND interface and C3 NFC.
  * It is not a claim that C3 consumes the new batch entry below. */
 struct fwlab_nand_media fwlab_file_nand_v2_media(

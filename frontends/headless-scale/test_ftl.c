@@ -38,6 +38,7 @@ struct fixture {
     int use_media_v2;
     int use_window_v2;
     int use_operation_v2;
+    int use_mapped_v2;
     struct fwlab_nand_batch_v2 batch;
     struct fwlab_file_nand_holder_v1 holder;
     struct fwlab_file_nand_v1_config media_config;
@@ -229,7 +230,15 @@ static void media_open(struct fixture *f, int format)
     CHECK(f->media_arena);
     if (f->use_media_v2) {
         struct fwlab_file_nand_v2_config c = v2_configuration(&f->media_config);
-        if (format)
+        if (f->use_mapped_v2 && format)
+            CHECK(fwlab_file_nand_v2_posix_mapped_format(f->media_arena, bytes,
+                f->directory_fd, "nand.bin", &c, &f->media_v2,
+                &f->holder_v2) == FWLAB_NFC_API_OK);
+        else if (f->use_mapped_v2)
+            CHECK(fwlab_file_nand_v2_posix_mapped_restart(f->media_arena, bytes,
+                f->directory_fd, "nand.bin", &c, &f->holder_v2,
+                &f->media_v2) == FWLAB_NFC_API_OK);
+        else if (format)
             CHECK(fwlab_file_nand_v2_posix_format(f->media_arena, bytes,
                 f->directory_fd, "nand.bin", &c, &f->media_v2,
                 &f->holder_v2) == FWLAB_NFC_API_OK);
@@ -237,6 +246,9 @@ static void media_open(struct fixture *f, int format)
             CHECK(fwlab_file_nand_v2_posix_restart(f->media_arena, bytes,
                 f->directory_fd, "nand.bin", &c, &f->holder_v2,
                 &f->media_v2) == FWLAB_NFC_API_OK);
+        if (f->use_mapped_v2)
+            printf("SCALE_MEDIA_OPEN|phase=%s|cold_io=POSIX|runtime_io=MAP_SHARED|whole_extent_preallocated=1|prefaulted_before_admission=1\n",
+                   format ? "format" : "recovery");
         f->media_binding.media = fwlab_file_nand_v2_media(f->media_v2);
         if (f->use_window_v2) {
             f->batch = f->use_operation_v2 ? fwlab_file_nand_v2_posix_operation_batch(f->media_v2) :
@@ -564,7 +576,7 @@ static void full_journey(struct fixture *f)
 #include "ftl_cost.inc"
 
 static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2, int window_v2,
-                    int operation_v2)
+                    int operation_v2, int mapped_v2)
 {
     struct fixture f = {0};
     struct fwlab_ftl_scale_status s;
@@ -578,8 +590,10 @@ static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2, int 
     f.use_media_v2 = use_v2;
     f.use_window_v2 = window_v2;
     f.use_operation_v2 = operation_v2;
+    f.use_mapped_v2 = mapped_v2;
     CHECK(!window_v2 || (use_v2 && !cuts));
     CHECK(!operation_v2 || window_v2);
+    CHECK(!mapped_v2 || operation_v2);
     f.media_config.geometry = geometry(mib);
     memcpy(f.media_config.media_uuid, "SCALE-B2-NAND-001", 16);
     f.media_config.media_uuid[15] = (uint8_t)(mib / 64u);
@@ -600,7 +614,9 @@ static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2, int 
     medium_report(&f, 0);
     printf("SCALE_MEDIA_FORMAT|version=%u|ftl_format=%u|fresh_directory=1|batch_consumer=%u\n",
            use_v2 ? 2u : 1u, window_v2 ? 2u : 1u, window_v2 ? 1u : 0u);
-    if (operation_v2) puts("SCALE_MEDIA_VALIDATION|profile=POSIX_OPERATION|entry_exit_checks=1|per_callback_interval_not_claimed=1");
+    if (operation_v2)
+        printf("SCALE_MEDIA_VALIDATION|profile=%s|entry_exit_checks=1|per_callback_interval_not_claimed=1\n",
+               mapped_v2 ? "POSIX_MAPPED" : "POSIX_OPERATION");
     if (window_v2) scale_storage_window_v2_factory_init(&f.factory, &f.options);
     else scale_storage_factory_init(&f.factory, &f.options);
     media_open(&f, 1);
@@ -677,6 +693,11 @@ static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2, int 
     printf("SCALE_FTL_LIVE|mib=%u|arena=%llu|nfc_children=%llu|gc=%llu|cp=%llu\n",
            mib, (unsigned long long)s.arena_bytes, (unsigned long long)s.nfc_children,
            (unsigned long long)s.garbage_collections, (unsigned long long)s.checkpoints);
+    /* Reuse this one recovery/readback leg for D144 handoff. This flag selects
+     * the next constructor; the current mapped instance still closes through
+     * its own IO callbacks before ordinary restart opens the same holder. */
+    if (mapped_v2 && mib == 64)
+        f.use_mapped_v2 = 0;
     reopen(&f);
     identify(&f);
     for (i = 0; i < sizeof(expected) / sizeof(output); ++i) {
@@ -685,6 +706,16 @@ static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2, int 
     }
     command(&f, 2, f.lbas - 1, 1, NULL, output, 0, 0);
     CHECK(memcmp(last, output, sizeof(last)) == 0);
+    if (mapped_v2 && mib == 64) {
+        struct fwlab_ftl_scale *lower = f.runtime->block.context;
+        CHECK(!f.use_mapped_v2 && f.use_operation_v2 && lower->disk_format == 2 &&
+              !memcmp(f.media_binding.media_uuid, f.holder_v2.media_uuid, 16));
+        memset(last, 0x6c, sizeof(last));
+        command(&f, 1, f.lbas - 1, 1, last, NULL, 0, 0);
+        command(&f, 2, f.lbas - 1, 1, NULL, output, 0, 0);
+        CHECK(!memcmp(last, output, sizeof(last)));
+        puts("SCALE_MAPPED_HANDOFF_PASS|logical_mib=64|mapped_close=1|ordinary_POSIX_recovery=1|same_holder_UUID=1|FTL_format=2|NFC_PAGE2_R0=1|readback_and_continued_write=1|reformat=0");
+    }
     if (full)
         full_journey(&f);
     if (cuts)
@@ -717,7 +748,8 @@ int main(int argc, char **argv)
                             strcmp(argv[1], "--media-v2-cuts") == 0);
     int large = argc == 2 && strcmp(argv[1], "--full-64g") == 0;
     int plan = argc == 2 && strcmp(argv[1], "--plan-64g") == 0;
-    int operation_v2 = argc == 2 && strcmp(argv[1], "--window-v2-operation") == 0;
+    int mapped_v2 = argc == 2 && strcmp(argv[1], "--window-v2-mapped") == 0;
+    int operation_v2 = argc == 2 && (strcmp(argv[1], "--window-v2-operation") == 0 || mapped_v2);
     int window_v2 = argc == 2 && (strcmp(argv[1], "--window-v2") == 0 ||
                                   strcmp(argv[1], "--window-v2-cost") == 0 || operation_v2);
     int cost = argc == 2 && (strcmp(argv[1], "--cost") == 0 ||
@@ -738,11 +770,11 @@ int main(int argc, char **argv)
         return 0;
     }
     if (large) {
-        journey(65536, 1, 0, 0, 0, 0, 0);
+        journey(65536, 1, 0, 0, 0, 0, 0, 0);
         return 0;
     }
-    journey(64, full, cuts, cost, use_v2, window_v2, operation_v2);
+    journey(64, full, cuts, cost, use_v2, window_v2, operation_v2, mapped_v2);
     if (!cost)
-        journey(256, full, 0, 0, use_v2, window_v2, operation_v2);
+        journey(256, full, 0, 0, use_v2, window_v2, operation_v2, mapped_v2);
     return 0;
 }
