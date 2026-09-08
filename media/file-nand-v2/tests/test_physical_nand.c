@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 #include "physical_nand_internal.h"
 #include "physical_nand_batch.h"
+#include "physical_nand_codec.h"
 #include "fwlab/portable/crc32c.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -519,8 +520,48 @@ static void rejection(void)
     writes = f->writes; crash(f); CHECK(restart(f) != FWLAB_NFC_API_OK && f->writes == writes);
     puts("CPRIME_REJECT_PASS|UUID_geometry_length=1|required_intent_corruption=1|resolved_home_corruption=1|invalid_embedded_BASE=1|no_autoformat=1"); destroy(f);
 }
+static void byte_uniformity_equivalence(void)
+{
+    uint8_t bytes[4096 + 16];
+    uint64_t comparisons = 0;
+    CHECK(fnv2_all(NULL, 0, 0) && fnv2_all(NULL, 0, 255));
+    for (unsigned value = 0; value < 256; ++value)
+        for (size_t offset = 0; offset < 8; ++offset)
+            for (size_t n = 0; n <= 33; ++n) {
+                uint8_t *p = bytes + offset;
+                memset(bytes, (uint8_t)(value ^ 255u), sizeof(bytes));
+                memset(p, (uint8_t)value, n);
+                CHECK(fnv2_all(p, n, (uint8_t)value) == (bool)all(p, n, (uint8_t)value));
+                ++comparisons;
+                for (size_t bad = 0; bad < n; ++bad) {
+                    p[bad] ^= 1u;
+                    CHECK(fnv2_all(p, n, (uint8_t)value) == (bool)all(p, n, (uint8_t)value));
+                    ++comparisons; p[bad] ^= 1u;
+                }
+            }
+    const size_t lengths[] = {60, 92, 128, 252, 512, 1024, 4096};
+    for (size_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); ++i)
+        for (size_t offset = 0; offset < 8; ++offset)
+            for (unsigned which = 0; which < 2; ++which) {
+                const size_t n = lengths[i];
+                const uint8_t value = which ? 255 : 0;
+                uint8_t *p = bytes + offset;
+                const size_t positions[] = {0, 7, 8, n / 2, n - 1};
+                memset(bytes, (uint8_t)(value ^ 255u), sizeof(bytes)); memset(p, value, n);
+                CHECK(fnv2_all(p, n, value) == (bool)all(p, n, value)); ++comparisons;
+                for (size_t j = 0; j < sizeof(positions) / sizeof(positions[0]); ++j) {
+                    p[positions[j]] ^= 1u;
+                    CHECK(fnv2_all(p, n, value) == (bool)all(p, n, value));
+                    ++comparisons; p[positions[j]] ^= 1u;
+                }
+            }
+    printf("CPRIME_BYTE_SCAN_PASS|reference=original_byte_loop|all256values=1|unaligned_offsets=8|short_lengths=0..33|short_all_mismatch_positions=1|record_lengths_through4096=1|null_zero=1|outside_span_antivalue_guards=1|comparisons=%llu\n",
+           (unsigned long long)comparisons);
+}
+
 int main(void)
 {
+    byte_uniformity_equivalence();
     initial_format(); full_batch_cost(); batch_read_states(); singleton_semantics(); cut_intent(); cut_homes_and_abort();
     cut_commit(); abort_erase_and_bad(); cut_bank_reuse(); rejection();
     puts("CPRIME_ADJACENT_PASS|bounded_working_durable_bytes=1|three_barriers=1|no_POSIX_powerloss_or_10GB_claim=1");

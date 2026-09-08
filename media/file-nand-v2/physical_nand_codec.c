@@ -17,7 +17,17 @@ void fnv2_put32(uint8_t *p, uint32_t v)
 void fnv2_put64(uint8_t *p, uint64_t v)
 { fnv2_put32(p, (uint32_t)v); fnv2_put32(p + 4, (uint32_t)(v >> 32)); }
 bool fnv2_all(const uint8_t *p, size_t n, uint8_t value)
-{ for (size_t i = 0; i < n; ++i) if (p[i] != value) return false; return true; }
+{
+    const uint64_t repeated = (uint64_t)value * UINT64_C(0x0101010101010101);
+    while (n >= sizeof(uint64_t)) {
+        uint64_t word;
+        memcpy(&word, p, sizeof(word)); /* Exact span; unaligned inputs are valid. */
+        if (word != repeated) return false;
+        p += sizeof(word); n -= sizeof(word);
+    }
+    for (size_t i = 0; i < n; ++i) if (p[i] != value) return false;
+    return true;
+}
 uint32_t fnv2_crc(const uint8_t *p, size_t n) { return fwlab_crc32c_fast(p, n); }
 bool fnv2_record_crc(const uint8_t *p, size_t n)
 { return n >= 4 && fnv2_get32(p + n - 4) == fnv2_crc(p, n - 4); }
