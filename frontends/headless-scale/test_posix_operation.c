@@ -124,7 +124,7 @@ struct fixture {
     uint8_t main[GROUP_PAGES * MAIN_BYTES], oob[GROUP_PAGES * OOB_BYTES];
     uint64_t reads, writes, syncs;
     uint32_t nfc_epoch;
-    uint8_t arm_mode, commit_written, mode_changed;
+    uint8_t arm_mode, commit_written, mode_changed, copy_first_done;
     int mapped, copy_cut, receipt_fd;
 };
 
@@ -140,19 +140,26 @@ static enum fwlab_nfc_api_result observed_write(void *opaque, uint64_t at, const
     struct fixture *f = opaque;
     enum fwlab_nfc_api_result result;
     ++f->writes;
-    if (f->copy_cut && at == FNV2_HOME_BASE + MAIN_BYTES && n == sizeof(f->main)) {
+    if (f->copy_cut == 1 && at == FNV2_HOME_BASE + 2u * MAIN_BYTES) {
+        CHECK(f->media->page_copy_crc && n == MAIN_BYTES && f->copy_first_done &&
+              f->syncs == 1 && fwlab_file_nand_v2_sequence(f->media) == 2);
+        CHECK(f->saved_io.write(f->saved_io.context, at, in, 37) == FWLAB_NFC_API_OK);
+        CHECK(write(f->receipt_fd, "C", 1) == 1);
+        _exit(77); /* First page plus 37 bytes of the second, no group return. */
+    }
+    if (f->copy_cut && at == FNV2_HOME_BASE + MAIN_BYTES) {
+        CHECK(f->media->page_copy_crc && n == MAIN_BYTES && !f->copy_first_done);
         CHECK(f->syncs == 1 && fwlab_file_nand_v2_sequence(f->media) == 2);
-        if (f->copy_cut == 1) {
-            CHECK(f->saved_io.write(f->saved_io.context, at, in, MAIN_BYTES + 37) == FWLAB_NFC_API_OK);
-            CHECK(write(f->receipt_fd, "C", 1) == 1);
-            _exit(77);
+        if (f->copy_cut == 2) {
+            CHECK(mapping.address && sysconf(_SC_PAGESIZE) == MAIN_BYTES);
+            CHECK(mprotect((uint8_t *)mapping.address + (size_t)at, MAIN_BYTES, PROT_NONE) == 0);
+            CHECK(write(f->receipt_fd, "F", 1) == 1);
+            /* Execute the REAL mapped BYTE copy; no signal-to-error translation. */
         }
-        CHECK(f->copy_cut == 2 && mapping.address && sysconf(_SC_PAGESIZE) == MAIN_BYTES);
-        CHECK(mprotect((uint8_t *)mapping.address + (size_t)at, MAIN_BYTES, PROT_NONE) == 0);
-        CHECK(write(f->receipt_fd, "F", 1) == 1);
-        /* Execute the REAL mapped BYTE copy; no signal-to-error translation. */
     }
     result = f->saved_io.write(f->saved_io.context, at, in, n);
+    if (result == FWLAB_NFC_API_OK && f->copy_cut == 1 && at == FNV2_HOME_BASE + MAIN_BYTES)
+        f->copy_first_done = 1;
     if (result == FWLAB_NFC_API_OK && f->arm_mode && n == FNV2_TERMINAL_BYTES &&
         at == FNV2_BANK_BASE + FNV2_BANK_BYTES + FNV2_INTENT_BYTES) {
         struct fnv2_terminal terminal;
@@ -170,7 +177,7 @@ static enum fwlab_nfc_api_result observed_sync(void *opaque)
     ++f->syncs;
     result = f->saved_io.sync(f->saved_io.context);
     if (result == FWLAB_NFC_API_OK && f->arm_mode && f->commit_written) {
-        CHECK(f->syncs == 3 && f->writes == 5 && !f->mode_changed);
+        CHECK(f->syncs == 3 && f->writes == (f->mapped ? GROUP_PAGES + 4u : 5u) && !f->mode_changed);
         CHECK(fchmod(f->change_fd, 0400) == 0);
         f->mode_changed = 1;
         f->arm_mode = 0;
@@ -197,6 +204,7 @@ static void media_open(struct fixture *f, int format)
         "nand.bin", &f->config, &f->media, &f->holder) :
         fwlab_file_nand_v2_posix_restart(f->arena, bytes, f->directory_fd,
         "nand.bin", &f->config, &f->holder, &f->media)) == FWLAB_NFC_API_OK);
+    CHECK(f->media->page_copy_crc == (uint8_t)f->mapped);
     CHECK(!f->mapped || (mapping.allocations == 1 && mapping.maps == 1 &&
           mapping.prefaults == 1 && mapping.length == fwlab_file_nand_v2_image_bytes(&f->config)));
     f->saved_io = f->media->io;
@@ -356,7 +364,8 @@ static void after_commit_mode_change(void)
     nfc_open(f); f->arm_mode = 1;
     r = request(f, FWLAB_NFC_PAGE_V2_PROGRAM_GROUP, 1, 0);
     result = execute(f, &r, NULL);
-    CHECK(f->commit_written && f->mode_changed && !f->arm_mode && f->syncs == 3 && f->writes == 5 &&
+    CHECK(f->commit_written && f->mode_changed && !f->arm_mode && f->syncs == 3 &&
+          f->writes == (f->mapped ? GROUP_PAGES + 4u : 5u) &&
           fwlab_file_nand_v2_sequence(f->media) == 1 && f->media->quarantined && !f->media->busy);
     CHECK(result.terminal == FWLAB_NFC_TERMINAL_FAILED &&
           result.backend_status == FWLAB_NFC_API_INVARIANT_FAILURE &&

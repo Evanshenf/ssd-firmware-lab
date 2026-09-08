@@ -443,6 +443,7 @@ static enum fwlab_nfc_api_result open_media(
         }
         media->io.read = mapped_read;
         media->io.write = mapped_write;
+        media->page_copy_crc = 1;
     }
     stored = (struct fnv2_posix_context *)media->io_storage;
     *stored = context;

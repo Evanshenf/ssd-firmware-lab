@@ -334,6 +334,7 @@ enum fwlab_nfc_api_result fwlab_file_nand_v2_read_pages(struct fwlab_file_nand_v
         !ppa_ids(m, first, &bid, &pid) ||
         count > (uint32_t)m->config.geometry.pages_per_block - first->page)
         return FWLAB_NFC_API_INVALID_CONTRACT;
+    const bool page_copy_crc = m->page_copy_crc != 0;
     m->busy = 1;
     if (!load_block(m, bid, &b) ||
         !read_bytes(m, page_at(m, pid), m->page_records,
@@ -358,14 +359,18 @@ enum fwlab_nfc_api_result fwlab_file_nand_v2_read_pages(struct fwlab_file_nand_v
         info->program_count = (uint8_t)(state != FWLAB_NAND_PAGE_ERASED);
         needs_main |= state == FWLAB_NAND_PAGE_VALID || state == FWLAB_NAND_PAGE_TORN;
     }
-    /* One physical range read; erased/unknown bytes are replaced below before
-     * successful return. They are never treated as current data by this read. */
-    if (needs_main && !read_bytes(m, FNV2_HOME_BASE + (uint64_t)pid * 4096u,
-                                  main, main_bytes)) return broken(m);
+    /* Read the same main range. Mapped BYTE copies stay adjacent to per-page
+     * CRC; ordinary IO keeps its coalesced call. Erased/unknown contents are
+     * replaced below before successful return, never exposed as current data. */
+    if (needs_main && !page_copy_crc &&
+        !read_bytes(m, FNV2_HOME_BASE + (uint64_t)pid * 4096u, main, main_bytes)) return broken(m);
     for (uint32_t p = 0; p < count; ++p) {
         uint8_t *page_main = main + (size_t)p * 4096u;
         uint8_t *page_oob = oob + (size_t)p * 128u;
         const uint8_t *record = m->page_records[p];
+        if (needs_main && page_copy_crc &&
+            !read_bytes(m, FNV2_HOME_BASE + (uint64_t)(pid + p) * 4096u,
+                        page_main, 4096u)) return broken(m);
         if (states[p] == FWLAB_NAND_PAGE_ERASED || states[p] == FNV2_UNKNOWN_PAGE) {
             memset(page_main, 0xff, 4096); memset(page_oob, 0xff, 128);
         } else {
@@ -394,16 +399,29 @@ enum fwlab_nfc_api_result fwlab_file_nand_v2_program_pages(struct fwlab_file_nan
         return FWLAB_NFC_API_OK;
     }
     if (m->sequence == UINT64_MAX) return FWLAB_NFC_API_COUNTER_EXHAUSTED;
+    const bool page_copy_crc = m->page_copy_crc != 0;
     if (!read_bytes(m, page_at(m, pid), m->page_records, (size_t)count * FNV2_PAGE_RECORD_BYTES)) return broken(m);
     for (uint32_t p = 0; p < count; ++p)
         if (page_class(m, &b, m->page_records[p], pid + p) != FWLAB_NAND_PAGE_ERASED) return broken(m);
     intent_init(m, &i, &b, bid, FNV2_PROGRAM, first->page, (uint16_t)count);
-    for (uint32_t p = 0; p < count; ++p)
-        fnv2_page_encode(m->page_records[p], pid + p, b.info.erase_generation, FWLAB_NAND_PAGE_VALID,
-                         i.sequence, main + (size_t)p * 4096u, oob + (size_t)p * 128u);
+    if (!page_copy_crc)
+        for (uint32_t p = 0; p < count; ++p)
+            fnv2_page_encode(m->page_records[p], pid + p, b.info.erase_generation, FWLAB_NAND_PAGE_VALID,
+                             i.sequence, main + (size_t)p * 4096u, oob + (size_t)p * 128u);
     after = b; after.sequence = i.sequence; after.info.next_program_page = (uint16_t)(first->page + count);
-    if (!begin(m, &i) || !write_bytes(m, FNV2_HOME_BASE + (uint64_t)pid * 4096u, main, main_bytes) ||
-        !write_bytes(m, page_at(m, pid), m->page_records, (size_t)count * FNV2_PAGE_RECORD_BYTES) ||
+    if (!begin(m, &i)) return broken(m);
+    if (page_copy_crc) {
+        /* Durable INTENT precedes every page home. Main CRC and its copy are
+         * adjacent, but all page/block records and both remaining barriers
+         * still complete before any successful group result is returned. */
+        for (uint32_t p = 0; p < count; ++p) {
+            fnv2_page_encode(m->page_records[p], pid + p, b.info.erase_generation, FWLAB_NAND_PAGE_VALID,
+                             i.sequence, main + (size_t)p * 4096u, oob + (size_t)p * 128u);
+            if (!write_bytes(m, FNV2_HOME_BASE + (uint64_t)(pid + p) * 4096u,
+                             main + (size_t)p * 4096u, 4096u)) return broken(m);
+        }
+    } else if (!write_bytes(m, FNV2_HOME_BASE + (uint64_t)pid * 4096u, main, main_bytes)) return broken(m);
+    if (!write_bytes(m, page_at(m, pid), m->page_records, (size_t)count * FNV2_PAGE_RECORD_BYTES) ||
         !save_block(m, bid, &after) || !barrier(m) || !terminal_write(m, &i, FNV2_COMMIT)) return broken(m);
     for (uint32_t p = 0; p < count; ++p) {
         result_none(&results[p], &b); results[p].physical_outcome = FWLAB_NFC_PHYS_APPLIED;

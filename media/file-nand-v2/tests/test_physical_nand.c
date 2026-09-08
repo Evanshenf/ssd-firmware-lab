@@ -129,6 +129,7 @@ static struct fixture *create(void)
     f->working = calloc(1, f->capacity); f->durable = calloc(1, f->capacity); CHECK(f->working && f->durable);
     f->io = (struct fnv2_io){f, bytes_read, bytes_write, bytes_sync, bytes_resize, bytes_size, bytes_close};
     CHECK(fnv2_engine_open(&f->arena, sizeof(f->arena), &f->config, &f->io, 1, &f->media) == FWLAB_NFC_API_OK);
+    CHECK(!f->media->page_copy_crc);
     f->port = fwlab_file_nand_v2_media(f->media); CHECK(f->port.ops && f->port.context == f->media);
     return f;
 }
@@ -143,7 +144,7 @@ static void crash(struct fixture *f)
 static enum fwlab_nfc_api_result restart(struct fixture *f)
 {
     enum fwlab_nfc_api_result r = fnv2_engine_open(&f->arena, sizeof(f->arena), &f->config, &f->io, 0, &f->media);
-    if (r == FWLAB_NFC_API_OK) { f->port = fwlab_file_nand_v2_media(f->media); CHECK(f->port.ops); }
+    if (r == FWLAB_NFC_API_OK) { f->port = fwlab_file_nand_v2_media(f->media); CHECK(f->port.ops && !f->media->page_copy_crc); }
     else CHECK(!f->media);
     return r;
 }
@@ -316,6 +317,116 @@ static void full_batch_cost(void)
     CHECK(f->writes == calls && f->syncs == syncs); erased(f, 3, 1);
     free(main); free(oob); destroy(f);
 }
+static void page_copy_failure(const char *name, int home_page, uint32_t failed_barrier,
+                              const uint8_t *main, const uint8_t *oob)
+{
+    struct fixture *f = create(); struct fwlab_nfc_ppa first = address(0, 0);
+    struct fwlab_nand_media_result result[PAGES_PER_BLOCK];
+    program_ok(f, 1, 0, 201); program_ok(f, 2, 0, 202);
+    f->media->page_copy_crc = 1;
+    uint64_t writes = f->writes, bytes = f->write_bytes, syncs = f->syncs;
+    memset(result, 0xa5, sizeof(result));
+    if (failed_barrier) arm_sync(f, failed_barrier, 1);
+    else arm_write(f, FNV2_HOME_BASE + (uint64_t)home_page * PAGE_BYTES, 37);
+    CHECK(fwlab_file_nand_v2_program_pages(f->media, &first, PAGES_PER_BLOCK,
+        main, PAGES_PER_BLOCK * PAGE_BYTES, oob, PAGES_PER_BLOCK * OOB_BYTES,
+        result, PAGES_PER_BLOCK) == FWLAB_NFC_API_INVARIANT_FAILURE);
+    CHECK(f->fired && fwlab_file_nand_v2_sequence(f->media) == 2 &&
+          all((const uint8_t *)result, sizeof(result), 0xa5));
+    if (!failed_barrier) {
+        size_t leaked = (size_t)home_page * PAGE_BYTES + 37u;
+        CHECK(f->syncs == syncs + 1 && f->writes == writes + (uint64_t)home_page + 2u &&
+              f->write_bytes == bytes + FNV2_INTENT_BYTES + leaked);
+        /* Existing failed-write fixture leaks its own short write. Also allow
+         * preceding completed home callbacks to reach durability before sync;
+         * recovery must consume the WHOLE intent, not infer a safe suffix. */
+        memcpy(f->durable + FNV2_HOME_BASE, f->working + FNV2_HOME_BASE, leaked);
+        CHECK(!memcmp(f->durable + FNV2_HOME_BASE, main, leaked));
+    } else {
+        uint64_t expected_writes = failed_barrier == 1 ? 1u :
+            failed_barrier == 2 ? PAGES_PER_BLOCK + 3u : PAGES_PER_BLOCK + 4u;
+        CHECK(f->syncs == syncs + failed_barrier && f->writes == writes + expected_writes);
+    }
+    quarantined(f); reboot(f);
+    CHECK(fwlab_file_nand_v2_sequence(f->media) == 3);
+    for (uint16_t p = 0; p < PAGES_PER_BLOCK; ++p) {
+        if (failed_barrier == 3) value(f, 0, p, (uint8_t)(31 + p));
+        else {
+            aborted_program(f, p, PAGES_PER_BLOCK);
+            CHECK(f->durable[(size_t)page_meta(p) + 10u] == FNV2_UNKNOWN_PAGE);
+        }
+    }
+    value(f, 1, 0, 201); value(f, 2, 0, 202); erased(f, 1, 1);
+    stable_reboot(f, 3);
+    if (failed_barrier != 3) {
+        writes = f->writes; syncs = f->syncs;
+        CHECK(program(f, 0, 63, 99, PAGE_BYTES, OOB_BYTES, FWLAB_NFC_INTEGRITY_COMPLETE,
+                      &result[0]) == FWLAB_NFC_API_OK);
+        CHECK(result[0].physical_outcome == FWLAB_NFC_PHYS_NO_EFFECT &&
+              result[0].reason == FWLAB_NFC_REASON_NOT_ERASED &&
+              f->writes == writes && f->syncs == syncs && fwlab_file_nand_v2_sequence(f->media) == 3);
+    }
+    printf("CPRIME_PAGE_COPY_CUT_PASS|case=%s|API_error_no_group_results=1|quarantine=1|ordinary_restart=1|TORN_reservation_pages=%u|durable_COMMIT_lost_reply=%u|ack_neighbors_main_OOB=1|stable_second_restart=1\n",
+           name, failed_barrier == 3 ? 0u : PAGES_PER_BLOCK, failed_barrier == 3 ? 1u : 0u);
+    destroy(f);
+}
+
+static void page_copy_crc_journey(void)
+{
+    struct fixture *f[2] = {create(), create()};
+    struct fwlab_nfc_ppa first = address(2, 0);
+    struct fwlab_nand_media_result results[2][PAGES_PER_BLOCK];
+    struct fwlab_nand_page_info pages[2][PAGES_PER_BLOCK];
+    struct fwlab_nand_block_info blocks[2];
+    uint8_t *main = malloc(PAGES_PER_BLOCK * PAGE_BYTES), *oob = malloc(PAGES_PER_BLOCK * OOB_BYTES);
+    uint8_t *read_main = malloc(PAGES_PER_BLOCK * PAGE_BYTES), *read_oob = malloc(PAGES_PER_BLOCK * OOB_BYTES);
+    CHECK(main && oob && read_main && read_oob);
+    for (unsigned p = 0; p < PAGES_PER_BLOCK; ++p)
+        payload(main + p * PAGE_BYTES, oob + p * OOB_BYTES, (uint8_t)(31 + p));
+    f[1]->media->page_copy_crc = 1;
+    for (unsigned variant = 0; variant < 2; ++variant) {
+        struct fixture *one = f[variant];
+        uint64_t writes = one->writes, bytes = one->write_bytes, syncs = one->syncs;
+        CHECK(fwlab_file_nand_v2_program_pages(one->media, &first, PAGES_PER_BLOCK,
+            main, PAGES_PER_BLOCK * PAGE_BYTES, oob, PAGES_PER_BLOCK * OOB_BYTES,
+            results[variant], PAGES_PER_BLOCK) == FWLAB_NFC_API_OK);
+        CHECK(one->writes - writes == (variant ? PAGES_PER_BLOCK + 4u : 5u) &&
+              one->write_bytes - bytes == UINT64_C(280128) && one->syncs - syncs == 3 &&
+              fwlab_file_nand_v2_sequence(one->media) == 1);
+        uint64_t reads = one->reads, read_bytes = one->read_bytes;
+        writes = one->writes;
+        CHECK(fwlab_file_nand_v2_read_pages(one->media, &first, PAGES_PER_BLOCK,
+            read_main, PAGES_PER_BLOCK * PAGE_BYTES, read_oob, PAGES_PER_BLOCK * OOB_BYTES,
+            pages[variant], PAGES_PER_BLOCK, &blocks[variant]) == FWLAB_NFC_API_OK);
+        CHECK(one->reads - reads == (variant ? PAGES_PER_BLOCK + 2u : 3u) &&
+              one->read_bytes - read_bytes == UINT64_C(278592) && one->writes == writes &&
+              one->syncs - syncs == 3 && !memcmp(main, read_main, PAGES_PER_BLOCK * PAGE_BYTES) &&
+              !memcmp(oob, read_oob, PAGES_PER_BLOCK * OOB_BYTES));
+    }
+    CHECK(!memcmp(results[0], results[1], sizeof(results[0])) &&
+          !memcmp(pages[0], pages[1], sizeof(pages[0])) && !memcmp(&blocks[0], &blocks[1], sizeof(blocks[0])));
+    CHECK(f[0]->length == f[1]->length && !memcmp(f[0]->working, f[1]->working, f[0]->length) &&
+          !memcmp(f[0]->durable, f[1]->durable, f[0]->length));
+    stable_reboot(f[0], 1); stable_reboot(f[1], 1);
+    value(f[1], 2, 0, 31); value(f[1], 2, 63, 94);
+    puts("CPRIME_PAGE_COPY_EQUIVALENCE_PASS|default_grouped_unchanged=1|final_image_bytes_equal=1|all_results_main_OOB_facts_equal=1|page_write_calls=68|page_read_calls=66|write_bytes=280128|read_bytes=278592|syncs=3|ordinary_restart=1");
+    /* The newly split Read must still reject a later page's corrupted main. */
+    f[1]->media->page_copy_crc = 1;
+    f[1]->working[FNV2_HOME_BASE + (2u * PAGES_PER_BLOCK + 32u) * PAGE_BYTES + 137u] ^= 1;
+    CHECK(fwlab_file_nand_v2_read_pages(f[1]->media, &first, PAGES_PER_BLOCK,
+        read_main, PAGES_PER_BLOCK * PAGE_BYTES, read_oob, PAGES_PER_BLOCK * OOB_BYTES,
+        pages[1], PAGES_PER_BLOCK, &blocks[1]) == FWLAB_NFC_API_INVARIANT_FAILURE);
+    CHECK(f[1]->media->quarantined && !f[1]->media->busy && !fwlab_file_nand_v2_batch(f[1]->media).ops);
+    destroy(f[0]); destroy(f[1]); free(read_main); free(read_oob);
+    page_copy_failure("first_home", 0, 0, main, oob);
+    page_copy_failure("middle_home", 32, 0, main, oob);
+    page_copy_failure("last_home", 63, 0, main, oob);
+    page_copy_failure("intent_barrier", -1, 1, main, oob);
+    page_copy_failure("homes_barrier", -1, 2, main, oob);
+    page_copy_failure("commit_barrier", -1, 3, main, oob);
+    free(main); free(oob);
+}
+
 static void singleton_semantics(void)
 {
     struct fixture *f = create(); struct fwlab_nand_media_result result; struct observed out;
@@ -562,7 +673,7 @@ static void byte_uniformity_equivalence(void)
 int main(void)
 {
     byte_uniformity_equivalence();
-    initial_format(); full_batch_cost(); batch_read_states(); singleton_semantics(); cut_intent(); cut_homes_and_abort();
+    initial_format(); full_batch_cost(); page_copy_crc_journey(); batch_read_states(); singleton_semantics(); cut_intent(); cut_homes_and_abort();
     cut_commit(); abort_erase_and_bad(); cut_bank_reuse(); rejection();
     puts("CPRIME_ADJACENT_PASS|bounded_working_durable_bytes=1|three_barriers=1|no_POSIX_powerloss_or_10GB_claim=1");
     return 0;

@@ -42,6 +42,9 @@ struct fwlab_file_nand_v2 {
     uint8_t quarantined;
     uint8_t closed;
     uint8_t busy;
+    /* Private BYTE scheduling choice, zero by default. Set by the mapped
+     * adapter only after admission; not a NAND capability or on-media field. */
+    uint8_t page_copy_crc;
     uint8_t intent[FNV2_INTENT_BYTES];
     uint8_t terminal[FNV2_TERMINAL_BYTES];
     uint8_t page_records[FWLAB_FILE_NAND_V2_MAX_BATCH_PAGES][FNV2_PAGE_RECORD_BYTES];
