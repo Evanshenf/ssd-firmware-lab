@@ -234,6 +234,24 @@ request/multi-queue path—not another expansion of the correctness framework.
 
 ## Staged route
 
+One subsequent optional POSIX descriptor reuses file validation only inside a
+single synchronous physical operation, with complete entry/exit checks and an
+explicit exclusive-backend assumption. The default callback-validation profile
+is unchanged. See its [detection-interval limits](../media/file-nand-v2/README.md).
+
+Three alternating local x86 16-MiB comparisons, using the same reusable buffers
+and real physical/NFC engines, measured these median NFC Write rates:
+
+| Group | Default callback checks | Operation-boundary checks |
+| --- | ---: | ---: |
+| 8 KiB | 1.159 GB/s | 1.574 GB/s |
+| 256 KiB | 5.195 GB/s | 5.749 GB/s |
+
+The actual byte calls, written bytes, CRC/OOB validation and three physical
+barriers are unchanged. These are small working-set diagnostics, not the earlier
+ARM 512-MiB measurements, native NVMe rates or a 10-GB/s/1–3% acceptance. The
+remaining gap is real; partial syscall reduction is not the complete solution.
+
 | Stage | Deliverable | Boundary |
 |---|---|---|
 | P0 | Byte-equivalent CRC repair | Implemented; does not close throughput goal |

@@ -51,7 +51,7 @@ CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 CRC_PROGRAM := $(BUILD)/test_crc
 FAST_CRC_PROGRAM := $(BUILD)/test_crc_fast
 FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
-.PHONY: all check check-crc check-crc-fast check-full check-cuts check-cost check-parent check-parent-window-v2 check-media-v2 check-media-v2-cuts check-media-v2-cost check-window-v2 check-window-v2-cost plan-64g check-64g
+.PHONY: all check check-crc check-crc-fast check-full check-cuts check-cost check-parent check-parent-window-v2 check-parent-window-v2-operation check-media-v2 check-media-v2-cuts check-media-v2-cost check-window-v2 check-window-v2-operation check-window-v2-cost plan-64g check-64g
 all: $(PROGRAM)
 check: check-crc check-crc-fast $(PROGRAM)
 	$(PROGRAM)
@@ -69,6 +69,8 @@ check-parent: $(PARENT_PROGRAM)
 	$(PARENT_PROGRAM)
 check-parent-window-v2: $(PARENT_PROGRAM)
 	$(PARENT_PROGRAM) --window-v2
+check-parent-window-v2-operation: $(PARENT_PROGRAM)
+	$(PARENT_PROGRAM) --window-v2-operation
 check-media-v2: $(PROGRAM)
 	$(PROGRAM) --media-v2
 check-media-v2-cuts: $(PROGRAM)
@@ -77,6 +79,8 @@ check-media-v2-cost: $(PROGRAM)
 	$(PROGRAM) --media-v2-cost
 check-window-v2: $(PROGRAM)
 	$(PROGRAM) --window-v2
+check-window-v2-operation: $(PROGRAM)
+	$(PROGRAM) --window-v2-operation
 check-window-v2-cost: $(PROGRAM)
 	$(PROGRAM) --window-v2-cost
 plan-64g: $(PROGRAM)

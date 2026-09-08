@@ -60,7 +60,7 @@ struct fixture {
     struct media_counts counts;
     uint64_t open_records, close_records, window_records, partial_windows;
     uint32_t cut_syncs;
-    uint8_t cut_fired, cut_data, cut_enabled, use_media_v2, window_v2;
+    uint8_t cut_fired, cut_data, cut_enabled, use_media_v2, window_v2, operation_v2;
 };
 
 static uint64_t media_sequence(const struct fixture *f)
@@ -288,7 +288,8 @@ static void construct_lower(struct fixture *f, int format, int extended)
     CHECK(fb < 1024u * 1024u); /* No per-parent 1 MiB payload inside the FTL arena. */
     f->ftl_arena = calloc(1, fb); f->nfc_arena = calloc(1, nb); CHECK(f->ftl_arena && f->nfc_arena);
     if (f->window_v2) {
-        struct fwlab_nand_batch_v2 batch = fwlab_file_nand_v2_batch(f->media_v2);
+        struct fwlab_nand_batch_v2 batch = f->operation_v2 ?
+            fwlab_file_nand_v2_posix_operation_batch(f->media_v2) : fwlab_file_nand_v2_batch(f->media_v2);
         struct fwlab_nfc_page_v2_config page = {0};
         struct fwlab_nfc_page_v2_provider page_provider;
         page.version = FWLAB_NFC_PAGE_V2_VERSION; page.size = sizeof(page);
@@ -296,7 +297,7 @@ static void construct_lower(struct fixture *f, int format, int extended)
         memcpy(page.media_uuid, e.base.media_uuid, sizeof(page.media_uuid));
         page.instance_nonce = e.base.nfc_instance_nonce; page.operation_uid_limit = UINT64_MAX;
         page.controller_epoch = page.generation = 1;
-        CHECK(batch.scalar.context == f->media_v2);
+        CHECK(batch.ops && batch.scalar.ops && batch.scalar.context == f->media_v2);
         CHECK(fwlab_nfc_page_v2_init(f->nfc_arena, nb, &page, &batch, &f->nfc_v2) == FWLAB_NFC_API_OK);
         page_provider = fwlab_nfc_page_v2_provider(f->nfc_v2);
         CHECK(fwlab_ftl_scale_init_window_v2(f->ftl_arena, fb, &e, &buffer, &page_provider, &f->ftl) == FWLAB_SPINE_V0_OK);
@@ -304,7 +305,8 @@ static void construct_lower(struct fixture *f, int format, int extended)
               fb == fwlab_ftl_scale_extended_arena_size(&e) + SF_WINDOW_BYTES);
     } else {
         staging = fwlab_ftl_scale_staging_provider(f->ftl_arena, fb);
-        media = f->use_media_v2 ? fwlab_file_nand_v2_media(f->media_v2) : fwlab_file_nand_v1_media(f->media);
+        media = f->operation_v2 ? fwlab_file_nand_v2_posix_operation_batch(f->media_v2).scalar :
+            f->use_media_v2 ? fwlab_file_nand_v2_media(f->media_v2) : fwlab_file_nand_v1_media(f->media);
         CHECK(fwlab_nfc_scaled_init(f->nfc_arena, nb, &n, e.base.nfc_instance_nonce, &staging, &media, &f->nfc) == FWLAB_NFC_API_OK);
         provider = fwlab_nfc_model_provider(f->nfc);
         CHECK((extended ? fwlab_ftl_scale_init_extended(f->ftl_arena, fb, &e, &buffer, &provider, &f->ftl) :
@@ -340,11 +342,13 @@ static void close_lower(struct fixture *f)
     free(f->ftl_arena); free(f->nfc_arena); free(f->media_arena);
     f->ftl = NULL; f->nfc = NULL; f->nfc_v2 = NULL; f->media = NULL; f->media_v2 = NULL;
 }
-static struct fixture *create(int window_v2)
+static struct fixture *create(int window_v2, int operation_v2)
 {
     const char *root = getenv("FWLAB_TEST_MEDIA_DIR"); struct statfs fs; int fd;
     struct fixture *f = calloc(1, sizeof(*f)); CHECK(f);
     f->window_v2 = f->use_media_v2 = (uint8_t)window_v2;
+    f->operation_v2 = (uint8_t)operation_v2;
+    CHECK(!operation_v2 || window_v2);
     f->media_config.geometry = nfc_config().geometry;
     memcpy(f->media_config.media_uuid, "P2-A-PARENT-0001", 16);
     if (!root || root[0] != '/' || (fd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)) < 0) {
@@ -596,9 +600,9 @@ static void closing_parent(struct fixture *f)
     retire(f, &r); close_lower(f); puts("PARENT_CLOSE_PASS|retained_parent_counted=1|prefix_cancel=1|Block_NFC_buffer_zero=1|media_closed=1");
 }
 
-static void cancel_staged(int closing, int window_v2, int accepted)
+static void cancel_staged(int closing, int window_v2, int accepted, int operation_v2)
 {
-    struct fixture *f = create(window_v2); struct fwlab_block_request_v0 r;
+    struct fixture *f = create(window_v2, operation_v2); struct fwlab_block_request_v0 r;
     struct fwlab_block_status_v0 s; uint32_t i;
     size_t map_bytes = (VOLUME_LBAS / 8u) * sizeof(struct sf_map_entry);
     struct sf_map_entry *before = malloc(map_bytes); CHECK(before);
@@ -674,9 +678,9 @@ static enum fwlab_nfc_api_result cut_size(void *p, uint64_t *n)
 { struct fixture *f = p; return f->saved_io.size(f->saved_io.context, n); }
 static enum fwlab_nfc_api_result cut_close(void *p)
 { struct fixture *f = p; return f->saved_io.close(f->saved_io.context); }
-static void uncertain_map(int window_v2, int data)
+static void uncertain_map(int window_v2, int data, int operation_v2)
 {
-    struct fixture *f = create(window_v2); uint32_t receipt[2] = {0}; int pipefd[2], status;
+    struct fixture *f = create(window_v2, operation_v2); uint32_t receipt[2] = {0}; int pipefd[2], status;
     open_lower(f, 1, 1); io(f, FWLAB_BLOCK_V0_WRITE, 0, 2048, 0xe1); close_lower(f);
     CHECK(pipe(pipefd) == 0); fflush(NULL); pid_t child = fork(); CHECK(child >= 0);
     if (!child) {
@@ -713,21 +717,23 @@ static void uncertain_map(int window_v2, int data)
 }
 int main(int argc, char **argv)
 {
-    int window_v2 = argc == 2 && !strcmp(argv[1], "--window-v2");
+    int operation_v2 = argc == 2 && !strcmp(argv[1], "--window-v2-operation");
+    int window_v2 = argc == 2 && (!strcmp(argv[1], "--window-v2") || operation_v2);
     if (argc > 2 || (argc == 2 && !window_v2 && strcmp(argv[1], "--cancel-staged"))) {
-        fputs("usage: test_scale_parent [--cancel-staged|--window-v2]\n", stderr); return 2;
+        fputs("usage: test_scale_parent [--cancel-staged|--window-v2|--window-v2-operation]\n", stderr); return 2;
     }
-    cancel_staged(0, window_v2, 0); cancel_staged(1, window_v2, 0);
+    if (operation_v2) puts("PARENT_MEDIA_VALIDATION|profile=POSIX_OPERATION|entry_exit_checks=1|per_callback_interval_not_claimed=1");
+    cancel_staged(0, window_v2, 0, operation_v2); cancel_staged(1, window_v2, 0, operation_v2);
     if (argc == 2 && !window_v2) return 0;
     if (window_v2) {
-        cancel_staged(0, 1, 1); cancel_staged(1, 1, 1);
-        cancel_after_data(0); cancel_after_data(1);
-        format_mismatch(0); format_mismatch(1);
+        cancel_staged(0, 1, 1, operation_v2); cancel_staged(1, 1, 1, operation_v2);
+        cancel_after_data(0, operation_v2); cancel_after_data(1, operation_v2);
+        format_mismatch(0, operation_v2); format_mismatch(1, operation_v2);
     }
-    struct fixture *f = create(window_v2); positive(f);
+    struct fixture *f = create(window_v2, operation_v2); positive(f);
     if (window_v2) window_holes(f);
     cancellations(f); garbage_collection(f); closing_parent(f); destroy(f);
-    uncertain_map(window_v2, 0);
-    if (window_v2) uncertain_map(1, 1);
+    uncertain_map(window_v2, 0, operation_v2);
+    if (window_v2) uncertain_map(1, 1, operation_v2);
     printf("PARENT_PASS|window_v2=%d|adjacent_Buffer_real_FTL_NFC_media=1|no_Host_DMA_or_throughput_claim=1\n", window_v2); return 0;
 }

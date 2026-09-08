@@ -83,3 +83,33 @@ make -C frontends/headless-scale -f ftl.mk check-parent-window-v2
 The cost entry reports actual API calls/bytes and maintenance, with instrumented
 timing. It is not a paired 1-MiB throughput benchmark or a 10-GB/s/1–3% claim.
 Both entries create fresh owned images; neither operates on an existing image.
+
+## Optional operation-boundary validation
+
+`fwlab_file_nand_v2_posix_operation_batch(media)` explicitly selects a different
+POSIX validation interval. It checks the complete regular-file, current owner,
+mode, link count, identity and size predicate before and after one synchronous
+physical operation. Its byte callbacks retain range checks, complete IO, EINTR
+handling and every sync while reusing those validated file facts. The default
+descriptor still checks before each byte callback; format/recovery, resize,
+diagnostic hash and close remain outside reuse.
+
+This profile requires exclusive backend control throughout the operation. OFD
+locks exclude cooperating owners, not external truncate/chmod/link operations.
+Persistent changes before entry or at exit are detected, but in-flight truncation
+followed by file regrowth can escape the boundary checks. Do not claim the old
+per-callback detection interval. A failed exit check returns error/quarantine,
+even after COMMIT synced; NFC reports UNKNOWN rather than a successful write.
+The descriptor retains the same media context, geometry, UUID and physical engine.
+
+Small real-POSIX checks and the existing actual consumers can select it explicitly:
+
+```sh
+make -C media/file-nand-v2 check-operation
+make -C frontends/headless-scale -f ftl.mk check-parent-window-v2-operation
+make -C frontends/headless-scale -f ftl.mk check-window-v2-operation
+```
+
+Use only the documented capped tmpfs for these fresh-image checks. No deployment
+switches automatically. The optimization changes neither physical write bytes
+nor barrier count, and does not add calibrated NAND hardware timings.

@@ -75,9 +75,9 @@ static void window_holes(struct fixture *f)
     puts("PARENT_WINDOW_HOLES_PASS|mixed_values_holes_partial_page=1|unmapped_1MiB_zero=1|hole_no_physical_read=1");
 }
 
-static void cancel_after_data(int closing)
+static void cancel_after_data(int closing, int operation_v2)
 {
-    struct fixture *f = create(1); uint32_t i;
+    struct fixture *f = create(1, operation_v2); uint32_t i;
     struct fwlab_block_request_v0 r;
     struct fwlab_block_status_v0 s;
     size_t map_bytes = (VOLUME_LBAS / 8u) * sizeof(struct sf_map_entry);
@@ -118,9 +118,9 @@ static void cancel_after_data(int closing)
            closing ? "epoch_close" : "cancel", prefix);
 }
 
-static void format_mismatch(int written_window_v2)
+static void format_mismatch(int written_window_v2, int operation_v2)
 {
-    struct fixture *f = create(1); int status;
+    struct fixture *f = create(1, operation_v2); int status;
     f->window_v2 = (uint8_t)written_window_v2;
     open_lower(f, 1, 1); io(f, FWLAB_BLOCK_V0_WRITE, 0, 16, 0x48); close_lower(f);
     CHECK(fflush(NULL) == 0); pid_t child = fork(); CHECK(child >= 0);

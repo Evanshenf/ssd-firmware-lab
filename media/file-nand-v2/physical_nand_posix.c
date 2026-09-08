@@ -5,6 +5,7 @@
 #define _FILE_OFFSET_BITS 64
 
 #include "physical_nand_internal.h"
+#include "physical_nand_batch.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -15,12 +16,16 @@
 #include <unistd.h>
 
 struct fnv2_posix_context {
+    uint64_t magic;
     int fd;
     int allow_resize;
     uint64_t device;
     uint64_t inode;
     uint64_t expected_size;
+    uint8_t operation_active;
 };
+
+#define FNV2_POSIX_MAGIC UINT64_C(0x464e5632504f5358)
 
 _Static_assert(sizeof(struct fnv2_posix_context) <= 128,
                "POSIX context fits persistent IO storage");
@@ -44,6 +49,13 @@ static int context_stat(const struct fnv2_posix_context *context,
            (uint64_t)status->st_size == context->expected_size;
 }
 
+static int callback_valid(const struct fnv2_posix_context *context)
+{
+    struct stat status;
+    return context != NULL && context->fd >= 0 &&
+        (context->operation_active || context_stat(context, &status));
+}
+
 static int span_valid(uint64_t offset, size_t size, uint64_t file_size)
 {
     return offset <= (uint64_t)INT64_MAX &&
@@ -55,12 +67,11 @@ static enum fwlab_nfc_api_result posix_read(
     void *opaque, uint64_t offset, void *buffer, size_t size)
 {
     struct fnv2_posix_context *context = opaque;
-    struct stat status;
     uint8_t *bytes = buffer;
     size_t completed = 0;
 
-    if (buffer == NULL || !context_stat(context, &status) ||
-        !span_valid(offset, size, (uint64_t)status.st_size)) {
+    if (buffer == NULL || !callback_valid(context) ||
+        !span_valid(offset, size, context->expected_size)) {
         return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     while (completed < size) {
@@ -87,12 +98,11 @@ static enum fwlab_nfc_api_result posix_write(
     void *opaque, uint64_t offset, const void *buffer, size_t size)
 {
     struct fnv2_posix_context *context = opaque;
-    struct stat status;
     const uint8_t *bytes = buffer;
     size_t completed = 0;
 
-    if (buffer == NULL || !context_stat(context, &status) ||
-        !span_valid(offset, size, (uint64_t)status.st_size)) {
+    if (buffer == NULL || !callback_valid(context) ||
+        !span_valid(offset, size, context->expected_size)) {
         return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     while (completed < size) {
@@ -118,10 +128,9 @@ static enum fwlab_nfc_api_result posix_write(
 static enum fwlab_nfc_api_result posix_sync(void *opaque)
 {
     struct fnv2_posix_context *context = opaque;
-    struct stat status;
     int result;
 
-    if (!context_stat(context, &status)) {
+    if (!callback_valid(context)) {
         return FWLAB_NFC_API_INVARIANT_FAILURE;
     }
     do {
@@ -168,7 +177,7 @@ static enum fwlab_nfc_api_result posix_close(void *opaque)
     struct fnv2_posix_context *context = opaque;
     int fd;
 
-    if (context == NULL || context->fd < 0) {
+    if (context == NULL || context->fd < 0 || context->operation_active) {
         return FWLAB_NFC_API_WRONG_STATE;
     }
     fd = context->fd;
@@ -272,6 +281,7 @@ static enum fwlab_nfc_api_result open_media(
         return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     memset(&context, 0, sizeof(context));
+    context.magic = FNV2_POSIX_MAGIC;
     context.fd = openat(directory_fd, name, flags, 0600);
     if (context.fd < 0) {
         return FWLAB_NFC_API_INVALID_CONTRACT;
@@ -357,4 +367,140 @@ enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_restart(
 {
     return open_media(arena, arena_size, directory_fd, name, config, holder,
                       media, NULL, 0);
+}
+
+/* These concrete POSIX wrappers alone mint/retire the short reuse scope.
+ * Generic NAND entrypoints and fnv2_io retain their existing contracts. */
+static struct fnv2_posix_context *operation_context(struct fwlab_file_nand_v2 *m)
+{
+    struct fnv2_posix_context *c;
+    if (!m) return NULL;
+    c = (struct fnv2_posix_context *)m->io_storage;
+    return c->magic == FNV2_POSIX_MAGIC && c->fd >= 0 && !c->allow_resize ? c : NULL;
+}
+
+static enum fwlab_nfc_api_result operation_begin(struct fwlab_file_nand_v2 *m,
+                                                  struct fwlab_nand_media *base)
+{
+    struct fnv2_posix_context *c;
+    struct stat status;
+    *base = fwlab_file_nand_v2_media(m);
+    if (!base->ops) return FWLAB_NFC_API_WRONG_STATE;
+    c = operation_context(m);
+    if (!c) return FWLAB_NFC_API_INVALID_CONTRACT;
+    if (c->operation_active) return FWLAB_NFC_API_WRONG_STATE;
+    if (!context_stat(c, &status)) {
+        m->quarantined = 1;
+        return FWLAB_NFC_API_INVARIANT_FAILURE;
+    }
+    c->operation_active = 1;
+    return FWLAB_NFC_API_OK;
+}
+
+static enum fwlab_nfc_api_result operation_end(struct fwlab_file_nand_v2 *m,
+                                                enum fwlab_nfc_api_result result)
+{
+    struct fnv2_posix_context *c = (struct fnv2_posix_context *)m->io_storage;
+    struct stat status;
+    /* The synchronous wrapper owns this flag even after engine quarantine. */
+    c->operation_active = 0;
+    if (c->magic != FNV2_POSIX_MAGIC || c->allow_resize || !context_stat(c, &status)) {
+        m->quarantined = 1;
+        return FWLAB_NFC_API_INVARIANT_FAILURE;
+    }
+    return result;
+}
+
+static enum fwlab_nfc_api_result operation_read_pages(void *opaque,
+    const struct fwlab_nfc_ppa *first, uint32_t count,
+    uint8_t *main, size_t main_bytes, uint8_t *oob, size_t oob_bytes,
+    struct fwlab_nand_page_info *pages, size_t capacity, struct fwlab_nand_block_info *block)
+{
+    struct fwlab_file_nand_v2 *m = opaque; struct fwlab_nand_media base;
+    enum fwlab_nfc_api_result r = operation_begin(m, &base);
+    if (r != FWLAB_NFC_API_OK) return r;
+    r = fwlab_file_nand_v2_read_pages(m, first, count, main, main_bytes,
+                                     oob, oob_bytes, pages, capacity, block);
+    return operation_end(m, r);
+}
+static enum fwlab_nfc_api_result operation_program_pages(void *opaque,
+    const struct fwlab_nfc_ppa *first, uint32_t count,
+    const uint8_t *main, size_t main_bytes, const uint8_t *oob, size_t oob_bytes,
+    struct fwlab_nand_media_result *results, size_t capacity)
+{
+    struct fwlab_file_nand_v2 *m = opaque; struct fwlab_nand_media base;
+    enum fwlab_nfc_api_result r = operation_begin(m, &base);
+    if (r != FWLAB_NFC_API_OK) return r;
+    r = fwlab_file_nand_v2_program_pages(m, first, count, main, main_bytes,
+                                        oob, oob_bytes, results, capacity);
+    return operation_end(m, r);
+}
+static enum fwlab_nfc_api_result operation_read(void *opaque,
+    const struct fwlab_nfc_ppa *ppa, uint8_t *main, uint32_t main_bytes,
+    uint8_t *oob, uint32_t oob_bytes, struct fwlab_nand_page_info *page,
+    struct fwlab_nand_block_info *block)
+{
+    struct fwlab_file_nand_v2 *m = opaque; struct fwlab_nand_media base;
+    enum fwlab_nfc_api_result r = operation_begin(m, &base);
+    if (r != FWLAB_NFC_API_OK) return r;
+    r = base.ops->read_page(m, ppa, main, main_bytes, oob, oob_bytes, page, block);
+    return operation_end(m, r);
+}
+static enum fwlab_nfc_api_result operation_program(void *opaque,
+    const struct fwlab_nfc_ppa *ppa, const uint8_t *main, uint32_t main_bytes,
+    const uint8_t *oob, uint32_t oob_bytes, uint32_t applied_main, uint32_t applied_oob,
+    uint8_t integrity, struct fwlab_nand_media_result *out)
+{
+    struct fwlab_file_nand_v2 *m = opaque; struct fwlab_nand_media base;
+    enum fwlab_nfc_api_result r = operation_begin(m, &base);
+    if (r != FWLAB_NFC_API_OK) return r;
+    r = base.ops->program(m, ppa, main, main_bytes, oob, oob_bytes,
+                          applied_main, applied_oob, integrity, out);
+    return operation_end(m, r);
+}
+static enum fwlab_nfc_api_result operation_erase(void *opaque,
+    const struct fwlab_nfc_ppa *ppa, uint32_t applied, uint8_t integrity,
+    struct fwlab_nand_media_result *out)
+{
+    struct fwlab_file_nand_v2 *m = opaque; struct fwlab_nand_media base;
+    enum fwlab_nfc_api_result r = operation_begin(m, &base);
+    if (r != FWLAB_NFC_API_OK) return r;
+    r = base.ops->erase(m, ppa, applied, integrity, out);
+    return operation_end(m, r);
+}
+static enum fwlab_nfc_api_result operation_bad(void *opaque, const struct fwlab_nfc_ppa *ppa)
+{
+    struct fwlab_file_nand_v2 *m = opaque; struct fwlab_nand_media base;
+    enum fwlab_nfc_api_result r = operation_begin(m, &base);
+    if (r != FWLAB_NFC_API_OK) return r;
+    r = base.ops->mark_runtime_bad(m, ppa);
+    return operation_end(m, r);
+}
+static uint64_t strict_hash(void *opaque)
+{
+    struct fwlab_file_nand_v2 *m = opaque;
+    struct fwlab_nand_media base = fwlab_file_nand_v2_media(m);
+    struct fnv2_posix_context *c = operation_context(m);
+    return base.ops && c && !c->operation_active ? base.ops->hash(m) : 0;
+}
+static const struct fwlab_nand_media_ops operation_scalar_ops = {
+    .version = FWLAB_NFC_CONTRACT_VERSION, .size = sizeof(operation_scalar_ops),
+    .read_page = operation_read, .program = operation_program,
+    .erase = operation_erase, .mark_runtime_bad = operation_bad, .hash = strict_hash
+};
+static const struct fwlab_nand_batch_v2_ops operation_batch_ops = {
+    .version = FWLAB_NAND_BATCH_V2_VERSION, .size = sizeof(operation_batch_ops),
+    .read_pages = operation_read_pages, .program_pages = operation_program_pages
+};
+struct fwlab_nand_batch_v2 fwlab_file_nand_v2_posix_operation_batch(struct fwlab_file_nand_v2 *m)
+{
+    struct fwlab_nand_batch_v2 out = fwlab_file_nand_v2_batch(m);
+    struct fnv2_posix_context *c = out.ops ? operation_context(m) : NULL;
+    if (!c || c->operation_active) {
+        memset(&out, 0, sizeof(out));
+        return out;
+    }
+    out.ops = &operation_batch_ops;
+    out.scalar.ops = &operation_scalar_ops;
+    return out;
 }
