@@ -65,6 +65,13 @@ static enum fwlab_nfc_api_result bytes_write(void *p, uint64_t offset, const voi
 {
     struct fixture *f = p; size_t done = n;
     if (!in || !span(f, offset, n)) return FWLAB_NFC_API_INVALID_CONTRACT;
+    /* Generated-record self-check belongs in the test, not the runtime write
+     * path. Check the actual destination bank before injecting a short write. */
+    if (n == FNV2_INTENT_BYTES && (offset == bank(0) || offset == bank(1))) {
+        struct fnv2_intent decoded;
+        CHECK(fnv2_intent_decode(&f->arena, in, (unsigned)(offset == bank(1)), &decoded));
+        CHECK(decoded.predecessor == f->arena.sequence);
+    }
     ++f->writes;
     if (offset == bank(0)) ++f->bank_writes[0];
     if (offset == bank(1)) ++f->bank_writes[1];
@@ -434,6 +441,7 @@ static void singleton_semantics(void)
     CHECK(program(f, 0, 0, 19, 137, 19, FWLAB_NFC_INTEGRITY_TORN, &result) == FWLAB_NFC_API_OK);
     CHECK(f->writes - calls == 5 && f->write_bytes - bytes == 5952 && f->syncs - syncs == 3);
     CHECK(result.applied_main_bytes == 137 && result.applied_oob_bytes == 19 && result.integrity == FWLAB_NFC_INTEGRITY_TORN);
+    stable_reboot(f, 1); /* Partial PROGRAM's own INTENT/COMMIT is selected. */
     observe(f, 0, 0, &out); expect_payload(&out, 19, 137, 19);
     CHECK(out.page.state == FWLAB_NAND_PAGE_TORN && out.page.program_count == 1 && out.block.next_program_page == 1);
     program_ok(f, 0, 1, 20); program_ok(f, 0, 2, 21); program_ok(f, 1, 0, 22);
@@ -453,6 +461,7 @@ static void singleton_semantics(void)
     CHECK(erase(f, 0, 64, FWLAB_NFC_INTEGRITY_COMPLETE, &result) == FWLAB_NFC_API_OK);
     CHECK(f->write_bytes - bytes == 1600 && f->syncs - syncs == 3);
     CHECK(result.base_erase_generation == 0 && result.final_erase_generation == 1);
+    stable_reboot(f, fwlab_file_nand_v2_sequence(f->media));
     erased(f, 0, 0); erased(f, 0, 63); observe(f, 0, 0, &out);
     CHECK(out.block.erase_attempt_count == 3 && out.block.successful_erase_count == 1 && !out.block.next_program_page);
     program_ok(f, 0, 0, 41); struct fwlab_nfc_ppa bad = address(1, 0);
@@ -675,6 +684,6 @@ int main(void)
     byte_uniformity_equivalence();
     initial_format(); full_batch_cost(); page_copy_crc_journey(); batch_read_states(); singleton_semantics(); cut_intent(); cut_homes_and_abort();
     cut_commit(); abort_erase_and_bad(); cut_bank_reuse(); rejection();
-    puts("CPRIME_ADJACENT_PASS|bounded_working_durable_bytes=1|three_barriers=1|no_POSIX_powerloss_or_10GB_claim=1");
+    puts("CPRIME_ADJACENT_PASS|bounded_working_durable_bytes=1|three_barriers=1|generated_intents_decoded_by_test=1|no_POSIX_powerloss_or_10GB_claim=1");
     return 0;
 }

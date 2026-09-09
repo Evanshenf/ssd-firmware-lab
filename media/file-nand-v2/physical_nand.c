@@ -111,12 +111,11 @@ static void intent_init(struct fwlab_file_nand_v2 *m, struct fnv2_intent *i,
 }
 static bool begin(struct fwlab_file_nand_v2 *m, struct fnv2_intent *i)
 {
-    struct fnv2_intent checked;
+    /* Private callers already validate BASE, sequence and NAND transition
+     * before intent_init(). Reuse the encoder's CRC, rather than decoding our
+     * own bytes. Recovery still validates every persisted INTENT in full. */
     fnv2_intent_encode(m, i, m->intent);
-    if (!fnv2_intent_decode(m, m->intent, (unsigned)(i->sequence & 1u), &checked)) {
-        (void)broken(m); return false;
-    }
-    i->crc = checked.crc; m->busy = 1;
+    i->crc = fnv2_get32(m->intent + FNV2_INTENT_BYTES - 4u); m->busy = 1;
     return write_bytes(m, bank_at(i->sequence), m->intent, FNV2_INTENT_BYTES) && barrier(m);
 }
 static bool terminal_write(struct fwlab_file_nand_v2 *m, const struct fnv2_intent *i,
