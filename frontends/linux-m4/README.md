@@ -234,6 +234,11 @@ limit 128 KiB despite MDTS 8. There is no retry-as-smaller fallback after an I/O
 error. The L2 guest requires room for an unsplit 1 MiB command and fails if the
 limit is smaller; its owner journey requires the explicit large-wire success
 marker. Split L1 commands do not prove single-command 1 MiB SELF or atomicity.
+The strict LARGE guest prepares a 2 MiB-aligned, synchronously collapsed THP
+payload buffer and fails if that preparation is unavailable. This keeps the
+1 MiB-plus-offset buffer within one folio for Linux's bio/SG limits while NVMe
+still uses 257 controller-page PRP references. It does not change the NAND
+image, controller frame sizes, DMA checks, or submitted command lengths.
 
 Actual native qualification and separate performance measurement remain pending
 for this candidate. No MQ2, 1 MiB atomicity, new NAND algorithm or 10 GB/s claim

@@ -520,11 +520,31 @@ int main(int argc, char **argv)
         close(fd);
         return 1;
     }
+#if FWLAB_NATIVE_TEST_LARGE
+    /* A 1 MiB transfer at +512 spans 257 base pages. Linux can limit a
+     * passthrough request to 256 bio/SG entries. Prepare one 2 MiB folio for
+     * the strict guest witness; NVMe still describes 257 distinct 4 KiB PRPs.
+     * This is the client payload buffer, not the simulated NAND backing. */
+    allocation = guest ? aligned_alloc(2097152, 2097152) :
+                         aligned_alloc(4096, NATIVE_CLIENT_BUFFER_BYTES);
+#else
     allocation = aligned_alloc(4096, NATIVE_CLIENT_BUFFER_BYTES);
+#endif
     if (!allocation) {
         close(fd);
         return 1;
     }
+#if FWLAB_NATIVE_TEST_LARGE
+    if (guest) {
+        if (madvise(allocation, 2097152, MADV_HUGEPAGE)) goto done;
+        memset(allocation, 0, 2097152);
+        if (madvise(allocation, 2097152, MADV_COLLAPSE)) {
+            perror("strict guest payload requires a 2 MiB collapsed folio");
+            goto done;
+        }
+        puts("NATIVE_GUEST_BUFFER bytes=2097152 alignment=2097152 MADV_COLLAPSE=success NAND_backend=unchanged");
+    }
+#endif
     if (cut) {
         result = cut_journey(fd, argv[2], argv[3], cut, allocation) ? 0 : 1;
         goto done;
