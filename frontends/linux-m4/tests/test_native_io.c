@@ -68,6 +68,38 @@ static const struct native_case cases[] = {
 };
 #define NATIVE_CASE_COUNT (sizeof(cases) / sizeof(cases[0]))
 static uint8_t pattern_delta;
+#if FWLAB_NATIVE_TEST_LARGE
+/* Workload size is not the Linux queue's per-command submission ceiling.
+ * Only L1 may split, selected before I/O; the L2 large witness is strict. */
+static uint32_t wire_io_bytes = 1048576;
+static int wire_guest;
+
+static int wire_limits(const char *namespace_path, int guest)
+{
+    char path[PATH_MAX];
+    unsigned long kib = 0;
+    FILE *file;
+    int parsed;
+
+    if (snprintf(path, sizeof(path), "%s/queue/max_hw_sectors_kb", namespace_path) >=
+        (int)sizeof(path))
+        return 0;
+    file = fopen(path, "re");
+    if (!file) return 0;
+    parsed = fscanf(file, "%lu", &kib);
+    if (fclose(file) || parsed != 1 || kib < 8 || kib % 4)
+        return 0;
+    wire_io_bytes = kib >= 1024 ? 1048576 : (uint32_t)kib * 1024;
+    wire_guest = guest;
+    if (guest && wire_io_bytes != 1048576) {
+        fputs("L2 requires an unsplit 1 MiB command; refusing smaller queue limit\n", stderr);
+        return 0;
+    }
+    printf("NATIVE_WIRE_LIMIT layer=%s max_hw_kib=%lu selected_bytes=%u split_allowed=%d\n",
+           guest ? "L2" : "L1", kib, wire_io_bytes, !guest);
+    return 1;
+}
+#endif
 
 static int exchange(int fd, unsigned long operation,
                     struct nvme_passthru_cmd *command)
@@ -124,6 +156,7 @@ static int identity_guard(int fd, const char *bdf, int guest)
         goto done;
 #if FWLAB_NATIVE_TEST_LARGE
     if (identify[77] != 8) goto done; /* matched 1 MiB / 4 KiB MDTS */
+    if (!wire_limits(resolved, guest)) goto done;
 #endif
     printf("IDENTITY bdf=%s namespace=1 bytes=%" PRIu64 " native_driver=1\n",
            bdf, bytes);
@@ -157,6 +190,32 @@ static int transfer(int fd, uint8_t opcode, const struct native_case *test,
                     uint8_t *buffer, uint32_t control, uint32_t hint)
 {
     struct nvme_passthru_cmd command = { 0 };
+#if FWLAB_NATIVE_TEST_LARGE
+    uint32_t done = 0, commands = 0, maximum = 0;
+
+    while (done < test->bytes) {
+        uint32_t bytes = test->bytes - done;
+        int result;
+        if (bytes > wire_io_bytes) bytes = wire_io_bytes;
+        memset(&command, 0, sizeof(command));
+        command.opcode = opcode;
+        command.nsid = 1;
+        command.addr = (uintptr_t)(buffer + done);
+        command.data_len = bytes;
+        command.cdw10 = test->lba + done / 512u;
+        command.cdw12 = control | (bytes / 512u - 1u);
+        command.cdw13 = hint;
+        result = exchange(fd, NVME_IOCTL_IO_CMD, &command);
+        if (result) return result; /* Never retry a failed command as smaller I/O. */
+        done += bytes;
+        commands++;
+        if (bytes > maximum) maximum = bytes;
+    }
+    if (test->bytes == 1048576)
+        printf("NATIVE_LARGE_TRANSFER layer=%s op=%02x logical_bytes=%u wire_max_bytes=%u commands=%u buffer_offset=%u\n",
+               wire_guest ? "L2" : "L1", opcode, test->bytes, maximum, commands, test->offset);
+    return 0;
+#else
 
     command.opcode = opcode;
     command.nsid = 1;
@@ -166,6 +225,7 @@ static int transfer(int fd, uint8_t opcode, const struct native_case *test,
     command.cdw12 = control | (test->bytes / 512u - 1u);
     command.cdw13 = hint;
     return exchange(fd, NVME_IOCTL_IO_CMD, &command);
+#endif
 }
 
 static int read_compare(int fd, const struct native_case *test, uint8_t *buffer,
@@ -519,9 +579,12 @@ guest_again:
         write_mode = 1;
         goto guest_again;
     }
-    if (guest)
+    if (guest) {
+#if FWLAB_NATIVE_TEST_LARGE
+        puts("NATIVE_GUEST_LARGE_WIRE_PASS bytes=1048576 commands_per_transfer=1 aligned_and_offset=exact phases=A_read_B_write_read");
+#endif
         printf("NATIVE_GUEST_AB_PASS host_A=exact guest_B=durable shapes=%zu\n", NATIVE_CASE_COUNT);
-    else
+    } else
         printf("NATIVE_IO_PASS mode=%s shapes=%zu continued_reads=64\n", argv[1], NATIVE_CASE_COUNT);
     result = 0;
 done:

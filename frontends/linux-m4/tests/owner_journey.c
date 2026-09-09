@@ -278,17 +278,27 @@ static int guest_log_passed(const char *path)
     FILE *file = fopen(path, "r");
     char line[1024];
     int a = 0, b = 0, complete = 0, bad = 0;
+#if FWLAB_NATIVE_TEST_LARGE
+    int large_wire = 0;
+#endif
     if (!file) return 0;
     while (fgets(line, sizeof(line), file)) {
         a |= strstr(line, "NATIVE_GUEST_A_READ_OK") != NULL;
         b |= strstr(line, "NATIVE_GUEST_AB_PASS") != NULL;
         complete |= strstr(line, "J2_L2_OWNER_PASS") != NULL;
+#if FWLAB_NATIVE_TEST_LARGE
+        large_wire |= strstr(line, "NATIVE_GUEST_LARGE_WIRE_PASS bytes=1048576 commands_per_transfer=1 aligned_and_offset=exact phases=A_read_B_write_read") != NULL;
+#endif
         bad |= strstr(line, "J2_L2_PREFLIGHT_FAIL") != NULL || strstr(line, "Kernel panic") != NULL ||
                strstr(line, "BUG:") != NULL || strstr(line, "Oops:") != NULL;
     }
     if (ferror(file)) bad = 1;
     fclose(file);
+#if FWLAB_NATIVE_TEST_LARGE
+    return a && b && complete && large_wire && !bad;
+#else
     return a && b && complete && !bad;
+#endif
 }
 
 static int guest_log_held(const char *path)

@@ -226,6 +226,15 @@ and profile-pin checks. The existing offline worker journey also has a selected
 guard plus MDTS 8, and add aligned and offset 1 MiB cases. Their `aer` command
 checks Unsupported followed by Identify; the scoped lab runner adds reset.
 
+The LARGE client distinguishes a logical workload from a wire command. On L1
+it reads the guarded namespace's `max_hw_sectors_kb` before I/O and explicitly
+splits a larger workload at that limit, recording each transfer's wire size and
+completed command count. Linux's IOMMU mapping recommendation can make that
+limit 128 KiB despite MDTS 8. There is no retry-as-smaller fallback after an I/O
+error. The L2 guest requires room for an unsplit 1 MiB command and fails if the
+limit is smaller; its owner journey requires the explicit large-wire success
+marker. Split L1 commands do not prove single-command 1 MiB SELF or atomicity.
+
 Actual native qualification and separate performance measurement remain pending
 for this candidate. No MQ2, 1 MiB atomicity, new NAND algorithm or 10 GB/s claim
 is made by a successful build or offline test.
