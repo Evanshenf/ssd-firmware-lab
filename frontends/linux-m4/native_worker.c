@@ -458,6 +458,7 @@ static int firmware_loop(struct native_context *context, struct native_media *me
     while (!stop_requested) {
         struct fwlab_m4_native_message message;
         uint32_t units;
+        int received;
         native_message_init(context, NULL, FWLAB_M4_NATIVE_STATUS, &message);
         if (native_exchange(context, &message))
             return 0;
@@ -483,14 +484,18 @@ static int firmware_loop(struct native_context *context, struct native_media *me
             nanosleep(&idle, NULL);
             continue;
         }
-        if (receive_command(context) < 0 || !admit_commands(context))
+        received = receive_command(context);
+        if (received < 0 || !admit_commands(context))
             return 0;
         if (j0_runtime_step(context->runtime, 48, &units) != FWLAB_SPINE_V0_OK ||
             !finish_commands(context, 0)) {
             fprintf(stderr, "firmware progress failed at epoch %u\n", context->epoch);
             return 0;
         }
-        nanosleep(&idle, NULL);
+        /* A new capture deserves its next progress turn without an artificial
+         * wait. Mere occupied slots or budget consumption are not this signal. */
+        if (!received)
+            nanosleep(&idle, NULL);
     }
     return 1;
 }
