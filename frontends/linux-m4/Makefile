@@ -59,6 +59,8 @@ FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
 .PHONY: scaled-runtime check-scaled-runtime
 .PHONY: scaled-worker attach-check
 .PHONY: scaled-pump-worker scaled-pump-runtime check-scaled-pump-runtime
+.PHONY: large-worker large-runtime check-large-runtime native-io-large native-io-large-static
+.PHONY: profile-check
 
 scaled-worker:
 	mkdir -p $(SCALED_BUILD)
@@ -74,11 +76,24 @@ scaled-pump-worker:
 		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) \
 		-o $(SCALED_BUILD)/fwlab_native_scaled_pump_worker
 
+large-worker:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 \
+		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
+		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) \
+		-o $(SCALED_BUILD)/fwlab_native_large_worker
+
 attach-check:
 	mkdir -p $(SCALED_BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_native_attach.c native_attach.c native_pump.c \
 		-Wl,--wrap=ioctl -o $(SCALED_BUILD)/native_attach_check
 	$(SCALED_BUILD)/native_attach_check
+
+profile-check:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_native_profile.c $(FIRMWARE_SOURCES) \
+		-o $(SCALED_BUILD)/native_profile_check
+	$(SCALED_BUILD)/native_profile_check
 
 scaled-runtime:
 	mkdir -p $(SCALED_BUILD)
@@ -98,6 +113,16 @@ scaled-pump-runtime:
 
 check-scaled-pump-runtime: scaled-pump-runtime
 	FWLAB_TEST_MEDIA_DIR="$(FWLAB_TEST_MEDIA_DIR)" $(SCALED_BUILD)/native_scaled_pump_offline
+
+large-runtime:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 \
+		-I../../core/ftl-scale -I../../media/file-nand-v2 \
+		$(CFLAGS) $(SCALED_RUNTIME_SOURCES) -Wl,--wrap=ioctl \
+		-o $(SCALED_BUILD)/native_large_offline
+
+check-large-runtime: large-runtime
+	FWLAB_TEST_MEDIA_DIR="$(FWLAB_TEST_MEDIA_DIR)" $(SCALED_BUILD)/native_large_offline
 
 worker:
 	mkdir -p build
@@ -122,6 +147,18 @@ native-io-scaled-static:
 	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_TEST_SCALED=1 $(CFLAGS) -static \
 		tests/test_native_io.c tests/owner_journey.c tests/vfio_epoch.c \
 		-o $(SCALED_BUILD)/j1_native_scaled_io_static
+
+native-io-large:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_TEST_SCALED=1 -DFWLAB_NATIVE_TEST_LARGE=1 $(CFLAGS) \
+		tests/test_native_io.c tests/owner_journey.c tests/vfio_epoch.c \
+		-o $(SCALED_BUILD)/j1_native_large_io
+
+native-io-large-static:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_TEST_SCALED=1 -DFWLAB_NATIVE_TEST_LARGE=1 $(CFLAGS) -static \
+		tests/test_native_io.c tests/owner_journey.c tests/vfio_epoch.c \
+		-o $(SCALED_BUILD)/j1_native_large_io_static
 
 runtime:
 	mkdir -p build

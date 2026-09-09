@@ -8,6 +8,7 @@
 #include "fwlab/unstable/m4_native.h"
 #include "fwlab/unstable/m4_attach_native.h"
 #include "fwlab/unstable/m4_pump_native.h"
+#include "fwlab/unstable/m4_profile_native.h"
 #include "fwlab/unstable/m4_canary_native.h"
 
 #define NATIVE_COMMANDS 32u
@@ -60,6 +61,8 @@ struct native_slot {
     uint8_t queue_terminal;
     uint8_t queue_retire_started;
     uint8_t queue_drained;
+    uint8_t frame_held;
+    uint8_t frame_class;
     uint8_t reserved;
     uint8_t bounce[FWLAB_M4_NATIVE_MAX_BYTES];
 };
@@ -84,6 +87,14 @@ struct native_context {
      * initial observation. Runtime resets update epoch, not this identity. */
     struct fwlab_m4_attach_message attachment;
     uint32_t producer_mode; /* immutable attachment, not controller/media epoch */
+    uint32_t host_profile_id;
+    struct fwlab_m4_host_limits host_limits;
+    struct {
+        uint8_t *bytes;
+        uint64_t origin_uid;
+        uint32_t epoch;
+        uint8_t held;
+    } frame[2]; /* process-lived backing; independent of J0/kernel issuers */
     struct {
         struct fwlab_spine_command_ticket_v0 ticket;
         struct fwlab_completion_lease_v0 lease;
@@ -107,6 +118,10 @@ int native_attach_explicit(struct native_context *context, uint32_t format,
     const uint8_t uuid[16], const uint8_t binding[32]);
 int native_attach_mode(struct native_context *context, uint32_t producer, uint32_t format,
     const uint8_t uuid[16], const uint8_t binding[32]);
+int native_attach_profile(struct native_context *context, uint32_t profile,
+    uint32_t producer, uint32_t format, const uint8_t uuid[16], const uint8_t binding[32]);
+int native_frames_quiescent(const struct native_context *context);
+int native_frame_storage_fini(struct native_context *context);
 int native_pump(struct native_context *context, int *service_result);
 enum fwlab_spine_result_v0 native_host_bind(
     void *context, const struct fwlab_controller_buffer_port_v0 *buffer,

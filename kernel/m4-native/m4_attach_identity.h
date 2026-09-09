@@ -5,6 +5,7 @@
 
 #include "fwlab/unstable/m4_attach_native.h"
 #include "fwlab/unstable/m4_pump_native.h"
+#include "fwlab/unstable/m4_profile_native.h"
 #include <linux/errno.h>
 #ifdef __KERNEL__
 #include <linux/string.h>
@@ -89,6 +90,32 @@ static inline int fwlab_m4_pump_request_valid(const struct fwlab_m4_pump_message
         message->size == sizeof(*message) && message->function_nonce &&
         !message->service_result && !message->captured && !message->reserved0 &&
         fwlab_m4_attach_zero(message->reserved, sizeof(message->reserved));
+}
+
+static inline int fwlab_m4_attach_profile_request_valid(
+    const struct fwlab_m4_attach_profile_message *message)
+{
+    struct fwlab_m4_host_limits expected = fwlab_m4_host_limits_for(message->host_profile_id);
+
+    return message->version == FWLAB_M4_ATTACH_PROFILE_VERSION &&
+        message->size == sizeof(*message) && !message->function_nonce &&
+        !message->controller_epoch && !message->reserved0 &&
+        fwlab_m4_producer_valid(message->producer_mode) && expected.max_io_bytes &&
+        !memcmp(&message->limits, &expected, sizeof(expected)) &&
+        fwlab_m4_attach_zero(message->reserved, sizeof(message->reserved));
+}
+
+static inline int fwlab_m4_attach_pin_host_profile(struct fwlab_m4_attachment *stored,
+    __u32 constructed_profile, __u32 constructed_producer,
+    __u32 requested_profile, __u32 requested_producer, __u32 format,
+    const __u8 uuid[16], const __u8 binding[32])
+{
+    if ((constructed_profile != FWLAB_M4_HOST_PROFILE_SMALL &&
+         constructed_profile != FWLAB_M4_HOST_PROFILE_LARGE_SERIAL) ||
+        requested_profile != constructed_profile)
+        return -EOPNOTSUPP;
+    return fwlab_m4_attach_pin_mode(stored, constructed_producer,
+        requested_producer, format, uuid, binding);
 }
 
 #endif

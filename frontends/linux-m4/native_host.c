@@ -6,7 +6,41 @@
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
+#include <stdlib.h>
 #include <sys/ioctl.h>
+
+static int large_profile(const struct native_context *context)
+{
+    return context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL;
+}
+
+static uint8_t *slot_bytes(struct native_context *context, const struct native_slot *slot)
+{
+    if (!large_profile(context)) return (uint8_t *)slot->bounce;
+    if (!slot->frame_held || slot->frame_class > J0_BUFFER_CLASS_CONTROL ||
+        !context->frame[slot->frame_class].held ||
+        context->frame[slot->frame_class].origin_uid != slot->capture.origin_uid ||
+        context->frame[slot->frame_class].epoch != slot->capture.controller_epoch)
+        return NULL;
+    return context->frame[slot->frame_class].bytes;
+}
+
+int native_frames_quiescent(const struct native_context *context)
+{
+    uint32_t index;
+    if (!context || context->frame[0].held || context->frame[1].held) return 0;
+    for (index = 0; index < NATIVE_COMMANDS; ++index)
+        if (context->slot[index].frame_held) return 0;
+    return 1;
+}
+
+int native_frame_storage_fini(struct native_context *context)
+{
+    if (!native_frames_quiescent(context)) return 0;
+    free(context->frame[0].bytes); free(context->frame[1].bytes);
+    memset(context->frame, 0, sizeof(context->frame));
+    return 1;
+}
 
 void native_message_init(struct native_context *context,
                         const struct native_slot *slot, uint32_t operation,
@@ -26,7 +60,7 @@ void native_message_init(struct native_context *context,
         message->dma_uid = slot->dma_uid;
         message->direction = slot->direction;
         message->bytes = slot->bytes;
-        message->data_pointer = (uintptr_t)slot->bounce;
+        message->data_pointer = (uintptr_t)slot_bytes(context, slot);
     }
 }
 
@@ -89,12 +123,34 @@ static enum fwlab_spine_result_v0 endpoint_prepare(
 {
     struct native_context *context = opaque;
     struct native_slot *slot = find_command(context, command, origin);
+    uint32_t allocation_class = slot && slot->capture.queue_id == 0
+        ? J0_BUFFER_CLASS_CONTROL : J0_BUFFER_CLASS_IO;
+    uint32_t limit = large_profile(context)
+        ? (allocation_class == J0_BUFFER_CLASS_CONTROL
+            ? context->host_limits.max_admin_bytes : context->host_limits.max_io_bytes)
+        : FWLAB_M4_NATIVE_MAX_BYTES;
 
     if (!slot || input || context->closing || !bytes ||
-        bytes > FWLAB_M4_NATIVE_MAX_BYTES || (direction != 1 && direction != 2))
+        bytes > limit || (direction != 1 && direction != 2))
         return FWLAB_SPINE_V0_INVALID;
     if (slot->bytes && (slot->bytes != bytes || slot->direction != direction))
         return FWLAB_SPINE_V0_POISONED;
+    if (large_profile(context)) {
+        if (slot->frame_held) {
+            if (slot->frame_class != allocation_class || !slot_bytes(context, slot))
+                return FWLAB_SPINE_V0_POISONED;
+        } else {
+            if (!context->frame[allocation_class].bytes)
+                return FWLAB_SPINE_V0_POISONED;
+            if (context->frame[allocation_class].held)
+                return FWLAB_SPINE_V0_NO_CAPACITY;
+            context->frame[allocation_class].held = 1;
+            context->frame[allocation_class].origin_uid = slot->capture.origin_uid;
+            context->frame[allocation_class].epoch = slot->capture.controller_epoch;
+            slot->frame_class = (uint8_t)allocation_class;
+            slot->frame_held = 1;
+        }
+    }
     slot->bytes = bytes;
     slot->direction = direction;
     return FWLAB_SPINE_V0_OK;
@@ -104,8 +160,60 @@ static enum fwlab_spine_result_v0 endpoint_release(
     void *opaque, const struct fwlab_nvme_command_handle *command,
     const struct fwlab_nvme_origin_token *origin)
 {
-    return find_command(opaque, command, origin) ? FWLAB_SPINE_V0_OK
-                                               : FWLAB_SPINE_V0_STALE;
+    struct native_context *context = opaque;
+    struct native_slot *slot = find_command(context, command, origin);
+    if (!slot) return FWLAB_SPINE_V0_STALE;
+    if (large_profile(context) && slot->frame_held) {
+        if (!slot_bytes(context, slot)) return FWLAB_SPINE_V0_POISONED;
+        context->frame[slot->frame_class].held = 0;
+        context->frame[slot->frame_class].origin_uid = 0;
+        context->frame[slot->frame_class].epoch = 0;
+        slot->frame_held = 0;
+    }
+    return FWLAB_SPINE_V0_OK;
+}
+
+static enum fwlab_spine_result_v0 shape_unknown(struct native_context *context)
+{
+    context->closing = 1;
+    return FWLAB_SPINE_V0_POISONED;
+}
+
+static enum fwlab_spine_result_v0 large_shape(
+    struct native_context *context, struct native_slot *slot,
+    struct fwlab_m4_native_message *accepted)
+{
+    struct fwlab_m4_native_message request;
+    unsigned attempt;
+    int unknown_seen = 0;
+    native_message_init(context, slot, FWLAB_M4_NATIVE_SHAPE, &request);
+    for (attempt = 0; attempt < 3; ++attempt) {
+        struct fwlab_m4_native_message reply = request, expected = request;
+        int result = ioctl(context->descriptor, FWLAB_M4_NATIVE_EXCHANGE, &reply);
+        if (result < 0) {
+            int error = errno;
+            unknown_seen = 1;
+            if ((error == EFAULT || error == EINTR) && attempt + 1 < 3) continue;
+            /* No clean rollback or zero certificate for unknown kernel shape. */
+            return shape_unknown(context);
+        }
+        if (result || reply.result == INT32_MIN || reply.result > 0)
+            return shape_unknown(context);
+        if (reply.result)
+            return unknown_seen ? shape_unknown(context) : FWLAB_SPINE_V0_INVALID;
+        expected.result = 0;
+        expected.authority_uid = reply.authority_uid;
+        expected.dma_uid = reply.dma_uid;
+        expected.dma_state = reply.dma_state;
+        if (!reply.authority_uid || !reply.dma_uid ||
+            (reply.dma_state != FWLAB_M4_NATIVE_DMA_RESERVED &&
+             reply.dma_state != FWLAB_M4_NATIVE_DMA_CANCELLED) ||
+            memcmp(&reply, &expected, sizeof(reply)))
+            return shape_unknown(context);
+        *accepted = reply;
+        return FWLAB_SPINE_V0_OK;
+    }
+    return shape_unknown(context);
 }
 
 static enum fwlab_spine_result_v0 authority_mint(
@@ -129,9 +237,14 @@ static enum fwlab_spine_result_v0 authority_mint(
         *authority = slot->authority;
         return FWLAB_SPINE_V0_OK;
     }
-    native_message_init(context, slot, FWLAB_M4_NATIVE_SHAPE, &message);
-    if (native_exchange(context, &message) || !message.authority_uid || !message.dma_uid)
-        return FWLAB_SPINE_V0_INVALID;
+    if (large_profile(context)) {
+        enum fwlab_spine_result_v0 result = large_shape(context, slot, &message);
+        if (result != FWLAB_SPINE_V0_OK) return result;
+    } else {
+        native_message_init(context, slot, FWLAB_M4_NATIVE_SHAPE, &message);
+        if (native_exchange(context, &message) || !message.authority_uid || !message.dma_uid)
+            return FWLAB_SPINE_V0_INVALID;
+    }
     slot->authority_uid = message.authority_uid;
     slot->dma_uid = message.dma_uid;
     memset(&slot->authority, 0, sizeof(slot->authority));
@@ -245,7 +358,7 @@ static enum fwlab_spine_result_v0 dma_observe(
         slot->dma_status.terminal_kind == FWLAB_DMA_V0_SUCCEEDED &&
         context->buffer.ops->write(context->buffer.context,
             &slot->dma_request.buffer, &slot->dma_request.span,
-            slot->bounce, slot->bytes) != FWLAB_CONTROLLER_BUFFER_V0_OK)
+            slot_bytes(context, slot), slot->bytes) != FWLAB_CONTROLLER_BUFFER_V0_OK)
         slot->dma_status.terminal_kind = FWLAB_DMA_V0_FAILED;
     if (slot->dma_status.terminal_kind == FWLAB_DMA_V0_FAILED) {
         slot->dma_status.fault_domain = 1;
@@ -279,7 +392,7 @@ static enum fwlab_spine_result_v0 dma_submit(
         slot->dma_submitted = 1;
         if (slot->direction == FWLAB_HOST_DATA_V0_CONTROLLER_TO_HOST &&
             context->buffer.ops->read(context->buffer.context, &request->buffer,
-                &request->span, slot->bounce, slot->bytes) != FWLAB_CONTROLLER_BUFFER_V0_OK)
+                &request->span, slot_bytes(context, slot), slot->bytes) != FWLAB_CONTROLLER_BUFFER_V0_OK)
             return FWLAB_SPINE_V0_POISONED;
     }
     observed = dma_observe(context, slot, FWLAB_M4_NATIVE_DMA);
@@ -402,7 +515,8 @@ static enum fwlab_spine_result_v0 epoch_quiescent(
         status->authority_refs += slot->occupied && slot->authority_live;
         status->dma_operations += slot->occupied && slot->dma_submitted && !slot->dma_drained;
     }
-    status->quiescent = quiescent && !status->authority_refs && !status->dma_operations;
+    status->quiescent = quiescent && !status->authority_refs && !status->dma_operations &&
+        native_frames_quiescent(context);
     return FWLAB_SPINE_V0_OK;
 }
 
@@ -573,6 +687,23 @@ enum fwlab_spine_result_v0 native_host_bind(
 {
     struct native_context *context = opaque;
 
+    if (!context || !buffer || !binding || !generation)
+        return FWLAB_SPINE_V0_INVALID;
+    if (large_profile(context)) {
+        if (!native_frames_quiescent(context)) return FWLAB_SPINE_V0_POISONED;
+        if (!context->frame[0].bytes && !context->frame[1].bytes) {
+            uint8_t *io = calloc(1, FWLAB_M4_LARGE_IO_BYTES);
+            uint8_t *control = calloc(1, FWLAB_M4_CONTROL_PAGE_BYTES);
+            if (!io || !control) {
+                free(io); free(control);
+                return FWLAB_SPINE_V0_NO_CAPACITY;
+            }
+            context->frame[J0_BUFFER_CLASS_IO].bytes = io;
+            context->frame[J0_BUFFER_CLASS_CONTROL].bytes = control;
+        }
+        if (!context->frame[0].bytes || !context->frame[1].bytes)
+            return FWLAB_SPINE_V0_POISONED;
+    }
     context->buffer = *buffer;
     context->generation = generation;
     context->closing = 0;

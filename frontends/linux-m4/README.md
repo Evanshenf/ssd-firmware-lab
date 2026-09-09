@@ -188,3 +188,44 @@ journey, matching the kernel's single service-capture fault point. Actual kernel
 mode compatibility, native I/O/reset, pending-mask/unmask and owner switching
 remain required before candidate qualification. Removing the BAR producer does
 not remove deferred IRQ work or establish whole-system single-thread bandwidth.
+
+## Large serialized Host profile (development candidate)
+
+`large-worker` / `check-large-runtime` select 1 MiB maximum I/O on the existing
+64 MiB namespace and unchanged scaled FTL/PAGE2/physical-v2 path. Namespace
+capacity and Host command size are independent. Match this worker with a PUMP
+kernel built using `FWLAB_M4_HOST_PROFILE=2`. The separate 160-byte attachment-v3
+binds exact Host limits before identity pinning; old 112/128-byte messages remain
+SMALL-only and do not silently attach a large worker to a small implementation.
+
+The first profile permits one captured I/O command (including Flush) and one
+Admin command through transport retirement. Ring depth and metadata capacity
+remain 32, not 32 resident 1 MiB payloads. Kernel, native mover and J0 each own
+their own 1 MiB I/O frame and 4 KiB control frame; small I/O cannot borrow the
+control reserve. Existing inline small-reference arrays are not enlarged.
+The native path requires referenced input, not the old inline snapshot mode.
+
+Large requests snapshot a complete bounded PRP graph before data DMA, including
+up to 257 data-page references and two offset-capable list pages. Data mappings
+remain individually checked 4 KiB segments. Buffer, Host-DMA and publication
+identities remain distinct; no loan or direct-LBA backend is introduced.
+Unknown SHAPE results retain the same origin/frame for bounded readback; lasting
+uncertainty fails closed instead of ordinary rollback and re-admission.
+
+The profile keeps AER as immediate Unsupported (SCT 0 / SC 1 / DNR 1), not a
+long-lived event request occupying the only Admin credit. Serial Q1 ingress
+establishes Q1 Write-before-Flush order; it does not claim future MQ ordering.
+Frames return at their existing owner-specific drain/retirement boundaries,
+and retained cancelled kernel requests are cleaned before the zero certificate.
+
+`profile-check` executes the actual bounded PRP parser and controller-buffer
+owner with fake adjacent inputs. `attach-check` includes exact v3 reply/retry
+and profile-pin checks. The existing offline worker journey also has a selected
+1 MiB variant; fake syscall results do not establish kernel/IOMMU execution.
+`native-io-large` / `native-io-large-static` require the same exact 64 MiB/BDF
+guard plus MDTS 8, and add aligned and offset 1 MiB cases. Their `aer` command
+checks Unsupported followed by Identify; the scoped lab runner adds reset.
+
+Actual native qualification and separate performance measurement remain pending
+for this candidate. No MQ2, 1 MiB atomicity, new NAND algorithm or 10 GB/s claim
+is made by a successful build or offline test.

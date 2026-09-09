@@ -85,6 +85,34 @@ by default and does not broaden ordinary supported commands. This candidate
 still needs actual native/owner/PBA qualification; offline checks are not kernel
 fault/locking evidence or a new performance claim.
 
+### Large serialized Host profile
+
+The development `FWLAB_M4_HOST_PROFILE=2` construction requires producer 2
+(PUMP); default profile 1 retains SMALL behavior. Its explicit attachment-v3
+uses a distinct 160-byte ioctl command and exact profile/limit matching before
+media identity pinning. This does not change media format or old 112/128-byte
+attachment layouts. Large construction is restricted to the tested 4 KiB kernel
+page environment and does not claim ARM kernel portability.
+
+Profile 2 has one I/O and one Admin ingress reservation from SQ capture through
+transport RETIRE, including payload-free commands. Separate snapshot/graph
+storage backs 1 MiB I/O and 4 KiB Admin payloads. Capture leaves a blocked queue
+untouched and continues checking the other queue. Drained RESET_ACK/CERTIFY
+cleans retained cancelled requests and their frames before reporting zero.
+
+Large SHAPE walks at most 257 data references and two PRP-list pages, with an
+8-byte-aligned initial list pointer and page-aligned continuation. Graph/scratch
+storage is preallocated. Authority is published only after complete validation;
+repeated accepted SHAPE returns the original IDs. Existing small per-segment
+mapping/copy guards remain unchanged; there is no 1 MiB spinlocked copy. Invalid
+or stale later mappings can still yield declared partial DMA, not atomic DMA.
+The matching worker retains AER as immediate Unsupported, not a waiting command.
+
+Use the explicitly named `large-worker` and `native-io-large` targets. Existing
+lab isolation, fresh-only format, recovery, ownership and cleanup rules still
+apply. Native data/fault/reset/owner evidence is required separately; adjacent
+parser or frame-owner checks alone do not qualify this kernel construction.
+
 The independent `j1_native_io` client has `write`, `verify`, `cut1`, `cut2` and
 `cut3` modes. It checks an exclusive, unmounted 1-MiB namespace, namespace ID,
 vendor/model identity and the exact synthetic sysfs BDF before any write.

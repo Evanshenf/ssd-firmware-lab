@@ -35,6 +35,18 @@ _Static_assert(FWLAB_NATIVE_TEST_SCALED == 0 || FWLAB_NATIVE_TEST_SCALED == 1,
 #define NATIVE_TEST_BYTES UINT64_C(1048576)
 #endif
 
+#ifndef FWLAB_NATIVE_TEST_LARGE
+#define FWLAB_NATIVE_TEST_LARGE 0
+#endif
+_Static_assert(FWLAB_NATIVE_TEST_LARGE == 0 ||
+               (FWLAB_NATIVE_TEST_LARGE == 1 && FWLAB_NATIVE_TEST_SCALED),
+               "large client requires the explicit scaled64 profile");
+#if FWLAB_NATIVE_TEST_LARGE
+#define NATIVE_CLIENT_BUFFER_BYTES (1048576u + 4096u)
+#else
+#define NATIVE_CLIENT_BUFFER_BYTES 12288u
+#endif
+
 struct native_case { uint32_t lba, bytes, offset; uint8_t seed; };
 int native_owner_host_journey(const char *directory, const char *bdf, int budget);
 int native_owner_stale_journey(const char *directory, const char *bdf);
@@ -48,6 +60,10 @@ static const struct native_case cases[] = {
     { 137, 8192, 512, 0x73 },
 #if FWLAB_NATIVE_TEST_SCALED
     { (uint32_t)(NATIVE_TEST_BYTES / 512u - 16u), 8192, 0, 0x94 },
+#endif
+#if FWLAB_NATIVE_TEST_LARGE
+    { 8192, 1048576, 0, 0xb5 },
+    { 16384, 1048576, 512, 0xd6 },
 #endif
 };
 #define NATIVE_CASE_COUNT (sizeof(cases) / sizeof(cases[0]))
@@ -106,6 +122,9 @@ static int identity_guard(int fd, const char *bdf, int guest)
         memcmp(identify + 4, "FWLABLINUXV1-0000001", 19) ||
         memcmp(identify + 24, "SSD Firmware Lab Linux-profile-v1", 32))
         goto done;
+#if FWLAB_NATIVE_TEST_LARGE
+    if (identify[77] != 8) goto done; /* matched 1 MiB / 4 KiB MDTS */
+#endif
     printf("IDENTITY bdf=%s namespace=1 bytes=%" PRIu64 " native_driver=1\n",
            bdf, bytes);
     valid = 1;
@@ -119,6 +138,19 @@ done:
 static uint8_t pattern(uint32_t index, uint8_t seed)
 {
     return (uint8_t)(seed + pattern_delta + index * 17u + (index >> 8));
+}
+
+static int aer_then_identify(int fd, const char *bdf)
+{
+    struct nvme_passthru_cmd command = { 0 };
+    int result;
+    command.opcode = 0x0c;
+    result = exchange(fd, NVME_IOCTL_ADMIN_CMD, &command);
+    if (result <= 0 || (result & 0x7ff) != 1 || !(result & 0x4000) ||
+        !identity_guard(fd, bdf, 0))
+        return 0;
+    puts("NATIVE_AER_PASS unsupported_SCT0_SC1_DNR1=1 following_Identify_completed=1 no_long_lived_Admin=1");
+    return 1;
 }
 
 static int transfer(int fd, uint8_t opcode, const struct native_case *test,
@@ -380,6 +412,7 @@ int main(int argc, char **argv)
     int fd, write_mode, result = 1, guest = 0, guest_phase = 0, guest_hold = 0, pba = 0;
     uint32_t index, iteration, cut = 0;
     int budget = argc == 4 && !strcmp(argv[1], "budget");
+    int aer = argc == 4 && !strcmp(argv[1], "aer");
 
     setvbuf(stdout, NULL, _IOLBF, 0);
 
@@ -410,9 +443,9 @@ int main(int argc, char **argv)
     guest_hold = argc == 4 && !strcmp(argv[1], "guest-hold");
     pba = argc == 4 && !strcmp(argv[1], "pba");
     guest = guest_hold || (argc == 4 && !strcmp(argv[1], "guest-ab"));
-    if (argc != 4 || (!cut && !guest && !pba && !budget && strcmp(argv[1], "write") &&
+    if (argc != 4 || (!cut && !guest && !pba && !budget && !aer && strcmp(argv[1], "write") &&
                       strcmp(argv[1], "verify") && strcmp(argv[1], "verify-b"))) {
-        fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3|cut4|budget /dev/nvmeXn1 BDF\n", argv[0]);
+        fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3|cut4|aer|budget /dev/nvmeXn1 BDF\n", argv[0]);
         return 2;
     }
     pattern_delta = !strcmp(argv[1], "verify-b") ? 0x33 : 0;
@@ -427,13 +460,17 @@ int main(int argc, char **argv)
         close(fd);
         return 1;
     }
-    allocation = aligned_alloc(4096, 12288);
+    allocation = aligned_alloc(4096, NATIVE_CLIENT_BUFFER_BYTES);
     if (!allocation) {
         close(fd);
         return 1;
     }
     if (cut) {
         result = cut_journey(fd, argv[2], argv[3], cut, allocation) ? 0 : 1;
+        goto done;
+    }
+    if (aer) {
+        result = aer_then_identify(fd, argv[3]) ? 0 : 1;
         goto done;
     }
     if (pba) {

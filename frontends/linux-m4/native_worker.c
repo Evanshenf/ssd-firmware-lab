@@ -21,6 +21,13 @@
     (FWLAB_NATIVE_PUMP && !FWLAB_NATIVE_SCALED)
 #error "FWLAB_NATIVE_PUMP requires the explicitly selected scaled worker"
 #endif
+#ifndef FWLAB_NATIVE_LARGE
+#define FWLAB_NATIVE_LARGE 0
+#endif
+#if (FWLAB_NATIVE_LARGE != 0 && FWLAB_NATIVE_LARGE != 1) || \
+    (FWLAB_NATIVE_LARGE && (!FWLAB_NATIVE_SCALED || !FWLAB_NATIVE_PUMP))
+#error "FWLAB_NATIVE_LARGE requires the selected scaled PUMP worker"
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -146,6 +153,10 @@ int native_runtime_create(struct native_context *context,
      * epoch. Its internal objects still need fresh, non-reused identities. */
     config.volatile_nonce_seed = ++context->next_runtime_seed;
     config.host_factory = &factory;
+    if (context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL) {
+        config.linux_limits = fwlab_linux_profile_large_limits();
+        config.buffer_profile = J0_BUFFER_LARGE_SERIAL;
+    }
     if (j0_runtime_init(context->runtime, &config) != FWLAB_SPINE_V0_OK) {
         /* J0 has released all partial construction state; no lower step ran. */
         free(context->runtime);
@@ -388,6 +399,8 @@ static int finish_commands(struct native_context *context, int closing)
                 return 0;
             slot->firmware_retired = 1;
         }
+        if (slot->frame_held)
+            return 0; /* Kernel ingress cannot be reused before endpoint release. */
         native_message_init(context, slot, FWLAB_M4_NATIVE_RETIRE, &message);
         if (native_exchange(context, &message))
             continue;
@@ -420,6 +433,8 @@ enum fwlab_spine_result_v0 native_runtime_close_step(
         return result;
     result = j0_runtime_fini(context->runtime);
     if (result == FWLAB_SPINE_V0_OK) {
+        if (!native_frames_quiescent(context))
+            return FWLAB_SPINE_V0_POISONED;
         context->last_closed = closed;
         context->last_closed.profiles_retired = context->runtime->profiles_retired;
         context->last_ftl_nonce = context->runtime->m3p_instance_nonce;
@@ -559,7 +574,10 @@ int main(int argc, char **argv)
 #if FWLAB_NATIVE_SCALED
     if (!native_scaled_media_open(&media_owner, context, directory, media_uuid, format))
         goto done;
-#if FWLAB_NATIVE_PUMP
+#if FWLAB_NATIVE_LARGE
+    if (native_attach_profile(context, FWLAB_M4_HOST_PROFILE_LARGE_SERIAL,
+            FWLAB_M4_PRODUCER_PUMP, FWLAB_M4_MEDIA_SCALED, media->uuid, binding))
+#elif FWLAB_NATIVE_PUMP
     if (native_attach_mode(context, FWLAB_M4_PRODUCER_PUMP,
             FWLAB_M4_MEDIA_SCALED, media->uuid, binding))
 #else
@@ -603,6 +621,8 @@ done:
         if (!runtime_close(context))
             goto unresolved_close;
     }
+    if (context && !native_frame_storage_fini(context))
+        goto unresolved_close;
 #if FWLAB_NATIVE_SCALED
     /* The server is stopped and no reset/grant can reuse the process-lived
      * holder now. A NULL runtime during NO_OWNER alone was not permission. */

@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "spine_internal.h"
+#include "profiles/linux_profile_limits.h"
 #include "spine_publication_v1.h"
 #include "m3p.h"
 #include "file_nand.h"
@@ -23,6 +24,10 @@
 #define J0_BUDGET_REFERENCE 0u
 #define J0_BUDGET_LAB 1u
 #define J0_BUDGET_SCALE 2u
+#define J0_BUFFER_REFERENCE 0u
+#define J0_BUFFER_LARGE_SERIAL 1u
+#define J0_BUFFER_CLASS_IO 0u
+#define J0_BUFFER_CLASS_CONTROL 1u
 
 #define J0_LIFECYCLE_NONCE UINT64_C(0x4a304c4946450001)
 #define J0_C43_ADAPTER_NONCE UINT64_C(0x4a30433433000001)
@@ -161,6 +166,10 @@ struct j0_runtime_config {
     uint64_t expected_lba_count;
     /* NULL preserves the legacy M3P constructor. Requires explicit media. */
     const struct j0_storage_factory *storage_factory;
+    /* All-zero limits retain the small reference. Large requires referenced
+     * Host input and its separate bounded payload construction. */
+    struct fwlab_linux_profile_limits linux_limits;
+    uint32_t buffer_profile;
     uint32_t reserved1[4];
 };
 
@@ -170,7 +179,8 @@ struct j0_controller_buffer_record {
     uint8_t bytes[J0_MAX_TRANSFER_BYTES];
     uint8_t occupied;
     uint8_t released;
-    uint8_t reserved[6];
+    uint8_t allocation_class;
+    uint8_t reserved[5];
 };
 
 struct j0_controller_buffer {
@@ -182,6 +192,9 @@ struct j0_controller_buffer {
     uint32_t generation;
     uint32_t close_execution_epoch;
     uint32_t active_leases;
+    uint8_t *large_frame[2];
+    uint8_t frame_held[2];
+    uint8_t large_serial;
     uint8_t admission_closed;
     uint8_t close_started;
     uint8_t poisoned;
@@ -380,6 +393,12 @@ enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init_volume(
     uint32_t generation, uint32_t namespace_id,
     const struct fwlab_block_volume_desc_v0 *volume,
     struct fwlab_host_profile_adapter_v0 *adapter);
+enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init_limits(
+    void *arena, size_t arena_size, uint64_t instance_nonce,
+    uint32_t generation, uint32_t namespace_id,
+    const struct fwlab_block_volume_desc_v0 *volume,
+    const struct fwlab_linux_profile_limits *limits,
+    struct fwlab_host_profile_adapter_v0 *adapter);
 enum fwlab_spine_result_v0 fwlab_linux_profile_v1_binding_v0(
     const struct fwlab_host_profile_adapter_v0 *adapter, uint32_t role,
     struct fwlab_spine_profile_binding_v0 *binding);
@@ -387,6 +406,13 @@ enum fwlab_spine_result_v0 fwlab_linux_profile_v1_binding_v0(
 void j0_controller_buffer_init(
     struct j0_controller_buffer *buffer, uint64_t issuer_nonce,
     uint32_t generation);
+enum fwlab_controller_buffer_result_v0 j0_controller_buffer_large_init(
+    struct j0_controller_buffer *buffer);
+enum fwlab_controller_buffer_result_v0 j0_controller_buffer_acquire_class(
+    struct j0_controller_buffer *buffer,
+    const struct fwlab_controller_buffer_acquire_v0 *request,
+    struct fwlab_controller_buffer_lease_v0 *lease, uint32_t allocation_class);
+int j0_controller_buffer_storage_fini(struct j0_controller_buffer *buffer);
 
 void j0_host_data_init(
     struct j0_host_data *host, struct j0_controller_buffer *buffer,

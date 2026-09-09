@@ -15,7 +15,7 @@
 
 static struct {
     struct fwlab_m4_attachment stored;
-    unsigned calls, legacy_calls, losses, malformed, mode, pump_calls;
+    unsigned calls, legacy_calls, losses, malformed, mode, pump_calls, profile;
     int service_result;
     int unsupported, always_lost;
 } endpoint;
@@ -38,11 +38,43 @@ int __wrap_ioctl(int descriptor, unsigned long command, ...)
         argument = va_arg(args, struct fwlab_m4_attach_message *);
     else if (command == FWLAB_M4_ATTACH_MODE)
         argument = va_arg(args, struct fwlab_m4_attach_mode_message *);
+    else if (command == FWLAB_M4_ATTACH_PROFILE)
+        argument = va_arg(args, struct fwlab_m4_attach_profile_message *);
     else if (command == FWLAB_M4_PUMP)
         argument = va_arg(args, struct fwlab_m4_pump_message *);
     else
         argument = va_arg(args, struct fwlab_m4_native_message *);
     va_end(args);
+    if (command == FWLAB_M4_ATTACH_PROFILE) {
+        struct fwlab_m4_attach_profile_message *message = argument;
+        CHECK(fwlab_m4_attach_profile_request_valid(message));
+        message->result = fwlab_m4_attach_pin_host_profile(&endpoint.stored,
+            endpoint.profile, endpoint.mode, message->host_profile_id,
+            message->producer_mode, message->media_format_version,
+            message->media_uuid, message->binding_sha256);
+        if (!message->result) {
+            message->function_nonce = 9123;
+            message->controller_epoch = 7;
+        }
+        if (endpoint.losses || endpoint.always_lost) {
+            if (endpoint.losses) --endpoint.losses;
+            memset(message, 0x5a, sizeof(*message) / 2);
+            errno = EFAULT;
+            return -1;
+        }
+        switch (endpoint.malformed) {
+        case 1: message->reserved[3] = 1; break;
+        case 2: --message->limits.max_io_bytes; break;
+        case 3: ++message->host_profile_id; break;
+        case 4: ++message->producer_mode; break;
+        case 5: message->media_uuid[15] ^= 1; break;
+        case 6: message->binding_sha256[31] ^= 1; break;
+        case 7: message->function_nonce = 0; break;
+        case 8: message->controller_epoch = 0; break;
+        default: break;
+        }
+        return 0;
+    }
     if (command == FWLAB_M4_ATTACH_IDENTITY) {
         struct fwlab_m4_attach_message *message = argument;
         CHECK(fwlab_m4_attach_request_valid(message));
@@ -266,6 +298,35 @@ static void mode_and_pump_checks(struct native_context *context)
     puts("NATIVE_MODE_PUMP_PASS|actual_mode_pin_and_retry=1|legacy_wire_unchanged=1|service_fault_distinct=1|not_kernel_progress_proof=1");
 }
 
+static void profile_checks(struct native_context *context)
+{
+    struct fwlab_m4_attachment stored = { 0 };
+    CHECK(fwlab_m4_attach_pin_host_profile(&stored, 2, 2, 1, 2, 2, uuid, binding) == -EOPNOTSUPP);
+    CHECK(!stored.media_format_version);
+    CHECK(fwlab_m4_attach_pin_host_profile(&stored, 2, 2, 2, 2, 2, uuid, binding) == 0);
+    for (unsigned malformed = 0; malformed <= 8; ++malformed) {
+        memset(context, 0, sizeof(*context)); context->descriptor = -180;
+        memset(&endpoint, 0, sizeof(endpoint)); endpoint.mode = 2; endpoint.profile = 2;
+        endpoint.malformed = malformed;
+        if (!malformed) endpoint.losses = 1;
+        CHECK(native_attach_profile(context, 2, 2, 2, uuid, binding) == (malformed ? -EPROTO : 0));
+        if (!malformed) {
+            CHECK(endpoint.calls == 2 && context->host_profile_id == 2 &&
+                  context->host_limits.max_io_bytes == 1048576);
+        } else CHECK(!context->host_profile_id && !context->function_nonce);
+    }
+    memset(context, 0, sizeof(*context)); context->descriptor = -180;
+    memset(&endpoint, 0, sizeof(endpoint)); endpoint.mode = 1; endpoint.profile = 1;
+    CHECK(native_attach_profile(context, 2, 2, 2, uuid, binding) == -EOPNOTSUPP);
+    CHECK(!endpoint.stored.media_format_version && !context->host_profile_id);
+    endpoint.unsupported = 1;
+    CHECK(native_attach_profile(context, 2, 2, 2, uuid, binding) == -ENOTTY);
+    memset(&endpoint, 0, sizeof(endpoint)); endpoint.mode = 2; endpoint.profile = 2; endpoint.always_lost = 1;
+    CHECK(native_attach_profile(context, 2, 2, 2, uuid, binding) == -EFAULT);
+    CHECK(endpoint.calls == 3 && endpoint.stored.media_format_version == 2 && !context->host_profile_id);
+    puts("NATIVE_PROFILE_ATTACH_PASS|exact_v3_retry_reply=1|actual_profile_pin_guard=1|no_kernel_claim=1");
+}
+
 int main(void)
 {
     struct native_context *context = calloc(1, sizeof(*context));
@@ -303,6 +364,7 @@ int main(void)
     CHECK(endpoint.calls == 3 && endpoint.stored.media_format_version == 2 &&
           !context->function_nonce && !context->attachment.media_format_version);
     mode_and_pump_checks(context);
+    profile_checks(context);
     free(context);
     puts("NATIVE_ATTACH_PASS|actual_pin_and_retry=1|legacy_explicit_identity=1|finite_copyout=1|no_kernel_execution_claim=1");
     return 0;

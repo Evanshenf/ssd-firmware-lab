@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include "spine_internal.h"
+#include "linux_profile_limits.h"
 #include "fwlab/contracts/block_service_v0.h"
 #include "fwlab/private/block_volume_v0.h"
 
@@ -88,6 +89,7 @@ struct linux_adapter {
     uint32_t retire_delay;
     uint32_t namespace_id;
     struct fwlab_block_volume_desc_v0 volume;
+    struct fwlab_linux_profile_limits limits;
     struct linux_record record[LINUX_RECORDS];
 };
 
@@ -360,14 +362,15 @@ static int dwords_valid(
              !(kind == LINUX_KIND_READ && dword[3] == 7))) {
             return 0;
         }
-        if (lba_count > 16 || slba >= adapter->volume.lba_count ||
+        if (lba_count > adapter->limits.max_io_bytes / adapter->volume.lba_bytes ||
+            slba >= adapter->volume.lba_count ||
             lba_count > adapter->volume.lba_count - slba) {
             semantic->status = LINUX_STATUS_LBA_RANGE;
             semantic->dnr = 1;
             return 1;
         }
         bytes = lba_count * adapter->volume.lba_bytes;
-        if (bytes > 8192 || bytes > UINT32_MAX) {
+        if (bytes > adapter->limits.max_io_bytes || bytes > UINT32_MAX) {
             semantic->status = LINUX_STATUS_LBA_RANGE;
             semantic->dnr = 1;
             return 1;
@@ -523,7 +526,10 @@ static void encode_payload(const struct linux_adapter *adapter,
         space_padded(payload, 4, 20, serial, sizeof(serial) - 1);
         space_padded(payload, 24, 40, model, sizeof(model) - 1);
         space_padded(payload, 64, 8, firmware, sizeof(firmware) - 1);
-        payload[77] = 1;
+        {
+            uint32_t pages = adapter->limits.max_io_bytes / adapter->limits.controller_page_bytes;
+            while (pages > 1) { ++payload[77]; pages >>= 1; }
+        }
         put_u16(payload, 78, 1);
         put_u32(payload, 80, UINT32_C(0x00010000));
         payload[512] = UINT8_C(0x66);
@@ -1212,23 +1218,27 @@ size_t fwlab_linux_profile_v1_adapter_arena_alignment(void)
     return _Alignof(struct linux_adapter);
 }
 
-enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init_volume(
+enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init_limits(
     void *arena,
     size_t arena_size,
     uint64_t instance_nonce,
     uint32_t generation,
     uint32_t namespace_id,
     const struct fwlab_block_volume_desc_v0 *volume,
+    const struct fwlab_linux_profile_limits *limits,
     struct fwlab_host_profile_adapter_v0 *adapter)
 {
     struct linux_adapter *context = arena;
+    struct fwlab_linux_profile_limits selected;
 
     if (arena == NULL || adapter == NULL || arena_size != sizeof(*context) ||
         ((uintptr_t)arena % _Alignof(struct linux_adapter)) != 0 ||
         instance_nonce == 0 || generation == 0 || namespace_id != 1 ||
-        !fwlab_block_volume_desc_v0_valid(volume) || volume->lba_bytes != 512) {
+        !fwlab_block_volume_desc_v0_valid(volume) || volume->lba_bytes != 512 ||
+        !fwlab_linux_profile_limits_valid(limits)) {
         return FWLAB_SPINE_V0_INVALID;
     }
+    selected = *limits;
     memset(context, 0, sizeof(*context));
     context->magic = LINUX_ADAPTER_MAGIC;
     context->instance_nonce = instance_nonce;
@@ -1236,11 +1246,23 @@ enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init_volume(
     context->next_uid = 1;
     context->namespace_id = namespace_id;
     context->volume = *volume;
+    context->limits = selected;
     memset(adapter, 0, sizeof(*adapter));
     adapter->ops = &linux_ops;
     adapter->context = arena;
     adapter->generation = generation;
     return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 fwlab_linux_profile_v1_adapter_init_volume(
+    void *arena, size_t arena_size, uint64_t instance_nonce,
+    uint32_t generation, uint32_t namespace_id,
+    const struct fwlab_block_volume_desc_v0 *volume,
+    struct fwlab_host_profile_adapter_v0 *adapter)
+{
+    const struct fwlab_linux_profile_limits limits = fwlab_linux_profile_small_limits();
+    return fwlab_linux_profile_v1_adapter_init_limits(arena, arena_size, instance_nonce,
+        generation, namespace_id, volume, &limits, adapter);
 }
 
 /* Compatibility for the standalone fixed-profile reference. Real J0/native

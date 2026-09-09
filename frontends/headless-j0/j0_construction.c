@@ -193,6 +193,14 @@ static int runtime_config_valid(const struct j0_runtime_config *config)
            config->budget_profile <= J0_BUDGET_SCALE &&
            (config->budget_profile != J0_BUDGET_SCALE ||
             config->storage_factory != NULL) &&
+           config->buffer_profile <= J0_BUFFER_LARGE_SERIAL &&
+           (config->buffer_profile == J0_BUFFER_LARGE_SERIAL
+                ? (fwlab_linux_profile_limits_valid(&config->linux_limits) &&
+                   config->linux_limits.max_io_bytes == 1048576 &&
+                   config->host_factory != NULL && config->storage_factory != NULL)
+                : (j0_bytes_zero(&config->linux_limits, sizeof(config->linux_limits)) ||
+                   (fwlab_linux_profile_limits_valid(&config->linux_limits) &&
+                    config->linux_limits.max_io_bytes == J0_MAX_TRANSFER_BYTES))) &&
            j0_bytes_zero(config->reserved1, sizeof(config->reserved1));
 }
 
@@ -212,6 +220,7 @@ static void arena_release(struct j0_runtime *runtime)
     runtime->linux_arena = NULL;
     runtime->c43_arena = NULL;
     runtime->lifecycle_arena = NULL;
+    (void)j0_controller_buffer_storage_fini(&runtime->buffer);
 }
 
 static int storage_runner_valid(const struct j0_storage_runner *runner)
@@ -335,7 +344,8 @@ static int transfer_equal(
 static int transfer_contract(
     const struct fwlab_host_action_program_v0 *program,
     const struct fwlab_spine_profile_argument_v0 *argument,
-    uint32_t *direction, uint32_t *exact_bytes, uint8_t *buffer_required)
+    uint32_t *direction, uint32_t *exact_bytes, uint8_t *buffer_required,
+    uint32_t byte_limit)
 {
     uint32_t index;
     uint32_t found_direction = 0;
@@ -351,7 +361,7 @@ static int transfer_contract(
             kind == FWLAB_HOST_ACTION_V0_BLOCK_READ ||
             kind == FWLAB_HOST_ACTION_V0_BLOCK_WRITE) {
             if (argument[index].exact_bytes == 0 ||
-                argument[index].exact_bytes > J0_MAX_TRANSFER_BYTES ||
+                argument[index].exact_bytes > byte_limit ||
                 (found_bytes != 0 &&
                  found_bytes != argument[index].exact_bytes)) {
                 return 0;
@@ -390,7 +400,8 @@ static int supplied_transfer_valid(
         transfer->size != sizeof(*transfer) || transfer->reserved0 != 0 ||
         !j0_bytes_zero(transfer->reserved1, sizeof(transfer->reserved1)) ||
         transfer->direction != direction ||
-        transfer->exact_bytes != exact_bytes) {
+        transfer->exact_bytes != exact_bytes ||
+        (runtime->host_binding.inline_input && exact_bytes > J0_MAX_TRANSFER_BYTES)) {
         return 0;
     }
     if (direction == 0) {
@@ -512,8 +523,14 @@ static enum fwlab_spine_result_v0 resources_acquire(
     buffer_request.execution_epoch = runtime->config.execution_epoch;
     buffer_request.capacity_bytes = record->transfer_bytes;
     buffer_request.rights = FWLAB_CONTROLLER_BUFFER_RIGHT_V0_ALL;
-    buffer_result = runtime->buffer.port.ops->acquire(
-        runtime->buffer.port.context, &buffer_request, &record->buffer);
+    if (runtime->config.buffer_profile == J0_BUFFER_LARGE_SERIAL)
+        buffer_result = j0_controller_buffer_acquire_class(
+            &runtime->buffer, &buffer_request, &record->buffer,
+            record->command.queue_class == FWLAB_NVME_QUEUE_ADMIN
+                ? J0_BUFFER_CLASS_CONTROL : J0_BUFFER_CLASS_IO);
+    else
+        buffer_result = runtime->buffer.port.ops->acquire(
+            runtime->buffer.port.context, &buffer_request, &record->buffer);
     if (buffer_result != FWLAB_CONTROLLER_BUFFER_V0_OK) {
         return buffer_result == FWLAB_CONTROLLER_BUFFER_V0_NO_CAPACITY
                    ? FWLAB_SPINE_V0_NO_CAPACITY
@@ -563,6 +580,8 @@ enum fwlab_spine_result_v0 j0_runtime_init(
     memset(runtime, 0, sizeof(*runtime));
     runtime->magic = J0_RUNTIME_MAGIC;
     runtime->config = *config;
+    if (j0_bytes_zero(&config->linux_limits, sizeof(config->linux_limits)))
+        runtime->config.linux_limits = fwlab_linux_profile_small_limits();
     runtime->lifecycle_instance_nonce =
         J0_LIFECYCLE_NONCE + config->volatile_nonce_seed;
     runtime->m3p_instance_nonce =
@@ -578,6 +597,11 @@ enum fwlab_spine_result_v0 j0_runtime_init(
         &runtime->buffer,
         J0_BUFFER_ISSUER_NONCE + config->volatile_nonce_seed,
         config->generation);
+    if (config->buffer_profile == J0_BUFFER_LARGE_SERIAL &&
+        j0_controller_buffer_large_init(&runtime->buffer) != FWLAB_CONTROLLER_BUFFER_V0_OK) {
+        result = FWLAB_SPINE_V0_NO_CAPACITY;
+        goto failed;
+    }
     if (config->host_factory != NULL) {
         if (config->host_factory->bind == NULL ||
             config->host_factory->bind(
@@ -600,6 +624,7 @@ enum fwlab_spine_result_v0 j0_runtime_init(
         runtime->host_binding.endpoint_prepare == NULL ||
         runtime->host_binding.endpoint_release == NULL ||
         runtime->host_binding.inline_input > 1 ||
+        (config->buffer_profile == J0_BUFFER_LARGE_SERIAL && runtime->host_binding.inline_input) ||
         runtime->host_binding.data.buffer.ops != runtime->buffer.port.ops ||
         runtime->host_binding.data.buffer.context != runtime->buffer.port.context ||
         runtime->host_binding.data.buffer.issuer_nonce !=
@@ -849,7 +874,10 @@ static enum fwlab_spine_result_v0 runtime_admit(
         }
     }
     if (!transfer_contract(&program, record->argument, &direction,
-                           &exact_bytes, &buffer_required)) {
+                           &exact_bytes, &buffer_required,
+                           command->queue_class == FWLAB_NVME_QUEUE_ADMIN
+                               ? runtime->config.linux_limits.max_admin_bytes
+                               : runtime->config.linux_limits.max_io_bytes)) {
         record->original_failure = FWLAB_SPINE_V0_INVALID;
         record->phase = J0_ADMISSION_ROLLBACK;
         return rollback_drive(runtime, record);
@@ -871,6 +899,12 @@ static enum fwlab_spine_result_v0 runtime_admit(
     }
     result = resources_acquire(runtime, record, buffer_required);
     if (result != FWLAB_SPINE_V0_OK) {
+        /* Large SHAPE may have committed kernel ownership despite an unknown
+         * response. A poisoned acquisition is not clean rollback/re-admission.
+         * Retain the partial record and close this runtime without a zero claim. */
+        if (runtime->config.buffer_profile == J0_BUFFER_LARGE_SERIAL &&
+            result == FWLAB_SPINE_V0_POISONED)
+            return admission_poison(runtime);
         record->original_failure = result;
         record->phase = J0_ADMISSION_ROLLBACK;
         return rollback_drive(runtime, record);
@@ -971,11 +1005,11 @@ static enum fwlab_spine_result_v0 bind_ready_volume(struct j0_runtime *runtime)
         binding.service.provider_nonce != runtime->block.provider_nonce ||
         binding.service.generation != runtime->block.generation)
         return FWLAB_SPINE_V0_POISONED;
-    result = fwlab_linux_profile_v1_adapter_init_volume(
+    result = fwlab_linux_profile_v1_adapter_init_limits(
         runtime->linux_arena, fwlab_linux_profile_v1_adapter_arena_size(),
         J0_LINUX_ADAPTER_NONCE + runtime->config.volatile_nonce_seed,
         runtime->config.generation, runtime->namespace_id,
-        &binding.volume, &runtime->linux_adapter);
+        &binding.volume, &runtime->config.linux_limits, &runtime->linux_adapter);
     if (result != FWLAB_SPINE_V0_OK)
         return result;
     result = fwlab_linux_profile_v1_binding_v0(

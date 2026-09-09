@@ -13,6 +13,7 @@
 
 #include "m4_internal.h"
 #include "m4_attach_identity.h"
+#include "m4_prp_graph.h"
 #include "fwlab/unstable/m4_native.h"
 #include "fwlab/unstable/m4_owner_native.h"
 #include "fwlab/unstable/m4_canary_native.h"
@@ -114,10 +115,22 @@ struct native_request {
 	bool authority_released;
 	bool dma_retired;
 	bool queue_done;
+	bool frame_reserved;
+	u8 frame_class;
 	u8 sqe[64];
 	u8 completion[16];
 	struct fwlab_m4_mapping data_mapping[3];
 	u8 data[FWLAB_M4_NATIVE_MAX_BYTES];
+};
+
+struct native_frame {
+	u8 *data;
+	u8 *scratch;
+	struct fwlab_m4_mapping *mapping;
+	u64 owner_uid;
+	u32 owner_epoch;
+	u32 map_capacity;
+	bool held;
 };
 
 struct fwlab_m4_hif {
@@ -127,6 +140,8 @@ struct fwlab_m4_hif {
 	struct native_queue sq[NATIVE_QUEUES];
 	struct native_queue cq[NATIVE_QUEUES];
 	struct native_request request[NATIVE_DEPTH];
+	struct native_frame frame[2]; /* IO then Admin, only in LARGE_SERIAL */
+	struct fwlab_m4_host_limits limits;
 	u64 function_nonce;
 	u64 next_uid;
 	u64 next_authority_uid;
@@ -164,6 +179,72 @@ struct fwlab_m4_hif {
 	struct fwlab_m4_attachment attachment;
 	char name[48];
 };
+
+static bool native_large(struct fwlab_m4_hif *hif)
+{
+	(void)hif;
+	return FWLAB_M4_HOST_PROFILE == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL;
+}
+
+static struct native_frame *native_request_frame(struct fwlab_m4_hif *hif,
+					struct native_request *request)
+{
+	struct native_frame *frame;
+	if (!request->frame_reserved || request->frame_class >= 2)
+		return NULL;
+	frame = &hif->frame[request->frame_class];
+	return frame->held && frame->owner_uid == request->uid &&
+		frame->owner_epoch == request->epoch ? frame : NULL;
+}
+
+static u8 *native_request_data(struct fwlab_m4_hif *hif, struct native_request *request)
+{
+	struct native_frame *frame;
+	if (!native_large(hif)) return request->data;
+	frame = native_request_frame(hif, request);
+	return frame ? frame->data : NULL;
+}
+
+static struct fwlab_m4_mapping *native_request_maps(struct fwlab_m4_hif *hif,
+						 struct native_request *request)
+{
+	struct native_frame *frame;
+	if (!native_large(hif)) return request->data_mapping;
+	frame = native_request_frame(hif, request);
+	return frame ? frame->mapping : NULL;
+}
+
+/* No active effects may remain at the caller's drained cleanup boundary. */
+static int native_request_clear(struct fwlab_m4_hif *hif, struct native_request *request)
+{
+	if (native_large(hif) && request->frame_reserved) {
+		struct native_frame *frame = native_request_frame(hif, request);
+		if (!frame) return -EIO;
+		frame->held = false;
+		frame->owner_uid = 0;
+		frame->owner_epoch = 0;
+	}
+	memset(request, 0, sizeof(*request));
+	return 0;
+}
+
+static int native_requests_clear(struct fwlab_m4_hif *hif)
+{
+	u32 index;
+	for (index = 0; index < NATIVE_DEPTH; index++)
+		if (native_request_clear(hif, &hif->request[index])) return -EIO;
+	return hif->frame[0].held || hif->frame[1].held ? -EIO : 0;
+}
+
+static void native_frames_free(struct fwlab_m4_hif *hif)
+{
+	u32 index;
+	for (index = 0; index < 2; index++) {
+		kvfree(hif->frame[index].data);
+		kvfree(hif->frame[index].mapping);
+		kfree(hif->frame[index].scratch);
+	}
+}
 
 struct native_guard {
 	struct fwlab_m4_hif *hif;
@@ -340,8 +421,8 @@ static bool native_cut_point(struct fwlab_m4_hif *hif,
 		 * this already owned mapping, not a reminted authority. */
 		if (!pci_read_config_word(hif->pci->pdev, PCI_COMMAND, &command)) {
 			if (!pci_write_config_word(hif->pci->pdev, PCI_COMMAND, command & ~bit))
-				ret = native_copy(hif, &request->data_mapping[0], 0,
-					request->data, request->data_mapping[0].length,
+				ret = native_copy(hif, &native_request_maps(hif, request)[0], 0,
+					native_request_data(hif, request), native_request_maps(hif, request)[0].length,
 					request->bus_generation, request->epoch, request->owner_epoch);
 			if (pci_write_config_word(hif->pci->pdev, PCI_COMMAND, command))
 				ret = -EIO;
@@ -443,6 +524,8 @@ static int native_capture(struct fwlab_m4_hif *hif, u32 qid, u32 *captured)
 	int ret;
 
 	*captured = 0;
+	if (native_large(hif) && hif->frame[qid == 0 ? 1 : 0].held)
+		return 0;
 	if (!sq->valid || sq->cqid >= NATIVE_QUEUES)
 		return 0;
 	cq = &hif->cq[sq->cqid];
@@ -478,6 +561,14 @@ static int native_capture(struct fwlab_m4_hif *hif, u32 qid, u32 *captured)
 	request->sqid = qid;
 	request->cid = get_unaligned_le16(request->sqe + 2);
 	request->sq_head = (sq->head + 1) % sq->depth;
+	if (native_large(hif)) {
+		struct native_frame *frame = &hif->frame[qid == 0 ? 1 : 0];
+		request->frame_class = qid == 0 ? 1 : 0;
+		request->frame_reserved = true;
+		frame->held = true;
+		frame->owner_uid = request->uid;
+		frame->owner_epoch = request->epoch;
+	}
 	request->active = true;
 	sq->head = request->sq_head;
 	cq->pending++;
@@ -589,17 +680,61 @@ int fwlab_m4_hif_step(struct fwlab_m4_hif *hif)
 	return ret;
 }
 
+struct native_graph_context {
+	struct fwlab_m4_hif *hif;
+	struct native_request *request;
+	struct native_frame *frame;
+	u32 count;
+	enum fwlab_m4_dma_direction direction;
+};
+
+static int native_graph_read(void *opaque, u64 address, u32 bytes, void *output)
+{
+	struct native_graph_context *context = opaque;
+	struct fwlab_m4_hif *hif = context->hif;
+	struct native_request *request = context->request;
+	struct fwlab_m4_mapping list;
+	int ret = fwlab_m4_mapping_capture(&hif->pci->pdev->dev, address, bytes,
+		FWLAB_M4_DMA_READ_HOST, &list);
+	if (ret) return ret;
+	if (list.domain_nonce != hif->owner_domain.nonce ||
+	    list.attach_generation != hif->owner_domain.attach_generation)
+		return -ESTALE;
+	return native_copy(hif, &list, 0, output, bytes,
+		request->bus_generation, request->epoch, request->owner_epoch);
+}
+
+static int native_graph_capture(void *opaque, u64 address, u32 bytes)
+{
+	struct native_graph_context *context = opaque;
+	struct fwlab_m4_hif *hif = context->hif;
+	struct fwlab_m4_mapping *mapping;
+	int ret;
+	if (context->count >= context->frame->map_capacity) return -E2BIG;
+	mapping = &context->frame->mapping[context->count];
+	ret = fwlab_m4_mapping_capture(&hif->pci->pdev->dev, address, bytes,
+		context->direction, mapping);
+	if (ret) return ret;
+	if (mapping->domain_nonce != hif->owner_domain.nonce ||
+	    mapping->attach_generation != hif->owner_domain.attach_generation)
+		return -ESTALE;
+	++context->count;
+	return 0;
+}
+
 static int native_shape(struct fwlab_m4_hif *hif,
 			 struct native_request *request,
 			 struct fwlab_m4_native_message *message)
 {
 	struct fwlab_m4_mapping list;
+	struct fwlab_m4_mapping *maps = native_request_maps(hif, request);
 	u64 address[3], prp1, prp2;
 	__le64 entries[2];
 	u32 length[3], remaining, count = 1, index;
 	int direction, ret;
 
-	if (!message->bytes || message->bytes > FWLAB_M4_NATIVE_MAX_BYTES ||
+	if (!maps || !message->bytes || message->bytes >
+	    (request->sqid ? hif->limits.max_io_bytes : hif->limits.max_admin_bytes) ||
 	    (message->direction != 1 && message->direction != 2))
 		return -EINVAL;
 	if (request->shaped) {
@@ -614,6 +749,19 @@ static int native_shape(struct fwlab_m4_hif *hif,
 	prp2 = get_unaligned_le64(request->sqe + 32);
 	if (!prp1 || !IS_ALIGNED(prp1, 4))
 		return -EINVAL;
+	if (native_large(hif)) {
+		struct native_graph_context context = { hif, request,
+			native_request_frame(hif, request), 0,
+			message->direction == 1 ? FWLAB_M4_DMA_READ_HOST : FWLAB_M4_DMA_WRITE_HOST };
+		struct fwlab_m4_prp_walk walk = { .context = &context,
+			.read_list = native_graph_read, .capture = native_graph_capture,
+			.scratch = context.frame->scratch,
+			.scratch_bytes = FWLAB_M4_CONTROL_PAGE_BYTES };
+		ret = fwlab_m4_prp_build(&walk, &hif->limits, prp1, prp2, message->bytes);
+		if (ret) return ret;
+		count = context.count;
+		goto graph_ready;
+	}
 	address[0] = prp1;
 	length[0] = min_t(u32, message->bytes, PAGE_SIZE - offset_in_page(prp1));
 	remaining = message->bytes - length[0];
@@ -645,13 +793,14 @@ static int native_shape(struct fwlab_m4_hif *hif,
 		if (!address[index] || (index && !IS_ALIGNED(address[index], PAGE_SIZE)))
 			return -EINVAL;
 		ret = fwlab_m4_mapping_capture(&hif->pci->pdev->dev, address[index],
-			length[index], direction, &request->data_mapping[index]);
+			length[index], direction, &maps[index]);
 		if (ret)
 			return ret;
-		if (request->data_mapping[index].domain_nonce != hif->owner_domain.nonce ||
-		    request->data_mapping[index].attach_generation != hif->owner_domain.attach_generation)
+		if (maps[index].domain_nonce != hif->owner_domain.nonce ||
+		    maps[index].attach_generation != hif->owner_domain.attach_generation)
 			return -ESTALE;
 	}
+graph_ready:
 	if (!native_access(hif, request->bus_generation, request->epoch, request->owner_epoch))
 		return -ESTALE;
 	if (hif->next_authority_uid == U64_MAX || hif->next_dma_uid == U64_MAX)
@@ -677,7 +826,7 @@ static int native_shape(struct fwlab_m4_hif *hif,
 		old->dma_uid = request->dma_uid;
 		old->bytes = request->bytes;
 		old->direction = request->direction;
-		hif->canary.mapping = request->data_mapping[0];
+		hif->canary.mapping = maps[0];
 		hif->canary.owner_epoch = request->owner_epoch;
 		hif->canary.flags = 1;
 	}
@@ -693,8 +842,10 @@ static int native_dma(struct fwlab_m4_hif *hif, struct native_request *request,
 {
 	u32 index;
 	int ret = 0;
+	u8 *data = native_request_data(hif, request);
+	struct fwlab_m4_mapping *maps = native_request_maps(hif, request);
 
-	if (!request->shaped || message->authority_uid != request->authority_uid ||
+	if (!data || !maps || !request->shaped || message->authority_uid != request->authority_uid ||
 	    message->dma_uid != request->dma_uid || message->bytes != request->bytes ||
 	    message->direction != request->direction)
 		return -ESTALE;
@@ -708,17 +859,17 @@ static int native_dma(struct fwlab_m4_hif *hif, struct native_request *request,
 		if (native_cut_point(hif, request, request->direction == 1 ? 1 : 2))
 			goto result;
 		if (request->direction == 2 &&
-		    copy_from_user(request->data, u64_to_user_ptr(message->data_pointer),
+		    copy_from_user(data, u64_to_user_ptr(message->data_pointer),
 				   request->bytes))
 			return -EFAULT;
 		for (index = 0; index < request->mappings; index++) {
-			ret = native_copy(hif, &request->data_mapping[index], 0,
-				request->data + request->bytes_done,
-				request->data_mapping[index].length,
+			ret = native_copy(hif, &maps[index], 0,
+				data + request->bytes_done,
+				maps[index].length,
 				request->bus_generation, request->epoch, request->owner_epoch);
 			if (ret)
 				break;
-			request->bytes_done += request->data_mapping[index].length;
+			request->bytes_done += maps[index].length;
 		}
 		request->dma_result = ret;
 		request->dma_state = ret ? FWLAB_M4_NATIVE_DMA_FAILED :
@@ -728,7 +879,7 @@ result:
 	message->dma_state = request->dma_state;
 	message->bytes_done = request->bytes_done;
 	if (request->direction == 1 && request->bytes_done &&
-	    copy_to_user(u64_to_user_ptr(message->data_pointer), request->data,
+	    copy_to_user(u64_to_user_ptr(message->data_pointer), data,
 			 request->bytes_done))
 		return -EFAULT;
 	return 0;
@@ -909,15 +1060,16 @@ static int native_publish(struct fwlab_m4_hif *hif,
 	return 0;
 }
 
-static int native_attach_locked(struct fwlab_m4_hif *hif, u32 producer, u32 format,
+static int native_attach_locked(struct fwlab_m4_hif *hif, u32 producer, u32 profile,
+				u32 format,
 				const u8 uuid[16], const u8 binding[32])
 {
 	int ret;
 
 	if (hif->quarantined)
 		return -EBUSY;
-	ret = fwlab_m4_attach_pin_mode(&hif->attachment, FWLAB_M4_PRODUCER,
-		producer, format, uuid, binding);
+	ret = fwlab_m4_attach_pin_host_profile(&hif->attachment, FWLAB_M4_HOST_PROFILE,
+		FWLAB_M4_PRODUCER, profile, producer, format, uuid, binding);
 	if (!ret)
 		hif->attached = true;
 	return ret;
@@ -936,7 +1088,8 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 		    !memchr_inv(message->media_uuid, 0, sizeof(message->media_uuid)) ||
 		    !memchr_inv(message->binding_sha256, 0, sizeof(message->binding_sha256)))
 			return -EBUSY;
-		ret = native_attach_locked(hif, FWLAB_M4_PRODUCER_BAR, FWLAB_M4_MEDIA_LEGACY,
+		ret = native_attach_locked(hif, FWLAB_M4_PRODUCER_BAR,
+			FWLAB_M4_HOST_PROFILE_SMALL, FWLAB_M4_MEDIA_LEGACY,
 			message->media_uuid, message->binding_sha256);
 		if (ret)
 			return ret;
@@ -990,7 +1143,15 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 			return -ESTALE;
 		if (!hif->reset_pending && hif->firmware_ready)
 			return 0;
-		memset(hif->request, 0, sizeof(hif->request));
+		if (native_large(hif)) {
+			for (index = 0; index < NATIVE_DEPTH; index++) {
+				struct native_request *held = &hif->request[index];
+				if (held->active && (held->publication == FWLAB_M4_NATIVE_UNPUBLISHED ||
+				    (held->shaped && (!held->authority_released || !held->dma_retired))))
+					return -EBUSY;
+			}
+		}
+		if (native_requests_clear(hif)) return -EIO;
 		hif->delivery_uid = 0;
 		hif->reset_pending = false;
 		hif->firmware_ready = true;
@@ -1053,8 +1214,10 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 	case FWLAB_M4_NATIVE_RETIRE:
 		if (request->publication == FWLAB_M4_NATIVE_UNPUBLISHED)
 			return -EBUSY;
-		memset(request, 0, sizeof(*request));
-		return 0;
+		if (native_large(hif) && request->shaped &&
+		    (!request->authority_released || !request->dma_retired))
+			return -EBUSY;
+		return native_request_clear(hif, request);
 	default:
 		return -EINVAL;
 	}
@@ -1201,7 +1364,7 @@ static int native_owner_exchange(struct fwlab_m4_hif *hif,
 		}
 		fwlab_m4_close_effects(hif->pci);
 		native_registers_init(hif);
-		memset(hif->request, 0, sizeof(hif->request));
+		if (native_requests_clear(hif)) return -EIO;
 		hif->controller_epoch = 0;
 		hif->faulted = false;
 		hif->shutdown = false;
@@ -1322,8 +1485,8 @@ static noinline_for_stack int native_canary_exchange(struct fwlab_m4_hif *hif,
 		message->new_origin = new_request->uid;
 		message->new_owner_epoch = new_request->owner_epoch;
 		message->new_controller = new_request->epoch;
-		message->new_domain = new_request->data_mapping[0].domain_nonce;
-		message->new_data_iova = new_request->data_mapping[0].iova;
+		message->new_domain = native_request_maps(hif, new_request)[0].domain_nonce;
+		message->new_data_iova = native_request_maps(hif, new_request)[0].iova;
 		message->new_cq_iova = hif->cq[0].mapping.iova;
 		if (!fwlab_m4_prepare_msix(hif->pci, new_request->owner_epoch,
 			new_request->bus_generation, hif->seen_flr_epoch, &irq)) {
@@ -1367,6 +1530,32 @@ static long native_ioctl(struct file *file, unsigned int command, unsigned long 
 	struct fwlab_m4_hif *hif = file->private_data;
 	struct fwlab_m4_native_message message;
 
+	if (command == FWLAB_M4_ATTACH_PROFILE) {
+		struct fwlab_m4_attach_profile_message attach;
+		if (copy_from_user(&attach, (void __user *)arg, sizeof(attach)))
+			return -EFAULT;
+		if (!fwlab_m4_attach_profile_request_valid(&attach))
+			return -EINVAL;
+		mutex_lock(&hif->lock);
+		if (hif->stopped)
+			attach.result = -ENODEV;
+		else if (attach.host_profile_id != FWLAB_M4_HOST_PROFILE ||
+			 memcmp(&attach.limits, &hif->limits, sizeof(attach.limits)))
+			attach.result = -EOPNOTSUPP;
+		else
+			attach.result = native_attach_locked(hif, attach.producer_mode,
+				attach.host_profile_id, attach.media_format_version,
+				attach.media_uuid, attach.binding_sha256);
+		if (!attach.result) {
+			attach.producer_mode = FWLAB_M4_PRODUCER;
+			attach.host_profile_id = FWLAB_M4_HOST_PROFILE;
+			attach.limits = hif->limits;
+			attach.function_nonce = hif->function_nonce;
+			attach.controller_epoch = hif->controller_epoch;
+		}
+		mutex_unlock(&hif->lock);
+		return copy_to_user((void __user *)arg, &attach, sizeof(attach)) ? -EFAULT : 0;
+	}
 	if (command == FWLAB_M4_ATTACH_MODE) {
 		struct fwlab_m4_attach_mode_message attach;
 
@@ -1376,7 +1565,7 @@ static long native_ioctl(struct file *file, unsigned int command, unsigned long 
 			return -EINVAL;
 		mutex_lock(&hif->lock);
 		attach.result = hif->stopped ? -ENODEV : native_attach_locked(hif,
-			attach.producer_mode, attach.media_format_version,
+			attach.producer_mode, FWLAB_M4_HOST_PROFILE_SMALL, attach.media_format_version,
 			attach.media_uuid, attach.binding_sha256);
 		if (!attach.result) {
 			attach.producer_mode = FWLAB_M4_PRODUCER;
@@ -1419,7 +1608,7 @@ static long native_ioctl(struct file *file, unsigned int command, unsigned long 
 			return -EINVAL;
 		mutex_lock(&hif->lock);
 		attach.result = hif->stopped ? -ENODEV : native_attach_locked(hif,
-			FWLAB_M4_PRODUCER_BAR, attach.media_format_version,
+			FWLAB_M4_PRODUCER_BAR, FWLAB_M4_HOST_PROFILE_SMALL, attach.media_format_version,
 			attach.media_uuid, attach.binding_sha256);
 		if (!attach.result) {
 			attach.media_format_version = hif->attachment.media_format_version;
@@ -1515,12 +1704,33 @@ static const struct file_operations native_fops = {
 int fwlab_m4_hif_create(struct fwlab_m4_pci_ctx *pci, struct fwlab_m4_hif **out)
 {
 	struct fwlab_m4_hif *hif;
+	u32 index;
 
 	if (!pci || !pci->bar_mapping || !out)
 		return -EINVAL;
 	hif = kvzalloc(sizeof(*hif), GFP_KERNEL);
 	if (!hif)
 		return -ENOMEM;
+	hif->limits = fwlab_m4_host_limits_for(FWLAB_M4_HOST_PROFILE);
+	if (native_large(hif)) {
+		if (PAGE_SIZE != FWLAB_M4_CONTROL_PAGE_BYTES) {
+			kvfree(hif);
+			return -EOPNOTSUPP;
+		}
+		for (index = 0; index < 2; index++) {
+			struct native_frame *frame = &hif->frame[index];
+			frame->map_capacity = index ? 2 : hif->limits.max_data_pages;
+			frame->data = kvzalloc(index ? hif->limits.max_admin_bytes :
+				hif->limits.max_io_bytes, GFP_KERNEL);
+			frame->mapping = kvcalloc(frame->map_capacity, sizeof(*frame->mapping), GFP_KERNEL);
+			frame->scratch = kzalloc(FWLAB_M4_CONTROL_PAGE_BYTES, GFP_KERNEL);
+			if (!frame->data || !frame->mapping || !frame->scratch) {
+				native_frames_free(hif);
+				kvfree(hif);
+				return -ENOMEM;
+			}
+		}
+	}
 	hif->pci = pci;
 	mutex_init(&hif->lock);
 	hif->function_nonce = get_random_u64() ?: 1;
@@ -1574,5 +1784,6 @@ void fwlab_m4_hif_destroy(struct fwlab_m4_hif *hif)
 		return;
 	if (hif->registered)
 		misc_deregister(&hif->misc);
+	native_frames_free(hif);
 	kvfree(hif);
 }

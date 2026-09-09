@@ -11,6 +11,8 @@ ccflags-y += -I$(src)/../../include
 # Immutable producer selection; BAR remains the compatibility reference.
 FWLAB_M4_PRODUCER ?= 1
 ccflags-y += -DFWLAB_M4_PRODUCER=$(FWLAB_M4_PRODUCER)
+FWLAB_M4_HOST_PROFILE ?= 1
+ccflags-y += -DFWLAB_M4_HOST_PROFILE=$(FWLAB_M4_HOST_PROFILE)
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
 .PHONY: all clean

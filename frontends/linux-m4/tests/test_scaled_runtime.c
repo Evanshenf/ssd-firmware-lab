@@ -20,10 +20,16 @@
 } } while (0)
 #define OFFLINE_DESCRIPTOR (-179)
 #define HOST_ROWS 4u
+#if FWLAB_NATIVE_LARGE
+#define TEST_IO_BYTES 1048576u
+#else
+#define TEST_IO_BYTES 8192u
+#endif
+#define TEST_IO_LBAS (TEST_IO_BYTES / 512u)
 
 struct host_row {
     struct fwlab_m4_native_message capture;
-    uint8_t bytes[FWLAB_M4_NATIVE_MAX_BYTES];
+    uint8_t bytes[TEST_IO_BYTES]; /* fake Host memory, not a DUT payload pool */
     uint32_t direction, length, copied, code, code_type;
     uint8_t shaped, dma_done, dma_retired, authority_released, published, retired;
 };
@@ -35,6 +41,7 @@ static struct {
     uint32_t epoch;
     uint32_t pump_ticks, pump_captures, pump_losses, reset_acks;
     uint8_t delivered, service_fault_once, reset_pending;
+    uint32_t shape_losses;
 } host;
 static struct fwlab_m4_attachment attached_identity;
 static unsigned owner_identity_fault;
@@ -57,6 +64,8 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
         argument = va_arg(arguments, struct fwlab_m4_attach_message *);
     else if (request == FWLAB_M4_ATTACH_MODE)
         argument = va_arg(arguments, struct fwlab_m4_attach_mode_message *);
+    else if (request == FWLAB_M4_ATTACH_PROFILE)
+        argument = va_arg(arguments, struct fwlab_m4_attach_profile_message *);
     else if (request == FWLAB_M4_PUMP)
         argument = va_arg(arguments, struct fwlab_m4_pump_message *);
     else if (request == FWLAB_M4_OWNER_EXCHANGE)
@@ -66,6 +75,19 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
     else
         argument = va_arg(arguments, void *);
     va_end(arguments);
+    if (request == FWLAB_M4_ATTACH_PROFILE) {
+        struct fwlab_m4_attach_profile_message *attach = argument;
+        REQUIRE(FWLAB_NATIVE_LARGE && fwlab_m4_attach_profile_request_valid(attach));
+        REQUIRE(attach->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL &&
+                attach->producer_mode == FWLAB_M4_PRODUCER_PUMP);
+        attach->result = fwlab_m4_attach_pin(&attached_identity,
+            attach->media_format_version, attach->media_uuid, attach->binding_sha256);
+        if (!attach->result) {
+            attach->function_nonce = host.function;
+            attach->controller_epoch = host.epoch;
+        }
+        return 0;
+    }
     if (request == FWLAB_M4_ATTACH_MODE) {
         struct fwlab_m4_attach_mode_message *attach = argument;
         REQUIRE(FWLAB_NATIVE_PUMP && fwlab_m4_attach_mode_request_valid(attach));
@@ -217,6 +239,13 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
         row->shaped = 1;
         message->authority_uid = UINT64_C(0xa000) + message->origin_uid;
         message->dma_uid = UINT64_C(0xd000) + message->origin_uid;
+        message->dma_state = FWLAB_M4_NATIVE_DMA_RESERVED;
+        if (host.shape_losses && row->length == TEST_IO_BYTES) {
+            --host.shape_losses;
+            memset(message, 0x5a, sizeof(*message) / 2);
+            errno = EFAULT;
+            return -1;
+        }
         return 0;
     case FWLAB_M4_NATIVE_DMA:
     case FWLAB_M4_NATIVE_DMA_QUERY:
@@ -317,13 +346,13 @@ static void add_command(uint8_t opcode, uint64_t lba, uint8_t seed)
     } else if (opcode == 1 || opcode == 2) {
         put32(capture->sqe + 40, (uint32_t)lba);
         put32(capture->sqe + 44, (uint32_t)(lba >> 32));
-        put32(capture->sqe + 48, 15);
-        row->length = 8192;
+        put32(capture->sqe + 48, TEST_IO_LBAS - 1);
+        row->length = TEST_IO_BYTES;
         row->direction = opcode == 1 ? FWLAB_HOST_DATA_V0_HOST_TO_CONTROLLER
                                     : FWLAB_HOST_DATA_V0_CONTROLLER_TO_HOST;
     } else REQUIRE(opcode == 0); /* Flush has no data transfer. */
-    /* Legal aligned PRP1/direct PRP2 values in the fake Host graph; the fake
-     * does not claim to implement a real IOMMU or kernel graph validator. */
+    /* The fake syscall assumes an accepted Host graph. For large requests PRP2
+     * names a list, not a direct second page. Actual parser/IOAS proof is separate. */
     if (row->length) put32(capture->sqe + 24, 4096);
     if (row->length > 4096) put32(capture->sqe + 32, 8192);
     if (opcode == 1) pattern(row->bytes, row->length, seed);
@@ -335,6 +364,9 @@ static void run_script(struct native_context *context, struct native_scaled_medi
     host.service_fault_once = 1;
     host.pump_losses = 1;
 #endif
+#if FWLAB_NATIVE_LARGE
+    host.shape_losses = 1;
+#endif
     REQUIRE(firmware_loop(context, &media->native, NULL));
     REQUIRE(host.next == host.count && !host.occupied);
     for (uint32_t index = 0; index < host.count; ++index) {
@@ -345,6 +377,10 @@ static void run_script(struct native_context *context, struct native_scaled_medi
     }
     for (uint32_t index = 0; index < NATIVE_COMMANDS; ++index)
         REQUIRE(!context->slot[index].occupied);
+#if FWLAB_NATIVE_LARGE
+    REQUIRE(!host.shape_losses && native_frames_quiescent(context));
+    puts("NATIVE_LARGE_LOOP_PASS|one_MiB_real_storage=1|same_key_SHAPE_reply_loss=1|separate_frames_returned=1|not_kernel_graph_proof=1");
+#endif
 #if FWLAB_NATIVE_PUMP
     REQUIRE(host.pump_captures == host.count && host.pump_ticks > host.count &&
             !host.pump_losses && host.reset_acks == 1 && !host.reset_pending);
@@ -430,7 +466,7 @@ int main(void)
     struct native_scaled_media *media = calloc(1, sizeof(*media));
     struct fwlab_m4_native_message unsupported;
     struct native_owner owner;
-    uint8_t expected[8192];
+    static uint8_t expected[TEST_IO_BYTES]; /* independent expected Host data */
     uint64_t prior_ftl, prior_nfc, started;
     int directory_fd, name_length;
 
@@ -443,7 +479,7 @@ int main(void)
     directory_fd = open(directory, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     REQUIRE(directory_fd >= 0);
     setvbuf(stdout, NULL, _IOLBF, 0);
-    printf("NATIVE_SCALED_OFFLINE_BEGIN|media=%s/nand.bin|64MiB|8KiB|fake_ioctl_only|no_attach_M5_or_throughput_claim\n", directory);
+    printf("NATIVE_SCALED_OFFLINE_BEGIN|media=%s/nand.bin|64MiB|max_io_bytes=%u|fake_ioctl_only|no_attach_M5_or_throughput_claim\n", directory, TEST_IO_BYTES);
     context->descriptor = OFFLINE_DESCRIPTOR;
     context->function_nonce = UINT64_C(0x4d31414f46464c49);
     context->epoch = 1;
@@ -460,7 +496,10 @@ int main(void)
     started = wall_ns();
     REQUIRE(native_scaled_media_open(media, context, directory, uuid, 1));
     phase_end("media-format", context->epoch, started);
-#if FWLAB_NATIVE_PUMP
+#if FWLAB_NATIVE_LARGE
+    REQUIRE(native_attach_profile(context, FWLAB_M4_HOST_PROFILE_LARGE_SERIAL,
+        FWLAB_M4_PRODUCER_PUMP, FWLAB_M4_MEDIA_SCALED, media->native.uuid, binding) == 0);
+#elif FWLAB_NATIVE_PUMP
     REQUIRE(native_attach_mode(context, FWLAB_M4_PRODUCER_PUMP,
         FWLAB_M4_MEDIA_SCALED, media->native.uuid, binding) == 0);
 #else
@@ -485,9 +524,9 @@ int main(void)
     prior_nfc = context->runtime->nfc_instance_nonce;
     script_begin(context);
     add_command(6, 0, 0);
-    add_command(1, NATIVE_SCALED_LBA_COUNT - 16u, 0x5a);
+    add_command(1, NATIVE_SCALED_LBA_COUNT - TEST_IO_LBAS, 0x5a);
     add_command(0, 0, 0);
-    add_command(2, NATIVE_SCALED_LBA_COUNT - 16u, 0);
+    add_command(2, NATIVE_SCALED_LBA_COUNT - TEST_IO_LBAS, 0);
     run_script(context, media);
     check_identify(&host.row[0]);
     pattern(expected, sizeof(expected), 0x5a);
@@ -522,7 +561,7 @@ int main(void)
             context->runtime->m3p_instance_nonce != prior_ftl && context->runtime->nfc_instance_nonce != prior_nfc);
     script_begin(context);
     add_command(6, 0, 0);
-    add_command(2, NATIVE_SCALED_LBA_COUNT - 16u, 0);
+    add_command(2, NATIVE_SCALED_LBA_COUNT - TEST_IO_LBAS, 0);
     add_command(1, 0, 0xa6);
     add_command(2, 0, 0);
     run_script(context, media);
@@ -535,6 +574,7 @@ int main(void)
     REQUIRE(unlinkat(directory_fd, "nand.bin", 0) == 0);
     REQUIRE(close(directory_fd) == 0 && rmdir(directory) == 0);
     free(media);
+    REQUIRE(native_frame_storage_fini(context));
     free(context);
     puts("NATIVE_SCALED_OFFLINE_PASS|actual_native_constructor_host_loop=1|real_FTL_PAGE2_physical_v2=1|capacity64MiB=1|SELF_Flush_Read_recovery_continue=1|new_epoch=1|runtime_media_released=1|no_kernel_format_claim=1");
     return 0;

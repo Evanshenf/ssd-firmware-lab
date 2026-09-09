@@ -19,6 +19,7 @@
 #include "m4_hif.h"
 #include "m4_dma_api.h"
 #include "fwlab/unstable/m4_attach_native.h"
+#include "fwlab/unstable/m4_profile_native.h"
 
 #ifndef FWLAB_M4_PRODUCER
 #define FWLAB_M4_PRODUCER FWLAB_M4_PRODUCER_BAR
@@ -26,6 +27,17 @@
 #if FWLAB_M4_PRODUCER != FWLAB_M4_PRODUCER_BAR && \
     FWLAB_M4_PRODUCER != FWLAB_M4_PRODUCER_PUMP
 #error "FWLAB_M4_PRODUCER must be 1 (BAR) or 2 (PUMP)"
+#endif
+#ifndef FWLAB_M4_HOST_PROFILE
+#define FWLAB_M4_HOST_PROFILE FWLAB_M4_HOST_PROFILE_SMALL
+#endif
+#if FWLAB_M4_HOST_PROFILE != FWLAB_M4_HOST_PROFILE_SMALL && \
+    FWLAB_M4_HOST_PROFILE != FWLAB_M4_HOST_PROFILE_LARGE_SERIAL
+#error "FWLAB_M4_HOST_PROFILE must select SMALL or LARGE_SERIAL"
+#endif
+#if FWLAB_M4_HOST_PROFILE == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL && \
+    FWLAB_M4_PRODUCER != FWLAB_M4_PRODUCER_PUMP
+#error "LARGE_SERIAL requires the PUMP producer"
 #endif
 
 #define FWLAB_M4_PCI_NAME "ssd_fwlab_native_pci"

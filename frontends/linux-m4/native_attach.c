@@ -20,12 +20,14 @@ static int retryable(int error)
 }
 
 static int remember_attachment(struct native_context *context,
-    const struct fwlab_m4_attach_message *reply, uint32_t producer)
+    const struct fwlab_m4_attach_message *reply, uint32_t producer, uint32_t profile)
 {
     if (!reply->function_nonce || !reply->controller_epoch ||
         (context->function_nonce && context->function_nonce != reply->function_nonce))
         return -EPROTO;
     if (context->producer_mode && context->producer_mode != producer)
+        return -EPROTO;
+    if (context->host_profile_id && context->host_profile_id != profile)
         return -EPROTO;
     if (context->attachment.media_format_version &&
         (context->attachment.media_format_version != reply->media_format_version ||
@@ -34,6 +36,8 @@ static int remember_attachment(struct native_context *context,
         return -EPROTO;
     context->attachment = *reply;
     context->producer_mode = producer;
+    context->host_profile_id = profile;
+    context->host_limits = fwlab_m4_host_limits_for(profile);
     context->function_nonce = reply->function_nonce;
     context->epoch = reply->controller_epoch;
     return 0;
@@ -70,7 +74,7 @@ int native_attach_explicit(struct native_context *context, uint32_t format,
         expected.function_nonce = reply.function_nonce;
         expected.controller_epoch = reply.controller_epoch;
         if (memcmp(&reply, &expected, sizeof(reply))) return -EPROTO;
-        return remember_attachment(context, &reply, FWLAB_M4_PRODUCER_BAR);
+        return remember_attachment(context, &reply, FWLAB_M4_PRODUCER_BAR, FWLAB_M4_HOST_PROFILE_SMALL);
     }
     return -EIO;
 }
@@ -113,7 +117,7 @@ int native_attach_legacy(struct native_context *context,
         accepted.controller_epoch = reply.controller_epoch;
         memcpy(accepted.media_uuid, uuid, 16);
         memcpy(accepted.binding_sha256, binding, 32);
-        return remember_attachment(context, &accepted, FWLAB_M4_PRODUCER_BAR);
+        return remember_attachment(context, &accepted, FWLAB_M4_PRODUCER_BAR, FWLAB_M4_HOST_PROFILE_SMALL);
     }
     return -EIO;
 }
@@ -161,7 +165,56 @@ int native_attach_mode(struct native_context *context, uint32_t producer, uint32
         identity.controller_epoch = reply.controller_epoch;
         memcpy(identity.media_uuid, reply.media_uuid, 16);
         memcpy(identity.binding_sha256, reply.binding_sha256, 32);
-        return remember_attachment(context, &identity, producer);
+        return remember_attachment(context, &identity, producer, FWLAB_M4_HOST_PROFILE_SMALL);
+    }
+    return -EIO;
+}
+
+int native_attach_profile(struct native_context *context, uint32_t profile,
+    uint32_t producer, uint32_t format, const uint8_t uuid[16], const uint8_t binding[32])
+{
+    struct fwlab_m4_attach_profile_message request = { 0 };
+    unsigned attempt;
+
+    request.limits = fwlab_m4_host_limits_for(profile);
+    if (!context || !uuid || !binding || context->runtime || !request.limits.max_io_bytes ||
+        (producer != FWLAB_M4_PRODUCER_BAR && producer != FWLAB_M4_PRODUCER_PUMP) ||
+        (profile == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL && producer != FWLAB_M4_PRODUCER_PUMP) ||
+        (format != FWLAB_M4_MEDIA_LEGACY && format != FWLAB_M4_MEDIA_SCALED) ||
+        empty_identity(uuid, 16) || empty_identity(binding, 32))
+        return -EINVAL;
+    request.version = FWLAB_M4_ATTACH_PROFILE_VERSION;
+    request.size = sizeof(request);
+    request.producer_mode = producer;
+    request.host_profile_id = profile;
+    request.media_format_version = format;
+    request.result = INT32_MIN;
+    memcpy(request.media_uuid, uuid, 16);
+    memcpy(request.binding_sha256, binding, 32);
+    for (attempt = 0; attempt < 3; ++attempt) {
+        struct fwlab_m4_attach_profile_message reply = request, expected = request;
+        struct fwlab_m4_attach_message identity = { 0 };
+        int result = ioctl(context->descriptor, FWLAB_M4_ATTACH_PROFILE, &reply);
+        if (result < 0) {
+            int error = errno;
+            if (retryable(error) && attempt + 1 < 3) continue;
+            return -error;
+        }
+        if (result || reply.result == INT32_MIN || reply.result > 0)
+            return -EPROTO;
+        if (reply.result) return reply.result;
+        expected.result = 0;
+        expected.function_nonce = reply.function_nonce;
+        expected.controller_epoch = reply.controller_epoch;
+        if (memcmp(&reply, &expected, sizeof(reply))) return -EPROTO;
+        identity.version = FWLAB_M4_ATTACH_VERSION;
+        identity.size = sizeof(identity);
+        identity.media_format_version = reply.media_format_version;
+        identity.function_nonce = reply.function_nonce;
+        identity.controller_epoch = reply.controller_epoch;
+        memcpy(identity.media_uuid, reply.media_uuid, 16);
+        memcpy(identity.binding_sha256, reply.binding_sha256, 32);
+        return remember_attachment(context, &identity, producer, profile);
     }
     return -EIO;
 }

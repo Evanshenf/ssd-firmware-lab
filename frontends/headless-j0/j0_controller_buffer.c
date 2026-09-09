@@ -4,6 +4,7 @@
 #include "j0_internal.h"
 
 #include <string.h>
+#include <stdlib.h>
 
 int j0_bytes_zero(const void *value, size_t size)
 {
@@ -93,18 +94,30 @@ static struct j0_controller_buffer_record *buffer_request_find(
     return NULL;
 }
 
-static enum fwlab_controller_buffer_result_v0 buffer_acquire(
-    void *context,
-    const struct fwlab_controller_buffer_acquire_v0 *request,
-    struct fwlab_controller_buffer_lease_v0 *lease)
+static uint8_t *buffer_bytes(struct j0_controller_buffer *buffer,
+                             struct j0_controller_buffer_record *record)
 {
-    struct j0_controller_buffer *buffer = context;
+    return buffer->large_serial ? buffer->large_frame[record->allocation_class]
+                                : record->bytes;
+}
+
+enum fwlab_controller_buffer_result_v0 j0_controller_buffer_acquire_class(
+    struct j0_controller_buffer *buffer,
+    const struct fwlab_controller_buffer_acquire_v0 *request,
+    struct fwlab_controller_buffer_lease_v0 *lease, uint32_t allocation_class)
+{
     struct j0_controller_buffer_record *record;
     uint32_t index;
+    uint32_t limit;
 
-    if (buffer == NULL || request == NULL || lease == NULL ||
+    if (buffer == NULL || allocation_class > J0_BUFFER_CLASS_CONTROL)
+        return FWLAB_CONTROLLER_BUFFER_V0_INVALID;
+    if (!buffer->large_serial) allocation_class = J0_BUFFER_CLASS_IO;
+    limit = !buffer->large_serial ? J0_MAX_TRANSFER_BYTES :
+        allocation_class == J0_BUFFER_CLASS_CONTROL ? 4096u : 1048576u;
+    if (request == NULL || lease == NULL ||
         !fwlab_controller_buffer_acquire_v0_valid(request) ||
-        request->capacity_bytes > J0_MAX_TRANSFER_BYTES || buffer->poisoned) {
+        request->capacity_bytes > limit || buffer->poisoned) {
         return FWLAB_CONTROLLER_BUFFER_V0_INVALID;
     }
     if (buffer->admission_closed) {
@@ -113,13 +126,15 @@ static enum fwlab_controller_buffer_result_v0 buffer_acquire(
     record = buffer_request_find(buffer, request);
     if (record != NULL) {
         if (memcmp(&record->request, request, sizeof(*request)) != 0 ||
-            record->released) {
+            record->released || record->allocation_class != allocation_class) {
             buffer->poisoned = 1;
             return FWLAB_CONTROLLER_BUFFER_V0_POISONED;
         }
         *lease = record->lease;
         return FWLAB_CONTROLLER_BUFFER_V0_OK;
     }
+    if (buffer->large_serial && buffer->frame_held[allocation_class])
+        return FWLAB_CONTROLLER_BUFFER_V0_NO_CAPACITY;
     record = NULL;
     for (index = 0; index < J0_MAX_COMMANDS; ++index) {
         if (!buffer->record[index].occupied || buffer->record[index].released) {
@@ -138,6 +153,11 @@ static enum fwlab_controller_buffer_result_v0 buffer_acquire(
     memset(record, 0, sizeof(*record));
     record->occupied = 1;
     record->request = *request;
+    record->allocation_class = (uint8_t)allocation_class;
+    if (buffer->large_serial) {
+        buffer->frame_held[allocation_class] = 1;
+        memset(buffer_bytes(buffer, record), 0, request->capacity_bytes);
+    }
     record->lease.version = FWLAB_CONTROLLER_BUFFER_V0_VERSION;
     record->lease.size = (uint16_t)sizeof(record->lease);
     record->lease.type_tag = FWLAB_CONTROLLER_BUFFER_LEASE_V0_TAG;
@@ -150,6 +170,14 @@ static enum fwlab_controller_buffer_result_v0 buffer_acquire(
     ++buffer->active_leases;
     *lease = record->lease;
     return FWLAB_CONTROLLER_BUFFER_V0_OK;
+}
+
+static enum fwlab_controller_buffer_result_v0 buffer_acquire(
+    void *context, const struct fwlab_controller_buffer_acquire_v0 *request,
+    struct fwlab_controller_buffer_lease_v0 *lease)
+{
+    /* The public operation cannot consume the private control reserve. */
+    return j0_controller_buffer_acquire_class(context, request, lease, J0_BUFFER_CLASS_IO);
 }
 
 static enum fwlab_controller_buffer_result_v0 buffer_read(
@@ -174,7 +202,7 @@ static enum fwlab_controller_buffer_result_v0 buffer_read(
     if (record->released) {
         return FWLAB_CONTROLLER_BUFFER_V0_WRONG_STATE;
     }
-    memcpy(output, record->bytes + span->offset, output_size);
+    memcpy(output, buffer_bytes(buffer, record) + span->offset, output_size);
     return FWLAB_CONTROLLER_BUFFER_V0_OK;
 }
 
@@ -200,7 +228,7 @@ static enum fwlab_controller_buffer_result_v0 buffer_write(
     if (record->released) {
         return FWLAB_CONTROLLER_BUFFER_V0_WRONG_STATE;
     }
-    memcpy(record->bytes + span->offset, input, input_size);
+    memcpy(buffer_bytes(buffer, record) + span->offset, input, input_size);
     return FWLAB_CONTROLLER_BUFFER_V0_OK;
 }
 
@@ -232,8 +260,8 @@ static enum fwlab_controller_buffer_result_v0 buffer_copy(
     if (destination_record->released || source_record->released) {
         return FWLAB_CONTROLLER_BUFFER_V0_WRONG_STATE;
     }
-    memmove(destination_record->bytes + destination_span->offset,
-            source_record->bytes + source_span->offset,
+    memmove(buffer_bytes(buffer, destination_record) + destination_span->offset,
+            buffer_bytes(buffer, source_record) + source_span->offset,
             destination_span->length);
     return FWLAB_CONTROLLER_BUFFER_V0_OK;
 }
@@ -256,7 +284,15 @@ static enum fwlab_controller_buffer_result_v0 buffer_release(
     if (record->released) {
         return FWLAB_CONTROLLER_BUFFER_V0_OK;
     }
-    memset(record->bytes, 0, sizeof(record->bytes));
+    memset(buffer_bytes(buffer, record), 0,
+           buffer->large_serial ? record->lease.capacity_bytes : sizeof(record->bytes));
+    if (buffer->large_serial) {
+        if (!buffer->frame_held[record->allocation_class]) {
+            buffer->poisoned = 1;
+            return FWLAB_CONTROLLER_BUFFER_V0_POISONED;
+        }
+        buffer->frame_held[record->allocation_class] = 0;
+    }
     record->released = 1;
     if (buffer->active_leases == 0) {
         buffer->poisoned = 1;
@@ -303,7 +339,8 @@ static enum fwlab_controller_buffer_result_v0 buffer_epoch_quiescent(
         return FWLAB_CONTROLLER_BUFFER_V0_INVALID;
     }
     *active_leases = buffer->active_leases;
-    *quiescent = (uint8_t)(buffer->active_leases == 0);
+    *quiescent = (uint8_t)(buffer->active_leases == 0 &&
+        !buffer->frame_held[0] && !buffer->frame_held[1]);
     return FWLAB_CONTROLLER_BUFFER_V0_OK;
 }
 
@@ -334,4 +371,32 @@ void j0_controller_buffer_init(
     buffer->port.context = buffer;
     buffer->port.issuer_nonce = issuer_nonce;
     buffer->port.generation = generation;
+}
+
+enum fwlab_controller_buffer_result_v0 j0_controller_buffer_large_init(
+    struct j0_controller_buffer *buffer)
+{
+    uint8_t *io, *control;
+    if (!buffer || !buffer->port.ops || buffer->large_serial || buffer->active_leases)
+        return FWLAB_CONTROLLER_BUFFER_V0_INVALID;
+    io = calloc(1, 1048576);
+    control = calloc(1, 4096);
+    if (!io || !control) {
+        free(io); free(control);
+        return FWLAB_CONTROLLER_BUFFER_V0_NO_CAPACITY;
+    }
+    buffer->large_frame[J0_BUFFER_CLASS_IO] = io;
+    buffer->large_frame[J0_BUFFER_CLASS_CONTROL] = control;
+    buffer->large_serial = 1;
+    return FWLAB_CONTROLLER_BUFFER_V0_OK;
+}
+
+int j0_controller_buffer_storage_fini(struct j0_controller_buffer *buffer)
+{
+    if (!buffer || buffer->active_leases || buffer->frame_held[0] || buffer->frame_held[1])
+        return 0;
+    free(buffer->large_frame[0]); free(buffer->large_frame[1]);
+    buffer->large_frame[0] = buffer->large_frame[1] = NULL;
+    buffer->large_serial = 0;
+    return 1;
 }
