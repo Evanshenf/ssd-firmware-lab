@@ -7,6 +7,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define CHECK(expression) do { \
     if (!(expression)) { \
@@ -67,8 +68,53 @@ static uint8_t pattern_byte(unsigned pattern, size_t index)
     }
 }
 
+static bool zero_reference(const uint8_t *p, size_t n)
+{
+    if (!p && n) return false;
+    for (size_t i = 0; i < n; ++i) if (p[i]) return false;
+    return true;
+}
+
+static void zero_span(size_t offset, size_t length, bool exhaustive, uint64_t *cases)
+{
+    size_t allocation = offset + length;
+    uint8_t *base = malloc(allocation ? allocation : 1u);
+    CHECK(base);
+    memset(base, 0xa5, allocation ? allocation : 1u);
+    uint8_t *p = base + offset;
+    memset(p, 0, length);
+    CHECK(sf_bytes_zero(p, length) == zero_reference(p, length)); ++*cases;
+    const size_t positions[] = {0, 7, 8, length / 2, length ? length - 1u : 0};
+    size_t count = exhaustive ? length : sizeof(positions) / sizeof(positions[0]);
+    for (size_t k = 0; k < count; ++k) {
+        size_t bad = exhaustive ? k : positions[k];
+        if (bad >= length) continue;
+        for (unsigned bit = 0; bit < 8; ++bit) {
+            p[bad] = (uint8_t)(1u << bit);
+            CHECK(sf_bytes_zero(p, length) == zero_reference(p, length)); ++*cases;
+            p[bad] = 0;
+        }
+    }
+    free(base); /* The span ends at the allocation boundary for ASan checks. */
+}
+
+static void zero_equivalence(void)
+{
+    uint64_t cases = 0;
+    CHECK(sf_bytes_zero(NULL, 0));
+    CHECK(!sf_bytes_zero(NULL, 1) && !sf_bytes_zero(NULL, 8) && !sf_bytes_zero(NULL, 4096));
+    const size_t lengths[] = {124, 128, 252, 512, 1024, 1984, 2016, 2048, 3928, 4096, 8192};
+    for (size_t offset = 0; offset < 8; ++offset) {
+        for (size_t n = 0; n <= 65; ++n) zero_span(offset, n, true, &cases);
+        for (size_t n = 0; n < sizeof(lengths) / sizeof(lengths[0]); ++n)
+            zero_span(offset, lengths[n], false, &cases);
+    }
+    printf("SCALE_ZERO_SCAN_PASS|cases=%" PRIu64 "|byte_reference=1|offsets0to7=1|short_all_positions_all_bits=1|record_lengths_through8192=1|null_semantics=1|exact_heap_end=1\n", cases);
+}
+
 int main(void)
 {
+    zero_equivalence();
     static const size_t lengths[] = {
         0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 28, 31, 32, 33,
         60, 63, 64, 65, 124, 127, 128, 129, 252, 255, 256, 257,

@@ -21,6 +21,12 @@ bool sf_bytes_zero(const void *opaque, size_t size)
 {
     const uint8_t *p = opaque; size_t i;
     if (!p && size) return false;
+    while (size >= sizeof(uint64_t)) {
+        uint64_t word;
+        memcpy(&word, p, sizeof(word)); /* Exact span, including unaligned input. */
+        if (word) return false;
+        p += sizeof(word); size -= sizeof(word);
+    }
     for (i = 0; i < size; ++i) if (p[i]) return false;
     return true;
 }
