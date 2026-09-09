@@ -677,12 +677,58 @@ static int test_owner_control(void)
     return 0;
 }
 
+static int test_reserved_byte_scans(void)
+{
+    struct fwlab_block_request_v0 request = block_write_request();
+    struct fwlab_host_action_program_v0 program = write_program();
+    struct {
+        unsigned char *bytes;
+        size_t size;
+    } fields[] = {
+        {(unsigned char *)&request.reserved1, sizeof(request.reserved1)},
+        {(unsigned char *)&request.reserved2, sizeof(request.reserved2)},
+        {(unsigned char *)&request.operation_token.reserved,
+         sizeof(request.operation_token.reserved)},
+        {(unsigned char *)&request.buffer.reserved1,
+         sizeof(request.buffer.reserved1)},
+    };
+    unsigned char *actions = (unsigned char *)&program.action;
+
+    CHECK(!fwlab_block_request_v0_valid(NULL));
+    CHECK(!fwlab_host_action_program_v0_valid(NULL));
+    CHECK(fwlab_block_request_v0_valid(&request));
+    CHECK(fwlab_host_action_program_v0_valid(&program));
+    /* Public validators exercise short tails, whole words and nested fields. */
+    for (size_t field = 0; field < sizeof(fields) / sizeof(fields[0]); ++field) {
+        for (size_t byte = 0; byte < fields[field].size; ++byte) {
+            for (unsigned bit = 0; bit < 8; ++bit) {
+                fields[field].bytes[byte] = (unsigned char)(1u << bit);
+                CHECK(!fwlab_block_request_v0_valid(&request));
+                fields[field].bytes[byte] = 0;
+                CHECK(fwlab_block_request_v0_valid(&request));
+            }
+        }
+    }
+    /* Every byte of all unused action slots must still be checked. */
+    for (size_t byte = program.action_count * sizeof(program.action[0]);
+         byte < sizeof(program.action); ++byte) {
+        for (unsigned bit = 0; bit < 8; ++bit) {
+            actions[byte] = (unsigned char)(1u << bit);
+            CHECK(!fwlab_host_action_program_v0_valid(&program));
+            actions[byte] = 0;
+            CHECK(fwlab_host_action_program_v0_valid(&program));
+        }
+    }
+    return 0;
+}
+
 int main(void)
 {
     CHECK(test_action_program() == 0);
     CHECK(test_buffer_and_dma() == 0);
     CHECK(test_block_service() == 0);
     CHECK(test_owner_control() == 0);
+    CHECK(test_reserved_byte_scans() == 0);
     puts("S0-A public contracts: PASS (families=5 actions=9 nominal_tokens=4)");
     return 0;
 }

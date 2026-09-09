@@ -47,6 +47,15 @@ static int spine_bytes_zero(const void *value, size_t size)
     if (value == NULL) {
         return 0;
     }
+    while (size >= sizeof(uint64_t)) {
+        uint64_t word;
+        memcpy(&word, bytes, sizeof(word)); /* Exact span; alignment not required. */
+        if (word != 0) {
+            return 0;
+        }
+        bytes += sizeof(word);
+        size -= sizeof(word);
+    }
     for (index = 0; index < size; ++index) {
         if (bytes[index] != 0) {
             return 0;
