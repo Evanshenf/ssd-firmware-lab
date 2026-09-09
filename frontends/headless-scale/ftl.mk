@@ -16,6 +16,14 @@ endif
 BUILD ?= build/scale-ftl
 endif
 FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
+FWLAB_MEDIA_EXCLUSIVE ?= 0
+ifneq ($(FWLAB_MEDIA_EXCLUSIVE),0)
+ifneq ($(FWLAB_MEDIA_EXCLUSIVE),1)
+$(error FWLAB_MEDIA_EXCLUSIVE must be 0 or 1)
+endif
+endif
+override CPPFLAGS += -DFWLAB_MEDIA_EXCLUSIVE=$(FWLAB_MEDIA_EXCLUSIVE)
+MEDIA_CONFIG := $(BUILD)/.fwlab-media-config
 export FWLAB_TEST_MEDIA_DIR
 SOURCES := \
 	core/command-spine/spine_contracts.c \
@@ -53,6 +61,12 @@ FAST_CRC_PROGRAM := $(BUILD)/test_crc_fast
 FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
 .PHONY: all check check-crc check-crc-fast check-full check-cuts check-cost check-parent check-parent-window-v2 check-parent-window-v2-operation check-parent-window-v2-mapped check-media-v2 check-media-v2-cuts check-media-v2-cost check-window-v2 check-window-v2-operation check-window-v2-mapped check-window-v2-cost plan-64g check-64g
 all: $(PROGRAM)
+.PHONY: FORCE_MEDIA_CONFIG
+FORCE_MEDIA_CONFIG:
+$(MEDIA_CONFIG): FORCE_MEDIA_CONFIG
+	@mkdir -p "$(BUILD)"
+	@printf 'FWLAB_MEDIA_EXCLUSIVE=%s\n' '$(FWLAB_MEDIA_EXCLUSIVE)' | cmp -s - "$@" || \
+		printf 'FWLAB_MEDIA_EXCLUSIVE=%s\n' '$(FWLAB_MEDIA_EXCLUSIVE)' > "$@"
 check: check-crc check-crc-fast $(PROGRAM)
 	$(PROGRAM)
 check-crc: $(CRC_PROGRAM)
@@ -99,7 +113,7 @@ $(FAST_CRC_PROGRAM): $(FAST_CRC_OBJECT)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FAST_CRC_OBJECT) $(LDLIBS)
 $(PARENT_PROGRAM): $(PARENT_OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PARENT_OBJECTS) $(LDLIBS)
-$(BUILD)/%.o: ../../%.c ftl.mk
+$(BUILD)/%.o: ../../%.c ftl.mk $(MEDIA_CONFIG)
 	mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 -include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d) $(PARENT_OBJECTS:.o=.d) $(FAST_CRC_OBJECT:.o=.d)

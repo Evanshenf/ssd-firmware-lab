@@ -5,6 +5,14 @@
 
 #include "physical_nand.h"
 
+/* Build-time opt-in for simulator-exclusive mapped media. This changes only
+ * the host-file property-validation interval, not NAND integrity or syncs. */
+#ifndef FWLAB_MEDIA_EXCLUSIVE
+#define FWLAB_MEDIA_EXCLUSIVE 0
+#endif
+_Static_assert(FWLAB_MEDIA_EXCLUSIVE == 0 || FWLAB_MEDIA_EXCLUSIVE == 1,
+               "FWLAB_MEDIA_EXCLUSIVE must be 0 or 1");
+
 #define FNV2_SUPER_BYTES 4096u
 #define FNV2_INTENT_BYTES 1024u
 #define FNV2_TERMINAL_BYTES 512u

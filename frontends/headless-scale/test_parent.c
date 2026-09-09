@@ -738,8 +738,9 @@ int main(int argc, char **argv)
         fputs("usage: test_scale_parent [--cancel-staged|--window-v2|--window-v2-operation|--window-v2-mapped]\n", stderr); return 2;
     }
     if (byte_profile != POSIX_BYTE_STRICT)
-        printf("PARENT_MEDIA_VALIDATION|profile=%s|entry_exit_checks=1|per_callback_interval_not_claimed=1\n",
-               byte_profile == POSIX_BYTE_MAPPED ? "POSIX_MAPPED" : "POSIX_OPERATION");
+        printf("PARENT_MEDIA_VALIDATION|profile=%s|FWLAB_MEDIA_EXCLUSIVE=%d|entry_exit_checks=%d|per_callback_interval_not_claimed=1\n",
+               byte_profile == POSIX_BYTE_MAPPED ? "POSIX_MAPPED" : "POSIX_OPERATION",
+               FWLAB_MEDIA_EXCLUSIVE, !(FWLAB_MEDIA_EXCLUSIVE && byte_profile == POSIX_BYTE_MAPPED));
     cancel_staged(0, window_v2, 0, byte_profile); cancel_staged(1, window_v2, 0, byte_profile);
     if (argc == 2 && !window_v2) return 0;
     if (window_v2) {

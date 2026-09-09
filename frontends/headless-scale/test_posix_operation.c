@@ -178,6 +178,10 @@ static enum fwlab_nfc_api_result observed_sync(void *opaque)
     result = f->saved_io.sync(f->saved_io.context);
     if (result == FWLAB_NFC_API_OK && f->arm_mode && f->commit_written) {
         CHECK(f->syncs == 3 && f->writes == (f->mapped ? GROUP_PAGES + 4u : 5u) && !f->mode_changed);
+        if (f->arm_mode == 2) {
+            f->arm_mode = 0;
+            return FWLAB_NFC_API_INVARIANT_FAILURE; /* Real COMMIT sync, lost successful reply. */
+        }
         CHECK(fchmod(f->change_fd, 0400) == 0);
         f->mode_changed = 1;
         f->arm_mode = 0;
@@ -218,14 +222,16 @@ static void media_open(struct fixture *f, int format)
           !memcmp(&f->batch.geometry, &f->config.geometry, sizeof(f->batch.geometry)) &&
           !memcmp(f->batch.media_uuid, f->holder.media_uuid, sizeof(f->batch.media_uuid)));
 }
-static void media_close(struct fixture *f)
+static void media_close_expected(struct fixture *f, enum fwlab_nfc_api_result expected)
 {
-    CHECK(!f->media->busy && fwlab_file_nand_v2_close(f->media) == FWLAB_NFC_API_OK);
+    CHECK(!f->media->busy && fwlab_file_nand_v2_close(f->media) == expected);
     CHECK(!fwlab_file_nand_v2_posix_operation_batch(f->media).ops);
     CHECK(!f->mapped || (!mapping.address && mapping.fd == -1 &&
           mapping.maps == mapping.unmaps && mapping.closes == 1));
     free(f->arena); f->arena = NULL; f->media = NULL;
 }
+static void media_close(struct fixture *f)
+{ media_close_expected(f, FWLAB_NFC_API_OK); }
 static struct fixture *create(void)
 {
     const char *root = getenv("FWLAB_TEST_MEDIA_DIR");
@@ -290,6 +296,17 @@ static void before_entry_truncate(void)
     off_t truncated = (off_t)(fwlab_file_nand_v2_image_bytes(&f->config) - 1u);
     CHECK(ftruncate(f->change_fd, truncated) == 0);
     CHECK(f->saved_io.read(f->saved_io.context, 0, &byte, 1) == FWLAB_NFC_API_INVALID_CONTRACT && byte == 0xa5);
+    if (FWLAB_MEDIA_EXCLUSIVE && f->mapped) {
+        /* Outside modification violates owned operation assumptions. Do not
+         * submit normal IO to that mapping and claim strict entry detection. */
+        CHECK(!f->media->quarantined && !f->media->busy && !f->reads && !f->writes && !f->syncs &&
+              !fwlab_file_nand_v2_sequence(f->media) && fstat(f->change_fd, &status) == 0 &&
+              status.st_size == truncated);
+        media_close_expected(f, FWLAB_NFC_API_INVARIANT_FAILURE);
+        lock_probe(f->change_fd, 1); destroy(f);
+        puts("OWNED_MEDIA_TRUNCATE_CLOSE_PASS|normal_operation_submissions=0|direct_callback_still_strict=1|close_property_error=1|unmap_OFD_release=1|runtime_entry_detection_not_claimed=1");
+        return;
+    }
     CHECK(f->batch.ops->program_pages(f->batch.scalar.context, &first, GROUP_PAGES,
         f->main, sizeof(f->main), f->oob, sizeof(f->oob), results, GROUP_PAGES) == FWLAB_NFC_API_INVARIANT_FAILURE);
     CHECK(f->media->quarantined && !f->media->busy && !f->reads && !f->writes && !f->syncs &&
@@ -355,31 +372,50 @@ static void readback(struct fixture *f, uint64_t uid, uint16_t first)
           !memcmp(oob, f->oob, sizeof(oob)));
 }
 
-static void after_commit_mode_change(void)
+static void after_commit_mode_change(int io_error)
 {
     struct fixture *f = create();
     struct fwlab_nfc_page_v2_result result;
     struct fwlab_nfc_page_v2_request r;
     struct stat status; uint8_t byte = 0xa5;
-    nfc_open(f); f->arm_mode = 1;
+    int owned = FWLAB_MEDIA_EXCLUSIVE && f->mapped;
+    int late_property = owned && !io_error;
+    nfc_open(f); f->arm_mode = io_error ? 2 : 1;
     r = request(f, FWLAB_NFC_PAGE_V2_PROGRAM_GROUP, 1, 0);
     result = execute(f, &r, NULL);
-    CHECK(f->commit_written && f->mode_changed && !f->arm_mode && f->syncs == 3 &&
+    CHECK(f->commit_written && f->mode_changed == !io_error && !f->arm_mode && f->syncs == 3 &&
           f->writes == (f->mapped ? GROUP_PAGES + 4u : 5u) &&
-          fwlab_file_nand_v2_sequence(f->media) == 1 && f->media->quarantined && !f->media->busy);
-    CHECK(result.terminal == FWLAB_NFC_TERMINAL_FAILED &&
-          result.backend_status == FWLAB_NFC_API_INVARIANT_FAILURE &&
-          result.effect == FWLAB_NFC_PAGE_V2_EFFECT_UNKNOWN && !result.read_valid && !result.delivered_pages);
-    for (uint32_t i = 0; i < GROUP_PAGES; ++i)
-        CHECK(result.page[i].effect == FWLAB_NFC_PAGE_V2_EFFECT_UNKNOWN &&
-              result.page[i].facts_valid == FWLAB_NFC_PAGE_V2_FACT_EFFECT &&
-              !result.page[i].applied_main_bytes && !result.page[i].applied_oob_bytes &&
-              !result.page[i].applied_pages);
-    r = request(f, FWLAB_NFC_PAGE_V2_PROGRAM_GROUP, 2, GROUP_PAGES);
-    CHECK(f->provider.ops->try_submit(f->provider.context, &r).disposition == FWLAB_NFC_REJECTED);
-    CHECK(fstat(f->change_fd, &status) == 0 && (status.st_mode & 07777) == 0400);
-    CHECK(f->saved_io.read(f->saved_io.context, 0, &byte, 1) == FWLAB_NFC_API_INVALID_CONTRACT && byte == 0xa5);
-    nfc_close(f); media_close(f); /* Must clear reuse even after successful lower effects. */
+          fwlab_file_nand_v2_sequence(f->media) == (io_error ? 0u : 1u) && !f->media->busy);
+    if (late_property) {
+        CHECK(!f->media->quarantined && result.terminal == FWLAB_NFC_TERMINAL_SUCCESS &&
+              result.backend_status == FWLAB_NFC_API_OK &&
+              result.effect == FWLAB_NFC_PAGE_V2_EFFECT_APPLIED_COMPLETE);
+    } else {
+        CHECK(f->media->quarantined && result.terminal == FWLAB_NFC_TERMINAL_FAILED &&
+              result.backend_status == FWLAB_NFC_API_INVARIANT_FAILURE &&
+              result.effect == FWLAB_NFC_PAGE_V2_EFFECT_UNKNOWN && !result.read_valid && !result.delivered_pages);
+        for (uint32_t i = 0; i < GROUP_PAGES; ++i)
+            CHECK(result.page[i].effect == FWLAB_NFC_PAGE_V2_EFFECT_UNKNOWN &&
+                  result.page[i].facts_valid == FWLAB_NFC_PAGE_V2_FACT_EFFECT &&
+                  !result.page[i].applied_main_bytes && !result.page[i].applied_oob_bytes &&
+                  !result.page[i].applied_pages);
+        r = request(f, FWLAB_NFC_PAGE_V2_PROGRAM_GROUP, 2, GROUP_PAGES);
+        CHECK(f->provider.ops->try_submit(f->provider.context, &r).disposition == FWLAB_NFC_REJECTED);
+    }
+    CHECK(fstat(f->change_fd, &status) == 0 && (status.st_mode & 07777) == (io_error ? 0600 : 0400));
+    if (!io_error)
+        CHECK(f->saved_io.read(f->saved_io.context, 0, &byte, 1) == FWLAB_NFC_API_INVALID_CONTRACT && byte == 0xa5);
+    nfc_close(f);
+    media_close_expected(f, late_property ? FWLAB_NFC_API_INVARIANT_FAILURE : FWLAB_NFC_API_OK);
+    if (late_property) {
+        size_t size = fwlab_file_nand_v2_arena_size();
+        void *arena = calloc(1, size); struct fwlab_file_nand_v2 *out = arena; CHECK(arena);
+        lock_probe(f->change_fd, 1); mapping_reset(f->change_fd);
+        CHECK(fwlab_file_nand_v2_posix_mapped_restart(arena, size, f->directory_fd,
+            "nand.bin", &f->config, &f->holder, &out) == FWLAB_NFC_API_INVALID_CONTRACT && !out);
+        CHECK(!mapping.address && mapping.fd == -1);
+        free(arena);
+    }
     CHECK(fchmod(f->change_fd, 0600) == 0);
     media_open(f, 0); CHECK(fwlab_file_nand_v2_sequence(f->media) == 1);
     nfc_open(f); readback(f, 1, 0);
@@ -389,7 +425,12 @@ static void after_commit_mode_change(void)
           fwlab_file_nand_v2_sequence(f->media) == 2);
     readback(f, 3, GROUP_PAGES);
     nfc_close(f); media_close(f); destroy(f);
-    puts("POSIX_OPERATION_EXIT_PASS|real_group_fdatasyncs=3|final_COMMIT_synced=1|persistent_mode_change=1|API_error_after_effect=1|NFC_UNKNOWN=1|media_NFC_quarantined=1|scope_clear_close=1|same_holder_restart_readback_continue=1");
+    if (io_error)
+        puts("OWNED_MEDIA_IO_ERROR_PASS|real_group_fdatasyncs=3|sync_callback_error_after_real_COMMIT_sync=1|NFC_UNKNOWN=1|media_NFC_quarantined=1|scope_clear_close=1|same_holder_restart_readback_continue=1");
+    else if (late_property)
+        puts("OWNED_MEDIA_MODE_CLOSE_PASS|runtime_group_SUCCESS=1|real_group_fdatasyncs=3|mode_change_after_COMMIT=1|close_property_error=1|unmap_OFD_release=1|cold_restart_0400_rejected=1|restored_restart_readback_continue=1|runtime_property_detection_not_claimed=1");
+    else
+        puts("POSIX_OPERATION_EXIT_PASS|real_group_fdatasyncs=3|final_COMMIT_synced=1|persistent_mode_change=1|API_error_after_effect=1|NFC_UNKNOWN=1|media_NFC_quarantined=1|scope_clear_close=1|same_holder_restart_readback_continue=1");
 }
 
 struct page_observation {
@@ -536,7 +577,11 @@ int main(int argc, char **argv)
     mapped_profile = argc == 2 && !strcmp(argv[1], "--mapped");
     if (argc != 1 && !mapped_profile) { fputs("usage: posix_operation_test [--mapped]\n", stderr); return 2; }
     CHECK(setvbuf(stdout, NULL, _IOLBF, 0) == 0);
-    before_entry_truncate(); after_commit_mode_change();
+    printf("POSIX_OPERATION_PROFILE|FWLAB_MEDIA_EXCLUSIVE=%d|mapped=%d|operation_file_properties=%s|direct_callbacks_and_hash_strict=1\n",
+           FWLAB_MEDIA_EXCLUSIVE, mapped_profile,
+           FWLAB_MEDIA_EXCLUSIVE && mapped_profile ? "open_recovery_close" : "entry_exit");
+    before_entry_truncate(); after_commit_mode_change(0);
+    if (FWLAB_MEDIA_EXCLUSIVE && mapped_profile) after_commit_mode_change(1);
     if (mapped_profile) {
         mapped_equivalence(); mapped_copy_loss(0); mapped_copy_loss(1);
         mapped_constructor_failures();

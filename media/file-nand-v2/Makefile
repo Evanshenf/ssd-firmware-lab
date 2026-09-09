@@ -7,6 +7,14 @@ CFLAGS ?= -std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic
 CPPFLAGS ?=
 LDFLAGS ?=
 LDLIBS ?=
+FWLAB_MEDIA_EXCLUSIVE ?= 0
+ifneq ($(FWLAB_MEDIA_EXCLUSIVE),0)
+ifneq ($(FWLAB_MEDIA_EXCLUSIVE),1)
+$(error FWLAB_MEDIA_EXCLUSIVE must be 0 or 1)
+endif
+endif
+override CPPFLAGS += -DFWLAB_MEDIA_EXCLUSIVE=$(FWLAB_MEDIA_EXCLUSIVE)
+MEDIA_CONFIG := $(BUILD_DIR)/.fwlab-media-config
 
 TEST := $(BUILD_DIR)/physical_nand_test
 OPERATION_TEST := $(BUILD_DIR)/posix_operation_test
@@ -21,10 +29,17 @@ HEADERS := physical_nand.h physical_nand_internal.h physical_nand_codec.h physic
 	../../include/fwlab/portable/nfc_types.h ../../include/fwlab/portable/crc32c.h \
 	../../include/fwlab/portable/crc32c_fast.h ../../include/fwlab/portable/crc32c_shift1024.h
 
-.PHONY: all check check-operation check-mapped
+.PHONY: all check check-operation check-mapped FORCE_MEDIA_CONFIG
 all: $(TEST)
 
-$(TEST): $(SOURCES) $(HEADERS) Makefile
+FORCE_MEDIA_CONFIG:
+
+$(MEDIA_CONFIG): FORCE_MEDIA_CONFIG
+	@mkdir -p "$(BUILD_DIR)"
+	@printf 'FWLAB_MEDIA_EXCLUSIVE=%s\n' '$(FWLAB_MEDIA_EXCLUSIVE)' | cmp -s - "$@" || \
+		printf 'FWLAB_MEDIA_EXCLUSIVE=%s\n' '$(FWLAB_MEDIA_EXCLUSIVE)' > "$@"
+
+$(TEST): $(SOURCES) $(HEADERS) Makefile $(MEDIA_CONFIG)
 	mkdir -p "$(BUILD_DIR)"
 	$(CC) -I../../include -I. $(CPPFLAGS) $(CFLAGS) $(SOURCES) \
 		$(LDFLAGS) $(LDLIBS) -o "$@"
@@ -32,7 +47,7 @@ $(TEST): $(SOURCES) $(HEADERS) Makefile
 check: $(TEST)
 	"$(TEST)"
 
-$(OPERATION_TEST): $(OPERATION_SOURCES) $(HEADERS) Makefile \
+$(OPERATION_TEST): $(OPERATION_SOURCES) $(HEADERS) Makefile $(MEDIA_CONFIG) \
 	../../include/fwlab/contracts/nfc_page_v2_types.h \
 	../../include/fwlab/contracts/nfc_page_v2_provider.h \
 	../../include/fwlab/private/nfc_page_v2_model.h

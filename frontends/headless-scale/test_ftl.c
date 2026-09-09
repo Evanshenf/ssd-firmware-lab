@@ -615,8 +615,9 @@ static void journey(uint32_t mib, int full, int cuts, int cost, int use_v2, int 
     printf("SCALE_MEDIA_FORMAT|version=%u|ftl_format=%u|fresh_directory=1|batch_consumer=%u\n",
            use_v2 ? 2u : 1u, window_v2 ? 2u : 1u, window_v2 ? 1u : 0u);
     if (operation_v2)
-        printf("SCALE_MEDIA_VALIDATION|profile=%s|entry_exit_checks=1|per_callback_interval_not_claimed=1\n",
-               mapped_v2 ? "POSIX_MAPPED" : "POSIX_OPERATION");
+        printf("SCALE_MEDIA_VALIDATION|profile=%s|FWLAB_MEDIA_EXCLUSIVE=%d|entry_exit_checks=%d|per_callback_interval_not_claimed=1\n",
+               mapped_v2 ? "POSIX_MAPPED" : "POSIX_OPERATION",
+               FWLAB_MEDIA_EXCLUSIVE, !(FWLAB_MEDIA_EXCLUSIVE && mapped_v2));
     if (window_v2) scale_storage_window_v2_factory_init(&f.factory, &f.options);
     else scale_storage_factory_init(&f.factory, &f.options);
     media_open(&f, 1);

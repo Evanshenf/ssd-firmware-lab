@@ -26,6 +26,7 @@ struct fnv2_posix_context {
     uint64_t inode;
     uint64_t expected_size;
     uint8_t operation_active;
+    uint8_t exclusive_owned;
     uint8_t *mapping;
     size_t mapped_length;
 };
@@ -269,10 +270,16 @@ static enum fwlab_nfc_api_result posix_size(void *opaque, uint64_t *size)
 static enum fwlab_nfc_api_result posix_close(void *opaque)
 {
     struct fnv2_posix_context *context = opaque;
-    int fd;
+    int fd, properties_ok = 1, close_result;
 
     if (context == NULL || context->fd < 0 || context->operation_active) {
         return FWLAB_NFC_API_WRONG_STATE;
+    }
+    if (context->exclusive_owned) {
+        struct stat status;
+        /* Audit the admitted ownership epoch, but never leak its mapping or
+         * OFD on a late property error. This does not revoke prior results. */
+        properties_ok = context_stat(context, &status);
     }
     if (context->mapped_length != 0) {
         if (munmap(context->mapping, context->mapped_length) != 0) {
@@ -291,10 +298,12 @@ static enum fwlab_nfc_api_result posix_close(void *opaque)
     fd = context->fd;
     context->fd = -1;
     context->allow_resize = 0;
+    context->exclusive_owned = 0;
     /* Linux closes the descriptor even when close reports EINTR. Retrying
      * could close a reused descriptor. The OFD lock is released by close. */
-    return close(fd) == 0 ? FWLAB_NFC_API_OK :
-                            FWLAB_NFC_API_INVARIANT_FAILURE;
+    close_result = close(fd);
+    return close_result == 0 && properties_ok ? FWLAB_NFC_API_OK :
+                                              FWLAB_NFC_API_INVARIANT_FAILURE;
 }
 
 static int private_directory(int directory_fd)
@@ -444,6 +453,7 @@ static enum fwlab_nfc_api_result open_media(
         media->io.read = mapped_read;
         media->io.write = mapped_write;
         media->page_copy_crc = 1;
+        context.exclusive_owned = FWLAB_MEDIA_EXCLUSIVE;
     }
     stored = (struct fnv2_posix_context *)media->io_storage;
     *stored = context;
@@ -517,17 +527,30 @@ static struct fnv2_posix_context *operation_context(struct fwlab_file_nand_v2 *m
     return c->magic == FNV2_POSIX_MAGIC && c->fd >= 0 && !c->allow_resize ? c : NULL;
 }
 
+static int operation_file_valid(const struct fnv2_posix_context *c)
+{
+    struct stat status;
+
+    if (c != NULL && c->exclusive_owned) {
+        /* Admission/close own file-property queries in the opt-in build.
+         * Every operation still requires its live, fixed mapped extent. */
+        return c->magic == FNV2_POSIX_MAGIC && c->fd >= 0 && !c->allow_resize &&
+            c->mapping != NULL && c->mapped_length != 0 &&
+            c->expected_size == c->mapped_length;
+    }
+    return context_stat(c, &status);
+}
+
 static enum fwlab_nfc_api_result operation_begin(struct fwlab_file_nand_v2 *m,
                                                   struct fwlab_nand_media *base)
 {
     struct fnv2_posix_context *c;
-    struct stat status;
     *base = fwlab_file_nand_v2_media(m);
     if (!base->ops) return FWLAB_NFC_API_WRONG_STATE;
     c = operation_context(m);
     if (!c) return FWLAB_NFC_API_INVALID_CONTRACT;
     if (c->operation_active) return FWLAB_NFC_API_WRONG_STATE;
-    if (!context_stat(c, &status)) {
+    if (!operation_file_valid(c)) {
         m->quarantined = 1;
         return FWLAB_NFC_API_INVARIANT_FAILURE;
     }
@@ -539,10 +562,9 @@ static enum fwlab_nfc_api_result operation_end(struct fwlab_file_nand_v2 *m,
                                                 enum fwlab_nfc_api_result result)
 {
     struct fnv2_posix_context *c = (struct fnv2_posix_context *)m->io_storage;
-    struct stat status;
     /* The synchronous wrapper owns this flag even after engine quarantine. */
     c->operation_active = 0;
-    if (c->magic != FNV2_POSIX_MAGIC || c->allow_resize || !context_stat(c, &status)) {
+    if (c->magic != FNV2_POSIX_MAGIC || c->allow_resize || !operation_file_valid(c)) {
         m->quarantined = 1;
         return FWLAB_NFC_API_INVARIANT_FAILURE;
     }

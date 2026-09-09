@@ -116,6 +116,41 @@ nor barrier count, and does not add calibrated NAND hardware timings.
 
 ## Optional fixed mapped BYTE profile
 
+### Exclusive-file build option
+
+The default `FWLAB_MEDIA_EXCLUSIVE=0` retains the descriptor checks described
+below. For a simulator-managed file, compile with `FWLAB_MEDIA_EXCLUSIVE=1`:
+
+```sh
+make -C media/file-nand-v2 FWLAB_MEDIA_EXCLUSIVE=1 check-mapped
+make -C frontends/headless-scale -f ftl.mk FWLAB_MEDIA_EXCLUSIVE=1 check-parent-window-v2-mapped
+```
+
+This option changes **only the property-validation interval of an admitted
+mapped instance using the operation-boundary descriptor**. File identity, owner,
+mode, link count and size are checked on admission/recovery and at close, rather
+than each operation. The media file and private FD must not be independently
+modified, truncated, unlinked, have attributes changed, or be closed/reused by
+other code during that ownership epoch. Process credentials must remain stable.
+Passive readers and ordinary OS caching do not themselves change NAND contents;
+a concurrent reader is not promised a consistent backup image.
+
+All range/overflow, live mapping, reentrancy, CRC/OOB, NAND state, I/O-error and
+three real synchronization checks remain. Direct strict callbacks, diagnostic
+hashing, ordinary non-mapped POSIX, and cold format/recovery stay strict even in
+this build. A close-time property error still releases the mapping and FD/OFD
+lock and is reported after cleanup; it does not retroactively revoke a completed
+I/O. Mapping access faults retain the existing process-fatal behavior.
+
+The existing Makefiles accept only `0` or `1`. A small configuration stamp
+invalidates objects when this option changes, including custom build directories.
+Use separate build directories for concurrent configurations. Result logs report
+the selected option; exclusive-mode results are not strict-mode evidence. This
+option does not change media format, create new constructors, select raw storage,
+or deploy a native controller.
+
+### Mapping and default validation contract
+
 `fwlab_file_nand_v2_posix_mapped_format/restart` explicitly selects bounded
 mapped copies beneath the same physical engine. The constructors require tmpfs
 on the actual opened FD and cap the entire image, including all metadata and
