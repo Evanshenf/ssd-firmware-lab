@@ -55,7 +55,7 @@ SCALED_RUNTIME_SOURCES := tests/test_scaled_runtime.c native_scaled_media.c \
 SCALED_BUILD ?= build/scaled-offline
 FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
 
-.PHONY: worker native-io native-io-static runtime check-runtime clean
+.PHONY: worker native-io native-io-static native-io-scaled native-io-scaled-static runtime check-runtime clean
 .PHONY: scaled-runtime check-scaled-runtime
 .PHONY: scaled-worker attach-check
 
@@ -92,6 +92,18 @@ native-io:
 native-io-static:
 	mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -static tests/test_native_io.c tests/owner_journey.c tests/vfio_epoch.c -o build/j1_native_io_static
+
+native-io-scaled:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_TEST_SCALED=1 $(CFLAGS) \
+		tests/test_native_io.c tests/owner_journey.c tests/vfio_epoch.c \
+		-o $(SCALED_BUILD)/j1_native_scaled_io
+
+native-io-scaled-static:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_TEST_SCALED=1 $(CFLAGS) -static \
+		tests/test_native_io.c tests/owner_journey.c tests/vfio_epoch.c \
+		-o $(SCALED_BUILD)/j1_native_scaled_io_static
 
 runtime:
 	mkdir -p build

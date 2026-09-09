@@ -149,3 +149,10 @@ Use fresh disposable media for a separately scoped online qualification; this
 build is not authorization to replace a running worker or existing NAND file.
 Actual Linux probe/reset timing, native I/O and M5 remain to be qualified for
 this candidate. No performance or multi-queue claim follows from its build.
+
+The matching `native-io-scaled` / `native-io-scaled-static` clients retain exact
+device/BDF/identity and exclusive-open checks, but require exactly64MiB and add
+an8KiB case ending at the last LBA. Default clients still require1MiB. Both
+provide `profile-plan` as a no-device-open description, not a test PASS. The
+existing initramfs builder accepts the chosen static client as its second
+argument; owner subprocesses execute that same client binary.

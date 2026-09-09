@@ -24,6 +24,17 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#ifndef FWLAB_NATIVE_TEST_SCALED
+#define FWLAB_NATIVE_TEST_SCALED 0
+#endif
+_Static_assert(FWLAB_NATIVE_TEST_SCALED == 0 || FWLAB_NATIVE_TEST_SCALED == 1,
+               "native test profile must be legacy or scaled64");
+#if FWLAB_NATIVE_TEST_SCALED
+#define NATIVE_TEST_BYTES UINT64_C(67108864)
+#else
+#define NATIVE_TEST_BYTES UINT64_C(1048576)
+#endif
+
 struct native_case { uint32_t lba, bytes, offset; uint8_t seed; };
 int native_owner_host_journey(const char *directory, const char *bdf, int budget);
 int native_owner_stale_journey(const char *directory, const char *bdf);
@@ -35,7 +46,11 @@ static const struct native_case cases[] = {
     { 128, 512, 0, 0x31 },
     { 129, 4096, 0, 0x52 },
     { 137, 8192, 512, 0x73 },
+#if FWLAB_NATIVE_TEST_SCALED
+    { (uint32_t)(NATIVE_TEST_BYTES / 512u - 16u), 8192, 0, 0x94 },
+#endif
 };
+#define NATIVE_CASE_COUNT (sizeof(cases) / sizeof(cases[0]))
 static uint8_t pattern_delta;
 
 static int exchange(int fd, unsigned long operation,
@@ -78,7 +93,7 @@ static int identity_guard(int fd, const char *bdf, int guest)
         (!guest && !strstr(resolved, "/ssd_fwlab_native_pci/")) ||
         (guest && (statfs("/", &rootfs) ||
                    (rootfs.f_type != 0x858458f6 && rootfs.f_type != 0x01021994))) ||
-        ioctl(fd, BLKGETSIZE64, &bytes) || bytes != UINT64_C(1048576) ||
+        ioctl(fd, BLKGETSIZE64, &bytes) || bytes != NATIVE_TEST_BYTES ||
         ioctl(fd, NVME_IOCTL_ID) != 1)
         goto done;
     memset(identify, 0, 4096);
@@ -367,6 +382,15 @@ int main(int argc, char **argv)
 
     setvbuf(stdout, NULL, _IOLBF, 0);
 
+    if (argc == 2 && !strcmp(argv[1], "profile-plan")) {
+        printf("NATIVE_CLIENT_PLAN expected_bytes=%" PRIu64 " shapes=%zu no_device_open=1\n",
+               NATIVE_TEST_BYTES, NATIVE_CASE_COUNT);
+        for (index = 0; index < NATIVE_CASE_COUNT; ++index)
+            printf("PLAN_CASE lba=%u bytes=%u buffer_offset=%u\n",
+                   cases[index].lba, cases[index].bytes, cases[index].offset);
+        return 0;
+    }
+
     if (argc == 7 && !strcmp(argv[1], "owner-qemu"))
         return native_owner_qemu_journey(argv[2], argv[3], argv[4], argv[5], argv[6], 0);
     if (argc == 7 && !strcmp(argv[1], "owner-prekill"))
@@ -420,7 +444,7 @@ int main(int argc, char **argv)
         goto done;
     }
 guest_again:
-    for (index = 0; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+    for (index = 0; index < NATIVE_CASE_COUNT; ++index) {
         const struct native_case *test = &cases[index];
         uint8_t *buffer = allocation + test->offset;
 
@@ -446,7 +470,7 @@ guest_again:
         if (!read_compare(fd, &cases[0], allocation, 0, 0))
             goto done;
     if (guest && !guest_phase) {
-        puts("NATIVE_GUEST_A_READ_OK shapes=3 data=exact");
+        printf("NATIVE_GUEST_A_READ_OK shapes=%zu data=exact\n", NATIVE_CASE_COUNT);
         if (guest_hold) {
             puts("NATIVE_GUEST_HOLD");
             fflush(stdout);
@@ -458,9 +482,9 @@ guest_again:
         goto guest_again;
     }
     if (guest)
-        puts("NATIVE_GUEST_AB_PASS host_A=exact guest_B=durable shapes=3");
+        printf("NATIVE_GUEST_AB_PASS host_A=exact guest_B=durable shapes=%zu\n", NATIVE_CASE_COUNT);
     else
-        printf("NATIVE_IO_PASS mode=%s shapes=3 continued_reads=64\n", argv[1]);
+        printf("NATIVE_IO_PASS mode=%s shapes=%zu continued_reads=64\n", argv[1], NATIVE_CASE_COUNT);
     result = 0;
 done:
     free(allocation);
