@@ -16,6 +16,12 @@ struct native_media {
     struct fwlab_file_nand_v0 *file;
     struct fwlab_file_nand_holder_v0 holder;
     uint8_t uuid[16];
+    /* Explicit construction only. NULL/zero retains the legacy worker. These
+     * objects and the media holder outlive runtime close/finalization. */
+    const struct j0_media_binding *media_binding;
+    const struct j0_storage_factory *storage_factory;
+    uint64_t format_lba_count;
+    uint64_t expected_lba_count;
 };
 
 struct native_slot {

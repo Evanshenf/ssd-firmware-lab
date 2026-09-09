@@ -30,7 +30,42 @@ FIRMWARE_SOURCES := \
 RUNTIME_SOURCES := tests/test_runtime.c $(FIRMWARE_SOURCES)
 WORKER_SOURCES := native_worker.c native_host.c native_owner.c native_owner_socket.c $(FIRMWARE_SOURCES)
 
+# Offline native construction only. The released worker target stays legacy;
+# this target cannot attach a scaled backend to the current format-1 kernel.
+SCALED_SOURCES := \
+	../../core/ftl-scale/ftl_scale_codec.c \
+	../../core/ftl-scale/ftl_scale_recovery.c \
+	../../core/ftl-scale/ftl_scale_mapping.c \
+	../../core/ftl-scale/ftl_scale_gc.c \
+	../../core/ftl-scale/ftl_scale_runtime.c \
+	../../core/ftl-scale/ftl_scale_parent.c \
+	../../core/ftl-scale/ftl_scale_nfc.c \
+	../../core/ftl-scale/ftl_scale_nfc_v2.c \
+	../../core/ftl-scale/ftl_scale_window.c \
+	../../core/nfc-page-v2/nfc_page_v2.c \
+	../../core/nfc-runtime/nfc_scaled_model.c \
+	../../media/file-nand-v2/physical_nand.c \
+	../../media/file-nand-v2/physical_nand_codec.c \
+	../../media/file-nand-v2/physical_nand_posix.c \
+	../../media/file-nand-v2/physical_nand_batch.c \
+	../headless-scale/scale_storage.c
+SCALED_RUNTIME_SOURCES := tests/test_scaled_runtime.c native_scaled_media.c \
+	native_host.c native_owner.c native_owner_socket.c \
+	$(FIRMWARE_SOURCES) $(SCALED_SOURCES)
+SCALED_BUILD ?= build/scaled-offline
+FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
+
 .PHONY: worker native-io native-io-static runtime check-runtime clean
+.PHONY: scaled-runtime check-scaled-runtime
+
+scaled-runtime:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -I../../core/ftl-scale -I../../media/file-nand-v2 \
+		$(CFLAGS) $(SCALED_RUNTIME_SOURCES) -Wl,--wrap=ioctl \
+		-o $(SCALED_BUILD)/native_scaled_offline
+
+check-scaled-runtime: scaled-runtime
+	FWLAB_TEST_MEDIA_DIR="$(FWLAB_TEST_MEDIA_DIR)" $(SCALED_BUILD)/native_scaled_offline
 
 worker:
 	mkdir -p build

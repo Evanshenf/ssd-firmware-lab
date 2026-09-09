@@ -76,3 +76,50 @@ without a timeout/reset, with the error buffer unchanged and final Flush still
 successful. It deliberately consumes that runtime's budget and then revokes
 the owner. All device identity guards remain in force. Do not run it against
 an ordinary physical namespace.
+
+## Offline scaled native construction
+
+The ordinary `worker` target still constructs the tiny M3P/C3/file-v0 binding.
+The separate `check-scaled-runtime` target is an **offline prerequisite**, not
+a scaled worker that can attach to the current kernel module.
+
+It runs the actual native constructor, worker loop, host data mover and
+completion handling against a bounded fake ioctl boundary. Storage is the
+existing 64 MiB scaled FTL, PAGE2 R0 and physical-v2 NAND model. Requests remain
+8 KiB; the original worker scheduling and sleeps remain. The fake owns only
+Host byte buffers and assumed transport identities, never namespace storage.
+No real device is opened, and unknown ioctl operations fail.
+
+Use a separately prepared, capped 1 GiB tmpfs at `/run/fwlab-test-media` with
+sufficient available RAM. Run serially; no slow-disk fallback is provided:
+
+```sh
+flock -n /run/fwlab-test-media/.run.lock \
+  make -C frontends/linux-m4 check-scaled-runtime \
+  FWLAB_TEST_MEDIA_DIR=/run/fwlab-test-media
+```
+
+Code and logs stay outside tmpfs. The test uses only its own newly created
+directory/image and removes it on success; a failed case leaves its image for
+diagnosis. It never uses an existing deployment image or raw block device.
+
+The finite journey checks Identify capacity, nonzero Write/SELF near the last
+valid LBA, Flush, Read, complete runtime/media close, fresh-epoch recovery,
+readback and continued writes. The data mover must actually transfer Host
+bytes. Format is explicit and new-file-only; recovery neither creates nor
+formats, and a second format cannot replace an image.
+One adjacent constructor/close smoke also checks the unchanged legacy
+selection; it does not repeat the historical full runtime matrix on `/tmp`.
+
+`native_scaled_media` owns the media holder, arena, factory and binding at
+stable addresses until the associated native context finishes its runtime.
+The factory frees FTL/NFC state only. The media owner refuses close while that
+runtime exists. A zero-initialized owner and an outliving native context are
+private construction preconditions, not a general resource-management API.
+
+The current kernel still reports media format 1 and ATTACH has no media-format
+field. The offline transport assumptions do not resolve that online identity
+contract. This check is not native PCI/M5, ARM kernel, kernel readiness timeout,
+power-loss durability or throughput evidence. No WRITE-loan or READ-copy change
+is included. Existing snapshot, CRC/OOB and actual synchronization semantics
+remain in the storage engines.

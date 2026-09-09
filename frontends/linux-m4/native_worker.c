@@ -115,16 +115,25 @@ int native_runtime_create(struct native_context *context,
     config.size = (uint16_t)sizeof(config);
     memcpy(config.media_uuid, media->uuid, sizeof(config.media_uuid));
     config.file = media->file;
+    config.media_binding = media->media_binding;
+    config.storage_factory = media->storage_factory;
+    config.format_lba_count = format ? media->format_lba_count : 0;
+    config.expected_lba_count = format ? 0 : media->expected_lba_count;
     config.media_mode = format ? J0_MEDIA_FORMAT : J0_MEDIA_RECOVER;
-    config.budget_profile = J0_BUDGET_LAB;
+    config.budget_profile = media->storage_factory ? J0_BUDGET_SCALE : J0_BUDGET_LAB;
     config.generation = context->epoch;
     config.execution_epoch = context->epoch;
     /* Failed pre-grant construction may retry the same unpublished controller
      * epoch. Its internal objects still need fresh, non-reused identities. */
     config.volatile_nonce_seed = ++context->next_runtime_seed;
     config.host_factory = &factory;
-    if (j0_runtime_init(context->runtime, &config) != FWLAB_SPINE_V0_OK)
+    if (j0_runtime_init(context->runtime, &config) != FWLAB_SPINE_V0_OK) {
+        /* J0 has released all partial construction state; no lower step ran. */
+        free(context->runtime);
+        context->runtime = NULL;
+        memset(&context->buffer, 0, sizeof(context->buffer));
         return 0;
+    }
     for (iteration = 0; iteration < 800000; ++iteration) {
         uint32_t units;
         if (j0_runtime_step(context->runtime, 3, &units) != FWLAB_SPINE_V0_OK)
