@@ -8,6 +8,9 @@ obj-m += ssd_fwlab_native_pci.o
 ssd_fwlab_native_pci-y := m4_pci_main.o m4_pci.o m4_hif.o
 
 ccflags-y += -I$(src)/../../include
+# Immutable producer selection; BAR remains the compatibility reference.
+FWLAB_M4_PRODUCER ?= 1
+ccflags-y += -DFWLAB_M4_PRODUCER=$(FWLAB_M4_PRODUCER)
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
 .PHONY: all clean

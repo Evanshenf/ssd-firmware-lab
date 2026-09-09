@@ -33,6 +33,8 @@ static struct {
     uint8_t occupied;
     uint64_t next_uid, function;
     uint32_t epoch;
+    uint32_t pump_ticks, pump_captures, pump_losses, reset_acks;
+    uint8_t delivered, service_fault_once, reset_pending;
 } host;
 static struct fwlab_m4_attachment attached_identity;
 static unsigned owner_identity_fault;
@@ -53,6 +55,10 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
     va_start(arguments, request);
     if (request == FWLAB_M4_ATTACH_IDENTITY)
         argument = va_arg(arguments, struct fwlab_m4_attach_message *);
+    else if (request == FWLAB_M4_ATTACH_MODE)
+        argument = va_arg(arguments, struct fwlab_m4_attach_mode_message *);
+    else if (request == FWLAB_M4_PUMP)
+        argument = va_arg(arguments, struct fwlab_m4_pump_message *);
     else if (request == FWLAB_M4_OWNER_EXCHANGE)
         argument = va_arg(arguments, struct fwlab_m4_owner_message *);
     else if (request == FWLAB_M4_NATIVE_EXCHANGE)
@@ -60,6 +66,49 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
     else
         argument = va_arg(arguments, void *);
     va_end(arguments);
+    if (request == FWLAB_M4_ATTACH_MODE) {
+        struct fwlab_m4_attach_mode_message *attach = argument;
+        REQUIRE(FWLAB_NATIVE_PUMP && fwlab_m4_attach_mode_request_valid(attach));
+        attach->result = fwlab_m4_attach_pin_mode(&attached_identity,
+            FWLAB_M4_PRODUCER_PUMP, attach->producer_mode,
+            attach->media_format_version, attach->media_uuid, attach->binding_sha256);
+        if (!attach->result) {
+            attach->function_nonce = host.function;
+            attach->controller_epoch = host.epoch;
+        }
+        return 0;
+    }
+    if (request == FWLAB_M4_PUMP) {
+        struct fwlab_m4_pump_message *pump = argument;
+        REQUIRE(FWLAB_NATIVE_PUMP && fwlab_m4_pump_request_valid(pump));
+        REQUIRE(attached_identity.media_format_version == FWLAB_M4_MEDIA_SCALED &&
+                pump->function_nonce == host.function);
+        ++host.pump_ticks;
+        pump->result = 0;
+        if (host.service_fault_once) {
+            REQUIRE(!host.occupied && !host.next);
+            host.service_fault_once = 0;
+            host.reset_pending = 1;
+            pump->service_result = -EIO;
+            return 0;
+        }
+        if (!host.reset_pending && !host.occupied && host.next < host.count) {
+            host.active = host.next++;
+            host.occupied = 1;
+            host.delivered = 0;
+            ++host.pump_captures;
+            pump->captured = 1;
+        }
+        if (pump->captured && host.pump_losses) {
+            --host.pump_losses;
+            /* A retained command survives a failed reply. The next pump
+             * observes zero capture; NEXT must still deliver this exact row. */
+            memset(pump, 0x5a, sizeof(*pump) / 2);
+            errno = EFAULT;
+            return -1;
+        }
+        return 0;
+    }
     if (request == FWLAB_M4_ATTACH_IDENTITY) {
         struct fwlab_m4_attach_message *attach = argument;
         REQUIRE(fwlab_m4_attach_request_valid(attach));
@@ -97,7 +146,7 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
     message = argument;
     REQUIRE(message && message->version == FWLAB_M4_NATIVE_VERSION &&
             message->size == sizeof(*message));
-    REQUIRE(message->function_nonce == host.function && message->controller_epoch == host.epoch);
+    REQUIRE(message->function_nonce == host.function);
     ++host.ioctls;
     message->result = 0;
     if (message->operation == FWLAB_M4_NATIVE_STATUS) {
@@ -105,11 +154,33 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
             errno = ETIMEDOUT;
             return -1;
         }
-        message->event = FWLAB_M4_NATIVE_IDLE;
+        message->event = host.reset_pending ? FWLAB_M4_NATIVE_RESET : FWLAB_M4_NATIVE_IDLE;
+        message->controller_epoch = host.epoch + (host.reset_pending ? 1u : 0u);
         return 0;
     }
+    if (message->operation == FWLAB_M4_NATIVE_RESET_ACK) {
+        REQUIRE(FWLAB_NATIVE_PUMP && host.reset_pending && !host.occupied && !host.next);
+        REQUIRE(message->controller_epoch == host.epoch + 1u);
+        ++host.epoch;
+        ++host.reset_acks;
+        host.reset_pending = 0;
+        /* These are still unsubmitted Host script rows. The fake Host creates
+         * their successor transport epoch only after the real worker's ACK. */
+        for (uint32_t index = 0; index < host.count; ++index)
+            host.row[index].capture.controller_epoch = host.epoch;
+        return 0;
+    }
+    REQUIRE(message->controller_epoch == host.epoch && !host.reset_pending);
     if (message->operation == FWLAB_M4_NATIVE_NEXT) {
         message->event = FWLAB_M4_NATIVE_IDLE;
+#if FWLAB_NATIVE_PUMP
+        if (host.occupied && !host.delivered) {
+            host.delivered = 1;
+            *message = host.row[host.active].capture;
+            message->result = 0;
+            message->event = FWLAB_M4_NATIVE_COMMAND;
+        }
+#else
         if (!host.occupied && host.next < host.count) {
             host.active = host.next++;
             host.occupied = 1;
@@ -117,6 +188,7 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
             message->result = 0;
             message->event = FWLAB_M4_NATIVE_COMMAND;
         }
+#endif
         return 0;
     }
     /* No real-ioctl fallback, even for unexpected control or canary requests. */
@@ -259,6 +331,10 @@ static void add_command(uint8_t opcode, uint64_t lba, uint8_t seed)
 
 static void run_script(struct native_context *context, struct native_scaled_media *media)
 {
+#if FWLAB_NATIVE_PUMP
+    host.service_fault_once = 1;
+    host.pump_losses = 1;
+#endif
     REQUIRE(firmware_loop(context, &media->native, NULL));
     REQUIRE(host.next == host.count && !host.occupied);
     for (uint32_t index = 0; index < host.count; ++index) {
@@ -269,6 +345,11 @@ static void run_script(struct native_context *context, struct native_scaled_medi
     }
     for (uint32_t index = 0; index < NATIVE_COMMANDS; ++index)
         REQUIRE(!context->slot[index].occupied);
+#if FWLAB_NATIVE_PUMP
+    REQUIRE(host.pump_captures == host.count && host.pump_ticks > host.count &&
+            !host.pump_losses && host.reset_acks == 1 && !host.reset_pending);
+    puts("NATIVE_PUMP_LOOP_PASS|actual_worker_reset_drain_ack=1|retained_NEXT_after_lost_reply=1|not_kernel_fault_proof=1");
+#endif
 }
 
 static void check_identify(const struct host_row *row)
@@ -307,6 +388,7 @@ static void close_epoch(struct native_context *context, struct native_scaled_med
     phase_end("media-close", context->epoch, started);
 }
 
+#if !FWLAB_NATIVE_SCALED
 static void legacy_constructor_smoke(int directory_fd, const char *directory,
                                       const uint8_t uuid[16])
 {
@@ -334,6 +416,7 @@ static void legacy_constructor_smoke(int directory_fd, const char *directory,
     free(context);
     puts("LEGACY_NATIVE_CONSTRUCTOR_PASS|default_file_v0_M3P_C3=1|constructor_close_only=1");
 }
+#endif
 
 int main(void)
 {
@@ -364,7 +447,9 @@ int main(void)
     context->descriptor = OFFLINE_DESCRIPTOR;
     context->function_nonce = UINT64_C(0x4d31414f46464c49);
     context->epoch = 1;
+#if !FWLAB_NATIVE_SCALED
     legacy_constructor_smoke(directory_fd, directory, uuid);
+#endif
     script_begin(context);
     native_message_init(context, NULL, UINT32_MAX, &unsupported);
     REQUIRE(native_exchange(context, &unsupported) == -ENOTTY && unsupported.result == INT32_MIN);
@@ -375,7 +460,12 @@ int main(void)
     started = wall_ns();
     REQUIRE(native_scaled_media_open(media, context, directory, uuid, 1));
     phase_end("media-format", context->epoch, started);
+#if FWLAB_NATIVE_PUMP
+    REQUIRE(native_attach_mode(context, FWLAB_M4_PRODUCER_PUMP,
+        FWLAB_M4_MEDIA_SCALED, media->native.uuid, binding) == 0);
+#else
     REQUIRE(native_attach_explicit(context, FWLAB_M4_MEDIA_SCALED, media->native.uuid, binding) == 0);
+#endif
     started = wall_ns();
     REQUIRE(native_runtime_create(context, &media->native, 1));
     phase_end("runtime-format", context->epoch, started);

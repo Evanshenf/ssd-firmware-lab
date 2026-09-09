@@ -18,6 +18,15 @@
 
 #include "m4_hif.h"
 #include "m4_dma_api.h"
+#include "fwlab/unstable/m4_attach_native.h"
+
+#ifndef FWLAB_M4_PRODUCER
+#define FWLAB_M4_PRODUCER FWLAB_M4_PRODUCER_BAR
+#endif
+#if FWLAB_M4_PRODUCER != FWLAB_M4_PRODUCER_BAR && \
+    FWLAB_M4_PRODUCER != FWLAB_M4_PRODUCER_PUMP
+#error "FWLAB_M4_PRODUCER must be 1 (BAR) or 2 (PUMP)"
+#endif
 
 #define FWLAB_M4_PCI_NAME "ssd_fwlab_native_pci"
 #define FWLAB_M4_IOMMU_NAME "ssd_fwlab_native_iommu"

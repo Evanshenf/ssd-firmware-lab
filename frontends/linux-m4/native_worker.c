@@ -14,6 +14,13 @@
 #if FWLAB_NATIVE_SCALED
 #include "native_scaled_media.h"
 #endif
+#ifndef FWLAB_NATIVE_PUMP
+#define FWLAB_NATIVE_PUMP 0
+#endif
+#if (FWLAB_NATIVE_PUMP != 0 && FWLAB_NATIVE_PUMP != 1) || \
+    (FWLAB_NATIVE_PUMP && !FWLAB_NATIVE_SCALED)
+#error "FWLAB_NATIVE_PUMP requires the explicitly selected scaled worker"
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -458,7 +465,13 @@ static int firmware_loop(struct native_context *context, struct native_media *me
     while (!stop_requested) {
         struct fwlab_m4_native_message message;
         uint32_t units;
-        int received;
+        int received, service_result = 0;
+#if FWLAB_NATIVE_PUMP
+        /* Control/FLR/PBA service must continue even with no runtime/owner.
+         * A service fault latches the existing reset path; it is not fd loss. */
+        if (native_pump(context, &service_result))
+            return 0;
+#endif
         native_message_init(context, NULL, FWLAB_M4_NATIVE_STATUS, &message);
         if (native_exchange(context, &message))
             return 0;
@@ -480,7 +493,8 @@ static int firmware_loop(struct native_context *context, struct native_media *me
         }
         if (server && !native_owner_server_poll(server))
             return 0;
-        if (!context->runtime || (server && native_owner_blocks_commands(&server->owner))) {
+        if (service_result || !context->runtime ||
+            (server && native_owner_blocks_commands(&server->owner))) {
             nanosleep(&idle, NULL);
             continue;
         }
@@ -545,7 +559,12 @@ int main(int argc, char **argv)
 #if FWLAB_NATIVE_SCALED
     if (!native_scaled_media_open(&media_owner, context, directory, media_uuid, format))
         goto done;
+#if FWLAB_NATIVE_PUMP
+    if (native_attach_mode(context, FWLAB_M4_PRODUCER_PUMP,
+            FWLAB_M4_MEDIA_SCALED, media->uuid, binding))
+#else
     if (native_attach_explicit(context, FWLAB_M4_MEDIA_SCALED, media->uuid, binding))
+#endif
         goto done;
 #else
     memcpy(media->uuid, media_uuid, sizeof(media_uuid));

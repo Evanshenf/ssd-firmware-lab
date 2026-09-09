@@ -15,7 +15,8 @@
 
 static struct {
     struct fwlab_m4_attachment stored;
-    unsigned calls, legacy_calls, losses, malformed;
+    unsigned calls, legacy_calls, losses, malformed, mode, pump_calls;
+    int service_result;
     int unsupported, always_lost;
 } endpoint;
 static const uint8_t uuid[16] = { 1, 2, 3, 4 };
@@ -35,6 +36,10 @@ int __wrap_ioctl(int descriptor, unsigned long command, ...)
     va_start(args, command);
     if (command == FWLAB_M4_ATTACH_IDENTITY)
         argument = va_arg(args, struct fwlab_m4_attach_message *);
+    else if (command == FWLAB_M4_ATTACH_MODE)
+        argument = va_arg(args, struct fwlab_m4_attach_mode_message *);
+    else if (command == FWLAB_M4_PUMP)
+        argument = va_arg(args, struct fwlab_m4_pump_message *);
     else
         argument = va_arg(args, struct fwlab_m4_native_message *);
     va_end(args);
@@ -43,8 +48,10 @@ int __wrap_ioctl(int descriptor, unsigned long command, ...)
         CHECK(fwlab_m4_attach_request_valid(message));
         CHECK(!memcmp(message->media_uuid, uuid, sizeof(uuid)));
         CHECK(!memcmp(message->binding_sha256, binding, sizeof(binding)));
-        result = fwlab_m4_attach_pin(&endpoint.stored, message->media_format_version,
-                                     message->media_uuid, message->binding_sha256);
+        result = fwlab_m4_attach_pin_mode(&endpoint.stored,
+            endpoint.mode ? endpoint.mode : FWLAB_M4_PRODUCER_BAR,
+            FWLAB_M4_PRODUCER_BAR, message->media_format_version,
+            message->media_uuid, message->binding_sha256);
         message->result = result;
         if (!result) {
             message->media_format_version = endpoint.stored.media_format_version;
@@ -74,6 +81,66 @@ int __wrap_ioctl(int descriptor, unsigned long command, ...)
         }
         return 0;
     }
+    if (command == FWLAB_M4_ATTACH_MODE) {
+        struct fwlab_m4_attach_mode_message *message = argument;
+        CHECK(fwlab_m4_attach_mode_request_valid(message));
+        CHECK(!memcmp(message->media_uuid, uuid, 16));
+        CHECK(!memcmp(message->binding_sha256, binding, 32));
+        message->result = fwlab_m4_attach_pin_mode(&endpoint.stored,
+            endpoint.mode, message->producer_mode, message->media_format_version,
+            message->media_uuid, message->binding_sha256);
+        if (!message->result) {
+            message->producer_mode = endpoint.mode;
+            message->function_nonce = 9123;
+            message->controller_epoch = 7;
+        }
+        if (endpoint.always_lost || endpoint.losses) {
+            if (endpoint.losses) --endpoint.losses;
+            memset(message, 0x5a, sizeof(*message) / 2);
+            errno = EFAULT;
+            return -1;
+        }
+        switch (endpoint.malformed) {
+        case 1: ++message->version; break;
+        case 2: --message->size; break;
+        case 3: message->reserved[4] = 1; break;
+        case 4: message->producer_mode ^= 3; break;
+        case 5: message->binding_sha256[31] ^= 1; break;
+        case 6: ++message->media_format_version; break;
+        case 7: message->function_nonce = 0; break;
+        case 8: message->controller_epoch = 0; break;
+        default: break;
+        }
+        return 0;
+    }
+    if (command == FWLAB_M4_PUMP) {
+        struct fwlab_m4_pump_message *message = argument;
+        CHECK(fwlab_m4_pump_request_valid(message) && message->function_nonce == 9123);
+        ++endpoint.pump_calls;
+        message->result = 0;
+        message->service_result = endpoint.service_result;
+        /* The final observation may be zero after an earlier lost tick.
+         * This is syscall/retry coverage, not a kernel SQ/CQ model. */
+        message->captured = endpoint.pump_calls == 1;
+        if (endpoint.always_lost || endpoint.losses) {
+            if (endpoint.losses) --endpoint.losses;
+            memset(message, 0x5a, sizeof(*message) / 2);
+            errno = EFAULT;
+            return -1;
+        }
+        switch (endpoint.malformed) {
+        case 1: ++message->version; break;
+        case 2: --message->size; break;
+        case 3: message->reserved[1] = 1; break;
+        case 4: message->captured = 2; break;
+        case 5: message->service_result = 1; break;
+        case 6: message->service_result = -4096; break;
+        case 7: ++message->function_nonce; break;
+        case 8: message->result = 1; break;
+        default: break;
+        }
+        return 0;
+    }
     CHECK(command == FWLAB_M4_NATIVE_EXCHANGE);
     {
         struct fwlab_m4_native_message *message = argument;
@@ -81,8 +148,10 @@ int __wrap_ioctl(int descriptor, unsigned long command, ...)
         CHECK(message->version == FWLAB_M4_NATIVE_VERSION && message->size == sizeof(*message));
         CHECK(message->operation == FWLAB_M4_NATIVE_ATTACH);
         CHECK(!message->function_nonce && !message->controller_epoch);
-        result = fwlab_m4_attach_pin(&endpoint.stored, FWLAB_M4_MEDIA_LEGACY,
-                                     message->media_uuid, message->binding_sha256);
+        result = fwlab_m4_attach_pin_mode(&endpoint.stored,
+            endpoint.mode ? endpoint.mode : FWLAB_M4_PRODUCER_BAR,
+            FWLAB_M4_PRODUCER_BAR, FWLAB_M4_MEDIA_LEGACY,
+            message->media_uuid, message->binding_sha256);
         message->result = result;
         if (!result) { message->function_nonce = 9123; message->controller_epoch = 7; }
         if (endpoint.losses) {
@@ -128,6 +197,75 @@ static void pin_and_header_checks(void)
     bad = request; bad.controller_epoch = 1; CHECK(!fwlab_m4_attach_request_valid(&bad));
 }
 
+static void mode_and_pump_checks(struct native_context *context)
+{
+    struct fwlab_m4_attach_mode_message wire = { 0 }, bad;
+    struct fwlab_m4_pump_message pump = { 0 }, bad_pump;
+    int service;
+
+    CHECK(sizeof(wire) == 128 && sizeof(pump) == 48);
+    CHECK(FWLAB_M4_ATTACH_MODE != FWLAB_M4_ATTACH_IDENTITY);
+    wire.version = FWLAB_M4_ATTACH_MODE_VERSION;
+    wire.size = sizeof(wire);
+    wire.producer_mode = FWLAB_M4_PRODUCER_PUMP;
+    CHECK(fwlab_m4_attach_mode_request_valid(&wire));
+    bad = wire; bad.version = 1; CHECK(!fwlab_m4_attach_mode_request_valid(&bad));
+    bad = wire; bad.size = 112; CHECK(!fwlab_m4_attach_mode_request_valid(&bad));
+    bad = wire; bad.reserved1 = 1; CHECK(!fwlab_m4_attach_mode_request_valid(&bad));
+    bad = wire; bad.reserved[4] = 1; CHECK(!fwlab_m4_attach_mode_request_valid(&bad));
+    bad = wire; bad.producer_mode = 3; CHECK(!fwlab_m4_attach_mode_request_valid(&bad));
+    pump.version = FWLAB_M4_PUMP_VERSION; pump.size = sizeof(pump); pump.function_nonce = 9123;
+    CHECK(fwlab_m4_pump_request_valid(&pump));
+    bad_pump = pump; --bad_pump.size; CHECK(!fwlab_m4_pump_request_valid(&bad_pump));
+    bad_pump = pump; bad_pump.reserved0 = 1; CHECK(!fwlab_m4_pump_request_valid(&bad_pump));
+    bad_pump = pump; bad_pump.captured = 1; CHECK(!fwlab_m4_pump_request_valid(&bad_pump));
+    bad_pump = pump; bad_pump.service_result = -EIO; CHECK(!fwlab_m4_pump_request_valid(&bad_pump));
+    for (unsigned mode = 1; mode <= 2; ++mode) {
+        memset(context, 0, sizeof(*context)); context->descriptor = -180;
+        memset(&endpoint, 0, sizeof(endpoint)); endpoint.mode = mode;
+        if (mode == 2) {
+            CHECK(native_attach_explicit(context, 2, uuid, binding) == -EOPNOTSUPP);
+            CHECK(native_attach_legacy(context, uuid, binding) == -EOPNOTSUPP);
+            CHECK(!endpoint.stored.media_format_version && !context->function_nonce);
+        }
+        CHECK(native_attach_mode(context, mode ^ 3, 2, uuid, binding) == -EOPNOTSUPP);
+        CHECK(!endpoint.stored.media_format_version && !context->function_nonce);
+        endpoint.losses = 1;
+        CHECK(native_attach_mode(context, mode, 2, uuid, binding) == 0);
+        CHECK(context->producer_mode == mode && context->attachment.media_format_version == 2);
+        CHECK(native_attach_mode(context, mode, 2, uuid, binding) == 0);
+    }
+    for (unsigned malformed = 1; malformed <= 8; ++malformed) {
+        memset(context, 0, sizeof(*context)); context->descriptor = -180;
+        memset(&endpoint, 0, sizeof(endpoint)); endpoint.mode = 2; endpoint.malformed = malformed;
+        CHECK(native_attach_mode(context, 2, 2, uuid, binding) == -EPROTO);
+        CHECK(endpoint.calls == 1 && !context->producer_mode && !context->function_nonce);
+    }
+    memset(context, 0, sizeof(*context)); context->descriptor = -180;
+    memset(&endpoint, 0, sizeof(endpoint)); endpoint.unsupported = 1;
+    CHECK(native_attach_mode(context, 2, 2, uuid, binding) == -ENOTTY);
+    CHECK(endpoint.calls == 1 && !endpoint.legacy_calls);
+    memset(&endpoint, 0, sizeof(endpoint)); endpoint.mode = 2; endpoint.always_lost = 1;
+    CHECK(native_attach_mode(context, 2, 2, uuid, binding) == -EFAULT);
+    CHECK(endpoint.calls == 3 && endpoint.stored.media_format_version == 2 && !context->producer_mode);
+    memset(&endpoint, 0, sizeof(endpoint)); endpoint.mode = 2;
+    CHECK(native_attach_mode(context, 2, 2, uuid, binding) == 0);
+    endpoint.losses = 1;
+    CHECK(native_pump(context, &service) == 0 && service == 0 && endpoint.pump_calls == 2);
+    endpoint.service_result = -EIO;
+    CHECK(native_pump(context, &service) == 0 && service == -EIO);
+    for (unsigned malformed = 1; malformed <= 8; ++malformed) {
+        endpoint.malformed = malformed;
+        service = 99;
+        CHECK(native_pump(context, &service) == -EPROTO && service == 99);
+    }
+    endpoint.malformed = 0; endpoint.always_lost = 1; endpoint.pump_calls = 0;
+    CHECK(native_pump(context, &service) == -EFAULT && endpoint.pump_calls == 3);
+    endpoint.always_lost = 0; endpoint.unsupported = 1;
+    CHECK(native_pump(context, &service) == -ENOTTY);
+    puts("NATIVE_MODE_PUMP_PASS|actual_mode_pin_and_retry=1|legacy_wire_unchanged=1|service_fault_distinct=1|not_kernel_progress_proof=1");
+}
+
 int main(void)
 {
     struct native_context *context = calloc(1, sizeof(*context));
@@ -164,6 +302,7 @@ int main(void)
     CHECK(native_attach_explicit(context, 2, uuid, binding) == -EFAULT);
     CHECK(endpoint.calls == 3 && endpoint.stored.media_format_version == 2 &&
           !context->function_nonce && !context->attachment.media_format_version);
+    mode_and_pump_checks(context);
     free(context);
     puts("NATIVE_ATTACH_PASS|actual_pin_and_retry=1|legacy_explicit_identity=1|finite_copyout=1|no_kernel_execution_claim=1");
     return 0;

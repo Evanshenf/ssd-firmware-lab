@@ -162,6 +162,7 @@ static int cut_journey(int fd, const char *device, const char *bdf,
     struct stat st;
     int control = -1, parameter = -1, channel[2] = { -1, -1 };
     int consumed = 0, status = 0, fired = 0, success = 0;
+    const int read_cut = point == 2 || point == 4;
     unsigned int controller, index;
     pid_t child = -1;
 
@@ -181,7 +182,7 @@ static int cut_journey(int fd, const char *device, const char *bdf,
         goto done;
     test.seed = 0xd4;
     for (index = 0; index < test.bytes; ++index)
-        buffer[index] = point == 2 ? 0xa5 : pattern(index, test.seed);
+        buffer[index] = read_cut ? 0xa5 : pattern(index, test.seed);
     parameter = open("/sys/module/ssd_fwlab_native_pci/parameters/native_cut",
                      O_RDWR | O_NOFOLLOW | O_CLOEXEC);
     if (parameter < 0 || pipe2(channel, O_CLOEXEC))
@@ -195,11 +196,11 @@ static int cut_journey(int fd, const char *device, const char *bdf,
         goto done;
     if (!child) {
         close(channel[0]);
-        report.result = transfer(fd, point == 2 ? 2 : 1, &test, buffer,
+        report.result = transfer(fd, read_cut ? 2 : 1, &test, buffer,
                                  point == 3 ? UINT32_C(0x40000000) : 0, 0);
         report.untouched = 1;
         for (index = 0; index < test.bytes; ++index)
-            if (buffer[index] != (point == 2 ? 0xa5 : pattern(index, test.seed)))
+            if (buffer[index] != (read_cut ? 0xa5 : pattern(index, test.seed)))
                 report.untouched = 0;
         _exit(write(channel[1], &report, sizeof(report)) == sizeof(report) ? 0 : 1);
     }
@@ -404,14 +405,14 @@ int main(int argc, char **argv)
     if (argc == 4 && !strcmp(argv[1], "owner-stale"))
         return native_owner_stale_journey(argv[2], argv[3]);
     if (argc == 4 && strlen(argv[1]) == 4 && !strncmp(argv[1], "cut", 3) &&
-        argv[1][3] >= '1' && argv[1][3] <= '3')
+        argv[1][3] >= '1' && argv[1][3] <= '4')
         cut = (uint32_t)(argv[1][3] - '0');
     guest_hold = argc == 4 && !strcmp(argv[1], "guest-hold");
     pba = argc == 4 && !strcmp(argv[1], "pba");
     guest = guest_hold || (argc == 4 && !strcmp(argv[1], "guest-ab"));
     if (argc != 4 || (!cut && !guest && !pba && !budget && strcmp(argv[1], "write") &&
                       strcmp(argv[1], "verify") && strcmp(argv[1], "verify-b"))) {
-        fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3|budget /dev/nvmeXn1 BDF\n", argv[0]);
+        fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3|cut4|budget /dev/nvmeXn1 BDF\n", argv[0]);
         return 2;
     }
     pattern_delta = !strcmp(argv[1], "verify-b") ? 0x33 : 0;

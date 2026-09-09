@@ -34,7 +34,7 @@
 #define CSTS_FATAL BIT(1)
 #define CSTS_SHUTDOWN_COMPLETE BIT(3)
 
-/* Three opt-in, one-shot journey cuts, restricted to the native test's
+/* Opt-in, one-shot journey cuts, restricted to the native test's
  * 512-byte Q1 origin with captured CDW10=128/CDW11=0. Not a policy engine. */
 static unsigned int native_cut;
 static unsigned long long native_cut_uid;
@@ -46,7 +46,7 @@ static int native_cut_set(const char *value, const struct kernel_param *paramete
 	int ret = kstrtouint(value, 0, &requested);
 
 	(void)parameter;
-	if (ret || requested > 3)
+	if (ret || requested > 4)
 		return -EINVAL;
 	if (requested && cmpxchg(&native_cut, 0, requested))
 		return -EBUSY;
@@ -59,7 +59,7 @@ static const struct kernel_param_ops native_cut_ops = {
 	.get = param_get_uint,
 };
 module_param_cb(native_cut, &native_cut_ops, &native_cut, 0600);
-MODULE_PARM_DESC(native_cut, "J1 one-shot: 0 off, 1 DMA-in, 2 DMA-out, 3 pre-CQE");
+MODULE_PARM_DESC(native_cut, "J1 one-shot: 0 off, 1 DMA-in, 2 DMA-out, 3 pre-CQE, 4 service Read");
 module_param(native_cut_uid, ullong, 0400);
 MODULE_PARM_DESC(native_cut_uid, "Last native journey cut's captured origin UID");
 module_param(native_cut_permission_result, int, 0400);
@@ -434,7 +434,7 @@ static struct native_request *native_find(struct fwlab_m4_hif *hif,
 	return NULL;
 }
 
-static int native_capture(struct fwlab_m4_hif *hif, u32 qid)
+static int native_capture(struct fwlab_m4_hif *hif, u32 qid, u32 *captured)
 {
 	struct native_queue *sq = &hif->sq[qid];
 	struct native_queue *cq;
@@ -442,6 +442,7 @@ static int native_capture(struct fwlab_m4_hif *hif, u32 qid)
 	u32 tail, head, used, index;
 	int ret;
 
+	*captured = 0;
 	if (!sq->valid || sq->cqid >= NATIVE_QUEUES)
 		return 0;
 	cq = &hif->cq[sq->cqid];
@@ -480,9 +481,23 @@ static int native_capture(struct fwlab_m4_hif *hif, u32 qid)
 	request->active = true;
 	sq->head = request->sq_head;
 	cq->pending++;
+	*captured = 1;
 	pr_debug(FWLAB_M4_PCI_NAME ": capture q=%u uid=%llu op=%#x cdw10=%#x\n",
 		 qid, request->uid, request->sqe[0],
 		 get_unaligned_le32(request->sqe + 40));
+	/* One actual service-error return, before any userspace delivery/DMA.
+	 * Reuse the existing root-only cut and exact 512-byte Q1/LBA128 Read.
+	 * The normal caller's fault path, not this hook, performs reset closure. */
+	if (unlikely(READ_ONCE(native_cut) == 4) && qid == 1 &&
+	    request->sqe[0] == 2 && get_unaligned_le32(request->sqe + 4) == 1 &&
+	    get_unaligned_le32(request->sqe + 40) == 128 &&
+	    !get_unaligned_le32(request->sqe + 44) &&
+	    !get_unaligned_le32(request->sqe + 48) && cmpxchg(&native_cut, 4, 0) == 4) {
+		WRITE_ONCE(native_cut_uid, request->uid);
+		pr_info(FWLAB_M4_PCI_NAME ": J1_SERVICE_CUT uid=%llu epoch=%u result=%d\n",
+			request->uid, request->epoch, -EIO);
+		return -EIO;
+	}
 	return 0;
 }
 
@@ -494,14 +509,14 @@ int fwlab_m4_hif_request_reset(struct fwlab_m4_hif *hif, u32 epoch)
 	return 0;
 }
 
-int fwlab_m4_hif_step(struct fwlab_m4_hif *hif)
+/* Caller owns the HIF mutex. Both producers use this one semantic engine;
+ * the private pump visits at most two queues and retains at most one capture. */
+static int native_service_locked(struct fwlab_m4_hif *hif, u32 visits, u32 *captured)
 {
-	u32 cc, flr;
+	u32 cc, flr, visited;
 	int ret = 0;
 
-	if (!hif)
-		return -EINVAL;
-	mutex_lock(&hif->lock);
+	*captured = 0;
 	if (hif->stopped || hif->quarantined || !hif->pci->pdev)
 		goto out;
 	cc = readl(hif->pci->bar_mapping + REG_CC);
@@ -546,14 +561,30 @@ int fwlab_m4_hif_step(struct fwlab_m4_hif *hif)
 		ret = -ESTALE;
 		goto fault;
 	}
-	ret = native_capture(hif, hif->queue_cursor);
-	hif->queue_cursor = (hif->queue_cursor + 1) % NATIVE_QUEUES;
+	for (visited = 0; visited < visits; visited++) {
+		ret = native_capture(hif, hif->queue_cursor, captured);
+		hif->queue_cursor = (hif->queue_cursor + 1) % NATIVE_QUEUES;
+		if (ret || *captured)
+			break;
+	}
 	fwlab_m4_flush_msix(hif->pci);
 	if (!ret)
 		goto out;
 fault:
 	native_fault(hif);
 out:
+	return ret;
+}
+
+int fwlab_m4_hif_step(struct fwlab_m4_hif *hif)
+{
+	u32 captured;
+	int ret;
+
+	if (!hif)
+		return -EINVAL;
+	mutex_lock(&hif->lock);
+	ret = native_service_locked(hif, 1, &captured);
 	mutex_unlock(&hif->lock);
 	return ret;
 }
@@ -878,14 +909,15 @@ static int native_publish(struct fwlab_m4_hif *hif,
 	return 0;
 }
 
-static int native_attach_locked(struct fwlab_m4_hif *hif, u32 format,
+static int native_attach_locked(struct fwlab_m4_hif *hif, u32 producer, u32 format,
 				const u8 uuid[16], const u8 binding[32])
 {
 	int ret;
 
 	if (hif->quarantined)
 		return -EBUSY;
-	ret = fwlab_m4_attach_pin(&hif->attachment, format, uuid, binding);
+	ret = fwlab_m4_attach_pin_mode(&hif->attachment, FWLAB_M4_PRODUCER,
+		producer, format, uuid, binding);
 	if (!ret)
 		hif->attached = true;
 	return ret;
@@ -904,7 +936,7 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 		    !memchr_inv(message->media_uuid, 0, sizeof(message->media_uuid)) ||
 		    !memchr_inv(message->binding_sha256, 0, sizeof(message->binding_sha256)))
 			return -EBUSY;
-		ret = native_attach_locked(hif, FWLAB_M4_MEDIA_LEGACY,
+		ret = native_attach_locked(hif, FWLAB_M4_PRODUCER_BAR, FWLAB_M4_MEDIA_LEGACY,
 			message->media_uuid, message->binding_sha256);
 		if (ret)
 			return ret;
@@ -1335,6 +1367,49 @@ static long native_ioctl(struct file *file, unsigned int command, unsigned long 
 	struct fwlab_m4_hif *hif = file->private_data;
 	struct fwlab_m4_native_message message;
 
+	if (command == FWLAB_M4_ATTACH_MODE) {
+		struct fwlab_m4_attach_mode_message attach;
+
+		if (copy_from_user(&attach, (void __user *)arg, sizeof(attach)))
+			return -EFAULT;
+		if (!fwlab_m4_attach_mode_request_valid(&attach))
+			return -EINVAL;
+		mutex_lock(&hif->lock);
+		attach.result = hif->stopped ? -ENODEV : native_attach_locked(hif,
+			attach.producer_mode, attach.media_format_version,
+			attach.media_uuid, attach.binding_sha256);
+		if (!attach.result) {
+			attach.producer_mode = FWLAB_M4_PRODUCER;
+			attach.function_nonce = hif->function_nonce;
+			attach.controller_epoch = hif->controller_epoch;
+		}
+		mutex_unlock(&hif->lock);
+		return copy_to_user((void __user *)arg, &attach, sizeof(attach)) ? -EFAULT : 0;
+	}
+	if (command == FWLAB_M4_PUMP) {
+		struct fwlab_m4_pump_message pump;
+
+		if (copy_from_user(&pump, (void __user *)arg, sizeof(pump)))
+			return -EFAULT;
+		if (!fwlab_m4_pump_request_valid(&pump))
+			return -EINVAL;
+		mutex_lock(&hif->lock);
+		pump.result = 0;
+		if (hif->stopped)
+			pump.result = -ENODEV;
+		else if (FWLAB_M4_PRODUCER != FWLAB_M4_PRODUCER_PUMP)
+			pump.result = -EOPNOTSUPP;
+		else if (!hif->attached || pump.function_nonce != hif->function_nonce)
+			pump.result = -ESTALE;
+		else if (hif->quarantined)
+			pump.result = -EIO;
+		else
+			pump.service_result = native_service_locked(hif, NATIVE_QUEUES, &pump.captured);
+		mutex_unlock(&hif->lock);
+		/* A repeat after lost copyout is another tick. Retained NEXT and
+		 * keyed effects, not this observation, own delivery/completion. */
+		return copy_to_user((void __user *)arg, &pump, sizeof(pump)) ? -EFAULT : 0;
+	}
 	if (command == FWLAB_M4_ATTACH_IDENTITY) {
 		struct fwlab_m4_attach_message attach;
 
@@ -1344,7 +1419,8 @@ static long native_ioctl(struct file *file, unsigned int command, unsigned long 
 			return -EINVAL;
 		mutex_lock(&hif->lock);
 		attach.result = hif->stopped ? -ENODEV : native_attach_locked(hif,
-			attach.media_format_version, attach.media_uuid, attach.binding_sha256);
+			FWLAB_M4_PRODUCER_BAR, attach.media_format_version,
+			attach.media_uuid, attach.binding_sha256);
 		if (!attach.result) {
 			attach.media_format_version = hif->attachment.media_format_version;
 			memcpy(attach.media_uuid, hif->attachment.media_uuid, sizeof(attach.media_uuid));

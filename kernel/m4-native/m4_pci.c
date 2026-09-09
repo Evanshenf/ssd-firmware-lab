@@ -390,6 +390,7 @@ static void fwlab_m4_bar_reset_locked(struct fwlab_m4_pci_ctx *ctx)
 		fwlab_m4_hif_request_reset(ctx->hif, ctx->bar_epoch);
 }
 
+#if FWLAB_M4_PRODUCER == FWLAB_M4_PRODUCER_BAR
 static int fwlab_m4_bar_worker(void *data)
 {
 	struct fwlab_m4_pci_ctx *ctx = data;
@@ -400,6 +401,7 @@ static int fwlab_m4_bar_worker(void *data)
 	}
 	return 0;
 }
+#endif
 
 static int fwlab_m4_prepare_aperture(struct fwlab_m4_pci_ctx *ctx)
 {
@@ -765,6 +767,7 @@ int fwlab_m4_pci_scan(struct fwlab_m4_pci_ctx *ctx)
 	if (ret)
 		goto err_put_locked;
 
+#if FWLAB_M4_PRODUCER == FWLAB_M4_PRODUCER_BAR
 	ctx->bar_thread = kthread_run(fwlab_m4_bar_worker, ctx,
 				      "ssd-fwlab-bar");
 	if (IS_ERR(ctx->bar_thread)) {
@@ -772,6 +775,7 @@ int fwlab_m4_pci_scan(struct fwlab_m4_pci_ctx *ctx)
 		ctx->bar_thread = NULL;
 		goto err_put_locked;
 	}
+#endif
 
 	pci_dev_put(pdev);
 	pci_unlock_rescan_remove();

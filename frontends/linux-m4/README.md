@@ -156,3 +156,35 @@ an8KiB case ending at the last LBA. Default clients still require1MiB. Both
 provide `profile-plan` as a no-device-open description, not a test PASS. The
 existing initramfs builder accepts the chosen static client as its second
 argument; owner subprocesses execute that same client binary.
+
+## Selected singleton-pump candidate
+
+`scaled-pump-worker` builds the separate `fwlab_native_scaled_pump_worker` in
+the same build directory. Match it with kernel `FWLAB_M4_PRODUCER=2`; existing
+BAR workers and the default kernel remain separate compatibility references.
+The explicit attachment-v2 mode request never falls back to a BAR attachment,
+and media format/UUID/binding identity are not used as producer-mode flags.
+
+The pump executes synchronously at the top of the actual firmware loop, before
+STATUS and owner/runtime blocking. It advances the existing kernel HIF, not a
+second protocol executor, and visits at most two queues for one fresh capture.
+It does not move FTL/NFC/media work into the kernel or change their semantics.
+The response distinguishes admission failure from a HIF service fault. A valid
+service fault still reaches STATUS, owner polling and drain/reset, without new
+business admission that turn. Lost replies cause at most three same-fd ticks;
+retained NEXT delivery and keyed DMA/publication remain authoritative.
+
+`attach-check` covers the actual shared mode/identity validators and userspace
+helpers with fake syscall responses. `check-scaled-pump-runtime` compiles the
+same selected worker loop and crosses unchanged real scaled storage. Its finite
+fake Host injects a service fault/reset and loses one post-capture reply; only
+PUMP may capture and NEXT must return the retained command without recapture.
+The BAR offline target retains the legacy-constructor smoke. Both require the
+existing capped tmpfs and serial policy above. No second test framework or
+kernel fault/locking claim is created by these offline checks.
+
+The native client adds `cut4` to the existing one-shot cut/reset/readback
+journey, matching the kernel's single service-capture fault point. Actual kernel
+mode compatibility, native I/O/reset, pending-mask/unmask and owner switching
+remain required before candidate qualification. Removing the BAR producer does
+not remove deferred IRQ work or establish whole-system single-thread bandwidth.

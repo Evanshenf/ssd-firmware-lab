@@ -4,6 +4,7 @@
 #define FWLAB_M4_ATTACH_IDENTITY_H
 
 #include "fwlab/unstable/m4_attach_native.h"
+#include "fwlab/unstable/m4_pump_native.h"
 #include <linux/errno.h>
 #ifdef __KERNEL__
 #include <linux/string.h>
@@ -52,6 +53,42 @@ static inline int fwlab_m4_attach_pin(struct fwlab_m4_attachment *stored,
     memcpy(stored->binding_sha256, binding, 32);
     stored->media_format_version = format;
     return 0;
+}
+
+static inline int fwlab_m4_producer_valid(__u32 mode)
+{
+    return mode == FWLAB_M4_PRODUCER_BAR || mode == FWLAB_M4_PRODUCER_PUMP;
+}
+
+static inline int fwlab_m4_attach_mode_request_valid(
+    const struct fwlab_m4_attach_mode_message *message)
+{
+    return message->version == FWLAB_M4_ATTACH_MODE_VERSION &&
+        message->size == sizeof(*message) && !message->function_nonce &&
+        !message->controller_epoch && !message->reserved0 && !message->reserved1 &&
+        fwlab_m4_producer_valid(message->producer_mode) &&
+        fwlab_m4_attach_zero(message->reserved, sizeof(message->reserved));
+}
+
+/* Mode rejection precedes any identity mutation. The kernel supplies its
+ * immutable build mode, never a module parameter or an attached client's mode. */
+static inline int fwlab_m4_attach_pin_mode(struct fwlab_m4_attachment *stored,
+    __u32 constructed, __u32 requested, __u32 format,
+    const __u8 uuid[16], const __u8 binding[32])
+{
+    if (!fwlab_m4_producer_valid(constructed) || !fwlab_m4_producer_valid(requested))
+        return -EINVAL;
+    if (constructed != requested)
+        return -EOPNOTSUPP;
+    return fwlab_m4_attach_pin(stored, format, uuid, binding);
+}
+
+static inline int fwlab_m4_pump_request_valid(const struct fwlab_m4_pump_message *message)
+{
+    return message->version == FWLAB_M4_PUMP_VERSION &&
+        message->size == sizeof(*message) && message->function_nonce &&
+        !message->service_result && !message->captured && !message->reserved0 &&
+        fwlab_m4_attach_zero(message->reserved, sizeof(message->reserved));
 }
 
 #endif

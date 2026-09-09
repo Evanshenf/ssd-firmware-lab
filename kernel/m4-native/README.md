@@ -56,6 +56,35 @@ Closing an attached descriptor still quarantines the function. The separately
 selected scaled worker is a source candidate, not an extension of the native
 qualification described below; its real probe/reset/M5 evidence is pending.
 
+### Construction-selected singleton pump (development candidate)
+
+`make -C kernel/m4-native FWLAB_M4_PRODUCER=2 W=1` selects the firmware-driven
+producer. Default `1` retains the BAR-thread reference. Mode 2 does not compile
+or create the BAR thread; it is not a runtime module parameter or owner option.
+Both use the same HIF capture/control and CQE implementation and unchanged
+mapping/IRQ gates. Deferred IRQ work still exists and must be counted.
+
+Use the separately named `scaled-pump-worker` userspace target. Its 128-byte
+`FWLAB_M4_ATTACH_MODE` v2 command negotiates the producer before identity pinning;
+the old 112-byte attachment and legacy EXCHANGE attachment remain BAR-only.
+Wrong-mode/old-kernel combinations reject startup, without a fallback. Media
+format/UUID/binding identity and portable owner ABI are unchanged.
+
+The fixed 48-byte `FWLAB_M4_PUMP` advances control and at most one SQ capture,
+visiting at most the existing Admin and I/O queues. `result` is admission;
+`service_result` is the accepted HIF step's outcome. A service fault continues
+STATUS/owner/drain/reset, without new business admission that turn. Repeating
+after lost copyout is another tick, not idempotent replay. `captured=0` never
+acknowledges work or establishes an empty delivery queue; NEXT remains separate.
+
+For its bounded lab check, existing root-only `native_cut=4` returns one service
+error after capturing the client's 512-byte Q1/NSID1/LBA128 Read, before delivery.
+The ordinary service fault path closes effects and requests reset. `cut4` reuses
+the existing exclusive native client and reset/readback journey. It is disabled
+by default and does not broaden ordinary supported commands. This candidate
+still needs actual native/owner/PBA qualification; offline checks are not kernel
+fault/locking evidence or a new performance claim.
+
 The independent `j1_native_io` client has `write`, `verify`, `cut1`, `cut2` and
 `cut3` modes. It checks an exclusive, unmounted 1-MiB namespace, namespace ID,
 vendor/model identity and the exact synthetic sysfs BDF before any write.
