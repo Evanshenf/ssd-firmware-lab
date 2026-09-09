@@ -12,6 +12,7 @@
 #include <linux/vmalloc.h>
 
 #include "m4_internal.h"
+#include "m4_attach_identity.h"
 #include "fwlab/unstable/m4_native.h"
 #include "fwlab/unstable/m4_owner_native.h"
 #include "fwlab/unstable/m4_canary_native.h"
@@ -160,8 +161,7 @@ struct fwlab_m4_hif {
 	bool faulted;
 	bool quarantined;
 	bool stopped;
-	u8 media_uuid[16];
-	u8 binding_sha256[32];
+	struct fwlab_m4_attachment attachment;
 	char name[48];
 };
 
@@ -878,6 +878,19 @@ static int native_publish(struct fwlab_m4_hif *hif,
 	return 0;
 }
 
+static int native_attach_locked(struct fwlab_m4_hif *hif, u32 format,
+				const u8 uuid[16], const u8 binding[32])
+{
+	int ret;
+
+	if (hif->quarantined)
+		return -EBUSY;
+	ret = fwlab_m4_attach_pin(&hif->attachment, format, uuid, binding);
+	if (!ret)
+		hif->attached = true;
+	return ret;
+}
+
 static int native_exchange(struct fwlab_m4_hif *hif,
 			   struct fwlab_m4_native_message *message)
 {
@@ -885,18 +898,19 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 	u32 index;
 
 	if (message->operation == FWLAB_M4_NATIVE_ATTACH) {
+		int ret;
+
 		if (hif->quarantined ||
 		    !memchr_inv(message->media_uuid, 0, sizeof(message->media_uuid)) ||
 		    !memchr_inv(message->binding_sha256, 0, sizeof(message->binding_sha256)))
 			return -EBUSY;
-		if (hif->attached &&
-		    (memcmp(hif->media_uuid, message->media_uuid, sizeof(hif->media_uuid)) ||
-		     memcmp(hif->binding_sha256, message->binding_sha256,
-			    sizeof(hif->binding_sha256))))
-			return -EBUSY;
-		memcpy(hif->media_uuid, message->media_uuid, sizeof(hif->media_uuid));
-		memcpy(hif->binding_sha256, message->binding_sha256, sizeof(hif->binding_sha256));
-		hif->attached = true;
+		ret = native_attach_locked(hif, FWLAB_M4_MEDIA_LEGACY,
+			message->media_uuid, message->binding_sha256);
+		if (ret)
+			return ret;
+		memcpy(message->media_uuid, hif->attachment.media_uuid, sizeof(message->media_uuid));
+		memcpy(message->binding_sha256, hif->attachment.binding_sha256,
+		       sizeof(message->binding_sha256));
 		message->function_nonce = hif->function_nonce;
 		message->controller_epoch = hif->controller_epoch;
 		return 0;
@@ -1024,9 +1038,9 @@ static void native_owner_observe(struct fwlab_m4_hif *hif,
 	message->controller_epoch = hif->controller_epoch;
 	message->execution_epoch = hif->controller_epoch;
 	message->generation = 1;
-	message->media_format_version = 1;
-	memcpy(message->media_uuid, hif->media_uuid, sizeof(message->media_uuid));
-	memcpy(message->binding_sha256, hif->binding_sha256, sizeof(message->binding_sha256));
+	message->media_format_version = hif->attachment.media_format_version;
+	memcpy(message->media_uuid, hif->attachment.media_uuid, sizeof(message->media_uuid));
+	memcpy(message->binding_sha256, hif->attachment.binding_sha256, sizeof(message->binding_sha256));
 }
 
 static bool native_owner_revoke_equal(const struct fwlab_m4_owner_message *left,
@@ -1101,7 +1115,8 @@ static int native_owner_exchange(struct fwlab_m4_hif *hif,
 		    message->owner_kind != hif->pci->owner_kind ||
 		    message->controller_epoch != hif->controller_epoch ||
 		    message->execution_epoch != hif->controller_epoch ||
-		    memcmp(message->binding_sha256, hif->binding_sha256, sizeof(hif->binding_sha256)))
+		    memcmp(message->binding_sha256, hif->attachment.binding_sha256,
+			   sizeof(hif->attachment.binding_sha256)))
 			return -EINVAL;
 		if (hif->pci->owner_epoch == U64_MAX || hif->next_owner_uid >= U64_MAX - 1)
 			return -EOVERFLOW;
@@ -1132,7 +1147,8 @@ static int native_owner_exchange(struct fwlab_m4_hif *hif,
 		if (!native_owner_zero(message) || !retained->transition_uid ||
 		    message->transition_uid != retained->transition_uid ||
 		    message->owner_epoch != retained->owner_epoch ||
-		    memcmp(message->binding_sha256, hif->binding_sha256, sizeof(hif->binding_sha256)))
+		    memcmp(message->binding_sha256, hif->attachment.binding_sha256,
+			   sizeof(hif->attachment.binding_sha256)))
 			return -ESTALE;
 		if (retained->certificate_uid) {
 			if (memcmp(message->ftl_epoch_proof, retained->ftl_epoch_proof,
@@ -1187,7 +1203,8 @@ static int native_owner_exchange(struct fwlab_m4_hif *hif,
 		    message->certificate_uid != retained->certificate_uid ||
 		    message->owner_epoch != hif->pci->owner_epoch ||
 		    (message->target_owner != 1 && message->target_owner != 2) ||
-		    memcmp(message->binding_sha256, hif->binding_sha256, sizeof(hif->binding_sha256)))
+		    memcmp(message->binding_sha256, hif->attachment.binding_sha256,
+			   sizeof(hif->attachment.binding_sha256)))
 			return -ESTALE;
 		if (retained->old_controller_epoch == U32_MAX)
 			return -EOVERFLOW;
@@ -1318,6 +1335,28 @@ static long native_ioctl(struct file *file, unsigned int command, unsigned long 
 	struct fwlab_m4_hif *hif = file->private_data;
 	struct fwlab_m4_native_message message;
 
+	if (command == FWLAB_M4_ATTACH_IDENTITY) {
+		struct fwlab_m4_attach_message attach;
+
+		if (copy_from_user(&attach, (void __user *)arg, sizeof(attach)))
+			return -EFAULT;
+		if (!fwlab_m4_attach_request_valid(&attach))
+			return -EINVAL;
+		mutex_lock(&hif->lock);
+		attach.result = hif->stopped ? -ENODEV : native_attach_locked(hif,
+			attach.media_format_version, attach.media_uuid, attach.binding_sha256);
+		if (!attach.result) {
+			attach.media_format_version = hif->attachment.media_format_version;
+			memcpy(attach.media_uuid, hif->attachment.media_uuid, sizeof(attach.media_uuid));
+			memcpy(attach.binding_sha256, hif->attachment.binding_sha256,
+			       sizeof(attach.binding_sha256));
+			attach.function_nonce = hif->function_nonce;
+			attach.controller_epoch = hif->controller_epoch;
+		}
+		mutex_unlock(&hif->lock);
+		/* Exact immutable attachment retry is safe even after failed copyout. */
+		return copy_to_user((void __user *)arg, &attach, sizeof(attach)) ? -EFAULT : 0;
+	}
 	if (command == FWLAB_M4_CANARY_EXCHANGE) {
 		struct fwlab_m4_canary_message canary;
 		if (copy_from_user(&canary, (void __user *)arg, sizeof(canary)))

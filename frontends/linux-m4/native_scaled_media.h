@@ -9,10 +9,11 @@
 
 #define NATIVE_SCALED_LBA_COUNT UINT64_C(131072)
 
-/* Offline construction prerequisite, not a kernel ATTACH binding. Initialize
- * this owner to zero before first use; do not move it while open. The native
- * context outlives this owner and its runtime must finish before media close.
- * Factory release owns FTL/NFC allocations, never this physical-media holder. */
+/* Initialize this process-lived owner to zero before first use; do not move it
+ * while open. Its context outlives it. Keep it across reset and NO_OWNER even
+ * when runtime is NULL: owner grant will reuse it. Final close requires the
+ * owner server stopped and runtime finished. Factory release owns FTL/NFC
+ * allocations, never this holder. This type is not a kernel readiness proof. */
 struct native_scaled_media {
     struct native_media native;
     struct native_context *owner;

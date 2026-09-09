@@ -6,6 +6,7 @@
 
 #include "../headless-j0/j0_internal.h"
 #include "fwlab/unstable/m4_native.h"
+#include "fwlab/unstable/m4_attach_native.h"
 #include "fwlab/unstable/m4_canary_native.h"
 
 #define NATIVE_COMMANDS 32u
@@ -78,6 +79,9 @@ struct native_context {
     uint64_t last_nfc_nonce;
     uint32_t last_closed_epoch;
     uint64_t next_runtime_seed;
+    /* Accepted process-lived attachment; controller_epoch here is only the
+     * initial observation. Runtime resets update epoch, not this identity. */
+    struct fwlab_m4_attach_message attachment;
     struct {
         struct fwlab_spine_command_ticket_v0 ticket;
         struct fwlab_completion_lease_v0 lease;
@@ -95,6 +99,10 @@ void native_message_init(struct native_context *context,
                         struct fwlab_m4_native_message *message);
 int native_exchange(struct native_context *context,
                     struct fwlab_m4_native_message *message);
+int native_attach_legacy(struct native_context *context,
+    const uint8_t uuid[16], const uint8_t binding[32]);
+int native_attach_explicit(struct native_context *context, uint32_t format,
+    const uint8_t uuid[16], const uint8_t binding[32]);
 enum fwlab_spine_result_v0 native_host_bind(
     void *context, const struct fwlab_controller_buffer_port_v0 *buffer,
     uint32_t generation, struct j0_host_binding *binding);

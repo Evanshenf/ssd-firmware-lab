@@ -5,6 +5,16 @@
 #include "native_internal.h"
 #include "native_owner.h"
 
+#ifndef FWLAB_NATIVE_SCALED
+#define FWLAB_NATIVE_SCALED 0
+#endif
+#if FWLAB_NATIVE_SCALED != 0 && FWLAB_NATIVE_SCALED != 1
+#error "FWLAB_NATIVE_SCALED must be 0 or 1"
+#endif
+#if FWLAB_NATIVE_SCALED
+#include "native_scaled_media.h"
+#endif
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -57,6 +67,7 @@ static int hex_bytes(const char *text, uint8_t *bytes, size_t count)
     return !j0_bytes_zero(bytes, count);
 }
 
+#if !FWLAB_NATIVE_SCALED
 static void *allocate_arena(size_t alignment, size_t size)
 {
     if (!alignment || !size || size > SIZE_MAX - alignment + 1)
@@ -97,6 +108,7 @@ static int media_open(struct native_media *media, const char *directory, int for
     }
     return 1;
 }
+#endif
 
 int native_runtime_create(struct native_context *context,
                           struct native_media *media, int format)
@@ -489,15 +501,21 @@ int main(int argc, char **argv)
     const char *owner_directory = NULL;
     struct native_context *context = NULL;
     struct native_owner_server *server = NULL;
-    struct native_media media;
+#if FWLAB_NATIVE_SCALED
+    struct native_scaled_media media_owner;
+    struct native_media *media = &media_owner.native;
+#else
+    struct native_media media_owner;
+    struct native_media *media = &media_owner;
+#endif
     struct fwlab_m4_native_message message;
     struct sigaction action;
     struct stat st;
-    uint8_t binding[32];
+    uint8_t binding[32], media_uuid[16];
     int format = 0, index, result = 1;
 
-    memset(&media, 0, sizeof(media));
-    media.directory_fd = -1;
+    memset(&media_owner, 0, sizeof(media_owner));
+    media->directory_fd = -1;
     for (index = 1; index < argc; ++index) {
         if (!strcmp(argv[index], "--format")) { format = 1; continue; }
         if (index + 1 >= argc) goto usage;
@@ -509,32 +527,35 @@ int main(int argc, char **argv)
         else goto usage;
     }
     if (!device || strncmp(device, "/dev/fwlab-native-", 18) || !directory ||
-        !hex_bytes(uuid, media.uuid, sizeof(media.uuid)) ||
+        !hex_bytes(uuid, media_uuid, sizeof(media_uuid)) ||
         !hex_bytes(digest, binding, sizeof(binding)))
         goto usage;
     setvbuf(stdout, NULL, _IOLBF, 0);
     context = calloc(1, sizeof(*context));
     if (!context) goto done;
+    context->descriptor = -1;
     context->descriptor = open(device, O_RDWR | O_NOFOLLOW | O_CLOEXEC);
     if (context->descriptor < 0 || fstat(context->descriptor, &st) || !S_ISCHR(st.st_mode))
         goto done;
-    if (!media_open(&media, directory, format))
+#if FWLAB_NATIVE_SCALED
+    if (!native_scaled_media_open(&media_owner, context, directory, media_uuid, format))
         goto done;
-    native_message_init(context, NULL, FWLAB_M4_NATIVE_ATTACH, &message);
-    memcpy(message.media_uuid, media.uuid, sizeof(media.uuid));
-    memcpy(message.binding_sha256, binding, sizeof(binding));
-    if (native_exchange(context, &message) || !message.function_nonce || !message.controller_epoch)
+    if (native_attach_explicit(context, FWLAB_M4_MEDIA_SCALED, media->uuid, binding))
         goto done;
-    context->function_nonce = message.function_nonce;
-    context->epoch = message.controller_epoch;
-    if (!native_runtime_create(context, &media, format))
+#else
+    memcpy(media->uuid, media_uuid, sizeof(media_uuid));
+    if (!media_open(media, directory, format) ||
+        native_attach_legacy(context, media->uuid, binding))
+        goto done;
+#endif
+    if (!native_runtime_create(context, media, format))
         goto done;
     native_message_init(context, NULL, FWLAB_M4_NATIVE_RESET_ACK, &message);
     if (native_exchange(context, &message))
         goto done;
     if (owner_directory) {
         server = calloc(1, sizeof(*server));
-        if (!server || !native_owner_server_open(server, context, &media, owner_directory))
+        if (!server || !native_owner_server_open(server, context, media, owner_directory))
             goto done;
         printf("OWNER_CONTROL_READY directory=%s\n", owner_directory);
     }
@@ -544,29 +565,47 @@ int main(int argc, char **argv)
     sigaction(SIGTERM, &action, NULL);
     sigaction(SIGINT, &action, NULL);
     printf("NATIVE_READY function=%" PRIu64 " epoch=%u\n", context->function_nonce, context->epoch);
-    result = firmware_loop(context, &media, server) ? 0 : 1;
+    result = firmware_loop(context, media, server) ? 0 : 1;
 done:
     if (server) {
         native_owner_server_close(server);
         free(server);
     }
-    if (context && context->runtime && context->runtime->magic == J0_RUNTIME_MAGIC) {
+    if (context && context->runtime) {
+        if (context->runtime->magic != J0_RUNTIME_MAGIC)
+            goto unresolved_close;
         native_message_init(context, NULL, FWLAB_M4_NATIVE_REVOKE, &message);
         (void)native_exchange(context, &message);
         if (!runtime_close(context))
-            result = 1;
+            goto unresolved_close;
     }
-    if (media.file)
-        (void)fwlab_file_nand_v0_close(media.file);
-    free(media.arena);
-    if (media.directory_fd >= 0)
-        close(media.directory_fd);
+#if FWLAB_NATIVE_SCALED
+    /* The server is stopped and no reset/grant can reuse the process-lived
+     * holder now. A NULL runtime during NO_OWNER alone was not permission. */
+    if (!native_scaled_media_close(&media_owner))
+        goto unresolved_close;
+#else
+    if (media->file && fwlab_file_nand_v0_close(media->file) != FWLAB_NFC_API_OK)
+        goto unresolved_close;
+    free(media->arena);
+    if (media->directory_fd >= 0)
+        close(media->directory_fd);
+#endif
     if (context && context->descriptor >= 0)
         close(context->descriptor);
     free(context);
     if (result)
         fprintf(stderr, "native firmware stopped with an error\n");
     return result;
+unresolved_close:
+    /* Do not free the media/factory/context beneath unresolved internal work.
+     * Closing the HIF descriptor quarantines an accepted attachment. Process
+     * exit reclaims memory; this is an error, never a clean-drain certificate. */
+    fprintf(stderr, "native shutdown unresolved; retaining objects until process exit\n");
+    if (context && context->descriptor >= 0)
+        (void)close(context->descriptor);
+    fflush(stderr);
+    _Exit(1);
 usage:
     fprintf(stderr, "usage: %s --device /dev/fwlab-native-BDF --media-dir DIR "
                     "--uuid 32hex --binding-sha 64hex [--format] [--owner-dir DIR]\n", argv[0]);

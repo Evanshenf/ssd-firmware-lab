@@ -45,6 +45,17 @@ The worker's `--binding-sha` records the supplied build identity; it is not
 remote attestation. The private ioctl ABI is intentionally outside portable
 headers and currently supports the tested native 64-bit process only.
 
+The development source additionally accepts the separate, explicitly versioned
+`FWLAB_M4_ATTACH_IDENTITY` ioctl. Ordinary native EXCHANGE v1 remains unchanged;
+legacy ATTACH means media format 1. Explicit attachment pins one UUID/format/
+binding-digest tuple (declared formats 1 and 2 only). Identical same-descriptor
+retry is idempotent after failed copyout; a changed tuple rejects, including
+legacy ATTACH after format 2. Attachment never grants readiness or opens effects.
+Owner observation returns the pinned identity across reset and owner epochs.
+Closing an attached descriptor still quarantines the function. The separately
+selected scaled worker is a source candidate, not an extension of the native
+qualification described below; its real probe/reset/M5 evidence is pending.
+
 The independent `j1_native_io` client has `write`, `verify`, `cut1`, `cut2` and
 `cut3` modes. It checks an exclusive, unmounted 1-MiB namespace, namespace ID,
 vendor/model identity and the exact synthetic sysfs BDF before any write.

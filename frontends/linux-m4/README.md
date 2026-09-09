@@ -81,7 +81,7 @@ an ordinary physical namespace.
 
 The ordinary `worker` target still constructs the tiny M3P/C3/file-v0 binding.
 The separate `check-scaled-runtime` target is an **offline prerequisite**, not
-a scaled worker that can attach to the current kernel module.
+a native PCI or owner-switch qualification.
 
 It runs the actual native constructor, worker loop, host data mover and
 completion handling against a bounded fake ioctl boundary. Storage is the
@@ -113,13 +113,39 @@ selection; it does not repeat the historical full runtime matrix on `/tmp`.
 
 `native_scaled_media` owns the media holder, arena, factory and binding at
 stable addresses until the associated native context finishes its runtime.
-The factory frees FTL/NFC state only. The media owner refuses close while that
-runtime exists. A zero-initialized owner and an outliving native context are
+Keep this owner through all reset and NO_OWNER intervals: owner grant can
+reconstruct a runtime through it later. The factory frees FTL/NFC state only.
+Final close stops owner-server callbacks before draining runtime and media.
+The media owner refuses close while a runtime exists; this last guard alone
+does not authorize closing a holder during NO_OWNER. A zero-initialized owner and an outliving native context are
 private construction preconditions, not a general resource-management API.
 
-The current kernel still reports media format 1 and ATTACH has no media-format
-field. The offline transport assumptions do not resolve that online identity
-contract. This check is not native PCI/M5, ARM kernel, kernel readiness timeout,
+The offline check also uses the actual typed attachment helper and the small
+identity-pinning routine shared with HIF, checks the owner observation, and
+reconstructs once while retaining the same open media holder. Its ioctl/PCI
+boundary remains fake. This check is not native PCI/M5, ARM kernel, kernel readiness timeout,
 power-loss durability or throughput evidence. No WRITE-loan or READ-copy change
 is included. Existing snapshot, CRC/OOB and actual synchronization semantics
 remain in the storage engines.
+
+## Selected scaled worker candidate
+
+`make -C frontends/linux-m4 scaled-worker` builds
+`build/scaled-offline/fwlab_native_scaled_worker`. It selects the same fixed
+64 MiB physical-v2 construction at compile time, while sharing the ordinary
+worker's execution loop, host mover and owner-control code. No per-I/O storage
+fallback or second executor is added. The default `worker` remains legacy.
+
+The scaled entry requires the explicit `FWLAB_M4_ATTACH_IDENTITY` ioctl from
+the matching candidate kernel. It records UUID, media format and the supplied
+binding digest once. The attachment schema version, ordinary I/O wire version
+and media-format identity are distinct. Unsupported kernels fail startup;
+there is no fallback to legacy ATTACH or automatic image conversion. Exact
+same-descriptor retries are bounded and do not publish readiness. The digest
+is supplied build provenance, not cryptographic attestation of a running image.
+
+The CLI retains explicit new-only `--format` versus recovery without that flag.
+Use fresh disposable media for a separately scoped online qualification; this
+build is not authorization to replace a running worker or existing NAND file.
+Actual Linux probe/reset timing, native I/O and M5 remain to be qualified for
+this candidate. No performance or multi-queue claim follows from its build.

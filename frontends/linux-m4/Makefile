@@ -28,10 +28,10 @@ FIRMWARE_SOURCES := \
 	../../media/file-nand-v0/file_nand_posix.c
 
 RUNTIME_SOURCES := tests/test_runtime.c $(FIRMWARE_SOURCES)
-WORKER_SOURCES := native_worker.c native_host.c native_owner.c native_owner_socket.c $(FIRMWARE_SOURCES)
+WORKER_SOURCES := native_worker.c native_attach.c native_host.c native_owner.c native_owner_socket.c $(FIRMWARE_SOURCES)
 
-# Offline native construction only. The released worker target stays legacy;
-# this target cannot attach a scaled backend to the current format-1 kernel.
+# Explicit inventory shared by the offline journey and selected scaled worker.
+# The ordinary worker target remains legacy; online qualification is separate.
 SCALED_SOURCES := \
 	../../core/ftl-scale/ftl_scale_codec.c \
 	../../core/ftl-scale/ftl_scale_recovery.c \
@@ -50,13 +50,27 @@ SCALED_SOURCES := \
 	../../media/file-nand-v2/physical_nand_batch.c \
 	../headless-scale/scale_storage.c
 SCALED_RUNTIME_SOURCES := tests/test_scaled_runtime.c native_scaled_media.c \
-	native_host.c native_owner.c native_owner_socket.c \
+	native_attach.c native_host.c native_owner.c native_owner_socket.c \
 	$(FIRMWARE_SOURCES) $(SCALED_SOURCES)
 SCALED_BUILD ?= build/scaled-offline
 FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
 
 .PHONY: worker native-io native-io-static runtime check-runtime clean
 .PHONY: scaled-runtime check-scaled-runtime
+.PHONY: scaled-worker attach-check
+
+scaled-worker:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 \
+		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
+		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) \
+		-o $(SCALED_BUILD)/fwlab_native_scaled_worker
+
+attach-check:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_native_attach.c native_attach.c \
+		-Wl,--wrap=ioctl -o $(SCALED_BUILD)/native_attach_check
+	$(SCALED_BUILD)/native_attach_check
 
 scaled-runtime:
 	mkdir -p $(SCALED_BUILD)

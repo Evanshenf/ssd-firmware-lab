@@ -5,6 +5,7 @@
  * structure member named main is changed, and no executor source is copied. */
 #include "../native_scaled_media.h"
 #include "../native_owner.h"
+#include "../../../kernel/m4-native/m4_attach_identity.h"
 #define main native_legacy_cli_not_called
 #include "../native_worker.c"
 #undef main
@@ -33,6 +34,8 @@ static struct {
     uint64_t next_uid, function;
     uint32_t epoch;
 } host;
+static struct fwlab_m4_attachment attached_identity;
+static unsigned owner_identity_fault;
 
 /* Only the ioctl boundary is fake. It owns Host byte buffers/transport tuples,
  * never NAND media, mappings, namespace data or storage-success decisions. */
@@ -41,14 +44,57 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
     struct fwlab_m4_native_message *message;
     struct host_row *row;
     va_list arguments;
+    void *argument;
 
-    if (descriptor != OFFLINE_DESCRIPTOR || request != FWLAB_M4_NATIVE_EXCHANGE) {
+    if (descriptor != OFFLINE_DESCRIPTOR) {
         errno = ENOTTY;
         return -1;
     }
     va_start(arguments, request);
-    message = va_arg(arguments, struct fwlab_m4_native_message *);
+    if (request == FWLAB_M4_ATTACH_IDENTITY)
+        argument = va_arg(arguments, struct fwlab_m4_attach_message *);
+    else if (request == FWLAB_M4_OWNER_EXCHANGE)
+        argument = va_arg(arguments, struct fwlab_m4_owner_message *);
+    else if (request == FWLAB_M4_NATIVE_EXCHANGE)
+        argument = va_arg(arguments, struct fwlab_m4_native_message *);
+    else
+        argument = va_arg(arguments, void *);
     va_end(arguments);
+    if (request == FWLAB_M4_ATTACH_IDENTITY) {
+        struct fwlab_m4_attach_message *attach = argument;
+        REQUIRE(fwlab_m4_attach_request_valid(attach));
+        attach->result = fwlab_m4_attach_pin(&attached_identity,
+            attach->media_format_version, attach->media_uuid, attach->binding_sha256);
+        if (!attach->result) {
+            attach->media_format_version = attached_identity.media_format_version;
+            memcpy(attach->media_uuid, attached_identity.media_uuid, 16);
+            memcpy(attach->binding_sha256, attached_identity.binding_sha256, 32);
+            attach->function_nonce = host.function;
+            attach->controller_epoch = host.epoch;
+        }
+        return 0;
+    }
+    if (request == FWLAB_M4_OWNER_EXCHANGE) {
+        struct fwlab_m4_owner_message *owner = argument;
+        REQUIRE(owner->version == FWLAB_M4_OWNER_VERSION && owner->size == sizeof(*owner));
+        if (owner->operation != FWLAB_M4_OWNER_OBSERVE) { errno = ENOTTY; return -1; }
+        owner->result = 0;
+        owner->function_nonce = host.function;
+        owner->controller_epoch = owner->execution_epoch = host.epoch;
+        owner->owner_epoch = 1;
+        owner->owner_kind = 1;
+        owner->phase = FWLAB_M4_OWNER_OWNED;
+        owner->generation = 1;
+        owner->media_format_version = attached_identity.media_format_version;
+        memcpy(owner->media_uuid, attached_identity.media_uuid, 16);
+        memcpy(owner->binding_sha256, attached_identity.binding_sha256, 32);
+        if (owner_identity_fault == 1) ++owner->media_format_version;
+        if (owner_identity_fault == 2) owner->media_uuid[15] ^= 1;
+        if (owner_identity_fault == 3) owner->binding_sha256[31] ^= 1;
+        return 0;
+    }
+    if (request != FWLAB_M4_NATIVE_EXCHANGE) { errno = ENOTTY; return -1; }
+    message = argument;
     REQUIRE(message && message->version == FWLAB_M4_NATIVE_VERSION &&
             message->size == sizeof(*message));
     REQUIRE(message->function_nonce == host.function && message->controller_epoch == host.epoch);
@@ -293,12 +339,14 @@ int main(void)
 {
     const char *root = getenv("FWLAB_TEST_MEDIA_DIR");
     const uint8_t uuid[16] = {0x4d,0x31,0x41,0x2d,0x53,0x43,0x41,0x4c,0x45,1,2,3,4,5,6,7};
+    const uint8_t binding[32] = {0x4d,0x31,0x42,0x49,0x44,0x45,0x4e,0x54};
     char directory[512];
     struct statfs fs;
     struct stat before, after;
     struct native_context *context = calloc(1, sizeof(*context));
     struct native_scaled_media *media = calloc(1, sizeof(*media));
     struct fwlab_m4_native_message unsupported;
+    struct native_owner owner;
     uint8_t expected[8192];
     uint64_t prior_ftl, prior_nfc, started;
     int directory_fd, name_length;
@@ -327,6 +375,7 @@ int main(void)
     started = wall_ns();
     REQUIRE(native_scaled_media_open(media, context, directory, uuid, 1));
     phase_end("media-format", context->epoch, started);
+    REQUIRE(native_attach_explicit(context, FWLAB_M4_MEDIA_SCALED, media->native.uuid, binding) == 0);
     started = wall_ns();
     REQUIRE(native_runtime_create(context, &media->native, 1));
     phase_end("runtime-format", context->epoch, started);
@@ -335,6 +384,13 @@ int main(void)
             context->runtime->config.media_binding == &media->binding &&
             context->runtime->config.storage_factory == &media->factory);
     REQUIRE(!native_scaled_media_close(media) && media->opened && media->physical);
+    REQUIRE(native_owner_init(&owner, context, &media->native) &&
+            owner.port.stable.media_format_version == FWLAB_M4_MEDIA_SCALED &&
+            owner.media == &media->native);
+    for (owner_identity_fault = 1; owner_identity_fault <= 3; ++owner_identity_fault)
+        REQUIRE(!native_owner_init(&owner, context, &media->native));
+    owner_identity_fault = 0;
+    REQUIRE(native_owner_init(&owner, context, &media->native));
     prior_ftl = context->runtime->m3p_instance_nonce;
     prior_nfc = context->runtime->nfc_instance_nonce;
     script_begin(context);
@@ -348,6 +404,18 @@ int main(void)
     REQUIRE(memcmp(host.row[3].bytes, expected, sizeof(expected)) == 0);
     REQUIRE(host.dma_in == 1 && host.dma_out == 2);
     REQUIRE(fwlab_file_nand_v2_sequence(media->physical) > 0);
+    /* An owner may hold this exact media pointer while runtime is absent.
+     * Exercise reconstruction through it without closing/reopening the holder.
+     * This is not a fake certificate or an executed kernel owner transition. */
+    REQUIRE(runtime_close(context) && !context->runtime && media->opened);
+    REQUIRE(owner.media == &media->native && media->physical);
+    ++context->epoch;
+    REQUIRE(native_runtime_create(context, owner.media, 0));
+    REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == NATIVE_SCALED_LBA_COUNT &&
+            context->runtime->m3p_instance_nonce != prior_ftl && context->runtime->nfc_instance_nonce != prior_nfc);
+    prior_ftl = context->runtime->m3p_instance_nonce;
+    prior_nfc = context->runtime->nfc_instance_nonce;
+    puts("NATIVE_RETAINED_MEDIA_PASS|same_holder_between_runtimes=1|not_kernel_owner_switch=1");
     close_epoch(context, media);
     REQUIRE(fstatat(directory_fd, "nand.bin", &before, AT_SYMLINK_NOFOLLOW) == 0);
     REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 1));

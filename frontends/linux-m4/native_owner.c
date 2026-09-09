@@ -39,6 +39,15 @@ static int wire_exchange(struct native_owner *owner,
         message->result = INT32_MIN;
         return -EPROTO;
     }
+    if (!message->result &&
+        (!owner->native->attachment.media_format_version ||
+         message->media_format_version != owner->native->attachment.media_format_version ||
+         memcmp(message->media_uuid, owner->native->attachment.media_uuid, 16) ||
+         memcmp(message->binding_sha256, owner->native->attachment.binding_sha256, 32))) {
+        owner->quarantined = 1;
+        message->result = -ESTALE;
+        return -ESTALE;
+    }
     return message->result;
 }
 
@@ -390,7 +399,9 @@ int native_owner_init(struct native_owner *owner, struct native_context *native,
 {
     struct fwlab_m4_owner_message wire;
 
-    if (!owner || !native || !media || !native->runtime)
+    if (!owner || !native || !media || !native->runtime ||
+        !native->attachment.media_format_version ||
+        memcmp(media->uuid, native->attachment.media_uuid, 16))
         return 0;
     memset(owner, 0, sizeof(*owner));
     owner->native = native;
