@@ -18,7 +18,8 @@ struct fwlab_nfc_page_v2_model {
     uint8_t closed;
     uint8_t quarantined;
     uint8_t cancel_requested;
-    uint8_t main[FWLAB_NFC_PAGE_V2_MAX_PAGES * FWLAB_NFC_PAGE_V2_MAIN_BYTES];
+    /* Private window alignment; caller payload spans retain their contract. */
+    _Alignas(64) uint8_t main[FWLAB_NFC_PAGE_V2_MAX_PAGES * FWLAB_NFC_PAGE_V2_MAIN_BYTES];
     uint8_t oob[FWLAB_NFC_PAGE_V2_MAX_PAGES * FWLAB_NFC_PAGE_V2_OOB_BYTES];
     uint8_t scratch_main[FWLAB_NFC_PAGE_V2_MAIN_BYTES];
     uint8_t scratch_oob[FWLAB_NFC_PAGE_V2_OOB_BYTES];
@@ -30,6 +31,9 @@ struct fwlab_nfc_page_v2_model {
 
 _Static_assert(sizeof(struct fwlab_nfc_page_v2_result) <= UINT16_MAX,
                "result size fits its versioned envelope");
+_Static_assert(offsetof(struct fwlab_nfc_page_v2_model, main) % 64u == 0 &&
+               offsetof(struct fwlab_nfc_page_v2_model, oob) % 64u == 0,
+               "private payload windows are cache-line aligned");
 
 static bool live(const struct fwlab_nfc_page_v2_model *m)
 { return m && m->magic == PAGE2_MAGIC; }

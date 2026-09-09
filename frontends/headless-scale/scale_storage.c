@@ -198,7 +198,9 @@ static enum fwlab_spine_result_v0 storage_bind_common(
     if (!storage)
         return FWLAB_SPINE_V0_NO_CAPACITY;
     storage->ftl_arena = calloc(1, ftl_bytes);
-    storage->nfc_arena = calloc(1, nfc_bytes);
+    storage->nfc_arena = window_v2
+        ? aligned_alloc(fwlab_nfc_page_v2_arena_alignment(), nfc_bytes)
+        : calloc(1, nfc_bytes);
     result = FWLAB_SPINE_V0_NO_CAPACITY;
     if (!storage->ftl_arena || !storage->nfc_arena)
         goto failed;

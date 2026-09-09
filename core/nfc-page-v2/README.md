@@ -24,8 +24,12 @@ successful prefix. Cancelling an already completed program does not undo it.
 Reset closes new admission and drains retained results before quiescence.
 
 The model owns a 270336-byte payload window and 4224-byte scratch, plus request,
-result and physical facts (279032-byte arena on the tested 64-bit ABI). This is
+result and physical facts (279040-byte arena on the tested 64-bit ABI). This is
 not zero-copy. CPU spans are controller-owned storage, never Host DMA authority.
+Its private payload window is 64-byte aligned. Allocate the arena using both
+`fwlab_nfc_page_v2_arena_size()` and `fwlab_nfc_page_v2_arena_alignment()`;
+ordinary `calloc` does not guarantee this alignment. The constructor initializes
+the arena. Caller input/output spans have no new alignment requirement.
 R0 rejects nonzero injected-fault, timing and retry settings. Physical TORN,
 unknown, CRC/OOB failures and erase-generation state still participate; no C3
 injected-fault/timing equivalence or hardware NAND/ECC qualification is claimed.

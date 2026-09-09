@@ -40,6 +40,7 @@ static enum fwlab_nfc_api_result read_pages(void *opaque,
     struct fake *f = opaque;
     CHECK(!p->channel && !p->lun && !p->plane && !p->block && count && count <= PAGES - p->page);
     CHECK(mn == count * MAIN && on == count * OOB && capacity >= count);
+    CHECK((uintptr_t)main % 64u == 0 && (uintptr_t)oob % 64u == 0);
     ++f->reads; f->last_read_count = count;
     if (f->fail_read) { memset(main, 0xa9, mn); return FWLAB_NFC_API_INVARIANT_FAILURE; }
     memcpy(main, f->main + p->page * MAIN, mn);
@@ -66,6 +67,7 @@ static enum fwlab_nfc_api_result program_pages(void *opaque,
     struct fake *f = opaque;
     CHECK(count && p->page == f->block.next_program_page && count <= PAGES - p->page);
     CHECK(mn == count * MAIN && on == count * OOB && cap >= count);
+    CHECK((uintptr_t)main % 64u == 0 && (uintptr_t)oob % 64u == 0);
     ++f->programs; f->last_program_count = count;
     if (f->fail_program) {
         /* Deliberately write misleading result bytes: not valid on API error. */
@@ -128,7 +130,9 @@ static struct fixture *create(void)
 {
     struct fixture *f = calloc(1, sizeof(*f));
     CHECK(f);
-    f->arena = calloc(1, fwlab_nfc_page_v2_arena_size()); CHECK(f->arena);
+    CHECK(fwlab_nfc_page_v2_arena_size() % fwlab_nfc_page_v2_arena_alignment() == 0);
+    f->arena = aligned_alloc(fwlab_nfc_page_v2_arena_alignment(), fwlab_nfc_page_v2_arena_size());
+    CHECK(f->arena);
     CHECK((uintptr_t)f->arena % fwlab_nfc_page_v2_arena_alignment() == 0);
     f->config.version = FWLAB_NFC_PAGE_V2_VERSION; f->config.size = sizeof(f->config);
     f->config.profile = FWLAB_NFC_PAGE_V2_PROFILE_R0;
@@ -234,6 +238,27 @@ static void snapshot_and_read(void)
     destroy(f);
 }
 
+static void unaligned_caller_spans(void)
+{
+    struct fixture *f = create();
+    struct fwlab_nfc_page_v2_request r = request(f, FWLAB_NFC_PAGE_V2_PROGRAM_GROUP, 1, 0, 2);
+    struct fwlab_nfc_page_v2_result result;
+    struct fwlab_nfc_page_v2_output output = {f->output_main + 1, 2 * MAIN, f->output_oob + 1, 2 * OOB};
+    r.main = f->input_main + 1; r.oob = f->input_oob + 1;
+    CHECK((uintptr_t)r.main % 64u != 0 && (uintptr_t)r.oob % 64u != 0 &&
+          (uintptr_t)output.main % 64u != 0 && (uintptr_t)output.oob % 64u != 0);
+    CHECK(f->provider.ops->try_submit(f->model, &r).disposition == FWLAB_NFC_ACCEPTED);
+    execute(f); result = take(f, &r, NULL);
+    CHECK(result.terminal == FWLAB_NFC_TERMINAL_SUCCESS);
+    r = request(f, FWLAB_NFC_PAGE_V2_READ_GROUP, 2, 0, 2);
+    CHECK(f->provider.ops->try_submit(f->model, &r).disposition == FWLAB_NFC_ACCEPTED);
+    execute(f); result = take(f, &r, &output);
+    CHECK(result.read_valid && result.delivered_pages == 2);
+    CHECK(!memcmp(output.main, f->input_main + 1, output.main_bytes) &&
+          !memcmp(output.oob, f->input_oob + 1, output.oob_bytes));
+    destroy(f);
+}
+
 static void cancel_reset(void)
 {
     for (unsigned reset = 0; reset < 2; ++reset) {
@@ -329,9 +354,9 @@ static void rejection(void)
 
 int main(void)
 {
-    snapshot_and_read(); cancel_reset(); failures(); rejection();
+    snapshot_and_read(); unaligned_caller_spans(); cancel_reset(); failures(); rejection();
     printf("NFC_PAGE_V2_PASS|profile=PAGE2-R0|owned_payload=270336|scratch=4224|arena=%zu|"
-           "snapshot_once=1|group64=1|all_valid_or_no_output=1|cancel_reset_drain=1|unknown=1|disk_io=0\n",
+           "snapshot_once=1|group64=1|private_payload_align64=1|unaligned_caller_spans=1|all_valid_or_no_output=1|cancel_reset_drain=1|unknown=1|disk_io=0\n",
            fwlab_nfc_page_v2_arena_size());
     return 0;
 }

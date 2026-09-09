@@ -299,7 +299,10 @@ static void construct_lower(struct fixture *f, int format, int extended)
         extended ? fwlab_ftl_scale_extended_arena_size(&e) : fwlab_ftl_scale_arena_size(&e.base);
     nb = f->window_v2 ? fwlab_nfc_page_v2_arena_size() : fwlab_nfc_scaled_arena_size(&n); CHECK(fb && nb);
     CHECK(fb < 1024u * 1024u); /* No per-parent 1 MiB payload inside the FTL arena. */
-    f->ftl_arena = calloc(1, fb); f->nfc_arena = calloc(1, nb); CHECK(f->ftl_arena && f->nfc_arena);
+    f->ftl_arena = calloc(1, fb);
+    f->nfc_arena = f->window_v2
+        ? aligned_alloc(fwlab_nfc_page_v2_arena_alignment(), nb) : calloc(1, nb);
+    CHECK(f->ftl_arena && f->nfc_arena);
     if (f->window_v2) {
         struct fwlab_nand_batch_v2 batch = f->byte_profile != POSIX_BYTE_STRICT ?
             fwlab_file_nand_v2_posix_operation_batch(f->media_v2) : fwlab_file_nand_v2_batch(f->media_v2);

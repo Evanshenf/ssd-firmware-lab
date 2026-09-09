@@ -324,7 +324,8 @@ static void nfc_open(struct fixture *f)
     memcpy(c.media_uuid, f->config.media_uuid, sizeof(c.media_uuid));
     c.instance_nonce = NFC_NONCE; c.operation_uid_limit = UINT64_MAX;
     c.controller_epoch = ++f->nfc_epoch; c.generation = 1;
-    f->nfc_arena = calloc(1, fwlab_nfc_page_v2_arena_size()); CHECK(f->nfc_arena);
+    f->nfc_arena = aligned_alloc(fwlab_nfc_page_v2_arena_alignment(), fwlab_nfc_page_v2_arena_size());
+    CHECK(f->nfc_arena);
     CHECK(fwlab_nfc_page_v2_init(f->nfc_arena, fwlab_nfc_page_v2_arena_size(), &c,
         &f->batch, &f->nfc) == FWLAB_NFC_API_OK);
     f->provider = fwlab_nfc_page_v2_provider(f->nfc); CHECK(f->provider.ops);
