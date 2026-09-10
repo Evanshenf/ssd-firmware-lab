@@ -243,3 +243,24 @@ image, controller frame sizes, DMA checks, or submitted command lengths.
 Actual native qualification and separate performance measurement remain pending
 for this candidate. No MQ2, 1 MiB atomicity, new NAND algorithm or 10 GB/s claim
 is made by a successful build or offline test.
+
+### MQ2 serialized candidate
+
+`mq2-worker` selects private Host profile 3: two paired I/O queues, depth 32,
+Admin vector 0 and I/O vectors 1/2. It retains one **global** I/O credit/frame
+and one Admin reserve, not one I/O frame per queue. NoQ negotiates the minimum
+of requested SQ count, requested CQ count and two. Its captured result remains
+stable on retry. Queue deletion drains captured holders before reuse; CQE
+publication uses the captured SQ/CQ incarnations and association.
+
+The candidate loop uses private per-call `advanced` / `runnable` facts from the
+native, J0 and PAGE2 storage owners. Polling budget and occupied slots are not
+progress. The old loop entry remains unchanged for reference builds. Neither
+these facts nor a buffer lease grants Host DMA or durability authority.
+
+`profile-check` includes the MQ2 policy's NoQ/paired-queue/retry cases with fake
+queue effects. `check-progress-runtime` reuses the real LARGE storage journey
+with a controlled waiting executor and observed, still-executed `nanosleep`.
+It tests progress versus idle, not a two-queue kernel. Real Linux two-queue,
+three-vector, deletion/reset/owner and cost evidence are separate prerequisites;
+this development entry is not a completed MQ2 or throughput qualification.

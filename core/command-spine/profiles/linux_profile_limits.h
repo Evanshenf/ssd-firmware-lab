@@ -29,10 +29,19 @@ static inline struct fwlab_linux_profile_limits fwlab_linux_profile_large_limits
 
 static inline int fwlab_linux_profile_limits_valid(const struct fwlab_linux_profile_limits *p)
 {
-    return p && ((p->max_io_bytes == 8192 && p->max_admin_bytes == 8192) ||
-                 (p->max_io_bytes == 1048576 && p->max_admin_bytes == 4096)) &&
-        p->controller_page_bytes == 4096 && p->io_queue_pairs == 1 &&
-        p->queue_depth == 32 && p->vectors == 1;
+    int small, large;
+    if (!p || p->controller_page_bytes != 4096 || p->queue_depth != 32)
+        return 0;
+    small = p->max_io_bytes == 8192 && p->max_admin_bytes == 8192;
+    large = p->max_io_bytes == 1048576 && p->max_admin_bytes == 4096;
+    return ((small || large) && p->io_queue_pairs == 1 && p->vectors == 1) ||
+           (large && p->io_queue_pairs == 2 && p->vectors == 3);
+}
+
+static inline struct fwlab_linux_profile_limits fwlab_linux_profile_mq2_limits(void)
+{
+    const struct fwlab_linux_profile_limits limits = {1048576, 4096, 4096, 2, 32, 3};
+    return limits;
 }
 
 #endif

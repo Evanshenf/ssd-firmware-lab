@@ -45,6 +45,7 @@ struct native_slot {
     uint64_t dma_uid;
     uint32_t bytes;
     uint32_t direction;
+    uint32_t queue_result_dword0;
     uint8_t occupied;
     uint8_t admitted;
     uint8_t completion_acquired;
@@ -61,6 +62,7 @@ struct native_slot {
     uint8_t queue_terminal;
     uint8_t queue_retire_started;
     uint8_t queue_drained;
+    uint8_t queue_unknown;
     uint8_t frame_held;
     uint8_t frame_class;
     uint8_t reserved;
@@ -105,6 +107,7 @@ struct native_context {
     } canary;
     int descriptor;
     uint8_t closing;
+    uint8_t progressed; /* Per-turn native capture/admission/retirement fact. */
 };
 
 void native_message_init(struct native_context *context,

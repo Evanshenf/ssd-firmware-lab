@@ -185,7 +185,7 @@ static enum fwlab_spine_result_v0 latch_terminal(
     }
     result = admission->binding.result_latch(
         admission->binding.adapter.context, &action->argument_ref,
-        &action->terminal, outcome, 0);
+        &action->terminal, outcome, action->result_dword0);
     if (result != FWLAB_SPINE_V0_OK) {
         runtime->poisoned = 1;
         return result;
@@ -213,9 +213,9 @@ enum fwlab_spine_result_v0 j0_runtime_action_argument(
     return FWLAB_SPINE_V0_OK;
 }
 
-enum fwlab_spine_result_v0 j0_runtime_action_result(
+enum fwlab_spine_result_v0 j0_runtime_action_result_value(
     struct j0_runtime *runtime, const struct fwlab_host_action_token_v0 *token,
-    const struct fwlab_host_action_status_v0 *status)
+    const struct fwlab_host_action_status_v0 *status, uint32_t result_dword0)
 {
     struct j0_action_record *action;
     enum fwlab_spine_result_v0 result;
@@ -230,6 +230,9 @@ enum fwlab_spine_result_v0 j0_runtime_action_result(
     if (action == NULL) {
         return FWLAB_SPINE_V0_STALE;
     }
+    if (action->result_latched && action->result_dword0 != result_dword0)
+        return FWLAB_SPINE_V0_POISONED;
+    action->result_dword0 = result_dword0;
     action->terminal = *status;
     result = latch_terminal(runtime, action);
     if (result != FWLAB_SPINE_V0_OK) {
@@ -238,6 +241,13 @@ enum fwlab_spine_result_v0 j0_runtime_action_result(
     action->state = status->state == FWLAB_HOST_ACTION_V0_STATE_DRAINED
                         ? J0_DRIVER_DRAINED : J0_DRIVER_TERMINAL_LATCHED;
     return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 j0_runtime_action_result(
+    struct j0_runtime *runtime, const struct fwlab_host_action_token_v0 *token,
+    const struct fwlab_host_action_status_v0 *status)
+{
+    return j0_runtime_action_result_value(runtime, token, status, 0);
 }
 
 static enum fwlab_spine_result_v0 payload_submit(

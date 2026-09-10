@@ -57,6 +57,9 @@ struct linux_semantic {
     uint32_t requested_counts;
     uint32_t kind;
     uint32_t status;
+    uint32_t queue_id;
+    uint32_t associated_queue;
+    uint32_t interrupt_vector;
     uint8_t dnr;
     uint8_t fua;
     uint8_t reserved[6];
@@ -70,9 +73,16 @@ struct linux_slot {
     uint8_t reserved[6];
 };
 
+struct linux_queue_policy {
+    uint32_t negotiated_pairs;
+    uint32_t sq_mask;
+    uint32_t cq_mask;
+};
+
 struct linux_record {
     struct fwlab_host_action_program_v0 program;
     struct linux_semantic semantic;
+    struct linux_queue_policy queues_at_prepare;
     struct linux_slot slot[FWLAB_HOST_ACTION_V0_MAX_ACTIONS];
     uint8_t payload[LINUX_PAYLOAD_BYTES];
     uint32_t payload_bytes;
@@ -90,6 +100,7 @@ struct linux_adapter {
     uint32_t namespace_id;
     struct fwlab_block_volume_desc_v0 volume;
     struct fwlab_linux_profile_limits limits;
+    struct linux_queue_policy queues;
     struct linux_record record[LINUX_RECORDS];
 };
 
@@ -311,14 +322,81 @@ static int namespace_valid(
     return command->namespace_id == 0;
 }
 
+static int mq2_queue_fields(
+    const struct linux_adapter *adapter, const struct linux_queue_policy *queues,
+    uint32_t kind, const struct fwlab_nvme_command *command,
+    struct linux_semantic *semantic)
+{
+    const uint32_t *dword = command->command_dword10_15;
+    uint32_t qid = dword[0] & UINT32_C(0xffff);
+    uint32_t bit;
+
+    if (kind == LINUX_KIND_SET_NUMBER_OF_QUEUES) {
+        if (dword[0] != 7 || !words_zero(dword + 2, 4) ||
+            (dword[1] & UINT32_C(0xffff)) == UINT32_C(0xffff) ||
+            (dword[1] >> 16) == UINT32_C(0xffff))
+            return 0;
+        semantic->requested_counts = dword[1];
+        if (queues->sq_mask || queues->cq_mask) {
+            semantic->status = LINUX_STATUS_COMMAND_SEQUENCE;
+            semantic->dnr = 1;
+        }
+        return 1;
+    }
+    if (!queues->negotiated_pairs) {
+        semantic->status = LINUX_STATUS_COMMAND_SEQUENCE;
+        semantic->dnr = 1;
+        return 1;
+    }
+    if (!qid || qid > queues->negotiated_pairs || qid > adapter->limits.io_queue_pairs) {
+        semantic->status = LINUX_STATUS_INVALID_QUEUE;
+        semantic->dnr = 1;
+        return 1;
+    }
+    bit = UINT32_C(1) << qid;
+    semantic->queue_id = qid;
+    if (kind == LINUX_KIND_CREATE_CQ || kind == LINUX_KIND_CREATE_SQ) {
+        if (!words_zero(dword + 2, 4)) return 0;
+        if ((dword[0] >> 16) + 1 != adapter->limits.queue_depth) {
+            semantic->status = LINUX_STATUS_INVALID_QUEUE_SIZE;
+            semantic->dnr = 1;
+            return 1;
+        }
+        if (kind == LINUX_KIND_CREATE_CQ) {
+            if (dword[1] != (qid << 16 | UINT32_C(3))) return 0;
+            semantic->interrupt_vector = qid;
+            if (queues->cq_mask & bit) semantic->status = LINUX_STATUS_INVALID_QUEUE;
+        } else {
+            if (dword[1] != (qid << 16 | UINT32_C(1))) return 0;
+            semantic->associated_queue = qid; /* Fixed paired-CQ profile. */
+            if ((queues->sq_mask & bit) || !(queues->cq_mask & bit))
+                semantic->status = LINUX_STATUS_INVALID_QUEUE;
+        }
+    } else {
+        if (dword[0] != qid || !words_zero(dword + 1, 5)) return 0;
+        if ((kind == LINUX_KIND_DELETE_SQ && !(queues->sq_mask & bit)) ||
+            (kind == LINUX_KIND_DELETE_CQ &&
+             (!(queues->cq_mask & bit) || (queues->sq_mask & bit))))
+            semantic->status = LINUX_STATUS_INVALID_QUEUE_DELETE;
+    }
+    if (semantic->status != LINUX_STATUS_SUCCESS) semantic->dnr = 1;
+    return 1;
+}
+
 static int dwords_valid(
     const struct linux_adapter *adapter,
+    const struct linux_queue_policy *queues,
     uint32_t kind,
     const struct fwlab_nvme_command *command,
     struct linux_semantic *semantic)
 {
     const uint32_t *dword = command->command_dword10_15;
 
+    if (adapter->limits.io_queue_pairs == 2 &&
+        (kind == LINUX_KIND_SET_NUMBER_OF_QUEUES || kind == LINUX_KIND_CREATE_CQ ||
+         kind == LINUX_KIND_CREATE_SQ || kind == LINUX_KIND_DELETE_CQ ||
+         kind == LINUX_KIND_DELETE_SQ))
+        return mq2_queue_fields(adapter, queues, kind, command, semantic);
     switch (kind) {
     case LINUX_KIND_IDENTIFY_CONTROLLER:
         return dword[0] == 1 && words_zero(dword + 1, 5);
@@ -415,6 +493,7 @@ static void transport_status(
 static void sanitize(
     const struct linux_adapter *adapter,
     const struct fwlab_nvme_command *command,
+    const struct linux_queue_policy *queues,
     struct linux_semantic *semantic)
 {
     uint32_t kind;
@@ -453,7 +532,7 @@ static void sanitize(
         semantic->dnr = 1;
         return;
     }
-    if (!dwords_valid(adapter, kind, command, semantic)) {
+    if (!dwords_valid(adapter, queues, kind, command, semantic)) {
         semantic->status = LINUX_STATUS_INVALID_FIELD;
         semantic->dnr = 1;
     }
@@ -642,7 +721,7 @@ static uint32_t semantic_tag(uint32_t kind)
     }
 }
 
-static void populate_slots(struct linux_record *record)
+static void populate_slots(const struct linux_adapter *adapter, struct linux_record *record)
 {
     uint32_t index;
 
@@ -664,24 +743,31 @@ static void populate_slots(struct linux_record *record)
             argument->exact_bytes = record->payload_bytes;
             break;
         case LINUX_KIND_SET_NUMBER_OF_QUEUES:
+            if (adapter->limits.io_queue_pairs == 2) {
+                argument->requested_sq_count =
+                    (record->semantic.requested_counts & UINT32_C(0xffff)) + 1;
+                argument->requested_cq_count =
+                    (record->semantic.requested_counts >> 16) + 1;
+                break;
+            }
             argument->requested_cq_count =
                 (record->semantic.requested_counts & UINT32_C(0xffff)) + 1;
             argument->requested_sq_count =
                 (record->semantic.requested_counts >> 16) + 1;
             break;
         case LINUX_KIND_CREATE_CQ:
-            argument->queue_id = 1;
+            argument->queue_id = adapter->limits.io_queue_pairs == 2 ? record->semantic.queue_id : 1;
             argument->queue_entries = 32;
-            argument->interrupt_vector = 0;
+            argument->interrupt_vector = record->semantic.interrupt_vector;
             break;
         case LINUX_KIND_CREATE_SQ:
-            argument->queue_id = 1;
+            argument->queue_id = adapter->limits.io_queue_pairs == 2 ? record->semantic.queue_id : 1;
             argument->queue_entries = 32;
-            argument->associated_queue_id = 1;
+            argument->associated_queue_id = adapter->limits.io_queue_pairs == 2 ? record->semantic.associated_queue : 1;
             break;
         case LINUX_KIND_DELETE_CQ:
         case LINUX_KIND_DELETE_SQ:
-            argument->queue_id = 1;
+            argument->queue_id = adapter->limits.io_queue_pairs == 2 ? record->semantic.queue_id : 1;
             break;
         case LINUX_KIND_READ:
             argument->lba = record->semantic.slba;
@@ -721,8 +807,11 @@ static enum fwlab_spine_result_v0 linux_plan(
         !fwlab_nvme_command_valid(command)) {
         return FWLAB_SPINE_V0_INVALID;
     }
-    sanitize(adapter, command, &semantic);
     record = find_identity(adapter, command);
+    /* A repeated plan is checked against its first admission snapshot, not
+     * queue state changed by that command or by later successful operations. */
+    sanitize(adapter, command, record ? &record->queues_at_prepare : &adapter->queues,
+             &semantic);
     if (record != NULL) {
         if (!handle_equal(&record->program.command, &command->handle) ||
             !origin_equal(&record->program.origin, &command->origin) ||
@@ -757,10 +846,11 @@ static enum fwlab_spine_result_v0 linux_plan(
     memset(record, 0, sizeof(*record));
     record->occupied = 1;
     record->semantic = semantic;
+    record->queues_at_prepare = adapter->queues;
     record->retire_remaining = adapter->retire_delay;
     program_base(adapter, record, command);
     build_actions(adapter, record);
-    populate_slots(record);
+    populate_slots(adapter, record);
     if (!fwlab_host_action_program_v0_valid(&record->program)) {
         memset(record, 0, sizeof(*record));
         return FWLAB_SPINE_V0_POISONED;
@@ -961,6 +1051,15 @@ static int outcome_valid_for_kind(uint32_t outcome, uint16_t kind)
     return outcome == FWLAB_SPINE_PROVIDER_V0_RESOURCE_FAILURE;
 }
 
+static uint32_t noq_pairs(const struct linux_adapter *adapter,
+                          const struct linux_semantic *semantic)
+{
+    uint32_t sq = (semantic->requested_counts & UINT32_C(0xffff)) + 1;
+    uint32_t cq = (semantic->requested_counts >> 16) + 1;
+    uint32_t pairs = sq < cq ? sq : cq;
+    return pairs < adapter->limits.io_queue_pairs ? pairs : adapter->limits.io_queue_pairs;
+}
+
 static enum fwlab_spine_result_v0 linux_result_latch(
     void *context,
     const struct fwlab_host_action_argument_ref_v0 *reference,
@@ -978,7 +1077,7 @@ static enum fwlab_spine_result_v0 linux_result_latch(
         !fwlab_host_action_status_v0_valid(status) ||
         normalized_outcome < FWLAB_SPINE_PROVIDER_V0_SUCCESS ||
         normalized_outcome > FWLAB_SPINE_PROVIDER_V0_INVALID_QUEUE_DELETE ||
-        result_dword0 != 0 ||
+        (adapter->limits.io_queue_pairs == 1 && result_dword0 != 0) ||
         !outcome_valid_for_kind(normalized_outcome, reference->kind)) {
         return FWLAB_SPINE_V0_INVALID;
     }
@@ -999,6 +1098,16 @@ static enum fwlab_spine_result_v0 linux_result_latch(
             FWLAB_HOST_ACTION_V0_TERMINAL_QUARANTINED) {
         return FWLAB_SPINE_V0_POISONED;
     }
+    {
+        uint32_t expected = 0;
+        if (adapter->limits.io_queue_pairs == 2 &&
+            record->semantic.kind == LINUX_KIND_SET_NUMBER_OF_QUEUES &&
+            normalized_outcome == FWLAB_SPINE_PROVIDER_V0_SUCCESS) {
+            uint32_t zero_based = noq_pairs(adapter, &record->semantic) - 1;
+            expected = zero_based | (zero_based << 16);
+        }
+        if (result_dword0 != expected) return FWLAB_SPINE_V0_POISONED;
+    }
     memset(&local, 0, sizeof(local));
     local.version = FWLAB_SPINE_LIFECYCLE_V0_VERSION;
     local.size = sizeof(local);
@@ -1013,6 +1122,29 @@ static enum fwlab_spine_result_v0 linux_result_latch(
     }
     slot->result = local;
     slot->result_latched = 1;
+    if (adapter->limits.io_queue_pairs == 2 &&
+        normalized_outcome == FWLAB_SPINE_PROVIDER_V0_SUCCESS) {
+        uint32_t qid = record->semantic.queue_id;
+        switch (record->semantic.kind) {
+        case LINUX_KIND_SET_NUMBER_OF_QUEUES:
+            adapter->queues.negotiated_pairs = noq_pairs(adapter, &record->semantic);
+            break;
+        case LINUX_KIND_CREATE_CQ:
+            adapter->queues.cq_mask |= UINT32_C(1) << qid;
+            break;
+        case LINUX_KIND_CREATE_SQ:
+            adapter->queues.sq_mask |= UINT32_C(1) << qid;
+            break;
+        case LINUX_KIND_DELETE_CQ:
+            adapter->queues.cq_mask &= ~(UINT32_C(1) << qid);
+            break;
+        case LINUX_KIND_DELETE_SQ:
+            adapter->queues.sq_mask &= ~(UINT32_C(1) << qid);
+            break;
+        default:
+            break;
+        }
+    }
     return FWLAB_SPINE_V0_OK;
 }
 

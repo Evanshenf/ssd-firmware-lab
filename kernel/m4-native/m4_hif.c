@@ -19,7 +19,8 @@
 #include "fwlab/unstable/m4_canary_native.h"
 
 #define NATIVE_DEPTH 32U
-#define NATIVE_QUEUES 2U
+#define NATIVE_QUEUES \
+	(FWLAB_M4_HOST_PROFILE == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL ? 3U : 2U)
 #define REG_CAP 0x00
 #define REG_VS 0x08
 #define REG_CC 0x14
@@ -76,6 +77,9 @@ const struct fwlab_cqe_publisher_anchor_v0 __used
 
 struct native_queue {
 	struct fwlab_m4_mapping mapping;
+	u64 incarnation;
+	u32 holders;
+	u32 vector;
 	u16 depth;
 	u16 head;
 	u16 tail;
@@ -83,10 +87,14 @@ struct native_queue {
 	u16 pending;
 	u8 phase;
 	bool valid;
+	bool closing;
 };
 
 struct native_request {
 	u64 uid;
+	u64 sq_incarnation;
+	u64 cq_incarnation;
+	u64 target_incarnation;
 	u64 bus_generation;
 	u64 owner_epoch;
 	u64 authority_uid;
@@ -104,9 +112,11 @@ struct native_request {
 	u32 queue_entries;
 	u32 associated_queue;
 	u32 interrupt_vector;
+	u32 queue_result_dword0;
 	int queue_result;
 	int dma_result;
 	u16 sqid;
+	u16 cqid;
 	u16 cid;
 	u16 sq_head;
 	bool active;
@@ -115,6 +125,8 @@ struct native_request {
 	bool authority_released;
 	bool dma_retired;
 	bool queue_done;
+	bool queue_started;
+	bool queue_refs_held;
 	bool frame_reserved;
 	u8 frame_class;
 	u8 sqe[64];
@@ -144,6 +156,7 @@ struct fwlab_m4_hif {
 	struct fwlab_m4_host_limits limits;
 	u64 function_nonce;
 	u64 next_uid;
+	u64 next_queue_incarnation;
 	u64 next_authority_uid;
 	u64 next_dma_uid;
 	u64 delivery_uid;
@@ -153,6 +166,8 @@ struct fwlab_m4_hif {
 	u32 seen_flr_epoch;
 	u32 requested_flr_epoch;
 	u32 queue_cursor;
+	u32 io_cursor;
+	u32 negotiated_pairs;
 	u64 next_owner_uid;
 	struct fwlab_m4_owner_message revoke_key;
 	struct fwlab_m4_owner_message revoke_result;
@@ -180,10 +195,16 @@ struct fwlab_m4_hif {
 	char name[48];
 };
 
+static bool native_mq2(struct fwlab_m4_hif *hif)
+{
+	(void)hif;
+	return FWLAB_M4_HOST_PROFILE == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL;
+}
+
 static bool native_large(struct fwlab_m4_hif *hif)
 {
 	(void)hif;
-	return FWLAB_M4_HOST_PROFILE == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL;
+	return FWLAB_M4_HOST_PROFILE == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL || native_mq2(hif);
 }
 
 static struct native_frame *native_request_frame(struct fwlab_m4_hif *hif,
@@ -214,12 +235,57 @@ static struct fwlab_m4_mapping *native_request_maps(struct fwlab_m4_hif *hif,
 	return frame ? frame->mapping : NULL;
 }
 
+static bool native_queue_origin_valid(struct fwlab_m4_hif *hif,
+				     const struct native_request *request)
+{
+	const struct native_queue *sq, *cq;
+	if (!native_mq2(hif)) return true;
+	if (!request->queue_refs_held || request->sqid >= NATIVE_QUEUES ||
+	    request->cqid >= NATIVE_QUEUES) return false;
+	sq = &hif->sq[request->sqid];
+	cq = &hif->cq[request->cqid];
+	return sq->valid && cq->valid && sq->holders && cq->holders &&
+	       sq->incarnation == request->sq_incarnation &&
+	       cq->incarnation == request->cq_incarnation && sq->cqid == request->cqid;
+}
+
+static int native_queues_clear(struct fwlab_m4_hif *hif)
+{
+	u32 index;
+	for (index = 0; index < NATIVE_QUEUES; index++)
+		if (hif->sq[index].holders || hif->cq[index].holders) return -EBUSY;
+	memset(hif->sq, 0, sizeof(hif->sq));
+	memset(hif->cq, 0, sizeof(hif->cq));
+	hif->negotiated_pairs = 0;
+	hif->io_cursor = 1;
+	hif->queue_cursor = 0;
+	return 0;
+}
+
 /* No active effects may remain at the caller's drained cleanup boundary. */
 static int native_request_clear(struct fwlab_m4_hif *hif, struct native_request *request)
 {
+	struct native_frame *frame = NULL;
+	struct native_queue *cq = NULL;
+	if (native_mq2(hif) && request->queue_started && !request->queue_done)
+		return -EBUSY;
+	if (native_mq2(hif) && request->queue_refs_held) {
+		if (!native_queue_origin_valid(hif, request)) return -EIO;
+		cq = &hif->cq[request->cqid];
+		if (request->publication == FWLAB_M4_NATIVE_DISCARDED && !cq->pending)
+			return -EIO;
+	}
 	if (native_large(hif) && request->frame_reserved) {
-		struct native_frame *frame = native_request_frame(hif, request);
+		frame = native_request_frame(hif, request);
 		if (!frame) return -EIO;
+	}
+	if (cq) {
+		hif->sq[request->sqid].holders--;
+		cq->holders--;
+		if (request->publication == FWLAB_M4_NATIVE_DISCARDED) cq->pending--;
+		request->queue_refs_held = false;
+	}
+	if (frame) {
 		frame->held = false;
 		frame->owner_uid = 0;
 		frame->owner_epoch = 0;
@@ -330,8 +396,17 @@ static void native_cancel_transport(struct fwlab_m4_hif *hif)
 			request->publication = FWLAB_M4_NATIVE_DISCARDED;
 	}
 	fwlab_m4_clear_msix(hif->pci);
-	memset(hif->sq, 0, sizeof(hif->sq));
-	memset(hif->cq, 0, sizeof(hif->cq));
+	if (native_mq2(hif)) {
+		/* Old origins still own these incarnations while firmware drains.
+		 * No new queue can be constructed before RESET_ACK/CERTIFY cleanup. */
+		for (index = 0; index < NATIVE_QUEUES; index++) {
+			hif->sq[index].closing = true;
+			hif->cq[index].closing = true;
+		}
+	} else {
+		memset(hif->sq, 0, sizeof(hif->sq));
+		memset(hif->cq, 0, sizeof(hif->cq));
+	}
 	/* Queue memory may be reused without being zeroed by Linux. Old doorbells
 	 * must not make a new epoch consume those retired SQEs before its first
 	 * submission. Clear them before RESET_ACK publishes RDY=0. */
@@ -482,6 +557,12 @@ static int native_enable(struct fwlab_m4_hif *hif, u32 cc)
 			((aqa >> 16) & 0xfff) + 1, false);
 	if (ret)
 		return ret;
+	if (native_mq2(hif)) {
+		if (hif->next_queue_incarnation >= U64_MAX - 1) return -EOVERFLOW;
+		hif->sq[0].incarnation = ++hif->next_queue_incarnation;
+		hif->cq[0].incarnation = ++hif->next_queue_incarnation;
+		hif->io_cursor = 1;
+	}
 	pr_info(FWLAB_M4_PCI_NAME ": enable epoch=%u owner=%llu stale_db=%u/%u\n",
 		hif->controller_epoch, hif->pci->owner_epoch,
 		readl(hif->pci->bar_mapping + REG_SQ_DB(0)),
@@ -493,6 +574,10 @@ static int native_enable(struct fwlab_m4_hif *hif, u32 cc)
 	writel(0, hif->pci->bar_mapping + REG_CQ_DB(0));
 	writel(0, hif->pci->bar_mapping + REG_SQ_DB(1));
 	writel(0, hif->pci->bar_mapping + REG_CQ_DB(1));
+	if (native_mq2(hif)) {
+		writel(0, hif->pci->bar_mapping + REG_SQ_DB(2));
+		writel(0, hif->pci->bar_mapping + REG_CQ_DB(2));
+	}
 	wmb();
 	spin_lock_irqsave(&hif->pci->config_lock, flags);
 	hif->pci->effects_open = true;
@@ -524,11 +609,13 @@ static int native_capture(struct fwlab_m4_hif *hif, u32 qid, u32 *captured)
 	int ret;
 
 	*captured = 0;
+	if (native_mq2(hif) && sq->closing) return 0;
 	if (native_large(hif) && hif->frame[qid == 0 ? 1 : 0].held)
 		return 0;
 	if (!sq->valid || sq->cqid >= NATIVE_QUEUES)
 		return 0;
 	cq = &hif->cq[sq->cqid];
+	if (native_mq2(hif) && cq->closing) return 0;
 	if (!cq->valid)
 		return -EINVAL;
 	tail = readl(hif->pci->bar_mapping + REG_SQ_DB(qid));
@@ -559,6 +646,14 @@ static int native_capture(struct fwlab_m4_hif *hif, u32 qid, u32 *captured)
 	request->owner_epoch = hif->pci->owner_epoch;
 	request->bus_generation = hif->bus_generation;
 	request->sqid = qid;
+	if (native_mq2(hif)) {
+		request->cqid = sq->cqid;
+		request->sq_incarnation = sq->incarnation;
+		request->cq_incarnation = cq->incarnation;
+		request->queue_refs_held = true;
+		sq->holders++;
+		cq->holders++;
+	}
 	request->cid = get_unaligned_le16(request->sqe + 2);
 	request->sq_head = (sq->head + 1) % sq->depth;
 	if (native_large(hif)) {
@@ -653,8 +748,19 @@ static int native_service_locked(struct fwlab_m4_hif *hif, u32 visits, u32 *capt
 		goto fault;
 	}
 	for (visited = 0; visited < visits; visited++) {
-		ret = native_capture(hif, hif->queue_cursor, captured);
+		u32 qid = hif->queue_cursor;
+		if (native_mq2(hif) && qid)
+			qid = qid == 1 ? hif->io_cursor : 3 - hif->io_cursor;
+		ret = native_capture(hif, qid, captured);
 		hif->queue_cursor = (hif->queue_cursor + 1) % NATIVE_QUEUES;
+		if (native_mq2(hif) && *captured) {
+			if (qid) {
+				hif->io_cursor = qid == 1 ? 2 : 1;
+				hif->queue_cursor = 0; /* Offer Admin after an I/O grant. */
+			} else {
+				hif->queue_cursor = 1; /* Then offer the preferred I/O queue. */
+			}
+		}
 		if (ret || *captured)
 			break;
 	}
@@ -885,6 +991,153 @@ result:
 	return 0;
 }
 
+static bool native_queue_arguments_equal(const struct native_request *request,
+					const struct fwlab_m4_native_message *message)
+{
+	return request->queue_effect == message->queue_effect &&
+	       request->effect_qid == message->queue_id &&
+	       request->queue_entries == message->queue_entries &&
+	       request->associated_queue == message->associated_queue &&
+	       request->interrupt_vector == message->interrupt_vector;
+}
+
+static int native_queue_effect_mq2(struct fwlab_m4_hif *hif,
+				 struct native_request *request,
+				 struct fwlab_m4_native_message *message)
+{
+	struct native_queue candidate = {}, *sq, *cq;
+	struct native_guard guard = { hif, request->bus_generation, request->epoch,
+				    request->owner_epoch };
+	u32 qid = message->queue_id, i;
+	unsigned long flags;
+	bool deleting = message->queue_effect == FWLAB_M4_NATIVE_DELETE_SQ ||
+			message->queue_effect == FWLAB_M4_NATIVE_DELETE_CQ;
+	bool retire_route = false;
+	int ret = 0;
+
+	if (request->queue_started) {
+		if (!native_queue_arguments_equal(request, message)) return -EINVAL;
+		if (request->queue_done) {
+			message->result_dword0 = request->queue_result_dword0;
+			return request->queue_result;
+		}
+	} else {
+		request->queue_started = true;
+		request->queue_effect = message->queue_effect;
+		request->effect_qid = qid;
+		request->queue_entries = message->queue_entries;
+		request->associated_queue = message->associated_queue;
+		request->interrupt_vector = message->interrupt_vector;
+	}
+	/* An accepted deletion may finish metadata/route cleanup after reset or
+	 * owner revoke. It cannot admit new work, mint DMA, or publish a CQE. */
+	if (request->sqid || (!native_access(hif, request->bus_generation,
+		request->epoch, request->owner_epoch) &&
+		!(deleting && request->target_incarnation))) { ret = -ESTALE; goto done; }
+	if (message->queue_effect == FWLAB_M4_NATIVE_NUMBER_OF_QUEUES) {
+		if (qid || !message->queue_entries || !message->associated_queue ||
+		    message->queue_entries > U16_MAX || message->associated_queue > U16_MAX ||
+		    message->interrupt_vector) { ret = -EINVAL; goto done; }
+	} else if (!qid || qid >= NATIVE_QUEUES || qid > hif->negotiated_pairs) {
+		ret = -EINVAL;
+		goto done;
+	}
+	if (message->queue_effect == FWLAB_M4_NATIVE_CREATE_CQ ||
+	    message->queue_effect == FWLAB_M4_NATIVE_CREATE_SQ) {
+		if (message->queue_entries != NATIVE_DEPTH) { ret = -EINVAL; goto done; }
+		ret = native_queue_mapping(hif, &candidate, get_unaligned_le64(request->sqe + 24),
+			message->queue_entries, message->queue_effect == FWLAB_M4_NATIVE_CREATE_SQ);
+		if (ret) goto done;
+	}
+	sq = &hif->sq[qid];
+	cq = &hif->cq[qid];
+	spin_lock_irqsave(&hif->pci->config_lock, flags);
+	if (!native_access_locked(&guard) && !(deleting && request->target_incarnation)) {
+		ret = -ESTALE;
+		goto unlock;
+	}
+	switch (message->queue_effect) {
+	case FWLAB_M4_NATIVE_NUMBER_OF_QUEUES:
+		for (i = 1; i < NATIVE_QUEUES; i++)
+			if (hif->sq[i].valid || hif->cq[i].valid) { ret = -EBUSY; break; }
+		if (!ret) {
+			u32 n = min_t(u32, hif->limits.io_queue_pairs,
+				min(message->queue_entries, message->associated_queue));
+			hif->negotiated_pairs = n;
+			request->queue_result_dword0 = (n - 1) | ((n - 1) << 16);
+		}
+		break;
+	case FWLAB_M4_NATIVE_CREATE_CQ:
+		if (cq->valid || cq->holders || message->interrupt_vector != qid)
+			ret = -EINVAL;
+		else if (hif->next_queue_incarnation == U64_MAX)
+			ret = -EOVERFLOW;
+		else {
+			candidate.incarnation = ++hif->next_queue_incarnation;
+			candidate.vector = qid;
+			writel(0, hif->pci->bar_mapping + REG_CQ_DB(qid));
+			*cq = candidate;
+		}
+		break;
+	case FWLAB_M4_NATIVE_CREATE_SQ:
+		if (sq->valid || sq->holders || !cq->valid || cq->closing ||
+		    message->associated_queue != qid || message->interrupt_vector)
+			ret = -EINVAL;
+		else if (hif->next_queue_incarnation == U64_MAX)
+			ret = -EOVERFLOW;
+		else {
+			candidate.incarnation = ++hif->next_queue_incarnation;
+			candidate.cqid = qid;
+			writel(0, hif->pci->bar_mapping + REG_SQ_DB(qid));
+			*sq = candidate;
+		}
+		break;
+	case FWLAB_M4_NATIVE_DELETE_SQ:
+		if (!sq->valid || (request->target_incarnation &&
+		    request->target_incarnation != sq->incarnation)) { ret = -ESTALE; break; }
+		if (!request->target_incarnation) {
+			if (sq->closing) { ret = -EBUSY; break; }
+			request->target_incarnation = sq->incarnation;
+			sq->closing = true;
+		}
+		if (sq->holders) ret = -EINPROGRESS;
+		else memset(sq, 0, sizeof(*sq));
+		break;
+	case FWLAB_M4_NATIVE_DELETE_CQ:
+		if (!cq->valid || (request->target_incarnation &&
+		    request->target_incarnation != cq->incarnation)) { ret = -ESTALE; break; }
+		for (i = 1; i < NATIVE_QUEUES; i++)
+			if (hif->sq[i].valid && hif->sq[i].cqid == qid) { ret = -EBUSY; break; }
+		if (ret) break;
+		if (!request->target_incarnation) {
+			if (cq->closing) { ret = -EBUSY; break; }
+			request->target_incarnation = cq->incarnation;
+			cq->closing = true;
+		}
+		if (cq->holders || cq->pending) ret = -EINPROGRESS;
+		else retire_route = true;
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+unlock:
+	spin_unlock_irqrestore(&hif->pci->config_lock, flags);
+	/* Topology stays under hif->lock, but route synchronization cannot hold
+	 * config_lock while waiting for an IRQ callback which also takes it. */
+	if (retire_route && !ret) {
+		ret = fwlab_m4_retire_msix_route(hif->pci, cq->vector);
+		if (!ret) memset(cq, 0, sizeof(*cq));
+	}
+done:
+	if (ret != -EINPROGRESS) {
+		request->queue_done = true;
+		request->queue_result = ret;
+	}
+	message->result_dword0 = request->queue_result_dword0;
+	return ret;
+}
+
 static int native_queue_effect(struct fwlab_m4_hif *hif,
 			       struct native_request *request,
 			       struct fwlab_m4_native_message *message)
@@ -896,6 +1149,7 @@ static int native_queue_effect(struct fwlab_m4_hif *hif,
 	struct native_guard guard = { hif, request->bus_generation, request->epoch,
 				    request->owner_epoch };
 
+	if (native_mq2(hif)) return native_queue_effect_mq2(hif, request, message);
 	if (request->queue_done) {
 		if (request->queue_effect != message->queue_effect ||
 		    request->effect_qid != message->queue_id ||
@@ -1017,11 +1271,12 @@ static int native_publish(struct fwlab_m4_hif *hif,
 		message->publication = request->publication;
 		return 0;
 	}
-	cq = &hif->cq[hif->sq[request->sqid].cqid];
+	if (!native_queue_origin_valid(hif, request)) return -ESTALE;
+	cq = &hif->cq[native_mq2(hif) ? request->cqid : hif->sq[request->sqid].cqid];
 	if (!cq->valid || !cq->pending)
 		return -EINVAL;
-	ret = fwlab_m4_prepare_msix(hif->pci, request->owner_epoch,
-		request->bus_generation, hif->seen_flr_epoch, &irq);
+	ret = fwlab_m4_prepare_msix_vector(hif->pci, request->owner_epoch,
+		request->bus_generation, hif->seen_flr_epoch, cq->vector, &irq);
 	if (ret)
 		return ret;
 	request->completion_uid = message->completion_uid;
@@ -1147,11 +1402,13 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 			for (index = 0; index < NATIVE_DEPTH; index++) {
 				struct native_request *held = &hif->request[index];
 				if (held->active && (held->publication == FWLAB_M4_NATIVE_UNPUBLISHED ||
+				    (native_mq2(hif) && held->queue_started && !held->queue_done) ||
 				    (held->shaped && (!held->authority_released || !held->dma_retired))))
 					return -EBUSY;
 			}
 		}
 		if (native_requests_clear(hif)) return -EIO;
+		if (native_mq2(hif) && native_queues_clear(hif)) return -EIO;
 		hif->delivery_uid = 0;
 		hif->reset_pending = false;
 		hif->firmware_ready = true;
@@ -1168,6 +1425,7 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 		return -ESTALE;
 	if (hif->delivery_uid == request->uid)
 		hif->delivery_uid = 0;
+	if (!native_queue_origin_valid(hif, request)) return -ESTALE;
 	switch (message->operation) {
 	case FWLAB_M4_NATIVE_SHAPE:
 		return native_shape(hif, request, message);
@@ -1359,12 +1617,14 @@ static int native_owner_exchange(struct fwlab_m4_hif *hif,
 		for (index = 0; index < NATIVE_DEPTH; index++) {
 			struct native_request *request = &hif->request[index];
 			if (request->active && (request->publication == FWLAB_M4_NATIVE_UNPUBLISHED ||
+			    (native_mq2(hif) && request->queue_started && !request->queue_done) ||
 			    (request->shaped && (!request->authority_released || !request->dma_retired))))
 				return -EBUSY;
 		}
 		fwlab_m4_close_effects(hif->pci);
 		native_registers_init(hif);
 		if (native_requests_clear(hif)) return -EIO;
+		if (native_mq2(hif) && native_queues_clear(hif)) return -EIO;
 		hif->controller_epoch = 0;
 		hif->faulted = false;
 		hif->shutdown = false;

@@ -661,3 +661,89 @@ done:
     j3_vfio_memory_free(&old);
     return result;
 }
+
+int native_owner_mq2_journey(const char *directory, const char *bdf, const char *worker_log)
+{
+    struct sockaddr_un address = { .sun_family = AF_UNIX };
+    struct native_owner_packet packet = { 0 }, observed;
+    struct fwlab_owner_stable_identity_v0 stable;
+    struct fwlab_owner_revoke_status_v0 revoked;
+    struct j3_vfio_epoch vfio;
+    struct ucred peer;
+    socklen_t peer_bytes = sizeof(peer);
+    struct timeval timeout = { .tv_sec = 10 };
+    char path[160], resolved[PATH_MAX], executable[PATH_MAX];
+    unsigned domain, bus, slot, function;
+    uint32_t tested_epoch = 0;
+    uint64_t owner_epoch = 0;
+    int used = 0, control = -1, bound = 0, result = 1;
+    ssize_t length;
+    const char *stage = "MQ identity";
+    j3_vfio_init(&vfio);
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    if (sscanf(bdf, "%4x:%2x:%2x.%1x%n", &domain, &bus, &slot, &function, &used) != 4 ||
+        bdf[used] || domain < 0x7000 || domain > 0x7fff || bus || slot || function) return 1;
+    snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s", bdf);
+    if (!realpath(path, resolved) || !strstr(resolved, "/ssd_fwlab_native_pci/")) return 1;
+    if (snprintf(address.sun_path, sizeof(address.sun_path), "%s/owner.sock", directory) >=
+        (int)sizeof(address.sun_path)) return 1;
+    control = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+    if (control < 0 || setsockopt(control, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
+        setsockopt(control, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) ||
+        connect(control, (struct sockaddr *)&address, sizeof(address)) ||
+        getsockopt(control, SOL_SOCKET, SO_PEERCRED, &peer, &peer_bytes) ||
+        peer_bytes != sizeof(peer) || peer.pid <= 1 || peer.uid != 0) goto done;
+    snprintf(path, sizeof(path), "/proc/%d/exe", peer.pid);
+    length = readlink(path, executable, sizeof(executable) - 1);
+    if (length <= 0) goto done;
+    executable[length] = 0;
+    if (!strrchr(executable, '/') ||
+        strcmp(strrchr(executable, '/') + 1, "fwlab_native_mq2_replyloss_worker")) goto done;
+    packet.operation = NATIVE_OWNER_OBSERVE;
+    if (packet_call(control, &packet)) goto done;
+    stable = packet.stable;
+    if (packet.current.phase == FWLAB_OWNER_V0_OWNED) {
+        struct stat st;
+        snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/driver", bdf);
+        if (!lstat(path, &st) || errno != ENOENT ||
+            !revoke_and_drain(control, client_uid(), &observed, &revoked)) goto done;
+    } else if (packet.current.phase == FWLAB_OWNER_V0_NO_OWNER && packet.revoke_status.certificate_valid) {
+        revoked = packet.revoke_status;
+    } else goto done;
+    stage = "three-vector VFIO attachment";
+    if (!bind_driver(bdf, "vfio-pci")) goto done;
+    bound = 1;
+    if (!j3_vfio_open_mq2(&vfio, bdf) ||
+        !grant_owner(control, FWLAB_OWNER_V0_VFIO, &revoked, &stable)) goto done;
+    memset(&packet, 0, sizeof(packet)); packet.operation = NATIVE_OWNER_OBSERVE;
+    if (packet_call(control, &packet)) goto done;
+    owner_epoch = packet.current.owner_epoch;
+    stage = "finite literal Host queue cases";
+    if (!j3_vfio_mq2_run(&vfio, peer.pid, worker_log, &tested_epoch)) goto done;
+    memset(&packet, 0, sizeof(packet)); packet.operation = NATIVE_OWNER_OBSERVE;
+    if (packet_call(control, &packet) || memcmp(&packet.stable, &stable, sizeof(stable)) ||
+        packet.current.phase != FWLAB_OWNER_V0_OWNED || packet.current.owner_kind != FWLAB_OWNER_V0_VFIO ||
+        packet.current.owner_epoch != owner_epoch || packet.current.controller_epoch != tested_epoch) goto done;
+    stage = "final zero and detach";
+    if (!revoke_and_drain(control, client_uid(), &observed, &revoked) ||
+        !j3_vfio_close(&vfio) || !sysfs_write(bdf, "driver/unbind", bdf)) goto done;
+    bound = 0;
+    printf("MQ_LITERAL_OWNER_PASS function=%" PRIu64 " owner_epoch=%" PRIu64
+           " controller_epoch=%u cleanup=NO_OWNER media=B_exact\n",
+           stable.function_instance_nonce, owner_epoch, tested_epoch);
+    result = 0;
+done:
+    if (result) {
+        fprintf(stderr, "MQ_OWNER_FAIL stage=%s errno=%d\n", stage, errno);
+        if (control >= 0) {
+            memset(&packet, 0, sizeof(packet)); packet.operation = NATIVE_OWNER_OBSERVE;
+            if (!packet_call(control, &packet) && packet.current.phase == FWLAB_OWNER_V0_OWNED)
+                (void)revoke_and_drain(control, client_uid(), &observed, &revoked);
+        }
+    }
+    if (!j3_vfio_close(&vfio)) result = 1;
+    if (bound && !sysfs_write(bdf, "driver/unbind", bdf)) result = 1;
+    if (control >= 0) close(control);
+    j3_vfio_memory_free(&vfio);
+    return result;
+}

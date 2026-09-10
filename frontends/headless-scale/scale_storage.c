@@ -120,6 +120,16 @@ static enum fwlab_spine_result_v0 storage_step(
     return FWLAB_SPINE_V0_OK;
 }
 
+static enum fwlab_spine_result_v0 storage_step_report(
+    void *opaque, uint32_t budget, uint32_t *used,
+    struct fwlab_execution_progress *progress)
+{
+    struct scale_storage *storage = opaque;
+    if (!storage || storage->magic != SCALE_STORAGE_MAGIC || !storage->page_nfc)
+        return FWLAB_SPINE_V0_INVALID;
+    return fwlab_ftl_scale_step_report(storage->ftl, budget, used, progress);
+}
+
 static enum fwlab_spine_result_v0 storage_volume(
     void *opaque, struct fwlab_block_volume_binding_v0 *binding)
 {
@@ -247,6 +257,7 @@ static enum fwlab_spine_result_v0 storage_bind_common(
     runner->volume_query = storage_volume;
     runner->fini = storage_fini;
     runner->release = storage_release;
+    runner->step_report = storage->page_nfc ? storage_step_report : NULL;
     *service = fwlab_ftl_scale_block_service(storage->ftl);
     return FWLAB_SPINE_V0_OK;
 failed:

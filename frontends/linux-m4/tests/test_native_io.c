@@ -12,6 +12,7 @@
 #include <linux/fs.h>
 #include <linux/nvme_ioctl.h>
 #include <stdint.h>
+#include <sched.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,6 +51,7 @@ _Static_assert(FWLAB_NATIVE_TEST_LARGE == 0 ||
 struct native_case { uint32_t lba, bytes, offset; uint8_t seed; };
 int native_owner_host_journey(const char *directory, const char *bdf, int budget);
 int native_owner_stale_journey(const char *directory, const char *bdf);
+int native_owner_mq2_journey(const char *directory, const char *bdf, const char *worker_log);
 int native_owner_qemu_journey(const char *directory, const char *bdf,
                               const char *kernel, const char *initrd, const char *workdir, unsigned cut);
 int native_owner_postkill_journey(const char *directory, const char *bdf,
@@ -434,6 +436,86 @@ done:
     return result;
 }
 
+#if FWLAB_NATIVE_TEST_LARGE
+static int mq_masked_pba_journey(int fd, const char *bdf, uint8_t *buffer,
+                                  unsigned cpu1, unsigned cpu2)
+{
+    char path[128];
+    cpu_set_t saved, selected;
+    uint8_t flags[2];
+    uint8_t *bar = MAP_FAILED;
+    volatile uint32_t *mask = NULL;
+    volatile uint64_t *pending = NULL;
+    uint32_t original = 0;
+    int config = -1, resource = -1, status = 0, result = 0;
+    int masked = 0, affinity_changed = 0;
+    pid_t child = -1;
+    unsigned iteration;
+
+    if (cpu1 == cpu2 || cpu1 >= CPU_SETSIZE || cpu2 >= CPU_SETSIZE ||
+        sched_getaffinity(0, sizeof(saved), &saved) ||
+        !CPU_ISSET(cpu1, &saved) || !CPU_ISSET(cpu2, &saved)) return 0;
+    snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/config", bdf);
+    config = open(path, O_RDONLY | O_CLOEXEC);
+    snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/resource0", bdf);
+    resource = open(path, O_RDWR | O_CLOEXEC);
+    if (config < 0 || resource < 0 || pread(config, flags, 2, 0xa2) != 2 ||
+        (flags[0] | ((unsigned)(flags[1] & 7) << 8)) != 2 ||
+        !(flags[1] & 0x80) || (flags[1] & 0x40)) goto done;
+    bar = mmap(NULL, 16384, PROT_READ | PROT_WRITE, MAP_SHARED, resource, 0);
+    if (bar == MAP_FAILED) goto done;
+    mask = (volatile uint32_t *)(bar + 0x201c); /* MSI-X vector1, not MASKALL. */
+    pending = (volatile uint64_t *)(bar + 0x3000);
+    original = *mask;
+    if ((original & 1) || *pending) goto done;
+    *mask = original | 1; __sync_synchronize(); masked = 1;
+    child = fork();
+    if (child < 0) goto done;
+    if (!child) {
+        CPU_ZERO(&selected); CPU_SET(cpu1, &selected);
+        if (sched_setaffinity(0, sizeof(selected), &selected)) _exit(2);
+        _exit(read_compare(fd, &cases[0], buffer, 0, 0) ? 0 : 1);
+    }
+    for (iteration = 0; iteration < 5000 && !(*pending & 2); ++iteration) usleep(100);
+    if (iteration == 5000) goto done;
+    {
+        pid_t reaped = waitpid(child, &status, WNOHANG);
+        if (reaped == child || (reaped < 0 && errno == ECHILD)) child = -1;
+        if (reaped != 0) goto done;
+    }
+    CPU_ZERO(&selected); CPU_SET(cpu2, &selected);
+    if (sched_setaffinity(0, sizeof(selected), &selected)) goto done;
+    affinity_changed = 1;
+    if (!read_compare(fd, &cases[0], buffer, 0, 0) || *pending != 2) goto done;
+    {
+        pid_t reaped = waitpid(child, &status, WNOHANG);
+        if (reaped == child || (reaped < 0 && errno == ECHILD)) child = -1;
+        if (reaped != 0) goto done;
+    }
+    if (sched_setaffinity(0, sizeof(saved), &saved)) goto done;
+    affinity_changed = 0;
+    *mask = original; __sync_synchronize(); masked = 0;
+    for (iteration = 0; iteration < 2000; ++iteration) {
+        pid_t reaped = waitpid(child, &status, WNOHANG);
+        if (reaped == child) { child = -1; break; }
+        if (reaped < 0) goto done;
+        usleep(1000);
+    }
+    if (child > 0 || !WIFEXITED(status) || WEXITSTATUS(status) || *pending) goto done;
+    result = 1;
+done:
+    if (masked) { *mask = original; __sync_synchronize(); }
+    if (affinity_changed && sched_setaffinity(0, sizeof(saved), &saved)) result = 0;
+    if (child > 0) { kill(child, SIGTERM); waitpid(child, NULL, 0); }
+    if (bar != MAP_FAILED) munmap(bar, 16384);
+    if (resource >= 0) close(resource);
+    if (config >= 0) close(config);
+    if (result) puts("NATIVE_MQ_PBA_PASS Q1_masked=1 Q2_read_completed=1 Q1_still_waiting=1 independent_PBA=1 unmask_delivery=1 pending_cleared=1");
+    else fputs("MQ per-vector masked PBA journey failed\n", stderr);
+    return result;
+}
+#endif
+
 static int budget_journey(int fd, uint8_t *buffer)
 {
     const struct native_case *test = &cases[2];
@@ -473,6 +555,8 @@ int main(int argc, char **argv)
     uint32_t index, iteration, cut = 0;
     int budget = argc == 4 && !strcmp(argv[1], "budget");
     int aer = argc == 4 && !strcmp(argv[1], "aer");
+    int mq_pba = FWLAB_NATIVE_TEST_LARGE && argc == 6 && !strcmp(argv[1], "mq-pba-b");
+    unsigned mq_cpu1 = 0, mq_cpu2 = 0;
 
     setvbuf(stdout, NULL, _IOLBF, 0);
 
@@ -497,18 +581,30 @@ int main(int argc, char **argv)
         return native_owner_host_journey(argv[2], argv[3], 1);
     if (argc == 4 && !strcmp(argv[1], "owner-stale"))
         return native_owner_stale_journey(argv[2], argv[3]);
+#if FWLAB_NATIVE_TEST_LARGE
+    if (argc == 5 && !strcmp(argv[1], "owner-mq2-b"))
+        return native_owner_mq2_journey(argv[2], argv[3], argv[4]);
+#endif
     if (argc == 4 && strlen(argv[1]) == 4 && !strncmp(argv[1], "cut", 3) &&
         argv[1][3] >= '1' && argv[1][3] <= '4')
         cut = (uint32_t)(argv[1][3] - '0');
     guest_hold = argc == 4 && !strcmp(argv[1], "guest-hold");
     pba = argc == 4 && !strcmp(argv[1], "pba");
     guest = guest_hold || (argc == 4 && !strcmp(argv[1], "guest-ab"));
-    if (argc != 4 || (!cut && !guest && !pba && !budget && !aer && strcmp(argv[1], "write") &&
+    if ((!mq_pba && argc != 4) || (!mq_pba && !cut && !guest && !pba && !budget && !aer && strcmp(argv[1], "write") &&
                       strcmp(argv[1], "verify") && strcmp(argv[1], "verify-b"))) {
-        fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3|cut4|aer|budget /dev/nvmeXn1 BDF\n", argv[0]);
+        fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3|cut4|aer|budget /dev/nvmeXn1 BDF\n"
+                        "       %s mq-pba-b /dev/nvmeXn1 BDF Q1_CPU Q2_CPU (LARGE client only)\n", argv[0], argv[0]);
         return 2;
     }
-    pattern_delta = !strcmp(argv[1], "verify-b") ? 0x33 : 0;
+    if (mq_pba) {
+        char *end1, *end2;
+        unsigned long a = strtoul(argv[4], &end1, 10), b = strtoul(argv[5], &end2, 10);
+        if (!*argv[4] || !*argv[5] || *end1 || *end2 || a >= CPU_SETSIZE || b >= CPU_SETSIZE)
+            return 2;
+        mq_cpu1 = (unsigned)a; mq_cpu2 = (unsigned)b;
+    }
+    pattern_delta = (!strcmp(argv[1], "verify-b") || mq_pba) ? 0x33 : 0;
     write_mode = cut != 0 || budget || !strcmp(argv[1], "write");
     fd = open(argv[2], (write_mode || guest ? O_RDWR : O_RDONLY) |
                         O_EXCL | O_NOFOLLOW | O_CLOEXEC);
@@ -557,6 +653,14 @@ int main(int argc, char **argv)
         result = masked_pba_journey(fd, argv[3], allocation) ? 0 : 1;
         goto done;
     }
+#if FWLAB_NATIVE_TEST_LARGE
+    if (mq_pba) {
+        result = mq_masked_pba_journey(fd, argv[3], allocation, mq_cpu1, mq_cpu2) ? 0 : 1;
+        goto done;
+    }
+#else
+    (void)mq_cpu1; (void)mq_cpu2;
+#endif
     if (budget) {
         result = budget_journey(fd, allocation) ? 0 : 1;
         goto done;

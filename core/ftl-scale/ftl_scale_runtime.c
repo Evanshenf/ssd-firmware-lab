@@ -537,28 +537,55 @@ static bool close_step(struct fwlab_ftl_scale *f)
     }
     if (!f->nfc_quiescent) {
         r = f->nfc_adapter->drive(f);
-        if (r != FWLAB_NFC_API_OK || f->nfc_adapter->quiescent(f, &quiescent) != FWLAB_NFC_API_OK)
+        if (r != FWLAB_NFC_API_OK || f->nfc_adapter->quiescent(f, &quiescent) != FWLAB_NFC_API_OK) {
             sf_fail(f, SF_FAULT_IO);
-        else f->nfc_quiescent = (uint8_t)quiescent;
-        return true;
+            return true;
+        }
+        f->nfc_quiescent = (uint8_t)quiescent;
+        return quiescent; /* An unchanged external-wait poll is not progress. */
     }
     return false;
+}
+
+static enum fwlab_spine_result_v0 step_internal(struct fwlab_ftl_scale *f,
+    uint32_t budget, uint32_t *used, struct fwlab_execution_progress *progress)
+{
+    uint32_t count = 0;
+    if (!live(f) || !budget || !used) return FWLAB_SPINE_V0_INVALID;
+    if (progress) memset(progress, 0, sizeof(*progress));
+    while (count < budget && !f->quarantined) {
+        bool advanced;
+        if (f->work.step_cursor == 0) advanced = sf_io_step(f);
+        else if (f->work.step_cursor == 1) advanced = sf_meta_step(f);
+        else {
+            advanced = sf_work_step(f);
+            advanced = close_step(f) || advanced;
+        }
+        if (progress && advanced) progress->advanced = 1;
+        f->work.step_cursor = (f->work.step_cursor + 1u) % 3u;
+        ++count;
+    }
+    /* The FTL owns both the retained result and its consumer. Do not infer
+     * readiness from an occupied parent or from an attempted NFC submission. */
+    if (progress && !f->quarantined && f->io.phase == SF_IO_DONE &&
+        (sf_work_busy(f) || sf_meta_busy(f)))
+        progress->runnable = 1;
+    *used = count;
+    return f->quarantined ? FWLAB_SPINE_V0_QUARANTINED : FWLAB_SPINE_V0_OK;
 }
 
 enum fwlab_spine_result_v0 fwlab_ftl_scale_step(struct fwlab_ftl_scale *f,
                                               uint32_t budget, uint32_t *used)
 {
-    uint32_t count = 0;
-    if (!live(f) || !budget || !used) return FWLAB_SPINE_V0_INVALID;
-    while (count < budget && !f->quarantined) {
-        if (f->work.step_cursor == 0) (void)sf_io_step(f);
-        else if (f->work.step_cursor == 1) (void)sf_meta_step(f);
-        else { (void)sf_work_step(f); (void)close_step(f); }
-        f->work.step_cursor = (f->work.step_cursor + 1u) % 3u;
-        ++count;
-    }
-    *used = count;
-    return f->quarantined ? FWLAB_SPINE_V0_QUARANTINED : FWLAB_SPINE_V0_OK;
+    return step_internal(f, budget, used, NULL);
+}
+
+enum fwlab_spine_result_v0 fwlab_ftl_scale_step_report(struct fwlab_ftl_scale *f,
+    uint32_t budget, uint32_t *used, struct fwlab_execution_progress *progress)
+{
+    if (!progress || !live(f) || f->nfc_adapter != &sf_nfc_page2_adapter)
+        return FWLAB_SPINE_V0_INVALID;
+    return step_internal(f, budget, used, progress);
 }
 
 enum fwlab_spine_result_v0 fwlab_ftl_scale_format_start(struct fwlab_ftl_scale *f,

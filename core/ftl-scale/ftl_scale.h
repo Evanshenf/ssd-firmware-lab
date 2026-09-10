@@ -10,6 +10,7 @@
 #include "fwlab/contracts/nfc_provider.h"
 #include "fwlab/contracts/nfc_page_v2_provider.h"
 #include "fwlab/private/block_volume_v0.h"
+#include "fwlab/private/execution_progress.h"
 
 #define FWLAB_FTL_SCALE_VERSION 1u
 #define FWLAB_FTL_SCALE_LBA_BYTES 512u
@@ -116,6 +117,11 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_volume_query(
     struct fwlab_block_volume_binding_v0 *binding);
 enum fwlab_spine_result_v0 fwlab_ftl_scale_step(
     struct fwlab_ftl_scale *ftl, uint32_t budget, uint32_t *used);
+/* Private PAGE2 execution facts. The original step's used-budget meaning is
+ * unchanged; a polling visit is not automatically an advancement. */
+enum fwlab_spine_result_v0 fwlab_ftl_scale_step_report(
+    struct fwlab_ftl_scale *ftl, uint32_t budget, uint32_t *used,
+    struct fwlab_execution_progress *progress);
 enum fwlab_spine_result_v0 fwlab_ftl_scale_query(
     const struct fwlab_ftl_scale *ftl, struct fwlab_ftl_scale_status *status);
 enum fwlab_spine_result_v0 fwlab_ftl_scale_checkpoint_start(

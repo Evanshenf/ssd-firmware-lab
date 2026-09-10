@@ -11,7 +11,8 @@
 
 static int large_profile(const struct native_context *context)
 {
-    return context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL;
+    return context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL ||
+           context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL;
 }
 
 static uint8_t *slot_bytes(struct native_context *context, const struct native_slot *slot)
@@ -526,6 +527,7 @@ static enum fwlab_spine_result_v0 queue_observe(
     struct fwlab_m4_native_message message;
     int result;
 
+    if (slot->queue_unknown) return FWLAB_SPINE_V0_POISONED;
     if (slot->queue_terminal)
         return FWLAB_SPINE_V0_OK;
     native_message_init(context, slot, FWLAB_M4_NATIVE_QUEUE, &message);
@@ -534,13 +536,41 @@ static enum fwlab_spine_result_v0 queue_observe(
     message.queue_entries = slot->queue_argument.queue_entries;
     message.associated_queue = slot->queue_argument.associated_queue_id;
     message.interrupt_vector = slot->queue_argument.interrupt_vector;
-    result = native_exchange(context, &message);
+    if (context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL) {
+        struct fwlab_m4_native_message original;
+        unsigned attempt;
+        if (slot->queue_argument.semantic == FWLAB_SPINE_SEMANTIC_V0_SET_NUMBER_OF_QUEUES) {
+            /* Profile3 QUEUE/NoQ field contract: positive SQ/CQ counts. */
+            message.queue_entries = slot->queue_argument.requested_sq_count;
+            message.associated_queue = slot->queue_argument.requested_cq_count;
+        }
+        original = message;
+        for (attempt = 0; attempt < 3; ++attempt) {
+            message = original;
+            result = native_exchange(context, &message);
+            if (result != -EFAULT && result != -EINTR) break;
+        }
+        if (attempt == 3 || (result && message.result == INT32_MIN)) {
+            /* No new origin or rollback after an indeterminate queue effect. */
+            slot->queue_unknown = 1;
+            context->closing = 1;
+            return FWLAB_SPINE_V0_POISONED;
+        }
+    } else {
+        result = native_exchange(context, &message);
+    }
     if (result && message.result == INT32_MIN)
         return FWLAB_SPINE_V0_IN_PROGRESS;
     memset(&slot->queue_status, 0, sizeof(slot->queue_status));
     slot->queue_status.version = FWLAB_HOST_ACTION_PROGRAM_V0_VERSION;
     slot->queue_status.size = (uint16_t)sizeof(slot->queue_status);
     slot->queue_status.token = slot->queue_token;
+    if (context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL &&
+        result == -EINPROGRESS) {
+        slot->queue_status.state = FWLAB_HOST_ACTION_V0_STATE_ACCEPTED;
+        return FWLAB_SPINE_V0_OK;
+    }
+    slot->queue_result_dword0 = result ? 0 : message.result_dword0;
     slot->queue_status.state = FWLAB_HOST_ACTION_V0_STATE_TERMINAL;
     slot->queue_status.terminal_kind = !result ? FWLAB_HOST_ACTION_V0_SUCCEEDED :
         context->closing ? FWLAB_HOST_ACTION_V0_CANCELLED : FWLAB_HOST_ACTION_V0_FAILED;
@@ -553,8 +583,9 @@ static enum fwlab_spine_result_v0 queue_observe(
         slot->queue_status.fault_domain = 1;
         slot->queue_status.fault_code = (uint32_t)-result;
     }
-    if (j0_runtime_action_result(context->runtime, &slot->queue_token,
-                                &slot->queue_status) != FWLAB_SPINE_V0_OK)
+    if (j0_runtime_action_result_value(context->runtime, &slot->queue_token,
+                                      &slot->queue_status,
+                                      slot->queue_result_dword0) != FWLAB_SPINE_V0_OK)
         return FWLAB_SPINE_V0_POISONED;
     slot->queue_terminal = 1;
     return FWLAB_SPINE_V0_OK;
@@ -643,7 +674,8 @@ static enum fwlab_spine_result_v0 queue_retire_query(
     if (!slot || !status || !slot->queue_retire_started)
         return FWLAB_SPINE_V0_WRONG_STATE;
     slot->queue_status.state = FWLAB_HOST_ACTION_V0_STATE_DRAINED;
-    if (j0_runtime_action_result(context->runtime, token, &slot->queue_status) != FWLAB_SPINE_V0_OK)
+    if (j0_runtime_action_result_value(context->runtime, token, &slot->queue_status,
+                                      slot->queue_result_dword0) != FWLAB_SPINE_V0_OK)
         return FWLAB_SPINE_V0_POISONED;
     slot->queue_drained = 1;
     *status = slot->queue_status;

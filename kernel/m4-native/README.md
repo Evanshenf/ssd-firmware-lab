@@ -108,6 +108,25 @@ mapping/copy guards remain unchanged; there is no 1 MiB spinlocked copy. Invalid
 or stale later mappings can still yield declared partial DMA, not atomic DMA.
 The matching worker retains AER as immediate Unsupported, not a waiting command.
 
+Profile 3 (`FWLAB_M4_HOST_PROFILE=3`, PUMP only, Linux 7 interface) is the MQ2
+serialized candidate. It has paired Q1/CQ1/vector1 and Q2/CQ2/vector2 plus Admin
+vector0, with the same global one-I/O/one-Admin frame contract. IRQ allocation
+uses the actual MSI descriptor index; each vector has its own pending ticket,
+generation and deferred IRQ work item, not an extra firmware data thread.
+
+Captured origins hold SQ/CQ incarnations until retirement. Accepted deletion
+returns private `-EINPROGRESS` while draining, not a terminal busy result.
+Reset/revoke retains queue objects until holders and accepted queue operations
+are drained, then clears them before ACK/zero certification. Completing an
+accepted deletion under the closed effect gate is metadata/route cleanup only.
+The profile-3 NoQ operation carries positive requested SQ/CQ counts in the
+private exchange's `queue_entries` / `associated_queue` fields and returns its
+stable `result_dword0`; other queue operations retain their named field meanings.
+
+This is a development construction, not native MQ2 qualification by compilation.
+Old profiles 1/2 remain one-vector references; no SGL, multi-namespace, concurrent
+FTL, physical NAND or whole-SSD throughput claim is added.
+
 Use the explicitly named `large-worker` and `native-io-large` targets. Existing
 lab isolation, fresh-only format, recovery, ownership and cleanup rules still
 apply. Native data/fault/reset/owner evidence is required separately; adjacent

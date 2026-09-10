@@ -41,38 +41,57 @@ MODULE_PARM_DESC(bar_size, "Boot-reserved physical BAR0 size");
 static bool fwlab_m4_irq_valid_locked(struct fwlab_m4_pci_ctx *ctx,
 				      const struct fwlab_m4_irq_ticket *ticket)
 {
+	const struct fwlab_m4_irq_route *route;
 	u16 command = get_unaligned_le16(&ctx->config[PCI_COMMAND]);
 
+	if (ticket->vector >= FWLAB_M4_VECTOR_COUNT)
+		return false;
+	route = &ctx->route[ticket->vector];
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+	if (!route->allocated || route->virq != ticket->virq)
+		return false;
+#endif
 	return ctx->effects_open && ctx->owner_phase == FWLAB_M4_OWNER_OWNED &&
 	       ticket->owner_epoch == ctx->owner_epoch &&
 	       ticket->bus_generation == ctx->access_generation &&
 	       ticket->effects_generation == ctx->effects_generation &&
-	       ticket->route_generation == ctx->route_generation &&
+	       ticket->route_generation == route->generation &&
 	       ticket->bar_epoch == ctx->bar_epoch &&
 	       (command & (PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY)) ==
 		       (PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY) &&
 	       ctx->pdev && ctx->pdev->msix_enabled && ticket->virq &&
-	       msi_get_virq(&ctx->pdev->dev, 0) == ticket->virq;
+	       msi_get_virq(&ctx->pdev->dev, ticket->vector) == ticket->virq;
+}
+
+static u64 fwlab_m4_pending_bits_locked(struct fwlab_m4_pci_ctx *ctx)
+{
+	u64 bits = 0;
+	u32 vector;
+
+	for (vector = 0; vector < FWLAB_M4_VECTOR_COUNT; vector++)
+		if (ctx->route[vector].pending)
+			bits |= BIT_ULL(vector);
+	return bits;
 }
 
 static void fwlab_m4_irq_work(struct irq_work *work)
 {
-	struct fwlab_m4_pci_ctx *ctx = container_of(
-		work, struct fwlab_m4_pci_ctx, irq_work);
+	struct fwlab_m4_irq_route *route = container_of(work, struct fwlab_m4_irq_route, work);
+	struct fwlab_m4_pci_ctx *ctx = route->owner;
 	unsigned long flags;
-	unsigned int virq;
+	unsigned int virq = 0;
 
 	spin_lock_irqsave(&ctx->config_lock, flags);
-	virq = fwlab_m4_irq_valid_locked(ctx, &ctx->irq_ticket) ? ctx->pending_virq : 0;
+	if (route->queued && fwlab_m4_irq_valid_locked(ctx, &route->ticket))
+		virq = route->ticket.virq;
+	route->queued = false;
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
-
 	if (virq) {
 		int ret;
 
 		pr_debug(FWLAB_M4_PCI_NAME ": irq_work enter virq=%u\n", virq);
 		ret = generic_handle_irq(virq);
-		pr_debug(FWLAB_M4_PCI_NAME
-			": irq_work exit virq=%u ret=%d\n", virq, ret);
+		pr_debug(FWLAB_M4_PCI_NAME ": irq_work exit virq=%u ret=%d\n", virq, ret);
 	}
 }
 
@@ -80,9 +99,8 @@ static int fwlab_m4_update_msix(struct fwlab_m4_pci_ctx *ctx,
 			       const struct fwlab_m4_irq_ticket *ticket)
 {
 	unsigned long flags;
-	unsigned int virq = 0;
-	u32 vector_ctrl;
 	u16 msix_flags;
+	u32 vector;
 
 	spin_lock_irqsave(&ctx->config_lock, flags);
 	if (ticket) {
@@ -90,54 +108,64 @@ static int fwlab_m4_update_msix(struct fwlab_m4_pci_ctx *ctx,
 			spin_unlock_irqrestore(&ctx->config_lock, flags);
 			return -ESTALE;
 		}
-		ctx->irq_pending = true;
-		ctx->irq_ticket = *ticket;
+		ctx->route[ticket->vector].pending = true;
+		ctx->route[ticket->vector].ticket = *ticket;
 	}
-	if (!fwlab_m4_irq_valid_locked(ctx, &ctx->irq_ticket))
-		ctx->irq_pending = false;
-	msix_flags = get_unaligned_le16(
-		&ctx->config[FWLAB_M4_MSIX_CAP + PCI_MSIX_FLAGS]);
-	vector_ctrl = readl(ctx->bar_mapping + FWLAB_M4_MSIX_TABLE_OFFSET +
-			    PCI_MSIX_ENTRY_VECTOR_CTRL);
-	if (ctx->irq_pending && ctx->pdev && ctx->pdev->msix_enabled &&
-	    (msix_flags & PCI_MSIX_FLAGS_ENABLE) &&
-	    !(msix_flags & PCI_MSIX_FLAGS_MASKALL) &&
-	    !(vector_ctrl & PCI_MSIX_ENTRY_CTRL_MASKBIT))
-		virq = ctx->irq_ticket.virq;
-	if (virq) {
-		ctx->irq_pending = false;
-		WRITE_ONCE(ctx->pending_virq, virq);
+	msix_flags = get_unaligned_le16(&ctx->config[FWLAB_M4_MSIX_CAP + PCI_MSIX_FLAGS]);
+	for (vector = 0; vector < FWLAB_M4_VECTOR_COUNT; vector++) {
+		struct fwlab_m4_irq_route *route = &ctx->route[vector];
+		u32 ctrl = readl(ctx->bar_mapping + FWLAB_M4_MSIX_TABLE_OFFSET +
+				vector * PCI_MSIX_ENTRY_SIZE + PCI_MSIX_ENTRY_VECTOR_CTRL);
+
+		if (!fwlab_m4_irq_valid_locked(ctx, &route->ticket)) {
+			route->pending = false;
+			route->queued = false;
+		}
+		if (route->pending && (msix_flags & PCI_MSIX_FLAGS_ENABLE) &&
+		    !(msix_flags & PCI_MSIX_FLAGS_MASKALL) &&
+		    !(ctrl & PCI_MSIX_ENTRY_CTRL_MASKBIT)) {
+			route->pending = false;
+			route->queued = true;
+			irq_work_queue(&route->work);
+		}
 	}
-	writeq(ctx->irq_pending ? 1 : 0,
+	writeq(fwlab_m4_pending_bits_locked(ctx),
 	       ctx->bar_mapping + FWLAB_M4_MSIX_PBA_OFFSET);
-	if (virq)
-		irq_work_queue(&ctx->irq_work);
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
 	return 0;
 }
 
-int fwlab_m4_prepare_msix(struct fwlab_m4_pci_ctx *ctx, u64 owner_epoch,
-			  u64 bus_generation, u32 bar_epoch,
+int fwlab_m4_prepare_msix_vector(struct fwlab_m4_pci_ctx *ctx, u64 owner_epoch,
+			  u64 bus_generation, u32 bar_epoch, u32 vector,
 			  struct fwlab_m4_irq_ticket *ticket)
 {
 	struct fwlab_m4_irq_ticket candidate = {};
 	unsigned long flags;
 	bool valid;
 
-	if (!ticket)
+	if (!ticket || vector >= FWLAB_M4_VECTOR_COUNT)
 		return -EINVAL;
 	spin_lock_irqsave(&ctx->config_lock, flags);
 	candidate.owner_epoch = owner_epoch;
 	candidate.bus_generation = bus_generation;
 	candidate.bar_epoch = bar_epoch;
 	candidate.effects_generation = ctx->effects_generation;
-	candidate.route_generation = ctx->route_generation;
-	candidate.virq = ctx->pdev ? msi_get_virq(&ctx->pdev->dev, 0) : 0;
+	candidate.route_generation = ctx->route[vector].generation;
+	candidate.vector = vector;
+	candidate.virq = ctx->pdev ? msi_get_virq(&ctx->pdev->dev, vector) : 0;
 	valid = fwlab_m4_irq_valid_locked(ctx, &candidate);
 	if (valid)
 		*ticket = candidate;
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
 	return valid ? 0 : -ESTALE;
+}
+
+int fwlab_m4_prepare_msix(struct fwlab_m4_pci_ctx *ctx, u64 owner_epoch,
+			  u64 bus_generation, u32 bar_epoch,
+			  struct fwlab_m4_irq_ticket *ticket)
+{
+	return fwlab_m4_prepare_msix_vector(ctx, owner_epoch, bus_generation,
+					    bar_epoch, 0, ticket);
 }
 
 int fwlab_m4_raise_msix(struct fwlab_m4_pci_ctx *ctx,
@@ -151,18 +179,45 @@ void fwlab_m4_flush_msix(struct fwlab_m4_pci_ctx *ctx)
 	(void)fwlab_m4_update_msix(ctx, NULL);
 }
 
+int fwlab_m4_retire_msix_route(struct fwlab_m4_pci_ctx *ctx, u32 vector)
+{
+	struct fwlab_m4_irq_route *route;
+	unsigned long flags;
+
+	if (vector >= FWLAB_M4_VECTOR_COUNT)
+		return -EINVAL;
+	spin_lock_irqsave(&ctx->config_lock, flags);
+	route = &ctx->route[vector];
+	if (route->generation == U64_MAX) {
+		spin_unlock_irqrestore(&ctx->config_lock, flags);
+		return -EOVERFLOW;
+	}
+	route->generation++;
+	route->pending = false;
+	route->queued = false;
+	memset(&route->ticket, 0, sizeof(route->ticket));
+	writeq(fwlab_m4_pending_bits_locked(ctx), ctx->bar_mapping + FWLAB_M4_MSIX_PBA_OFFSET);
+	spin_unlock_irqrestore(&ctx->config_lock, flags);
+	irq_work_sync(&route->work);
+	return 0;
+}
+
 void fwlab_m4_clear_msix(struct fwlab_m4_pci_ctx *ctx)
 {
 	unsigned long flags;
+	u32 vector;
 
 	spin_lock_irqsave(&ctx->config_lock, flags);
-	ctx->irq_pending = false;
-	memset(&ctx->irq_ticket, 0, sizeof(ctx->irq_ticket));
-	WRITE_ONCE(ctx->pending_virq, 0);
+	for (vector = 0; vector < FWLAB_M4_VECTOR_COUNT; vector++) {
+		ctx->route[vector].pending = false;
+		ctx->route[vector].queued = false;
+		memset(&ctx->route[vector].ticket, 0, sizeof(ctx->route[vector].ticket));
+	}
 	if (ctx->bar_mapping)
 		writeq(0, ctx->bar_mapping + FWLAB_M4_MSIX_PBA_OFFSET);
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
-	irq_work_sync(&ctx->irq_work);
+	for (vector = 0; vector < FWLAB_M4_VECTOR_COUNT; vector++)
+		irq_work_sync(&ctx->route[vector].work);
 }
 
 void fwlab_m4_close_effects(struct fwlab_m4_pci_ctx *ctx)
@@ -203,7 +258,7 @@ static void fwlab_m4_irq_set_mask(struct irq_data *data, bool masked)
 	void __iomem *ctrl;
 	u32 value;
 
-	if (!ctx || data->hwirq >= 1)
+	if (!ctx || data->hwirq >= FWLAB_M4_VECTOR_COUNT)
 		return;
 	ctrl = ctx->bar_mapping + FWLAB_M4_MSIX_TABLE_OFFSET +
 	       data->hwirq * PCI_MSIX_ENTRY_SIZE + PCI_MSIX_ENTRY_VECTOR_CTRL;
@@ -256,24 +311,41 @@ static int fwlab_m4_irq_domain_alloc(struct irq_domain *domain,
 				     unsigned int virq,
 				     unsigned int nr_irqs, void *arg)
 {
-	unsigned int i;
 	struct fwlab_m4_pci_ctx *ctx = domain->host_data;
+	msi_alloc_info_t *info = arg;
+	unsigned int first = 0, i;
 	unsigned long flags;
 
-	(void)arg;
-	spin_lock_irqsave(&ctx->config_lock, flags);
-	if (ctx->route_generation == U64_MAX) {
-		spin_unlock_irqrestore(&ctx->config_lock, flags);
-		return -EOVERFLOW;
+	if (FWLAB_M4_VECTOR_COUNT > 1) {
+		if (!info || !info->desc || !ctx->pdev || info->desc->dev != &ctx->pdev->dev)
+			return -EINVAL;
+		first = info->desc->msi_index;
 	}
-	ctx->route_generation++;
+	if (!nr_irqs || first >= FWLAB_M4_VECTOR_COUNT ||
+	    nr_irqs > FWLAB_M4_VECTOR_COUNT - first)
+		return -EINVAL;
+	spin_lock_irqsave(&ctx->config_lock, flags);
+	for (i = 0; i < nr_irqs; i++) {
+		struct fwlab_m4_irq_route *route = &ctx->route[first + i];
+
+		if (route->allocated || route->generation == U64_MAX) {
+			int error = route->allocated ? -EBUSY : -EOVERFLOW;
+			spin_unlock_irqrestore(&ctx->config_lock, flags);
+			return error;
+		}
+	}
+	for (i = 0; i < nr_irqs; i++) {
+		struct fwlab_m4_irq_route *route = &ctx->route[first + i];
+
+		route->generation++;
+		route->allocated = true;
+		route->virq = virq + i;
+	}
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
 	for (i = 0; i < nr_irqs; i++) {
-		irq_domain_set_hwirq_and_chip(domain, virq + i, i,
-					      &fwlab_m4_msi_chip,
-					      domain->host_data);
-		__irq_set_handler(virq + i, handle_simple_irq, 0,
-				  "ssd-fwlab-simple");
+		irq_domain_set_hwirq_and_chip(domain, virq + i, first + i,
+					      &fwlab_m4_msi_chip, ctx);
+		__irq_set_handler(virq + i, handle_simple_irq, 0, "ssd-fwlab-simple");
 	}
 	return 0;
 }
@@ -284,14 +356,32 @@ static void fwlab_m4_irq_domain_free(struct irq_domain *domain,
 {
 	struct fwlab_m4_pci_ctx *ctx = domain->host_data;
 	unsigned long flags;
+	unsigned int i;
+	u32 released = 0;
 
 	spin_lock_irqsave(&ctx->config_lock, flags);
-	if (ctx->route_generation != U64_MAX)
-		ctx->route_generation++;
-	ctx->irq_pending = false;
-	ctx->pending_virq = 0;
-	memset(&ctx->irq_ticket, 0, sizeof(ctx->irq_ticket));
+	for (i = 0; i < nr_irqs; i++) {
+		struct irq_data *data = irq_domain_get_irq_data(domain, virq + i);
+		struct fwlab_m4_irq_route *route;
+
+		if (!data || data->hwirq >= FWLAB_M4_VECTOR_COUNT)
+			continue;
+		route = &ctx->route[data->hwirq];
+		if (route->generation != U64_MAX)
+			route->generation++;
+		route->allocated = false;
+		route->virq = 0;
+		route->pending = false;
+		route->queued = false;
+		memset(&route->ticket, 0, sizeof(route->ticket));
+		released |= BIT(data->hwirq);
+	}
+	if (ctx->bar_mapping)
+		writeq(fwlab_m4_pending_bits_locked(ctx), ctx->bar_mapping + FWLAB_M4_MSIX_PBA_OFFSET);
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
+	for (i = 0; i < FWLAB_M4_VECTOR_COUNT; i++)
+		if (released & BIT(i))
+			irq_work_sync(&ctx->route[i].work);
 	irq_domain_free_irqs_common(domain, virq, nr_irqs);
 }
 
@@ -408,9 +498,13 @@ static int fwlab_m4_prepare_aperture(struct fwlab_m4_pci_ctx *ctx)
 	struct resource *probe;
 	resource_size_t end;
 	int ret;
+	u32 vector;
 
 	spin_lock_init(&ctx->config_lock);
-	init_irq_work(&ctx->irq_work, fwlab_m4_irq_work);
+	for (vector = 0; vector < FWLAB_M4_VECTOR_COUNT; vector++) {
+		ctx->route[vector].owner = ctx;
+		init_irq_work(&ctx->route[vector].work, fwlab_m4_irq_work);
+	}
 	ctx->bar_start = (phys_addr_t)bar_start;
 	ctx->bar_size = (resource_size_t)bar_size;
 	if (ctx->bar_size != FWLAB_M4_BAR_SIZE ||
@@ -615,7 +709,7 @@ static void fwlab_m4_init_config(struct fwlab_m4_pci_ctx *ctx)
 		FWLAB_M4_MSIX_CAP;
 	ctx->config[FWLAB_M4_MSIX_CAP + PCI_CAP_LIST_ID] = PCI_CAP_ID_MSIX;
 	ctx->config[FWLAB_M4_MSIX_CAP + PCI_CAP_LIST_NEXT] = 0;
-	put_unaligned_le16(0,
+	put_unaligned_le16(FWLAB_M4_VECTOR_COUNT - 1,
 			   &ctx->config[FWLAB_M4_MSIX_CAP + PCI_MSIX_FLAGS]);
 	put_unaligned_le32(FWLAB_M4_MSIX_TABLE_OFFSET,
 			   &ctx->config[FWLAB_M4_MSIX_CAP + PCI_MSIX_TABLE]);
@@ -625,12 +719,13 @@ static void fwlab_m4_init_config(struct fwlab_m4_pci_ctx *ctx)
 
 static void fwlab_m4_release_aperture(struct fwlab_m4_pci_ctx *ctx)
 {
+	u32 vector;
 	if (ctx->bar_thread) {
 		kthread_stop(ctx->bar_thread);
 		ctx->bar_thread = NULL;
 	}
-	irq_work_sync(&ctx->irq_work);
-	WRITE_ONCE(ctx->pending_virq, 0);
+	for (vector = 0; vector < FWLAB_M4_VECTOR_COUNT; vector++)
+		irq_work_sync(&ctx->route[vector].work);
 	if (ctx->bar_mapping) {
 		iounmap(ctx->bar_mapping);
 		ctx->bar_mapping = NULL;

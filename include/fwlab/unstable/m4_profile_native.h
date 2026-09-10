@@ -8,6 +8,7 @@
 #define FWLAB_M4_ATTACH_PROFILE_VERSION 3U
 #define FWLAB_M4_HOST_PROFILE_SMALL 1U
 #define FWLAB_M4_HOST_PROFILE_LARGE_SERIAL 2U
+#define FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL 3U
 #define FWLAB_M4_LARGE_IO_BYTES 1048576U
 #define FWLAB_M4_CONTROL_PAGE_BYTES 4096U
 
@@ -38,7 +39,8 @@ static inline struct fwlab_m4_host_limits fwlab_m4_host_limits_for(__u32 profile
         /* These ceilings share the existing 32 metadata slots; not 64. */
         limits.io_ingress = 32;
         limits.admin_ingress = 32;
-    } else if (profile == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL) {
+    } else if (profile == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL ||
+               profile == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL) {
         limits.max_io_bytes = FWLAB_M4_LARGE_IO_BYTES;
         limits.max_admin_bytes = FWLAB_M4_CONTROL_PAGE_BYTES;
         limits.max_data_pages = 257;
@@ -49,9 +51,9 @@ static inline struct fwlab_m4_host_limits fwlab_m4_host_limits_for(__u32 profile
         return limits;
     }
     limits.controller_page_bytes = FWLAB_M4_CONTROL_PAGE_BYTES;
-    limits.io_queue_pairs = 1;
+    limits.io_queue_pairs = profile == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL ? 2 : 1;
     limits.queue_depth = 32;
-    limits.vectors = 1;
+    limits.vectors = profile == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL ? 3 : 1;
     return limits;
 }
 

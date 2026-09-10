@@ -671,7 +671,8 @@ enum fwlab_spine_result_v0 j0_runtime_init(
             goto failed;
         }
         result = FWLAB_SPINE_V0_INVALID;
-        if (!storage_runner_valid(&runtime->storage)) {
+        if (!storage_runner_valid(&runtime->storage) ||
+            (runtime->config.linux_limits.io_queue_pairs == 2 && !runtime->storage.step_report)) {
             goto failed;
         }
     } else {
@@ -1023,14 +1024,20 @@ static enum fwlab_spine_result_v0 bind_ready_volume(struct j0_runtime *runtime)
     return FWLAB_SPINE_V0_OK;
 }
 
-enum fwlab_spine_result_v0 j0_runtime_step(
-    struct j0_runtime *runtime, uint32_t budget, uint32_t *units)
+static enum fwlab_spine_result_v0 runtime_step_internal(
+    struct j0_runtime *runtime, uint32_t budget, uint32_t *units,
+    struct fwlab_execution_progress *progress)
 {
     uint32_t used = 0;
 
     if (runtime == NULL || runtime->magic != J0_RUNTIME_MAGIC ||
         budget == 0 || units == NULL || runtime->lifecycle_finished) {
         return FWLAB_SPINE_V0_INVALID;
+    }
+    if (progress) {
+        if (!runtime->storage.context || !runtime->storage.step_report)
+            return FWLAB_SPINE_V0_INVALID;
+        memset(progress, 0, sizeof(*progress));
     }
     while (used < budget) {
         if (runtime->fair_cursor == 0) {
@@ -1041,6 +1048,12 @@ enum fwlab_spine_result_v0 j0_runtime_step(
                     runtime->lifecycle_arena, 1, &lifecycle_units,
                     &transitions);
 
+            if (progress) {
+                if (transitions) progress->advanced = 1;
+                /* A provider call may consume a previously ready storage
+                 * result. Do not carry a stale runnable hint across it. */
+                if (lifecycle_units) progress->runnable = 0;
+            }
             if (result != FWLAB_SPINE_V0_OK &&
                 result != FWLAB_SPINE_V0_IN_PROGRESS) {
                 runtime->poisoned = 1;
@@ -1048,9 +1061,18 @@ enum fwlab_spine_result_v0 j0_runtime_step(
         } else if (runtime->fair_cursor == 1) {
             if (runtime->storage.context != NULL) {
                 uint32_t storage_units = 0;
-                enum fwlab_spine_result_v0 result = runtime->storage.step(
-                    runtime->storage.context, 1, &storage_units);
+                struct fwlab_execution_progress local = {0};
+                enum fwlab_spine_result_v0 result = progress
+                    ? runtime->storage.step_report(runtime->storage.context,
+                                                  1, &storage_units, &local)
+                    : runtime->storage.step(runtime->storage.context, 1, &storage_units);
 
+                if (progress && !fwlab_execution_progress_valid(&local))
+                    runtime->poisoned = 1;
+                else if (progress) {
+                    progress->advanced |= local.advanced;
+                    progress->runnable = local.runnable;
+                }
                 if ((result != FWLAB_SPINE_V0_OK &&
                      result != FWLAB_SPINE_V0_IN_PROGRESS) || storage_units > 1)
                     runtime->poisoned = 1;
@@ -1063,7 +1085,11 @@ enum fwlab_spine_result_v0 j0_runtime_step(
                 }
             }
         } else {
-            (void)close_reap_one(runtime);
+            int reaped = close_reap_one(runtime);
+            if (progress && reaped) {
+                progress->advanced = 1;
+                progress->runnable = 0;
+            }
         }
         if (runtime->storage.context == NULL &&
             runtime->config.budget_profile == J0_BUDGET_LAB &&
@@ -1080,9 +1106,10 @@ enum fwlab_spine_result_v0 j0_runtime_step(
         ++used;
         if (!runtime->ready && !runtime->close_started) {
             enum fwlab_spine_result_v0 bound = bind_ready_volume(runtime);
-            if (bound == FWLAB_SPINE_V0_OK)
+            if (bound == FWLAB_SPINE_V0_OK) {
                 runtime->ready = 1;
-            else if (bound != FWLAB_SPINE_V0_IN_PROGRESS)
+                if (progress) progress->advanced = 1;
+            } else if (bound != FWLAB_SPINE_V0_IN_PROGRESS)
                 runtime->poisoned = 1;
         }
         if (runtime->poisoned || runtime->host.poisoned ||
@@ -1095,6 +1122,20 @@ enum fwlab_spine_result_v0 j0_runtime_step(
     *units = used;
     return runtime->poisoned ? FWLAB_SPINE_V0_POISONED
                              : FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 j0_runtime_step(
+    struct j0_runtime *runtime, uint32_t budget, uint32_t *units)
+{
+    return runtime_step_internal(runtime, budget, units, NULL);
+}
+
+enum fwlab_spine_result_v0 j0_runtime_step_report(
+    struct j0_runtime *runtime, uint32_t budget, uint32_t *units,
+    struct fwlab_execution_progress *progress)
+{
+    if (!progress) return FWLAB_SPINE_V0_INVALID;
+    return runtime_step_internal(runtime, budget, units, progress);
 }
 
 enum fwlab_spine_result_v0 j0_runtime_intent_read(

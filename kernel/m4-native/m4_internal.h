@@ -13,6 +13,7 @@
 #include <linux/pci.h>
 #include <linux/sizes.h>
 #include <linux/spinlock.h>
+#include <linux/version.h>
 
 #include <asm/pci.h>
 
@@ -32,12 +33,17 @@
 #define FWLAB_M4_HOST_PROFILE FWLAB_M4_HOST_PROFILE_SMALL
 #endif
 #if FWLAB_M4_HOST_PROFILE != FWLAB_M4_HOST_PROFILE_SMALL && \
-    FWLAB_M4_HOST_PROFILE != FWLAB_M4_HOST_PROFILE_LARGE_SERIAL
-#error "FWLAB_M4_HOST_PROFILE must select SMALL or LARGE_SERIAL"
+    FWLAB_M4_HOST_PROFILE != FWLAB_M4_HOST_PROFILE_LARGE_SERIAL && \
+    FWLAB_M4_HOST_PROFILE != FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL
+#error "FWLAB_M4_HOST_PROFILE must select SMALL, LARGE_SERIAL or LARGE_MQ2_SERIAL"
 #endif
-#if FWLAB_M4_HOST_PROFILE == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL && \
+#if FWLAB_M4_HOST_PROFILE != FWLAB_M4_HOST_PROFILE_SMALL && \
     FWLAB_M4_PRODUCER != FWLAB_M4_PRODUCER_PUMP
-#error "LARGE_SERIAL requires the PUMP producer"
+#error "Large profiles require the PUMP producer"
+#endif
+#if FWLAB_M4_HOST_PROFILE == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL && \
+    LINUX_VERSION_CODE < KERNEL_VERSION(7, 0, 0)
+#error "MQ2 requires the qualified Linux 7 MSI parent-domain interface"
 #endif
 
 #define FWLAB_M4_PCI_NAME "ssd_fwlab_native_pci"
@@ -76,6 +82,8 @@
 
 #define FWLAB_M4_PCIE_CAP 0x40
 #define FWLAB_M4_MSIX_CAP 0xa0
+#define FWLAB_M4_VECTOR_COUNT \
+    (FWLAB_M4_HOST_PROFILE == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL ? 3U : 1U)
 
 struct fwlab_m4_irq_ticket {
 	u64 owner_epoch;
@@ -84,6 +92,18 @@ struct fwlab_m4_irq_ticket {
 	u64 route_generation;
 	u32 bar_epoch;
 	u32 virq;
+	u32 vector;
+};
+
+struct fwlab_m4_irq_route {
+	struct irq_work work;
+	struct fwlab_m4_pci_ctx *owner;
+	struct fwlab_m4_irq_ticket ticket;
+	u64 generation;
+	unsigned int virq;
+	bool allocated;
+	bool pending;
+	bool queued;
 };
 
 struct fwlab_m4_pci_ctx {
@@ -101,12 +121,8 @@ struct fwlab_m4_pci_ctx {
 	struct task_struct *bar_thread;
 	struct irq_domain *msi_domain;
 	struct fwnode_handle *msi_fwnode;
-	struct irq_work irq_work;
-	unsigned int pending_virq;
-	struct fwlab_m4_irq_ticket irq_ticket;
+	struct fwlab_m4_irq_route route[FWLAB_M4_VECTOR_COUNT];
 	u64 effects_generation;
-	u64 route_generation;
-	bool irq_pending;
 	bool effects_open;
 	u64 owner_epoch;
 	u32 owner_kind;
@@ -127,6 +143,10 @@ struct fwlab_m4_pci_ctx {
 int fwlab_m4_prepare_msix(struct fwlab_m4_pci_ctx *ctx, u64 owner_epoch,
 			  u64 bus_generation, u32 bar_epoch,
 			  struct fwlab_m4_irq_ticket *ticket);
+int fwlab_m4_prepare_msix_vector(struct fwlab_m4_pci_ctx *ctx, u64 owner_epoch,
+			  u64 bus_generation, u32 bar_epoch, u32 vector,
+			  struct fwlab_m4_irq_ticket *ticket);
+int fwlab_m4_retire_msix_route(struct fwlab_m4_pci_ctx *ctx, u32 vector);
 int fwlab_m4_raise_msix(struct fwlab_m4_pci_ctx *ctx,
 			const struct fwlab_m4_irq_ticket *ticket);
 void fwlab_m4_flush_msix(struct fwlab_m4_pci_ctx *ctx);

@@ -61,6 +61,9 @@ FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
 .PHONY: scaled-pump-worker scaled-pump-runtime check-scaled-pump-runtime
 .PHONY: large-worker large-runtime check-large-runtime native-io-large native-io-large-static
 .PHONY: profile-check
+.PHONY: mq2-worker
+.PHONY: mq2-replyloss-worker
+.PHONY: progress-runtime check-progress-runtime
 
 scaled-worker:
 	mkdir -p $(SCALED_BUILD)
@@ -82,6 +85,20 @@ large-worker:
 		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
 		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) \
 		-o $(SCALED_BUILD)/fwlab_native_large_worker
+
+mq2-worker:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 -DFWLAB_NATIVE_MQ2=1 \
+		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
+		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) \
+		-o $(SCALED_BUILD)/fwlab_native_mq2_worker
+
+mq2-replyloss-worker:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 -DFWLAB_NATIVE_MQ2=1 \
+		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
+		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) tests/queue_reply_loss.c \
+		-Wl,--wrap=ioctl -o $(SCALED_BUILD)/fwlab_native_mq2_replyloss_worker
 
 attach-check:
 	mkdir -p $(SCALED_BUILD)
@@ -123,6 +140,16 @@ large-runtime:
 
 check-large-runtime: large-runtime
 	FWLAB_TEST_MEDIA_DIR="$(FWLAB_TEST_MEDIA_DIR)" $(SCALED_BUILD)/native_large_offline
+
+progress-runtime:
+	mkdir -p $(SCALED_BUILD)
+	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 -DFWLAB_NATIVE_MQ2=1 \
+		-I../../core/ftl-scale -I../../media/file-nand-v2 \
+		$(CFLAGS) $(SCALED_RUNTIME_SOURCES) -Wl,--wrap=ioctl -Wl,--wrap=nanosleep \
+		-o $(SCALED_BUILD)/native_progress_offline
+
+check-progress-runtime: progress-runtime
+	FWLAB_TEST_MEDIA_DIR="$(FWLAB_TEST_MEDIA_DIR)" $(SCALED_BUILD)/native_progress_offline
 
 worker:
 	mkdir -p build

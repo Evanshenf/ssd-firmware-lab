@@ -115,6 +115,106 @@ static void frame_checks(void)
     free(buffer);
 }
 
+static struct fwlab_nvme_command mq_command(uint64_t uid, uint8_t opcode,
+                                            uint32_t dword10, uint32_t dword11)
+{
+    struct fwlab_nvme_command c = {0};
+    c.version = FWLAB_NVME_COMMAND_VERSION; c.size = sizeof(c);
+    c.handle.instance_nonce = 0x1000; c.handle.command_uid = uid;
+    c.handle.controller_epoch = 5; c.handle.generation = 2;
+    c.origin.word[0] = 0xa000 + uid; c.origin.word[1] = 0xb000 + uid;
+    c.trace_cookie = 0xc000 + uid; c.safety_generation = 9;
+    c.opcode = opcode; c.queue_class = FWLAB_NVME_QUEUE_ADMIN;
+    c.data_pointer_format = FWLAB_NVME_DATA_POINTER_PRP;
+    c.data_address_present = opcode == 5 || opcode == 1;
+    c.command_dword10_15[0] = dword10; c.command_dword10_15[1] = dword11;
+    return c;
+}
+
+static struct fwlab_host_action_status_v0 mq_success(
+    struct fwlab_spine_profile_binding_v0 *binding,
+    const struct fwlab_host_action_program_v0 *program, uint32_t value)
+{
+    struct fwlab_host_action_status_v0 s = {0};
+    struct fwlab_nvme_completion_intent intent;
+    CHECK(program->action_count == 1);
+    s.version = FWLAB_HOST_ACTION_PROGRAM_V0_VERSION; s.size = sizeof(s);
+    s.token.version = FWLAB_HOST_ACTION_PROGRAM_V0_VERSION; s.token.size = sizeof(s.token);
+    s.token.type_tag = FWLAB_HOST_ACTION_TOKEN_V0_TAG;
+    s.token.command = program->command; s.token.origin = program->origin;
+    s.token.action_uid = 100 + program->command.command_uid;
+    s.token.generation = 1; s.token.kind = program->action[0].kind;
+    s.state = FWLAB_HOST_ACTION_V0_STATE_TERMINAL;
+    s.terminal_kind = FWLAB_HOST_ACTION_V0_SUCCEEDED;
+    s.produced_witness_mask = FWLAB_HOST_WITNESS_V0_QUEUE_EFFECT;
+    s.effect = FWLAB_HOST_ACTION_V0_EFFECT_FULL; s.units_completed = 1;
+    CHECK(fwlab_host_action_status_v0_valid(&s));
+    CHECK(binding->result_latch(binding->adapter.context, &program->action[0].argument,
+          &s, FWLAB_SPINE_PROVIDER_V0_SUCCESS, value) == FWLAB_SPINE_V0_OK);
+    CHECK(binding->adapter.ops->complete(binding->adapter.context, program, &s, 1,
+          &intent) == FWLAB_SPINE_V0_OK);
+    CHECK(!intent.status_code && intent.result_dword0 == value);
+    return s;
+}
+
+static void mq2_policy_checks(void)
+{
+    struct fwlab_host_profile_adapter_v0 adapter;
+    struct fwlab_spine_profile_binding_v0 binding;
+    struct fwlab_linux_profile_limits limits = fwlab_linux_profile_mq2_limits();
+    struct fwlab_block_volume_desc_v0 volume = {0};
+    struct fwlab_host_action_program_v0 p[8], repeated;
+    struct fwlab_spine_profile_argument_v0 argument;
+    struct fwlab_host_action_status_v0 first;
+    struct fwlab_nvme_command c[8];
+    void *arena = calloc(1, fwlab_linux_profile_v1_adapter_arena_size());
+    CHECK(arena);
+    volume.version = FWLAB_BLOCK_VOLUME_V0_VERSION; volume.size = sizeof(volume);
+    volume.namespace_ref.word[0] = 1; volume.lba_count = 131072; volume.lba_bytes = 512;
+    CHECK(fwlab_linux_profile_v1_adapter_init_limits(arena,
+          fwlab_linux_profile_v1_adapter_arena_size(), 0x7100, 12, 1, &volume,
+          &limits, &adapter) == FWLAB_SPINE_V0_OK);
+    CHECK(fwlab_linux_profile_v1_binding_v0(&adapter, FWLAB_SPINE_ROLE_V0_NORMAL,
+          &binding) == FWLAB_SPINE_V0_OK);
+    c[0] = mq_command(1, 9, 7, 0x00070007);
+    c[1] = mq_command(2, 5, 0x001f0002, 0x00020003);
+    c[2] = mq_command(3, 1, 0x001f0002, 0x00020001);
+    c[3] = mq_command(4, 4, 2, 0); /* CQ2 still has SQ2: policy rejection. */
+    c[4] = mq_command(5, 0, 2, 0);
+    c[5] = mq_command(6, 4, 2, 0);
+    c[6] = mq_command(7, 9, 7, 0x00010000); /* SQ1/CQ2 requested: paired grant1. */
+    c[7] = mq_command(8, 5, 0x001f0002, 0x00020003);
+    for (unsigned i = 0; i < 8; ++i) {
+        CHECK(adapter.ops->plan(adapter.context, &c[i], &p[i]) == FWLAB_SPINE_V0_OK);
+        if (i == 3 || i == 7) { CHECK(!p[i].action_count); continue; }
+        CHECK(binding.argument_read(adapter.context, &p[i].action[0].argument,
+              &argument) == FWLAB_SPINE_V0_OK);
+        if (i == 0) CHECK(argument.requested_sq_count == 8 && argument.requested_cq_count == 8);
+        if (i == 1) CHECK(argument.queue_id == 2 && argument.interrupt_vector == 2);
+        if (i == 2) CHECK(argument.queue_id == 2 && argument.associated_queue_id == 2);
+        if (i == 6) CHECK(argument.requested_sq_count == 1 && argument.requested_cq_count == 2);
+        if (!i) first = mq_success(&binding, &p[i], 0x00010001);
+        else (void)mq_success(&binding, &p[i], 0);
+        CHECK(adapter.ops->plan(adapter.context, &c[i], &repeated) == FWLAB_SPINE_V0_OK);
+        CHECK(!memcmp(&p[i], &repeated, sizeof(repeated)));
+    }
+    /* Old NoQ replay must not undo the later one-pair grant. */
+    CHECK(adapter.ops->plan(adapter.context, &c[0], &repeated) == FWLAB_SPINE_V0_OK);
+    CHECK(!memcmp(&p[0], &repeated, sizeof(repeated)));
+    CHECK(binding.result_latch(adapter.context, &p[0].action[0].argument, &first,
+          FWLAB_SPINE_PROVIDER_V0_SUCCESS, 0x00010001) == FWLAB_SPINE_V0_OK);
+    CHECK(binding.result_latch(adapter.context, &p[0].action[0].argument, &first,
+          FWLAB_SPINE_PROVIDER_V0_SUCCESS, 0) == FWLAB_SPINE_V0_POISONED);
+    c[7].handle.command_uid = 9; c[7].origin.word[1]++;
+    CHECK(adapter.ops->plan(adapter.context, &c[7], &repeated) == FWLAB_SPINE_V0_OK);
+    CHECK(!repeated.action_count);
+    CHECK(adapter.ops->retire(adapter.context, &repeated) == FWLAB_SPINE_V0_OK);
+    for (unsigned i = 0; i < 8; ++i)
+        CHECK(adapter.ops->retire(adapter.context, &p[i]) == FWLAB_SPINE_V0_OK);
+    free(arena);
+    puts("MQ2_PROFILE_ADJACENT_PASS|NoQ_DW0=1|snapshot_retry=1|asymmetric_counts=1|paired_queue2=1|fake_queue_effects_not_kernel=1");
+}
+
 int main(void)
 {
     struct fwlab_m4_attach_profile_message request = { 0 }, bad;
@@ -127,7 +227,11 @@ int main(void)
     bad = request; bad.size = 128; CHECK(!fwlab_m4_attach_profile_request_valid(&bad));
     bad = request; --bad.limits.max_io_bytes; CHECK(!fwlab_m4_attach_profile_request_valid(&bad));
     bad = request; bad.reserved[3] = 1; CHECK(!fwlab_m4_attach_profile_request_valid(&bad));
-    graph_checks(); frame_checks();
+    bad = request; bad.host_profile_id = FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL;
+    bad.limits = fwlab_m4_host_limits_for(bad.host_profile_id);
+    CHECK(fwlab_m4_attach_profile_request_valid(&bad));
+    CHECK(bad.limits.io_queue_pairs == 2 && bad.limits.vectors == 3 && bad.limits.io_ingress == 1);
+    graph_checks(); frame_checks(); mq2_policy_checks();
     puts("NATIVE_PROFILE_CHECK_PASS|wire160=1|actual_PRP_parser=1|actual_class_buffer_owner=1|not_kernel_DMA_or_native_proof=1");
     return 0;
 }

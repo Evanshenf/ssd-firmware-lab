@@ -40,6 +40,7 @@ int native_pump(struct native_context *context, int *service_result)
          * visits STATUS/owner/reset and must not admit business this turn.
          * Never use captured==0 as evidence that NEXT has nothing retained. */
         *service_result = reply.service_result;
+        if (reply.captured) context->progressed = 1;
         return 0;
     }
     return -EIO;

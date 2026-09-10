@@ -46,6 +46,67 @@ static struct {
 static struct fwlab_m4_attachment attached_identity;
 static unsigned owner_identity_fault;
 
+#if FWLAB_NATIVE_MQ2
+#include "ftl_scale.h"
+/* Reuse the LARGE single-I/O fake Host to test the new execution loop only.
+ * It is not a fake MQ2 kernel or proof of two real Host queues. */
+static struct {
+    struct native_context *context;
+    enum fwlab_spine_result_v0 (*real_step)(void *, uint32_t, uint32_t *,
+                                          struct fwlab_execution_progress *);
+    uint32_t waiting, inserted, sleeps, advanced_sleeps, storage_advanced;
+    uint32_t pump_before, status_before, pump_during_wait, status_during_wait;
+} progress_gate;
+
+static enum fwlab_spine_result_v0 progress_gate_step(void *opaque, uint32_t budget,
+    uint32_t *used, struct fwlab_execution_progress *progress)
+{
+    enum fwlab_spine_result_v0 result;
+    struct fwlab_ftl_scale_status status;
+    if (progress_gate.waiting) {
+        *used = budget; /* Deliberately spent budget, zero actual progress. */
+        memset(progress, 0, sizeof(*progress));
+        if (!--progress_gate.waiting) {
+            progress_gate.pump_during_wait = host.pump_ticks - progress_gate.pump_before;
+            progress_gate.status_during_wait = host.iterations - progress_gate.status_before;
+        }
+        return FWLAB_SPINE_V0_OK;
+    }
+    result = progress_gate.real_step(opaque, budget, used, progress);
+    if (result == FWLAB_SPINE_V0_OK && progress->advanced) {
+        progress_gate.storage_advanced = 1;
+        REQUIRE(fwlab_ftl_scale_query(progress_gate.context->runtime->block.context,
+                                     &status) == FWLAB_SPINE_V0_OK);
+        if (!progress_gate.inserted && status.busy) {
+            progress_gate.inserted = 1; progress_gate.waiting = 96;
+            progress_gate.pump_before = host.pump_ticks;
+            progress_gate.status_before = host.iterations;
+        }
+    }
+    return result;
+}
+
+int __real_nanosleep(const struct timespec *request, struct timespec *remaining);
+int __wrap_nanosleep(const struct timespec *request, struct timespec *remaining)
+{
+    if (progress_gate.context) {
+        if (progress_gate.waiting) ++progress_gate.sleeps;
+        if (progress_gate.storage_advanced) ++progress_gate.advanced_sleeps;
+    }
+    return __real_nanosleep(request, remaining); /* Observe, do not remove sleep. */
+}
+
+static void install_progress_gate(void)
+{
+    struct j0_runtime *runtime = progress_gate.context ? progress_gate.context->runtime : NULL;
+    if (runtime && runtime->storage.step_report != progress_gate_step) {
+        REQUIRE(runtime->storage.step_report);
+        progress_gate.real_step = runtime->storage.step_report;
+        runtime->storage.step_report = progress_gate_step;
+    }
+}
+#endif
+
 /* Only the ioctl boundary is fake. It owns Host byte buffers/transport tuples,
  * never NAND media, mappings, namespace data or storage-success decisions. */
 int __wrap_ioctl(int descriptor, unsigned long request, ...)
@@ -101,6 +162,9 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
         return 0;
     }
     if (request == FWLAB_M4_PUMP) {
+#if FWLAB_NATIVE_MQ2
+        install_progress_gate();
+#endif
         struct fwlab_m4_pump_message *pump = argument;
         REQUIRE(FWLAB_NATIVE_PUMP && fwlab_m4_pump_request_valid(pump));
         REQUIRE(attached_identity.media_format_version == FWLAB_M4_MEDIA_SCALED &&
@@ -172,6 +236,9 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
     ++host.ioctls;
     message->result = 0;
     if (message->operation == FWLAB_M4_NATIVE_STATUS) {
+#if FWLAB_NATIVE_MQ2
+        progress_gate.storage_advanced = 0;
+#endif
         if (++host.iterations > 200000u) {
             errno = ETIMEDOUT;
             return -1;
@@ -360,6 +427,10 @@ static void add_command(uint8_t opcode, uint64_t lba, uint8_t seed)
 
 static void run_script(struct native_context *context, struct native_scaled_media *media)
 {
+#if FWLAB_NATIVE_MQ2
+    memset(&progress_gate, 0, sizeof(progress_gate));
+    progress_gate.context = context;
+#endif
 #if FWLAB_NATIVE_PUMP
     host.service_fault_once = 1;
     host.pump_losses = 1;
@@ -368,6 +439,16 @@ static void run_script(struct native_context *context, struct native_scaled_medi
     host.shape_losses = 1;
 #endif
     REQUIRE(firmware_loop(context, &media->native, NULL));
+#if FWLAB_NATIVE_MQ2
+    REQUIRE(progress_gate.inserted && !progress_gate.waiting && progress_gate.sleeps &&
+            !progress_gate.advanced_sleeps && progress_gate.pump_during_wait >= 4 &&
+            progress_gate.status_during_wait >= 4);
+    REQUIRE(context->runtime->storage.step_report == progress_gate_step);
+    context->runtime->storage.step_report = progress_gate.real_step;
+    printf("NATIVE_PROGRESS_LOOP_PASS|actual_large_parent=1|controlled_wait_visits=96|idle_sleeps=%u|sleep_after_storage_progress=0|pump_during_wait=%u|status_during_wait=%u|not_two_queue_kernel_proof=1\n",
+           progress_gate.sleeps, progress_gate.pump_during_wait, progress_gate.status_during_wait);
+    progress_gate.context = NULL;
+#endif
     REQUIRE(host.next == host.count && !host.occupied);
     for (uint32_t index = 0; index < host.count; ++index) {
         const struct host_row *row = &host.row[index];

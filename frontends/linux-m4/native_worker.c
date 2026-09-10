@@ -28,6 +28,13 @@
     (FWLAB_NATIVE_LARGE && (!FWLAB_NATIVE_SCALED || !FWLAB_NATIVE_PUMP))
 #error "FWLAB_NATIVE_LARGE requires the selected scaled PUMP worker"
 #endif
+#ifndef FWLAB_NATIVE_MQ2
+#define FWLAB_NATIVE_MQ2 0
+#endif
+#if (FWLAB_NATIVE_MQ2 != 0 && FWLAB_NATIVE_MQ2 != 1) || \
+    (FWLAB_NATIVE_MQ2 && !FWLAB_NATIVE_LARGE)
+#error "FWLAB_NATIVE_MQ2 requires the selected large scaled PUMP worker"
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -153,8 +160,10 @@ int native_runtime_create(struct native_context *context,
      * epoch. Its internal objects still need fresh, non-reused identities. */
     config.volatile_nonce_seed = ++context->next_runtime_seed;
     config.host_factory = &factory;
-    if (context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL) {
-        config.linux_limits = fwlab_linux_profile_large_limits();
+    if (context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL ||
+        context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL) {
+        config.linux_limits = context->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL
+            ? fwlab_linux_profile_mq2_limits() : fwlab_linux_profile_large_limits();
         config.buffer_profile = J0_BUFFER_LARGE_SERIAL;
     }
     if (j0_runtime_init(context->runtime, &config) != FWLAB_SPINE_V0_OK) {
@@ -233,12 +242,13 @@ static int receive_command(struct native_context *context)
     available->capture = message;
     decode_capture(available);
     printf("CAPTURE epoch=%u uid=%" PRIu64 " q=%u op=%02x cdw10=%08x cdw11=%08x "
-           "cdw12=%08x cdw13=%08x\n",
+           "cdw12=%08x cdw13=%08x cid=%u\n",
            context->epoch, (uint64_t)message.origin_uid, message.queue_id,
            available->command.opcode, available->command.command_dword10_15[0],
            available->command.command_dword10_15[1],
            available->command.command_dword10_15[2],
-           available->command.command_dword10_15[3]);
+           available->command.command_dword10_15[3], (unsigned)message.command_id);
+    context->progressed = 1;
     return 1;
 }
 
@@ -255,6 +265,7 @@ static int admit_commands(struct native_context *context)
                                              &slot->command, &slot->ticket);
         if (result == FWLAB_SPINE_V0_OK) {
             slot->admitted = 1;
+            context->progressed = 1;
         } else if (result != FWLAB_SPINE_V0_NO_CAPACITY && result != FWLAB_SPINE_V0_IN_PROGRESS) {
             if (context->runtime->poisoned || slot->command.transport_fault) {
                 fprintf(stderr, "admission failed uid=%" PRIu64 " result=%u\n",
@@ -408,6 +419,7 @@ static int finish_commands(struct native_context *context, int closing)
                slot->capture.controller_epoch, (uint64_t)slot->capture.origin_uid,
                slot->intent.status_code_type, slot->intent.status_code, slot->publication_known);
         memset(slot, 0, sizeof(*slot));
+        context->progressed = 1;
     }
     return 1;
 }
@@ -481,6 +493,10 @@ static int firmware_loop(struct native_context *context, struct native_media *me
         struct fwlab_m4_native_message message;
         uint32_t units;
         int received, service_result = 0;
+#if FWLAB_NATIVE_MQ2
+        struct fwlab_execution_progress progress = {0};
+        context->progressed = 0;
+#endif
 #if FWLAB_NATIVE_PUMP
         /* Control/FLR/PBA service must continue even with no runtime/owner.
          * A service fault latches the existing reset path; it is not fd loss. */
@@ -516,14 +532,22 @@ static int firmware_loop(struct native_context *context, struct native_media *me
         received = receive_command(context);
         if (received < 0 || !admit_commands(context))
             return 0;
+#if FWLAB_NATIVE_MQ2
+        if (j0_runtime_step_report(context->runtime, 48, &units, &progress) != FWLAB_SPINE_V0_OK ||
+#else
         if (j0_runtime_step(context->runtime, 48, &units) != FWLAB_SPINE_V0_OK ||
+#endif
             !finish_commands(context, 0)) {
             fprintf(stderr, "firmware progress failed at epoch %u\n", context->epoch);
             return 0;
         }
         /* A new capture deserves its next progress turn without an artificial
          * wait. Mere occupied slots or budget consumption are not this signal. */
+#if FWLAB_NATIVE_MQ2
+        if (!context->progressed && !progress.advanced && !progress.runnable)
+#else
         if (!received)
+#endif
             nanosleep(&idle, NULL);
     }
     return 1;
@@ -575,7 +599,8 @@ int main(int argc, char **argv)
     if (!native_scaled_media_open(&media_owner, context, directory, media_uuid, format))
         goto done;
 #if FWLAB_NATIVE_LARGE
-    if (native_attach_profile(context, FWLAB_M4_HOST_PROFILE_LARGE_SERIAL,
+    if (native_attach_profile(context, FWLAB_NATIVE_MQ2
+            ? FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL : FWLAB_M4_HOST_PROFILE_LARGE_SERIAL,
             FWLAB_M4_PRODUCER_PUMP, FWLAB_M4_MEDIA_SCALED, media->uuid, binding))
 #elif FWLAB_NATIVE_PUMP
     if (native_attach_mode(context, FWLAB_M4_PRODUCER_PUMP,

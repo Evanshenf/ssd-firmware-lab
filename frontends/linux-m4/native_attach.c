@@ -179,7 +179,8 @@ int native_attach_profile(struct native_context *context, uint32_t profile,
     request.limits = fwlab_m4_host_limits_for(profile);
     if (!context || !uuid || !binding || context->runtime || !request.limits.max_io_bytes ||
         (producer != FWLAB_M4_PRODUCER_BAR && producer != FWLAB_M4_PRODUCER_PUMP) ||
-        (profile == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL && producer != FWLAB_M4_PRODUCER_PUMP) ||
+        ((profile == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL ||
+          profile == FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL) && producer != FWLAB_M4_PRODUCER_PUMP) ||
         (format != FWLAB_M4_MEDIA_LEGACY && format != FWLAB_M4_MEDIA_SCALED) ||
         empty_identity(uuid, 16) || empty_identity(binding, 32))
         return -EINVAL;

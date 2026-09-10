@@ -15,6 +15,7 @@
 #include "fwlab/contracts/host_data_v0.h"
 #include "fwlab/portable/nfc_model.h"
 #include "fwlab/private/block_volume_v0.h"
+#include "fwlab/private/execution_progress.h"
 
 #define J0_RUNTIME_VERSION 1u
 #define J0_RUNTIME_MAGIC UINT64_C(0x4a30484541444c53)
@@ -129,6 +130,11 @@ struct j0_storage_runner {
         void *context, struct fwlab_block_volume_binding_v0 *binding);
     enum fwlab_spine_result_v0 (*fini)(void *context);
     void (*release)(void *context);
+    /* Optional for reference bindings; required by a progress-aware consumer.
+     * Facts belong to this executor, never reconstructed from used budget. */
+    enum fwlab_spine_result_v0 (*step_report)(
+        void *context, uint32_t budget, uint32_t *used,
+        struct fwlab_execution_progress *progress);
 };
 
 struct j0_storage_factory {
@@ -261,6 +267,7 @@ struct j0_action_record {
     struct fwlab_block_request_v0 block_request;
     struct fwlab_block_status_v0 block_status;
     uint32_t state;
+    uint32_t result_dword0; /* Opaque profile result, never decoded by J0. */
     uint8_t token_valid;
     uint8_t result_latched;
     uint8_t lower_token_valid;
@@ -460,8 +467,14 @@ enum fwlab_spine_result_v0 j0_runtime_action_argument(
 enum fwlab_spine_result_v0 j0_runtime_action_result(
     struct j0_runtime *runtime, const struct fwlab_host_action_token_v0 *token,
     const struct fwlab_host_action_status_v0 *status);
+enum fwlab_spine_result_v0 j0_runtime_action_result_value(
+    struct j0_runtime *runtime, const struct fwlab_host_action_token_v0 *token,
+    const struct fwlab_host_action_status_v0 *status, uint32_t result_dword0);
 enum fwlab_spine_result_v0 j0_runtime_step(
     struct j0_runtime *runtime, uint32_t budget, uint32_t *units);
+enum fwlab_spine_result_v0 j0_runtime_step_report(
+    struct j0_runtime *runtime, uint32_t budget, uint32_t *units,
+    struct fwlab_execution_progress *progress);
 enum fwlab_spine_result_v0 j0_runtime_intent_read(
     struct j0_runtime *runtime,
     const struct fwlab_spine_command_ticket_v0 *ticket,

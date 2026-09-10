@@ -111,7 +111,8 @@ static inline int fwlab_m4_attach_pin_host_profile(struct fwlab_m4_attachment *s
     const __u8 uuid[16], const __u8 binding[32])
 {
     if ((constructed_profile != FWLAB_M4_HOST_PROFILE_SMALL &&
-         constructed_profile != FWLAB_M4_HOST_PROFILE_LARGE_SERIAL) ||
+         constructed_profile != FWLAB_M4_HOST_PROFILE_LARGE_SERIAL &&
+         constructed_profile != FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL) ||
         requested_profile != constructed_profile)
         return -EOPNOTSUPP;
     return fwlab_m4_attach_pin_mode(stored, constructed_producer,
