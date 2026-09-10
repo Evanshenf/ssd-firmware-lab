@@ -547,6 +547,30 @@ static void mapped_constructor_failures(void)
     void *arena = calloc(1, size); CHECK(arena);
     program_group(f, 0, 0, 1); media_close(f);
 
+    /* A resource choice is not a NAND format change. Reject undersized or
+     * out-of-policy budgets before creating a file, then recover this same
+     * small image with an explicit large budget and unchanged page bytes. */
+    uint64_t budgets[] = { fwlab_file_nand_v2_image_bytes(&f->config) - 1u,
+                           (UINT64_C(90) << 30) + 1u };
+    for (unsigned i = 0; i < sizeof(budgets) / sizeof(budgets[0]); ++i) {
+        f->config.mapped_budget_bytes = budgets[i];
+        out = arena; memset(&holder, 0xa5, sizeof(holder));
+        CHECK(fwlab_file_nand_v2_posix_mapped_format(arena, size, f->directory_fd,
+            "budget-rejected.bin", &f->config, &out, &holder) ==
+            FWLAB_NFC_API_INVALID_CONTRACT && !out &&
+            !memcmp(&holder, &zero, sizeof(holder)));
+        CHECK(fstatat(f->directory_fd, "budget-rejected.bin", &status,
+                      AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
+    }
+    f->config.mapped_budget_bytes = UINT64_C(90) << 30;
+    media_open(f, 0);
+    struct page_observation budget_page = observe_page(f, 0, 0);
+    valid_page(f, &budget_page, 1);
+    CHECK(fwlab_file_nand_v2_sequence(f->media) == 1);
+    media_close(f);
+    f->config.mapped_budget_bytes = 0;
+    puts("MAPPED_BUDGET_PASS|undersized_and_overcap_rejected_before_create=1|explicit90GiB_budget_on_small_image=1|same_format_holder_and_data=1|no_large_capacity_pass_claim=1");
+
     mapping_reset(-1); mapping.fail_allocation = 1;
     out = (struct fwlab_file_nand_v2 *)arena; memset(&holder, 0xa5, sizeof(holder));
     CHECK(fwlab_file_nand_v2_posix_mapped_format(arena, size, f->directory_fd,

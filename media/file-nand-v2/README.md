@@ -165,7 +165,13 @@ or deploy a native controller.
 `fwlab_file_nand_v2_posix_mapped_format/restart` explicitly selects bounded
 mapped copies beneath the same physical engine. The constructors require tmpfs
 on the actual opened FD and cap the entire image, including all metadata and
-transaction banks, at 600 MiB and the platform's size/pointer-difference limits.
+transaction banks, at 600 MiB by default and the platform's size/pointer-difference
+limits. `config.mapped_budget_bytes` can explicitly admit a larger image, up to
+90 GiB, after the caller provisions and checks tmpfs/RAM headroom. The budget
+is per-open host policy, not serialized media data: format, geometry, CRC and
+recovery interpretation do not change. An insufficient or over-90-GiB budget
+is rejected before new-file creation. Recovery still requires exact image size
+and geometry; raising a budget does not resize an existing image.
 The existing ordinary-I/O constructors remain available without this profile.
 
 Strict ordinary-I/O format/recovery and directory synchronization run first.
@@ -204,8 +210,9 @@ they do not establish disk or whole-machine power durability.
 The source policy permits only this POSIX adapter's literal
 `<linux/magic.h>` include for its actual-FD tmpfs check. Linux filesystem types
 and constants remain outside the physical engine and shared contracts. This
-bounded profile does not select 64-GiB mappings, arbitrary filesystems, raw
-storage or any native deployment automatically. Initialization and teardown
+default budget does not select large mappings; explicit larger budgets still
+do not select arbitrary filesystems, raw storage or any native deployment
+automatically. Initialization and teardown
 costs must be reported separately from runtime throughput.
 
 Use the existing small capped tmpfs and run these entries serially:

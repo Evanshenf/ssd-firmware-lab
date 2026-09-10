@@ -13,6 +13,10 @@ struct fwlab_file_nand_v2;
 struct fwlab_file_nand_v2_config {
     struct fwlab_nfc_geometry geometry;
     uint8_t media_uuid[16];
+    /* Per-open mapped resource budget, not serialized NAND geometry/format.
+     * Zero preserves the 600-MiB default; explicit budgets are at most90GiB.
+     * The caller provisions sufficient tmpfs/RAM before new-image admission. */
+    uint64_t mapped_budget_bytes;
 };
 struct fwlab_file_nand_holder_v2 {
     uint64_t device;
@@ -38,7 +42,8 @@ enum fwlab_nfc_api_result fwlab_file_nand_v2_posix_restart(
     const struct fwlab_file_nand_holder_v2 *holder,
     struct fwlab_file_nand_v2 **media);
 
-/* Explicit Linux/tmpfs BYTE-copy profile, at most 600 MiB for the whole image.
+/* Explicit Linux/tmpfs BYTE-copy profile, default600MiB for the whole image;
+ * config.mapped_budget_bytes permits an explicitly provisioned larger budget.
  * Strict ordinary-I/O format/recovery precedes full preallocation, one fixed
  * shared mapping and writable prefaulting, all before outputs are published.
  * Failure never selects ordinary I/O implicitly. Geometry/format are unchanged.

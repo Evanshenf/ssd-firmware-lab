@@ -29,10 +29,12 @@ struct fnv2_posix_context {
     uint8_t exclusive_owned;
     uint8_t *mapping;
     size_t mapped_length;
+    uint64_t mapped_budget_bytes;
 };
 
 #define FNV2_POSIX_MAGIC UINT64_C(0x464e5632504f5358)
-#define FNV2_MAPPED_MAX_BYTES (UINT64_C(600) * 1024u * 1024u)
+#define FNV2_MAPPED_DEFAULT_BYTES (UINT64_C(600) * 1024u * 1024u)
+#define FNV2_MAPPED_MAX_BYTES (UINT64_C(90) << 30)
 
 _Static_assert(sizeof(struct fnv2_posix_context) <= 128,
                "POSIX context fits persistent IO storage");
@@ -70,9 +72,10 @@ static int span_valid(uint64_t offset, size_t size, uint64_t file_size)
            size <= file_size - offset;
 }
 
-static int mapped_size_valid(uint64_t size)
+static int mapped_size_valid(uint64_t size, uint64_t budget)
 {
-    return size != 0 && size <= FNV2_MAPPED_MAX_BYTES &&
+    return budget != 0 && budget <= FNV2_MAPPED_MAX_BYTES &&
+           size != 0 && size <= budget &&
            size <= (uint64_t)SIZE_MAX && size <= (uint64_t)PTRDIFF_MAX &&
            size <= (uint64_t)INT64_MAX;
 }
@@ -93,7 +96,7 @@ static enum fwlab_nfc_api_result mapped_prepare(
 
     if (!context_stat(context, &status) || context->allow_resize ||
         context->mapped_length != 0 ||
-        !mapped_size_valid(context->expected_size)) {
+        !mapped_size_valid(context->expected_size, context->mapped_budget_bytes)) {
         return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     do {
@@ -360,7 +363,7 @@ static enum fwlab_nfc_api_result open_media(
     struct fwlab_file_nand_v2 *media = NULL;
     struct stat status;
     enum fwlab_nfc_api_result result;
-    uint64_t image_bytes;
+    uint64_t image_bytes, mapped_budget;
     size_t alignment = fwlab_file_nand_v2_arena_alignment();
     int flags = O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK;
     int sync_result;
@@ -382,8 +385,10 @@ static enum fwlab_nfc_api_result open_media(
         return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     image_bytes = fwlab_file_nand_v2_image_bytes(config);
+    mapped_budget = config->mapped_budget_bytes ? config->mapped_budget_bytes :
+                                                FNV2_MAPPED_DEFAULT_BYTES;
     if (image_bytes == 0 || image_bytes > (uint64_t)INT64_MAX ||
-        (mapped && !mapped_size_valid(image_bytes))) {
+        (mapped && !mapped_size_valid(image_bytes, mapped_budget))) {
         return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     if (format) {
@@ -399,6 +404,7 @@ static enum fwlab_nfc_api_result open_media(
         return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     memset(&context, 0, sizeof(context));
+    context.mapped_budget_bytes = mapped_budget;
     context.magic = FNV2_POSIX_MAGIC;
     context.fd = openat(directory_fd, name, flags, 0600);
     if (context.fd < 0) {
