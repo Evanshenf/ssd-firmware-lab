@@ -26,6 +26,13 @@
 #define TEST_IO_BYTES 8192u
 #endif
 #define TEST_IO_LBAS (TEST_IO_BYTES / 512u)
+#if FWLAB_NATIVE_MQ2
+#define TEST_HOST_PROFILE FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL
+#elif FWLAB_NATIVE_LARGE
+#define TEST_HOST_PROFILE FWLAB_M4_HOST_PROFILE_LARGE_SERIAL
+#else
+#define TEST_HOST_PROFILE FWLAB_M4_HOST_PROFILE_SMALL
+#endif
 
 struct host_row {
     struct fwlab_m4_native_message capture;
@@ -48,8 +55,8 @@ static unsigned owner_identity_fault;
 
 #if FWLAB_NATIVE_MQ2
 #include "ftl_scale.h"
-/* Reuse the LARGE single-I/O fake Host to test the new execution loop only.
- * It is not a fake MQ2 kernel or proof of two real Host queues. */
+/* Select the actual MQ2 runtime while reusing a single-I/O fake Host.
+ * This tests construction/progress, not two kernel queues or IRQ routing. */
 static struct {
     struct native_context *context;
     enum fwlab_spine_result_v0 (*real_step)(void *, uint32_t, uint32_t *,
@@ -139,7 +146,7 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
     if (request == FWLAB_M4_ATTACH_PROFILE) {
         struct fwlab_m4_attach_profile_message *attach = argument;
         REQUIRE(FWLAB_NATIVE_LARGE && fwlab_m4_attach_profile_request_valid(attach));
-        REQUIRE(attach->host_profile_id == FWLAB_M4_HOST_PROFILE_LARGE_SERIAL &&
+        REQUIRE(attach->host_profile_id == TEST_HOST_PROFILE &&
                 attach->producer_mode == FWLAB_M4_PRODUCER_PUMP);
         attach->result = fwlab_m4_attach_pin(&attached_identity,
             attach->media_format_version, attach->media_uuid, attach->binding_sha256);
@@ -425,6 +432,21 @@ static void add_command(uint8_t opcode, uint64_t lba, uint8_t seed)
     if (opcode == 1) pattern(row->bytes, row->length, seed);
 }
 
+static void check_runtime_profile(const struct native_context *context)
+{
+    const struct fwlab_linux_profile_limits *limits;
+    REQUIRE(context->runtime && context->runtime->ready);
+    REQUIRE(context->host_profile_id == TEST_HOST_PROFILE);
+    limits = &context->runtime->config.linux_limits;
+    REQUIRE(limits->max_io_bytes == TEST_IO_BYTES &&
+            limits->controller_page_bytes == 4096 && limits->queue_depth == 32);
+    REQUIRE(limits->max_admin_bytes == (FWLAB_NATIVE_LARGE ? 4096u : 8192u));
+    REQUIRE(limits->io_queue_pairs == (FWLAB_NATIVE_MQ2 ? 2u : 1u) &&
+            limits->vectors == (FWLAB_NATIVE_MQ2 ? 3u : 1u));
+    REQUIRE(context->runtime->config.buffer_profile ==
+            (FWLAB_NATIVE_LARGE ? J0_BUFFER_LARGE_SERIAL : J0_BUFFER_REFERENCE));
+}
+
 static void run_script(struct native_context *context, struct native_scaled_media *media)
 {
 #if FWLAB_NATIVE_MQ2
@@ -439,13 +461,15 @@ static void run_script(struct native_context *context, struct native_scaled_medi
     host.shape_losses = 1;
 #endif
     REQUIRE(firmware_loop(context, &media->native, NULL));
+    /* The loop also rebuilds the runtime after the existing service-fault cut. */
+    check_runtime_profile(context);
 #if FWLAB_NATIVE_MQ2
     REQUIRE(progress_gate.inserted && !progress_gate.waiting && progress_gate.sleeps &&
             !progress_gate.advanced_sleeps && progress_gate.pump_during_wait >= 4 &&
             progress_gate.status_during_wait >= 4);
     REQUIRE(context->runtime->storage.step_report == progress_gate_step);
     context->runtime->storage.step_report = progress_gate.real_step;
-    printf("NATIVE_PROGRESS_LOOP_PASS|actual_large_parent=1|controlled_wait_visits=96|idle_sleeps=%u|sleep_after_storage_progress=0|pump_during_wait=%u|status_during_wait=%u|not_two_queue_kernel_proof=1\n",
+    printf("NATIVE_PROGRESS_LOOP_PASS|host_profile=3|configured_io_pairs=2|configured_vectors=3|fake_io_queues_exercised=1|actual_large_parent=1|controlled_wait_visits=96|idle_sleeps=%u|sleep_after_storage_progress=0|pump_during_wait=%u|status_during_wait=%u|not_two_queue_kernel_proof=1\n",
            progress_gate.sleeps, progress_gate.pump_during_wait, progress_gate.status_during_wait);
     progress_gate.context = NULL;
 #endif
@@ -578,7 +602,7 @@ int main(void)
     REQUIRE(native_scaled_media_open(media, context, directory, uuid, 1));
     phase_end("media-format", context->epoch, started);
 #if FWLAB_NATIVE_LARGE
-    REQUIRE(native_attach_profile(context, FWLAB_M4_HOST_PROFILE_LARGE_SERIAL,
+    REQUIRE(native_attach_profile(context, TEST_HOST_PROFILE,
         FWLAB_M4_PRODUCER_PUMP, FWLAB_M4_MEDIA_SCALED, media->native.uuid, binding) == 0);
 #elif FWLAB_NATIVE_PUMP
     REQUIRE(native_attach_mode(context, FWLAB_M4_PRODUCER_PUMP,
@@ -588,6 +612,7 @@ int main(void)
 #endif
     started = wall_ns();
     REQUIRE(native_runtime_create(context, &media->native, 1));
+    check_runtime_profile(context);
     phase_end("runtime-format", context->epoch, started);
     REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == NATIVE_SCALED_LBA_COUNT &&
             !context->runtime->config.file && context->runtime->storage.context &&
@@ -621,6 +646,7 @@ int main(void)
     REQUIRE(owner.media == &media->native && media->physical);
     ++context->epoch;
     REQUIRE(native_runtime_create(context, owner.media, 0));
+    check_runtime_profile(context);
     REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == NATIVE_SCALED_LBA_COUNT &&
             context->runtime->m3p_instance_nonce != prior_ftl && context->runtime->nfc_instance_nonce != prior_nfc);
     prior_ftl = context->runtime->m3p_instance_nonce;
@@ -637,6 +663,7 @@ int main(void)
     phase_end("media-recover", context->epoch, started);
     started = wall_ns();
     REQUIRE(native_runtime_create(context, &media->native, 0));
+    check_runtime_profile(context);
     phase_end("runtime-recover", context->epoch, started);
     REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == NATIVE_SCALED_LBA_COUNT &&
             context->runtime->m3p_instance_nonce != prior_ftl && context->runtime->nfc_instance_nonce != prior_nfc);
