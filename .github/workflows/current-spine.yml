@@ -25,7 +25,51 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Create a bounded ephemeral test-media mount
+        run: |
+          test "$(id -u)" -ne 0
+          fwlab_ci_media=$(mktemp -d "${RUNNER_TEMP}/fwlab-test-media.XXXXXX")
+          printf 'FWLAB_TEST_MEDIA_DIR=%s\n' "$fwlab_ci_media" >> "$GITHUB_ENV"
+          sudo mount -t tmpfs -o "size=1G,nodev,nosuid,noexec,uid=$(id -u),gid=$(id -g),mode=0700" \
+            tmpfs "$fwlab_ci_media"
       - name: Run current production-spine semantics and bounded storage regressions
         env:
           CC: ${{ matrix.cc }}
-        run: sh scripts/check_current_spine.sh
+        run: /usr/bin/time -v sh scripts/check_current_spine.sh
+      - name: Unmount only this job's disposable test medium
+        if: always()
+        run: |
+          if [ -n "${FWLAB_TEST_MEDIA_DIR:-}" ]; then
+            if mountpoint -q -- "$FWLAB_TEST_MEDIA_DIR"; then
+              sudo umount -- "$FWLAB_TEST_MEDIA_DIR"
+            fi
+            rmdir -- "$FWLAB_TEST_MEDIA_DIR"
+          fi
+
+  lower-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install ARM64 userspace tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends \
+            gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
+      - name: Run current PAGE2 and physical-media ARM64 userspace fixtures
+        # Keep the frozen c4-portable workflow unchanged. These existing small
+        # in-process fixtures cover current lower-layer portability, not POSIX
+        # persistence, the scaled FTL or native M4/M5. No media mount is needed.
+        run: |
+          test "$(id -u)" -ne 0
+          make -j1 -B -C core/nfc-page-v2 CC=aarch64-linux-gnu-gcc \
+            BUILD_DIR=build/ci-aarch64 all
+          qemu-aarch64 -L /usr/aarch64-linux-gnu \
+            core/nfc-page-v2/build/ci-aarch64/test_nfc_page_v2
+          make -j1 -B -C media/file-nand-v2 CC=aarch64-linux-gnu-gcc \
+            BUILD_DIR=build/ci-aarch64 FWLAB_MEDIA_EXCLUSIVE=0 all
+          qemu-aarch64 -L /usr/aarch64-linux-gnu \
+            media/file-nand-v2/build/ci-aarch64/physical_nand_test
