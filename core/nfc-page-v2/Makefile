@@ -6,6 +6,14 @@ CFLAGS ?= -std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic
 CPPFLAGS ?=
 LDFLAGS ?=
 LDLIBS ?=
+BUILD_CONFIG := $(BUILD_DIR)/.fwlab-build-config
+# Preserve shell quoting in flag values as literal stamp data (including -D strings).
+config_quote = '$(subst ','"'"',$(1))'
+BUILD_CONFIG_VALUES = $(call config_quote,CC=$(CC)) \
+	$(call config_quote,CPPFLAGS=$(CPPFLAGS)) \
+	$(call config_quote,CFLAGS=$(CFLAGS)) \
+	$(call config_quote,LDFLAGS=$(LDFLAGS)) \
+	$(call config_quote,LDLIBS=$(LDLIBS))
 PROGRAM := $(BUILD_DIR)/test_nfc_page_v2
 SOURCES := nfc_page_v2.c tests/test_nfc_page_v2.c
 HEADERS := ../../include/fwlab/contracts/nfc_page_v2_types.h \
@@ -14,9 +22,14 @@ HEADERS := ../../include/fwlab/contracts/nfc_page_v2_types.h \
     ../../include/fwlab/private/nand_batch_v2.h \
     ../../include/fwlab/contracts/nand_media.h \
     ../../include/fwlab/portable/nfc_types.h
-.PHONY: all check
+.PHONY: all check FORCE_BUILD_CONFIG
 all: $(PROGRAM)
-$(PROGRAM): $(SOURCES) $(HEADERS) Makefile
+FORCE_BUILD_CONFIG:
+$(BUILD_CONFIG): FORCE_BUILD_CONFIG
+	@mkdir -p "$(BUILD_DIR)"
+	@printf '%s\n' $(BUILD_CONFIG_VALUES) | cmp -s - "$@" || \
+		printf '%s\n' $(BUILD_CONFIG_VALUES) > "$@"
+$(PROGRAM): $(SOURCES) $(HEADERS) Makefile $(BUILD_CONFIG)
 	mkdir -p "$(BUILD_DIR)"
 	$(CC) -I../../include $(CPPFLAGS) $(CFLAGS) $(SOURCES) $(LDFLAGS) $(LDLIBS) -o "$@"
 check: $(PROGRAM)

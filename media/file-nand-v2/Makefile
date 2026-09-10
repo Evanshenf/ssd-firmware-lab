@@ -15,6 +15,14 @@ endif
 endif
 override CPPFLAGS += -DFWLAB_MEDIA_EXCLUSIVE=$(FWLAB_MEDIA_EXCLUSIVE)
 MEDIA_CONFIG := $(BUILD_DIR)/.fwlab-media-config
+# Preserve shell quoting in flag values as literal stamp data (including -D strings).
+config_quote = '$(subst ','"'"',$(1))'
+BUILD_CONFIG_VALUES = $(call config_quote,CC=$(CC)) \
+	$(call config_quote,CPPFLAGS=$(CPPFLAGS)) \
+	$(call config_quote,CFLAGS=$(CFLAGS)) \
+	$(call config_quote,LDFLAGS=$(LDFLAGS)) \
+	$(call config_quote,LDLIBS=$(LDLIBS)) \
+	$(call config_quote,FWLAB_MEDIA_EXCLUSIVE=$(FWLAB_MEDIA_EXCLUSIVE))
 
 TEST := $(BUILD_DIR)/physical_nand_test
 OPERATION_TEST := $(BUILD_DIR)/posix_operation_test
@@ -36,8 +44,8 @@ FORCE_MEDIA_CONFIG:
 
 $(MEDIA_CONFIG): FORCE_MEDIA_CONFIG
 	@mkdir -p "$(BUILD_DIR)"
-	@printf 'FWLAB_MEDIA_EXCLUSIVE=%s\n' '$(FWLAB_MEDIA_EXCLUSIVE)' | cmp -s - "$@" || \
-		printf 'FWLAB_MEDIA_EXCLUSIVE=%s\n' '$(FWLAB_MEDIA_EXCLUSIVE)' > "$@"
+	@printf '%s\n' $(BUILD_CONFIG_VALUES) | cmp -s - "$@" || \
+		printf '%s\n' $(BUILD_CONFIG_VALUES) > "$@"
 
 $(TEST): $(SOURCES) $(HEADERS) Makefile $(MEDIA_CONFIG)
 	mkdir -p "$(BUILD_DIR)"
