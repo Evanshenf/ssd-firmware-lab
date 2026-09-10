@@ -18,6 +18,40 @@ Neither entry flashes a commercial SSD. The released namespace is 1 MiB and
 runtime budgets are finite. A successful software test is not a native PCI,
 real NAND, large-capacity or performance result.
 
+The tagged commands below intentionally reproduce the old preview. For the
+newer adopted scalable/PAGE2/MQ2 source, read [current status](current-status.md)
+and use the development entry below; do not expect new targets in the old tag.
+
+## Development source: bounded tmpfs software path
+
+Use a writable checkout of the development commit being reported, as an
+ordinary user. An administrator must first provision an existing private,
+writable tmpfs of at most 1 GiB, conventionally `/run/fwlab-test-media`. Check
+free space and available memory; keep programs and logs on disk. The tests
+reject missing/non-tmpfs/undersized media instead of falling back to `/tmp`.
+
+```sh
+git rev-parse HEAD
+FWLAB_TEST_MEDIA_DIR=/run/fwlab-test-media \
+  make -C frontends/linux-m4 profile-check attach-check check-progress-runtime
+```
+
+This executes the current worker loop through real scalable FTL, PAGE2 and
+physical NAND v2 with a fake Host interface. It does not load a kernel module
+or create `/dev/nvme*`. Use the whole-command exit code, not an intermediate
+PASS marker. To run the existing broader old-and-current software checks:
+
+```sh
+FWLAB_TEST_MEDIA_DIR=/run/fwlab-test-media \
+  /usr/bin/time -v sh scripts/check_current_spine.sh
+make check
+```
+
+The entry runs serially and reports phase, elapsed time, media usage and memory.
+It does not repeat the completed full 64/256-MiB or 64-GiB campaigns. Tmpfs
+process recovery is not disk durability or host power-loss proof. Full native
+setup has its own [format/recover/stop sequence](native-scaled-usage.md).
+
 ## 1. Prerequisites
 
 Use Linux with Git, GNU Make, GCC or Clang with C11 support, and Linux/POSIX

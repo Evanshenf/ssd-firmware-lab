@@ -10,6 +10,12 @@ the module refuses ordinary/unreserved RAM. Do not load it on a production host.
 The current integration target is Ubuntu `7.0.0-30-generic`; other kernels are
 not a portability claim.
 
+This page retains the tagged reference and development construction contracts.
+For the adopted 64-MiB/Large/MQ2 path, see the
+[current matrix](../../docs/current-status.md),
+[operator sequence](../../docs/native-scaled-usage.md) and
+[separately scoped native results](../../docs/results/2026-09-10-scaled-storage-mq2.md).
+
 The two modules are `ssd_fwlab_native_iommu` and `ssd_fwlab_native_pci`.
 `bar_start` must be supplied explicitly. The endpoint begins with
 `driver_override=none`, without a running firmware process. Its root-only
@@ -53,8 +59,8 @@ retry is idempotent after failed copyout; a changed tuple rejects, including
 legacy ATTACH after format 2. Attachment never grants readiness or opens effects.
 Owner observation returns the pinned identity across reset and owner epochs.
 Closing an attached descriptor still quarantines the function. The separately
-selected scaled worker is a source candidate, not an extension of the native
-qualification described below; its real probe/reset/M5 evidence is pending.
+selected scaled worker does not expand the old qualification described below;
+its subsequent real probe/reset/M5 evidence has its own development record.
 
 ### Construction-selected singleton pump (development candidate)
 
@@ -82,8 +88,8 @@ error after capturing the client's 512-byte Q1/NSID1/LBA128 Read, before deliver
 The ordinary service fault path closes effects and requests reset. `cut4` reuses
 the existing exclusive native client and reset/readback journey. It is disabled
 by default and does not broaden ordinary supported commands. This candidate
-still needs actual native/owner/PBA qualification; offline checks are not kernel
-fault/locking evidence or a new performance claim.
+has subsequent native/owner/PBA results in the development evidence index;
+offline checks are not kernel fault/locking evidence or a new performance claim.
 
 ### Large serialized Host profile
 
@@ -129,7 +135,7 @@ FTL, physical NAND or whole-SSD throughput claim is added.
 
 Use the explicitly named `large-worker` and `native-io-large` targets. Existing
 lab isolation, fresh-only format, recovery, ownership and cleanup rules still
-apply. Native data/fault/reset/owner evidence is required separately; adjacent
+apply. Native data/fault/reset/owner evidence is recorded separately; adjacent
 parser or frame-owner checks alone do not qualify this kernel construction.
 
 The independent `j1_native_io` client has `write`, `verify`, `cut1`, `cut2` and
@@ -140,7 +146,7 @@ specific test origin at DMA-in, DMA-out or pre-CQE, followed by a real Linux
 controller reset and data/canary comparison. They do not constitute the later
 cross-owner stale-IOVA/eventfd/lease canary gate.
 
-The current profile is bounded: one 1-MiB namespace with 512-byte LBAs, one I/O
+The tagged reference profile is bounded: one 1-MiB namespace with 512-byte LBAs, one I/O
 queue pair, depth 32, 8-KiB maximum transfer, direct PRPs or a two-entry PRP
 list, basic Identify/SMART/queue setup/Read/Write/Flush and write FUA. Linux LR
 and read-prefetch hints retain those same finite semantics. No full NVMe,

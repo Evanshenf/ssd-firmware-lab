@@ -18,6 +18,13 @@
 当前发布版本为 **v0.1.0-spine-preview.1**：固定 **1 MiB namespace、文件 NAND 后端、有限运行预算**。
 128 GB、512 GB、1 TB 等大容量尚未实现或验证。已完成能力和风险以[版本结果](docs/results/2026-09-05-vertical-spine-preview.md)为准。
 
+**开发分支已超过上述旧标签。** 截至 `a6ee009`，已加入可扩展 FTL、物理 NAND v2／PAGE2，
+以及显式选择的 **64 MiB 原生 namespace、最大 1 MiB I/O、两个 I/O 队列和三个 MSI-X 向量**。
+两个队列仍共享一个 I/O buffer，FTL 串行执行，不是并行吞吐承诺。
+另有早期精确版本的 ARM64 **64 GiB headless 完整功能验证**，不能等同于当前原生大容量或 SSD 性能验证。
+见[当前能力与平台边界](docs/current-status.md)、[开发证据](docs/results/2026-09-10-scaled-storage-mq2.md)
+和[分层性能与全部成对样本](docs/results/2026-09-10-throughput.md)。本次公开开发成果，不改旧标签，也不宣称新的冻结版本。
+
 ## 先在 Linux 上运行软件检查
 
 准备 Git、GNU Make 和带 Linux/POSIX 开发头文件的 C11 编译器，用普通用户执行：
@@ -77,13 +84,17 @@ QEMU 所有权切换使用上游 `vfio-pci` 和 IOMMUFD，不另外建立一套 
 | NAND 持久化介质 | [file-NAND](media/file-nand-v0/) |
 | 原生设备连接 | [用户态固件](frontends/linux-m4/README.md)、[内核 PCI/HIF](kernel/m4-native/README.md) |
 
+新路径的入口是 [scalable FTL](core/ftl-scale/README.md)、[PAGE2 NFC](core/nfc-page-v2/README.md)、
+[物理 NAND v2](media/file-nand-v2/README.md) 和[原生 scaled／MQ2 启动说明](docs/native-scaled-usage.md)。
+上表保留旧标签的参考实现入口。
+
 ## 阶段限制与后续方向
 
-当前固定为一个 1 MiB namespace、512 字节 LBA、最大 8 KiB 传输和一个深度 32 的 I/O 队列对。
+旧预览标签固定为一个 1 MiB namespace、512 字节 LBA、最大 8 KiB 传输和一个深度 32 的 I/O 队列对；开发分支的不同构建见上面的能力表。
 命令、元数据序号及介质事务存在有限预算，重新打开介质不会清除持久化历史。
 原生实验已验证的环境是专用 x86-64 Linux 虚拟机、Ubuntu `7.0.0-30-generic` 和明确预留的 16 KiB BAR 空间；不能推断任意内核均可直接加载。
 
-可扩展容量、进一步的 FTL／磨损均衡算法、独占原始块设备后端、RTOS 平台和实体 FPGA／SoC／NAND 适配属于后续工作。
+更大的原生容量、进一步的 FTL／磨损均衡算法、独占原始块设备后端、RTOS 平台和实体 FPGA／SoC／NAND 适配属于后续工作。
 实体 NAND 的擦除代数等信息由谁持久化、如何恢复，仍有契约需要落实，不能宣称只替换文件后端就完成硬件移植。
 并发 FLR 与完成发布之间还有一项未确认风险，详见版本结果。
 

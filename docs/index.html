@@ -78,6 +78,7 @@
         <a href="https://github.com/Evanshenf/ssd-firmware-lab/releases/tag/v0.1.0-spine-preview.1">Download the preview source</a>
       </div>
       <p class="notice"><strong>Pre-alpha developer preview:</strong> v0.1.0-spine-preview.1 has one <strong>1-MiB namespace</strong>, file-backed simulated NAND and finite runtime budgets. It is not production firmware, a capacity/performance benchmark or an image to flash onto a commercial SSD.</p>
+      <p><strong>Development source beyond the tag:</strong> scalable FTL, physical NAND v2/PAGE2, and an explicit 64-MiB native profile with up to 1-MiB I/O, two I/O queues and three MSI-X vectors. MQ2 shares one global I/O frame: it is not parallel FTL. A separate earlier ARM64 64-GiB headless functional campaign does not qualify current native capacity. Read the <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/docs/current-status.md">current construction matrix</a> and <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/docs/results/2026-09-10-throughput.md">scoped performance data</a>.</p>
     </section>
     <section aria-labelledby="path-title">
       <h2 id="path-title">One firmware-to-media path</h2>
@@ -122,11 +123,12 @@ make -C frontends/linux-m4 check-runtime</code></pre>
         <li><a href="https://github.com/Evanshenf/ssd-firmware-lab/tree/main/core/m3p">FTL mapping, garbage collection and recovery</a></li>
         <li><a href="https://github.com/Evanshenf/ssd-firmware-lab/tree/main/nfc">NAND flash controller model</a></li>
         <li><a href="https://github.com/Evanshenf/ssd-firmware-lab/tree/main/media/file-nand-v0">Persistent NAND media implementation</a></li>
+        <li>Newer path: <a href="https://github.com/Evanshenf/ssd-firmware-lab/tree/main/core/ftl-scale">scalable FTL</a>, <a href="https://github.com/Evanshenf/ssd-firmware-lab/tree/main/core/nfc-page-v2">PAGE2 NFC</a>, <a href="https://github.com/Evanshenf/ssd-firmware-lab/tree/main/media/file-nand-v2">physical NAND v2</a></li>
       </ul>
     </section>
     <section aria-labelledby="limits-title">
       <h2 id="limits-title">Scope before scale</h2>
-      <p>The release supports a fixed 1-MiB namespace, 512-byte LBAs, an 8-KiB maximum transfer and one depth-32 I/O queue pair. Persistent operation budgets are finite. Scalable capacity, advanced wear-leveling, raw-block backing, RTOS ports and physical NAND/FPGA/SoC adapters are future work, not delivered features.</p>
+      <p>The tagged release supports a fixed 1-MiB namespace, 512-byte LBAs, an 8-KiB maximum transfer and one depth-32 I/O queue pair. Development profiles are listed separately above. Larger native capacity, advanced wear-leveling, raw-block backing, RTOS ports and physical NAND/FPGA/SoC adapters are future work, not delivered features.</p>
       <p>Physical NAND erase-generation recovery remains a hardware-porting contract gap. A concurrent FLR/publication-window risk is recorded as unconfirmed. The <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/docs/results/2026-09-05-vertical-spine-preview.md">versioned results</a> are the authority for what was tested.</p>
       <p>Development is <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/AI_ASSISTED.md">AI-assisted</a>; that is not a substitute for review or execution. To help, <a href="https://github.com/Evanshenf/ssd-firmware-lab/issues">report a reproduction or ask a firmware question</a>, including the exact version and redacted output.</p>
     </section>
@@ -134,7 +136,7 @@ make -C frontends/linux-m4 check-runtime</code></pre>
       <h2 id="chinese-title">开源 NVMe SSD 固件开发与仿真</h2>
       <p>NVMe FWLab（SSD Firmware Lab）是一个运行于 Linux 的 SSD 固件开发实验室，公开 C 固件源码，覆盖 FTL 闪存地址转换、GC 垃圾回收、NFC NAND 控制器模型、页与 OOB 元数据，以及持久化日志和重启恢复。</p>
       <p>当前已打通软件 NVMe → 固件 → FTL → NFC → NAND 介质的纵向路径，并完成指定的原生 Linux 和 QEMU 所有权切换实验。初步软件检查不需要专用开发板；原生设备实验需要另行配置专用虚拟机。</p>
-      <p><strong>目前仍是 1 MiB namespace、有限运行预算的 pre-alpha 预览。</strong>128 GB、512 GB、1 TB、RTOS 及实体 NAND 适配均不能作为已完成能力。它不是商用 SSD 刷机固件，也不适合保存真实业务数据。</p>
+      <p><strong>项目仍是 pre-alpha，旧标签固定 1 MiB；开发构建已加入 64 MiB 原生 namespace、最大 1 MiB I/O 与双队列／三个向量。</strong>双队列仍串行执行 FTL。早期 ARM64 的 64 GiB headless 功能验证不等于当前原生大容量或 SSD 性能。128 GB、512 GB、1 TB、RTOS 及实体 NAND 适配均不能作为已完成能力。它不是商用 SSD 刷机固件，也不适合保存真实业务数据。</p>
       <p><a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/README.zh-CN.md">阅读完整中文介绍和源码导航</a> · <a href="https://github.com/Evanshenf/ssd-firmware-lab/blob/main/docs/getting-started.md">查看入门步骤</a></p>
     </section>
   </main>

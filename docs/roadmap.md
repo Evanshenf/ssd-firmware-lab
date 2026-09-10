@@ -3,7 +3,14 @@
 
 # Roadmap
 
-All time ranges are planning estimates, not commitments.
+Current order: publish the adopted scalable-storage / serial-credit MQ2 work,
+keep exact evidence and limits visible, then select one bounded follow-up.
+See [current constructions](current-status.md) and
+[development evidence](results/2026-09-10-scaled-storage-mq2.md).
+Publishing development source is separate from freezing a new release.
+
+The initial M0/M1 schedules below are historical planning context, not pending
+prerequisites to native integration. Time ranges are not commitments.
 
 ## M0 — risk experiments (3–6 weeks, parallel)
 
@@ -13,7 +20,7 @@ Freeze public contracts and run the BAR, Host-DMA, runtime-death, owner-assignme
 
 Build a fixed-arena portable firmware core, headless HIF, fake DMA/NFC, memory media and deterministic trace oracle. Exit on sanitizer/property/fuzz checks and stale-free reset/queue lifecycle.
 
-The current Cycle 03 correctness sequence is intentionally transport-free:
+The historical Cycle 03 correctness sequence was intentionally transport-free:
 
 1. portable headless command lifecycle with fake providers;
 2. executable persistence lattice;
@@ -44,7 +51,14 @@ Add resource scheduling, staged read/program, erase, ECC/retry, page FTL, GC/WL,
 
 M4 and M5 share the synthetic endpoint, trusted Linux HIF, owner-lifecycle, DMA, reset, CQE and IRQ mechanisms. They do not share one graduation claim. The project uses upstream `vfio-pci`, IOMMUFD and QEMU for assignment and does not implement a custom VFIO ABI or QEMU NVMe model. See [ADR-0009](adr/0009-upstream-vfio-route-and-milestones.md).
 
-Before Host integration, finish the unchanged C4.3–C4.5 fixed software-oracle gates. G1 first freezes the B*-ABI authority and executable fake-adjacent dependency gates. M3-P and a separate `Linux-profile-v1` may then proceed in parallel and meet at that versioned boundary. Base M3 work that does not depend on the Host profile may continue independently.
+The old C4.3–C4.5 component-first sequence is not the current critical path.
+The adopted vertical spine uses profile adapters, one shared lifecycle and
+aggregate Block → FTL → NFC → physical NAND. Named J0–J3 software journeys
+were frozen in the existing preview. New scalable FTL/PAGE2 and native MQ2
+builds extend that spine with separately scoped evidence; they do not reopen
+or redefine the frozen C4 reference oracles. See
+[ADR-0013](adr/0013-scalable-ftl-and-page-windows.md) and
+[ADR-0014](adr/0014-native-profile-and-serial-mq2.md).
 
 ### M4 — Host-native portable path (experimental)
 
@@ -65,7 +79,24 @@ Build a RISC-V-first bare-metal SoC profile, then an ARM adapter and semantic di
 ## CI levels
 
 - Pull requests: format/static checks, unit/property tests, sanitizer/fuzz smoke, SPDX/provenance policy. No root, KVM, module loading or raw media.
-- Nightly: the pinned primary GA kernel plus a secondary upstream 6.18 LTS compatibility lane, pinned QEMU/adapter matrices, differential and power-cut coverage on disposable runners.
+- Additional kernel/native lab lanes: only an explicitly provisioned and version-recorded environment. No automatic secondary 6.18 lane, arbitrary-kernel or full power-cut coverage is claimed.
 - Release: applicable storage tests, full power-domain matrix, reproducible builds, support/evidence matrix and known limitations.
 
 For privileged Host work, run affected local checks during development, seal an immutable source commit, then run unprivileged GitHub CI and privileged exact-profile lab gates in parallel. Bind both to that source identity and add an evidence-only child commit. Do not rerun the full remote matrix for every intermediate edit, and do not feed evidence or runner output back into source compilation.
+
+## Bounded follow-ups, not current release promises
+
+1. Finish source/documentation/performance publication with preserved thematic
+   commits and one final hosted CI run. Keep the existing preview tag unchanged.
+2. Choose the next measured native-path bottleneck or larger-capacity integration
+   task. Two queue pairs currently share one global I/O credit; parallel FTL
+   requires a separate ownership/resource design, not more queues alone.
+3. Larger native capacity, raw-block admission and sustained overwrite/GC
+   behavior have separate capacity, memory, recovery and evidence budgets.
+   The historical 64-GiB ARM headless campaign is not native 64-GiB qualification.
+4. Real NAND/SoC, RTOS, RAID and management interfaces remain separate platform
+   work. P01 generation persistence needs an explicit hardware contract.
+
+Do not grow a new test framework or reopen closed component reviews merely to
+advance the roadmap. Name one real journey, its owned changes, executed checks
+and stop condition before beginning another implementation slice.

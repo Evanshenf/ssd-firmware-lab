@@ -9,11 +9,14 @@ nor the NFC executor. The tiny [M3P reference](../m3p/m3p.h) remains the
 reader/writer for its old formats. A runtime selects exactly one FTL; failure
 does not trigger fallback to another engine or implicit formatting.
 
-The initial qualification profiles are 64 MiB and 256 MiB logical capacity,
+The initial qualification profiles were 64 MiB and 256 MiB logical capacity,
 using 80 MiB and 320 MiB of physical NAND main area. They are connected through
 the headless Linux-profile path. The released native worker still uses its
-original 1-MiB profile; it has not silently gained larger capacity. A real
-64-GiB workload is a subsequent, separately provisioned qualification.
+original 1-MiB profile; it has not silently gained larger capacity. A subsequent
+64-GiB ARM64 headless tmpfs campaign passed at `cec2c5d`. New native workers
+separately use 64 MiB and selected 8-KiB/1-MiB transfer profiles; see the
+[current scope matrix](../../docs/current-status.md). That old large campaign
+is not current-format native or whole-SSD performance evidence.
 
 ## Responsibilities and construction
 
@@ -59,17 +62,18 @@ filesystem cache are additional.
 
 The first implementation supports Read, Write and Flush. The Linux profile
 does not advertise DSM/TRIM, and this engine rejects unsupported Block TRIM;
-the enum's presence is not a support claim. One namespace, 512-byte LBAs and an
-8-KiB maximum transfer remain protocol-profile limits. FTL geometry is
+the enum's presence is not a support claim. One namespace and 512-byte LBAs
+remain; the original protocol construction limits transfers to 8 KiB while
+explicit Large/MQ2 constructions admit 1 MiB. FTL geometry is
 4-KiB main plus 128-byte OOB, ascending one-program pages, 32 or 64 pages/block.
 The two qualification profiles use 64 pages/block.
 
 An explicit `fwlab_ftl_scale_extended_config` construction (version 2) can now
 set a Block transfer limit up to 2048 LBAs (1 MiB). The legacy constructor still
 limits requests to 16 LBAs. This does not change namespace capacity, on-media
-format 1 or the current Linux protocol profile's 8-KiB limit. The larger Block
-path is qualified below the protocol layer; a larger NVMe profile and native
-transport are separate integration work.
+format 1 or the original Linux protocol construction's 8-KiB limit. The larger
+Block seam was first qualified below protocol; later Large/MQ2 native evidence
+is separately recorded rather than inferred from that lower-layer test.
 
 The parent retains its original token, buffer lease, request and final status.
 It streams existing <=8-KiB groups without embedding a 1-MiB payload in each

@@ -3,9 +3,11 @@
 
 # Single-core performance and multi-queue roadmap
 
-This is an unreleased implementation roadmap, not a claim of10 GB/s throughput,
-PCIe compliance, production readiness or completed multi-queue support. The
-fixed-profile preview and its historical evidence remain unchanged.
+This is the implementation roadmap with historical diagnostic checkpoints, not
+a claim of 10 GB/s throughput, PCIe compliance or production readiness. The
+adopted source now includes serial-credit MQ2, not parallel FTL. Use the
+[current matrix](current-status.md) and [dated performance report](results/2026-09-10-throughput.md)
+for current claims. The fixed-profile tag and its evidence remain unchanged.
 
 ## Objective and measurement boundary
 
@@ -218,8 +220,9 @@ do not prove 10 GB/s, a 1–3% loss, ARM performance, or native NVMe bandwidth.
 GCC and Clang ASan/UBSan pass real aligned/unaligned/RMW, SELF restart, holes,
 partial-window/live GC, pre-dispatch cancel, post-DATA A/B drain, UNKNOWN
 quarantine/recovery and both constructor-format rejection directions. The
-existing Linux-profile/lifecycle also consumes the new binding, but still
-limits commands to 8 KiB. No legacy lifecycle or native SQ/CQE executor has
+Linux-profile/lifecycle at this checkpoint also consumed the new binding but
+still limited commands to 8 KiB; later Large/MQ2 extends this explicitly.
+No legacy lifecycle or native SQ/CQE executor has
 been duplicated to obtain a faster result.
 
 ```sh
@@ -229,8 +232,8 @@ make -C frontends/headless-scale -f ftl.mk FWLAB_CRC_NATIVE=1 check-window-v2-co
 
 Use the same existing capped tmpfs, serially. None of these entries formats an
 existing image or qualifies physical persistence. Remaining work is matched
-measurement and the newly measured bottlenecks, plus the planned native large
-request/multi-queue path—not another expansion of the correctness framework.
+measurement of actual bottlenecks; the subsequently adopted native large/MQ2
+path has its own evidence. No expansion of the correctness framework is implied.
 
 ## Staged route
 
@@ -256,7 +259,7 @@ remaining gap is real; partial syscall reduction is not the complete solution.
 |---|---|---|
 | P0 | Byte-equivalent CRC repair | Implemented; does not close throughput goal |
 | P1 | Remove proved redundant work in unfrozen storage/wrappers | Keep existing ordering and barriers; frozen NFC is not silently rewritten |
-| M1 | Scaled native binding, synchronous HIF pump, two real I/O queues and three MSI-X vectors | One firmware executor,32total command credits; initial8 KiB transfers |
+| M1 | Scaled native binding, synchronous HIF pump, two real I/O queues and three MSI-X vectors | Implemented with ONE global I/O frame plus ONE Admin reserve, not a per-queue credit pool |
 | P2 | Explicit large-transfer profile, bounded buffer pool and complete PRP graph | One outer Block token; private subgroups, prefix-aware failure and FUA |
 | P3 | Versioned low-amplification physical media/NFC batching and packed/incremental FTL metadata | Physical PPA/OOB/generation, recovery and durability remain real |
 | I1 | Native and same-function M5 integration | One immutable candidate and matched performance/correctness confirmation |
@@ -269,15 +272,17 @@ retains one Block request up to 1 MiB, streams existing v1 subgroups and permits
 CP/GC at resolved boundaries. The real-media adjacent-buffer journey passes
 GCC and Clang ASan/UBSan, including prefix/cancel/recovery and live GC while owned.
 It adds 640 bytes of parent control state, not a per-command 1 MiB payload.
-This is not yet a large NVMe profile, native support or a throughput result.
+That lower seam alone is not a large NVMe profile, native or throughput result;
+later native evidence is recorded separately in the current matrix.
 See the [FTL construction and test boundary](../core/ftl-scale/README.md).
 
 ### Multi-queue ownership
 
-Start with two I/O queues, depth32, Admin vector0 and I/O vectors1/2. Negotiate
-actual supported queue counts rather than the Host CPU count. Initially share
-32 command records: two Admin credits and fifteen per I/O queue. The storage
-engine's accepted-operation window is a separate resource bound.
+The adopted profile has two I/O queues, depth32, Admin vector0 and I/O vectors1/2.
+It negotiates supported paired queue counts rather than the Host CPU count.
+The earlier proposed two-Admin/fifteen-per-I/O credit split was not implemented:
+there is ONE global I/O frame plus ONE Admin reserve. Host queue depth is not
+the storage engine's accepted-operation window. See [ADR-0014](adr/0014-native-profile-and-serial-mq2.md).
 
 Use bounded round-robin capture, admission and publication; one blocked/full CQ
 must not starve the other queue or Admin. Queue incarnation and captured CQ

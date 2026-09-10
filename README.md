@@ -24,6 +24,17 @@ software preview: **one 1-MiB namespace, file-backed NAND and finite runtime
 budgets**. Large-capacity and production-readiness claims are not made. See the
 [exact-source results and remaining limits](docs/results/2026-09-05-vertical-spine-preview.md).
 
+**Development source has advanced beyond that tag.** Adopted changes through
+`a6ee009` add scalable FTL, physical NAND v2/PAGE2, and an explicit 64-MiB native
+profile with up to 1-MiB I/O, two I/O queues and three MSI-X vectors. MQ2 still
+has one global I/O frame and serialized storage execution. A separate ARM64
+64-GiB headless functional campaign passed on an earlier exact revision; it is
+not 64-GiB native or whole-SSD performance evidence.
+See [current constructions and platform limits](docs/current-status.md),
+[development evidence](docs/results/2026-09-10-scaled-storage-mq2.md) and
+[performance samples](docs/results/2026-09-10-throughput.md). This is development
+publication, not a new frozen release or a change to the old tag.
+
 ## Try the software path on Linux
 
 Start with an ordinary, unprivileged Linux user. You need Git, GNU Make and a
@@ -44,7 +55,7 @@ create `/dev/nvme*`**; `native_hif=not_connected` is expected in this test.
 The [getting-started guide](docs/getting-started.md) explains dependencies, output,
 the broader software check, and the separate privileged native NVMe experiment.
 
-## What works in the current preview
+## What works in the tagged preview
 
 | Capability | Executed software behavior |
 | --- | --- |
@@ -95,6 +106,11 @@ before the next grant. See the [native guide](kernel/m4-native/README.md).
 | Persistent NAND substrate | [File-NAND implementation](media/file-nand-v0/) |
 | Linux runtime and device binding | [Firmware frontend](frontends/linux-m4/README.md), [PCI/HIF](kernel/m4-native/README.md) |
 
+For the newer path, start at [scalable FTL](core/ftl-scale/README.md),
+[PAGE2 NFC](core/nfc-page-v2/README.md), [physical NAND v2](media/file-nand-v2/README.md)
+and [native scaled/MQ2 startup](docs/native-scaled-usage.md). The table above
+retains the tagged preview's reference implementation.
+
 ## Current limits and future work
 
 - The preview has one 1-MiB namespace, 512-byte LBAs, an 8-KiB transfer limit and
@@ -104,7 +120,7 @@ before the next grant. See the [native guide](kernel/m4-native/README.md).
 - Native integration was tested on a disposable x86-64 Linux VM with Ubuntu
   `7.0.0-30-generic` and a specifically reserved 16-KiB BAR aperture. It is not
   a drop-in module for arbitrary Linux kernels or production hosts.
-- Scalable capacity, richer FTL/wear-leveling, exclusive raw-block backing,
+- Larger native capacity, richer FTL/wear-leveling, exclusive raw-block backing,
   RTOS ports and real FPGA/SoC/NAND adapters are future work, not released features.
 - Physical NAND requires a concrete metadata/erase-generation recovery contract;
   simply replacing the file backend does not prove hardware portability.

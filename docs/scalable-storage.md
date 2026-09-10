@@ -3,20 +3,22 @@
 
 # Scalable storage development
 
-This plan extends the [vertical-spine preview](results/2026-09-05-vertical-spine-preview.md).
-It does not change that release's tested envelope or claim that the 64-GiB
-workload has already been qualified. The first large full-workload target is 64 GiB;
-128 GiB depends on provisioned storage and memory. Larger capacities are design
-and arithmetic targets until actually exercised.
+This plan extends the [vertical-spine preview](results/2026-09-05-vertical-spine-preview.md)
+without changing that tag. The initial SCALE-B1/B2 sections below are historical
+checkpoint scopes. A 64-GiB ARM64 headless tmpfs full workload subsequently passed
+at `cec2c5d`; current adopted native profiles separately expose 64 MiB, up to
+1-MiB I/O and serial-credit MQ2. See the [current matrix](current-status.md) and
+[exact-scope results](results/2026-09-10-scaled-storage-mq2.md). 128 GiB and larger
+remain conditional design targets, not executed claims.
 
-## Current implementation: SCALE-B2 bounded qualification
+## Initial implementation: SCALE-B2 bounded qualification
 
 The [new scalable FTL](../core/ftl-scale/README.md) now connects to the same
 headless Linux profile, lifecycle, Block contract, NFC executor and compact
 physical NAND. Real 64-MiB and 256-MiB logical volumes passed disk-backed full
 fills, interleaved half-volume overwrites, restart and complete readback.
-The fixed interruption/active-close cases also passed. Neither a 64-GiB workload
-nor larger native-worker deployment is claimed here.
+The fixed interruption/active-close cases also passed. That checkpoint did not
+itself qualify a 64-GiB workload or the later scaled native-worker deployment.
 
 The old M3P reference remains available for its existing formats. An explicit
 construction runner selects one FTL, while the same ready-only logical volume
@@ -30,10 +32,11 @@ Use `make -C frontends/headless-scale -f ftl.mk check` for the functional path;
 the README above describes full-volume and named-cut commands and their scope.
 The released native worker still uses its original 1-MiB profile.
 
-The next implementation route is described in the
+The implementation route and historical diagnostics are described in the
 [single-core performance and multi-queue roadmap](performance-spine.md).
-Its throughput targets are not current capability claims; the first completed
-repair is byte-equivalent CRC acceleration with the existing real-path checks.
+Its throughput targets are not current capability claims. Later adopted
+physical-v2/PAGE2, large-parent and native MQ2 changes are summarized in the
+linked current matrix; byte-equivalent CRC was only the first repair.
 
 The same full workload also passes as explicitly labeled tmpfs **functional**
 regression. A dedicated 1-GiB mount and serial execution keep the observed

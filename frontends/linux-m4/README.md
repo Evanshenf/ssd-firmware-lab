@@ -8,6 +8,11 @@ M3-P, NFC and physical file-NAND path. The native worker and owner-control
 binding are implemented. The integration is experimental; implementation and
 lab execution do not themselves establish reviewed architecture graduation.
 
+Current adopted scaled/large/MQ2 constructions and their exact evidence are
+listed in the [development matrix](../../docs/current-status.md). The ordinary
+`worker` and `check-runtime` remain the old tagged reference. Native
+format/recover/stop steps are in the [scaled operator guide](../../docs/native-scaled-usage.md).
+
 The shared lifecycle has a private publication extension. A completion lease
 retains the immutable intent until publication has a known outcome. Profile
 retirement then allows command-slot reuse. Host queue occupancy and pending
@@ -43,7 +48,9 @@ software-path tests, not native Linux or real power-loss evidence.
 Run the current semantic aggregate with `sh scripts/check_current_spine.sh`
 (`CC=clang` selects Clang). It rebuilds and executes the existing S0-B/J0-A/J0-B
 ELFs with actual object/archive/ELF digests, then builds the worker/native client
-and runs the runtime matrix. Hosted `current-spine` runs those same semantics.
+and runs the runtime matrix. It additionally runs selected PAGE2/physical-v2,
+retained-parent and MQ2 progress fixtures on an explicit bounded tmpfs as an
+ordinary user. Hosted `current-spine` runs those same semantics.
 Historical frozen leaf/changed-path checks retain their old scope and are not
 silently relaxed to approve the evolved integration.
 
@@ -240,9 +247,10 @@ payload buffer and fails if that preparation is unavailable. This keeps the
 still uses 257 controller-page PRP references. It does not change the NAND
 image, controller frame sizes, DMA checks, or submitted command lengths.
 
-Actual native qualification and separate performance measurement remain pending
-for this candidate. No MQ2, 1 MiB atomicity, new NAND algorithm or 10 GB/s claim
-is made by a successful build or offline test.
+Subsequent native and performance evidence is now indexed in the
+[development results](../../docs/results/2026-09-10-scaled-storage-mq2.md).
+It is separate from these offline checks; no 1-MiB atomicity, new NAND algorithm
+or 10-GB/s claim follows from a successful build.
 
 ### MQ2 serialized candidate
 
@@ -261,6 +269,7 @@ these facts nor a buffer lease grants Host DMA or durability authority.
 `profile-check` includes the MQ2 policy's NoQ/paired-queue/retry cases with fake
 queue effects. `check-progress-runtime` reuses the real LARGE storage journey
 with a controlled waiting executor and observed, still-executed `nanosleep`.
-It tests progress versus idle, not a two-queue kernel. Real Linux two-queue,
-three-vector, deletion/reset/owner and cost evidence are separate prerequisites;
-this development entry is not a completed MQ2 or throughput qualification.
+It tests progress versus idle, not a two-queue kernel. Actual Linux two-queue,
+three-vector, deletion/reset/owner and cost episodes subsequently passed in
+their [recorded scope](../../docs/results/2026-09-10-scaled-storage-mq2.md).
+This offline entry alone is not that native evidence or a release approval.
