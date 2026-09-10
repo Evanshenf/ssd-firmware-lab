@@ -5,9 +5,13 @@
 #include "physical_nand_batch.h"
 
 #include <fcntl.h>
+#include <inttypes.h>
+#include <linux/magic.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/vfs.h>
 #include <unistd.h>
 
 static void release_unbound(struct native_scaled_media *media)
@@ -19,34 +23,75 @@ static void release_unbound(struct native_scaled_media *media)
     media->native.directory_fd = -1;
 }
 
+static int format_preflight(const struct native_scaled_media *media,
+                            uint32_t logical_mib)
+{
+    struct statfs fs;
+    FILE *stream;
+    char line[256];
+    unsigned long long kib = 0;
+    uint64_t image_bytes = fwlab_file_nand_v2_image_bytes(&media->config);
+    uint64_t available, ram;
+    const uint64_t reserve = logical_mib > 256 ? UINT64_C(2) << 30 :
+                                               UINT64_C(128) << 20;
+
+    if (!image_bytes || fstatfs(media->native.directory_fd, &fs) ||
+        fs.f_type != TMPFS_MAGIC || fs.f_bsize <= 0 ||
+        (uint64_t)fs.f_bavail > UINT64_MAX / (uint64_t)fs.f_bsize)
+        return 0;
+    available = (uint64_t)fs.f_bavail * (uint64_t)fs.f_bsize;
+    stream = fopen("/proc/meminfo", "r");
+    if (!stream)
+        return 0;
+    while (fgets(line, sizeof(line), stream))
+        if (sscanf(line, "MemAvailable: %llu kB", &kib) == 1)
+            break;
+    if (fclose(stream) || !kib || kib > UINT64_MAX / 1024u)
+        return 0;
+    ram = (uint64_t)kib * 1024u;
+    if (image_bytes > UINT64_MAX - reserve ||
+        available < image_bytes + (UINT64_C(64) << 20) ||
+        ram < image_bytes + reserve) {
+        fprintf(stderr, "NATIVE_FORMAT_PREFLIGHT_ERROR|logical_mib=%u|image_bytes=%" PRIu64
+                "|fs_available=%" PRIu64 "|mem_available=%" PRIu64 "|no_disk_fallback=1\n",
+                logical_mib, image_bytes, available, ram);
+        return 0;
+    }
+    printf("NATIVE_FORMAT_PREFLIGHT_OK|logical_mib=%u|image_bytes=%" PRIu64
+           "|fs_available=%" PRIu64 "|mem_available=%" PRIu64 "|medium=tmpfs\n",
+           logical_mib, image_bytes, available, ram);
+    return 1;
+}
+
 int native_scaled_media_open(struct native_scaled_media *media,
     struct native_context *owner, const char *directory,
-    const uint8_t uuid[16], int format)
+    const uint8_t uuid[16], int format, uint32_t logical_mib)
 {
     size_t alignment, bytes;
+    uint64_t lba_count;
+    struct fwlab_nfc_geometry geometry;
     struct stat status;
     enum fwlab_nfc_api_result result;
 
     if (!media || media->opened || !owner || owner->runtime || !directory ||
-        !uuid || j0_bytes_zero(uuid, 16) || (format != 0 && format != 1))
+        !uuid || j0_bytes_zero(uuid, 16) || (format != 0 && format != 1) ||
+        !scale_storage_capacity_mib(logical_mib, &geometry, &lba_count))
         return 0;
     memset(media, 0, sizeof(*media));
     media->native.directory_fd = -1;
     media->owner = owner;
     memcpy(media->native.uuid, uuid, 16);
     memcpy(media->config.media_uuid, uuid, 16);
-    media->config.geometry = (struct fwlab_nfc_geometry){
-        .version = FWLAB_NFC_CONTRACT_VERSION,
-        .size = sizeof(struct fwlab_nfc_geometry),
-        .channels = 1, .luns_per_channel = 1, .planes_per_lun = 1,
-        .blocks_per_plane = 320, .pages_per_block = 64,
-        .plane_parallelism_per_lun = 1, .main_bytes_per_page = 4096,
-        .oob_bytes_per_page = 128, .max_programs_per_erase = 1,
-        .program_order = FWLAB_NFC_PROGRAM_ASCENDING
-    };
+    media->config.geometry = geometry;
+    if (logical_mib == 65536)
+        media->config.mapped_budget_bytes = UINT64_C(90) << 30;
     media->native.directory_fd = open(directory,
         O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (media->native.directory_fd < 0)
+        goto failed;
+    /* Fresh format reserves the complete mapped image before lower allocation.
+     * Recovery reuses that allocation and must not require another image's RAM. */
+    if (format && !format_preflight(media, logical_mib))
         goto failed;
     alignment = fwlab_file_nand_v2_arena_alignment();
     bytes = fwlab_file_nand_v2_arena_size();
@@ -81,8 +126,8 @@ int native_scaled_media_open(struct native_scaled_media *media,
     scale_storage_window_v2_factory_init(&media->factory, &media->options);
     media->native.media_binding = &media->binding;
     media->native.storage_factory = &media->factory;
-    media->native.format_lba_count = NATIVE_SCALED_LBA_COUNT;
-    media->native.expected_lba_count = NATIVE_SCALED_LBA_COUNT;
+    media->native.format_lba_count = lba_count;
+    media->native.expected_lba_count = lba_count;
     media->opened = 1;
     return 1;
 

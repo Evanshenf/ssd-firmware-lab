@@ -131,12 +131,40 @@ static int media_open(struct native_media *media, const char *directory, int for
 }
 #endif
 
+static uint32_t runtime_iteration_limit(const struct native_context *context)
+{
+    const struct j0_runtime *runtime = context->runtime;
+    uint64_t lbas = runtime->ready ? runtime->volume.lba_count :
+        runtime->config.media_mode == J0_MEDIA_FORMAT ? runtime->config.format_lba_count :
+                                                      runtime->config.expected_lba_count;
+
+    /* Only startup/drain allowances grow. In-flight work, per-step budgets,
+     * lifecycle limits and the ready firmware loop remain unchanged. */
+    return lbas > UINT64_C(256) * 2048u ? UINT32_C(1000000000) : 800000u;
+}
+
+static int runtime_progress(const struct native_context *context,
+    const char *phase, uint32_t iteration, uint64_t started, uint64_t *last)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now))
+        return 0;
+    if (!iteration || (uint64_t)now.tv_sec - *last >= 30u) {
+        printf("NATIVE_RUNTIME_PROGRESS|phase=%s|epoch=%u|iterations=%u|elapsed_s=%" PRIu64 "\n",
+               phase, context->epoch, iteration, (uint64_t)now.tv_sec - started);
+        *last = (uint64_t)now.tv_sec;
+    }
+    return 1;
+}
+
 int native_runtime_create(struct native_context *context,
                           struct native_media *media, int format)
 {
     struct j0_host_factory factory = { native_host_bind, context };
     struct j0_runtime_config config;
-    uint32_t iteration;
+    struct timespec now;
+    uint64_t started, last;
+    uint32_t iteration, limit;
 
     if (context->runtime || context->next_runtime_seed >= UINT64_C(0xfffff))
         return 0;
@@ -173,8 +201,15 @@ int native_runtime_create(struct native_context *context,
         memset(&context->buffer, 0, sizeof(context->buffer));
         return 0;
     }
-    for (iteration = 0; iteration < 800000; ++iteration) {
+    if (clock_gettime(CLOCK_MONOTONIC, &now))
+        return 0;
+    started = last = (uint64_t)now.tv_sec;
+    limit = runtime_iteration_limit(context);
+    for (iteration = 0; iteration < limit; ++iteration) {
         uint32_t units;
+        if (!(iteration & 1023u) && !runtime_progress(context,
+                format ? "format" : "recovery", iteration, started, &last))
+            return 0;
         if (j0_runtime_step(context->runtime, 3, &units) != FWLAB_SPINE_V0_OK)
             return 0;
         if (context->runtime->ready)
@@ -469,9 +504,20 @@ enum fwlab_spine_result_v0 native_runtime_close_step(
 
 static int runtime_close(struct native_context *context)
 {
-    uint32_t iteration;
+    struct timespec now;
+    uint64_t started, last;
+    uint32_t iteration, limit;
 
-    for (iteration = 0; iteration < 800000; ++iteration) {
+    if (!context->runtime)
+        return 1;
+    if (clock_gettime(CLOCK_MONOTONIC, &now))
+        return 0;
+    started = last = (uint64_t)now.tv_sec;
+    limit = runtime_iteration_limit(context);
+    for (iteration = 0; iteration < limit; ++iteration) {
+        if (!(iteration & 1023u) &&
+            !runtime_progress(context, "drain", iteration, started, &last))
+            return 0;
         enum fwlab_spine_result_v0 result = native_runtime_close_step(context, 48);
         if (result == FWLAB_SPINE_V0_OK)
             return 1;
@@ -571,6 +617,9 @@ int main(int argc, char **argv)
     struct stat st;
     uint8_t binding[32], media_uuid[16];
     int format = 0, index, result = 1;
+#if FWLAB_NATIVE_SCALED
+    uint32_t logical_mib = NATIVE_SCALED_DEFAULT_MIB;
+#endif
 
     memset(&media_owner, 0, sizeof(media_owner));
     media->directory_fd = -1;
@@ -582,6 +631,15 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[index], "--uuid")) uuid = argv[++index];
         else if (!strcmp(argv[index], "--binding-sha")) digest = argv[++index];
         else if (!strcmp(argv[index], "--owner-dir")) owner_directory = argv[++index];
+#if FWLAB_NATIVE_SCALED
+        else if (!strcmp(argv[index], "--namespace-mib")) {
+            const char *value = argv[++index];
+            if (!strcmp(value, "64")) logical_mib = 64;
+            else if (!strcmp(value, "256")) logical_mib = 256;
+            else if (!strcmp(value, "65536")) logical_mib = 65536;
+            else goto usage;
+        }
+#endif
         else goto usage;
     }
     if (!device || strncmp(device, "/dev/fwlab-native-", 18) || !directory ||
@@ -596,7 +654,7 @@ int main(int argc, char **argv)
     if (context->descriptor < 0 || fstat(context->descriptor, &st) || !S_ISCHR(st.st_mode))
         goto done;
 #if FWLAB_NATIVE_SCALED
-    if (!native_scaled_media_open(&media_owner, context, directory, media_uuid, format))
+    if (!native_scaled_media_open(&media_owner, context, directory, media_uuid, format, logical_mib))
         goto done;
 #if FWLAB_NATIVE_LARGE
     if (native_attach_profile(context, FWLAB_NATIVE_MQ2
@@ -677,6 +735,10 @@ unresolved_close:
     _Exit(1);
 usage:
     fprintf(stderr, "usage: %s --device /dev/fwlab-native-BDF --media-dir DIR "
-                    "--uuid 32hex --binding-sha 64hex [--format] [--owner-dir DIR]\n", argv[0]);
+                    "--uuid 32hex --binding-sha 64hex [--format] [--owner-dir DIR]"
+#if FWLAB_NATIVE_SCALED
+                    " [--namespace-mib 64|256|65536]"
+#endif
+                    "\n", argv[0]);
     return 2;
 }

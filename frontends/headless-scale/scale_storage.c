@@ -13,6 +13,36 @@
 #define SCALE_STORAGE_MAGIC UINT64_C(0x5343414c4542494e)
 #define SCALE_NFC_TRACE_ENTRIES 4096u
 
+int scale_storage_capacity_mib(uint32_t logical_mib,
+    struct fwlab_nfc_geometry *geometry, uint64_t *lba_count)
+{
+    struct fwlab_nfc_geometry g = {0};
+    struct sf_layout layout;
+    uint64_t lbas;
+    if (!geometry || !lba_count ||
+        (logical_mib != 64 && logical_mib != 256 && logical_mib != 65536))
+        return 0;
+    g.version = FWLAB_NFC_CONTRACT_VERSION;
+    g.size = (uint16_t)sizeof(g);
+    g.channels = logical_mib == 64 ? 1 : 2;
+    g.luns_per_channel = g.channels;
+    g.planes_per_lun = g.channels;
+    g.blocks_per_plane = logical_mib == 64 ? 320 :
+                        (logical_mib == 256 ? 160 : 40960);
+    g.pages_per_block = 64;
+    g.plane_parallelism_per_lun = g.planes_per_lun;
+    g.main_bytes_per_page = SF_PAGE_BYTES;
+    g.oob_bytes_per_page = SF_OOB_BYTES;
+    g.max_programs_per_erase = 1;
+    g.program_order = FWLAB_NFC_PROGRAM_ASCENDING;
+    lbas = (uint64_t)logical_mib * 2048u;
+    if (!sf_layout_make(&g, lbas, &layout))
+        return 0;
+    *geometry = g;
+    *lba_count = lbas;
+    return 1;
+}
+
 struct scale_storage {
     uint64_t magic;
     void *ftl_arena;

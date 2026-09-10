@@ -16,6 +16,11 @@ struct scale_storage_options {
     const struct fwlab_nand_batch_v2 *page_v2_media;
 };
 
+/* Shared construction presets, not FTL capacity truth. Recovery still validates
+ * the stored volume. MiB choices: 64, 256, 65536; no existing-image resize. */
+int scale_storage_capacity_mib(uint32_t logical_mib,
+    struct fwlab_nfc_geometry *geometry, uint64_t *lba_count);
+
 void scale_storage_factory_init(struct j0_storage_factory *factory,
                                  struct scale_storage_options *options);
 void scale_storage_window_v2_factory_init(struct j0_storage_factory *factory,

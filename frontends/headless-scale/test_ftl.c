@@ -131,6 +131,8 @@ static struct fwlab_file_nand_v2_config v2_configuration(
     struct fwlab_file_nand_v2_config result = {0};
     result.geometry = config->geometry;
     memcpy(result.media_uuid, config->media_uuid, 16);
+    if (fwlab_file_nand_v2_image_bytes(&result) > (UINT64_C(600) << 20))
+        result.mapped_budget_bytes = UINT64_C(90) << 30;
     return result;
 }
 
@@ -205,20 +207,9 @@ static void medium_report(struct fixture *f, int before_removal)
 static struct fwlab_nfc_geometry geometry(uint32_t logical_mib)
 {
     struct fwlab_nfc_geometry g = {0};
-    g.version = FWLAB_NFC_CONTRACT_VERSION;
-    g.size = (uint16_t)sizeof(g);
-    g.channels = logical_mib == 64 ? 1 : 2;
-    g.luns_per_channel = g.channels;
-    g.planes_per_lun = g.channels;
-    CHECK(logical_mib == 64 || logical_mib == 256 || logical_mib == 65536);
-    g.blocks_per_plane = logical_mib == 64 ? 320 :
-                        (logical_mib == 256 ? 160 : 40960);
-    g.pages_per_block = 64;
-    g.plane_parallelism_per_lun = g.planes_per_lun;
-    g.main_bytes_per_page = SF_PAGE_BYTES;
-    g.oob_bytes_per_page = SF_OOB_BYTES;
-    g.max_programs_per_erase = 1;
-    g.program_order = FWLAB_NFC_PROGRAM_ASCENDING;
+    uint64_t lbas = 0;
+    CHECK(scale_storage_capacity_mib(logical_mib, &g, &lbas));
+    CHECK(lbas == (uint64_t)logical_mib * 2048u);
     return g;
 }
 
@@ -744,12 +735,16 @@ finish:
 
 int main(int argc, char **argv)
 {
-    int full = argc == 2 && strcmp(argv[1], "--full") == 0;
+    int full_mapped = argc == 2 && strcmp(argv[1], "--full-window-v2-mapped") == 0;
+    int full = argc == 2 && (strcmp(argv[1], "--full") == 0 || full_mapped);
     int cuts = argc == 2 && (strcmp(argv[1], "--cuts") == 0 ||
                             strcmp(argv[1], "--media-v2-cuts") == 0);
-    int large = argc == 2 && strcmp(argv[1], "--full-64g") == 0;
-    int plan = argc == 2 && strcmp(argv[1], "--plan-64g") == 0;
-    int mapped_v2 = argc == 2 && strcmp(argv[1], "--window-v2-mapped") == 0;
+    int reference_large = argc == 2 && strcmp(argv[1], "--full-64g-reference-v1") == 0;
+    int reference_plan = argc == 2 && strcmp(argv[1], "--plan-64g-reference-v1") == 0;
+    int large = argc == 2 && (strcmp(argv[1], "--full-64g") == 0 || reference_large);
+    int plan = argc == 2 && (strcmp(argv[1], "--plan-64g") == 0 || reference_plan);
+    int mapped_v2 = argc == 2 && (strcmp(argv[1], "--window-v2-mapped") == 0 ||
+        full_mapped || (large && !reference_large) || (plan && !reference_plan));
     int operation_v2 = argc == 2 && (strcmp(argv[1], "--window-v2-operation") == 0 || mapped_v2);
     int window_v2 = argc == 2 && (strcmp(argv[1], "--window-v2") == 0 ||
                                   strcmp(argv[1], "--window-v2-cost") == 0 || operation_v2);
@@ -766,12 +761,14 @@ int main(int argc, char **argv)
         struct fwlab_file_nand_v1_config config = {0};
         config.geometry = geometry(65536);
         memcpy(config.media_uuid, "SCALE-B2-NAND-001", 16);
-        media_preflight(getenv("FWLAB_TEST_MEDIA_DIR"), 65536, &config, 0);
-        puts("SCALE_PLAN_ONLY|no_NAND_io=1|no_runtime_pass_claim=1");
+        media_preflight(getenv("FWLAB_TEST_MEDIA_DIR"), 65536, &config, use_v2);
+        printf("SCALE_PLAN_ONLY|media_format=%u|ftl_format=%u|NFC_PAGE2_R0=%u|mapped=%u|no_NAND_io=1|no_runtime_pass_claim=1\n",
+               use_v2 ? 2u : 1u, window_v2 ? 2u : 1u,
+               window_v2 ? 1u : 0u, mapped_v2 ? 1u : 0u);
         return 0;
     }
     if (large) {
-        journey(65536, 1, 0, 0, 0, 0, 0, 0);
+        journey(65536, 1, 0, 0, use_v2, window_v2, operation_v2, mapped_v2);
         return 0;
     }
     journey(64, full, cuts, cost, use_v2, window_v2, operation_v2, mapped_v2);

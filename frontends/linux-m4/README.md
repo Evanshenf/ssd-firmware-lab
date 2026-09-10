@@ -94,7 +94,8 @@ a native PCI or owner-switch qualification.
 
 It runs the actual native constructor, worker loop, host data mover and
 completion handling against a bounded fake ioctl boundary. Storage is the
-existing 64 MiB scaled FTL, PAGE2 R0 and physical-v2 NAND model. Requests remain
+existing scaled FTL, PAGE2 R0 and physical-v2 NAND model. It defaults to 64 MiB;
+the same fixture accepts `--namespace-mib 256`. Requests remain
 8 KiB; the original worker scheduling and sleeps remain. The fake owns only
 Host byte buffers and assumed transport identities, never namespace storage.
 No real device is opened, and unknown ioctl operations fail.
@@ -111,12 +112,21 @@ flock -n /run/fwlab-test-media/.run.lock \
 Code and logs stay outside tmpfs. The test uses only its own newly created
 directory/image and removes it on success; a failed case leaves its image for
 diagnosis. It never uses an existing deployment image or raw block device.
+After the default check, run the same built ELF serially at 256 MiB:
+
+```sh
+FWLAB_TEST_MEDIA_DIR=/run/fwlab-test-media \
+  flock -n /run/fwlab-test-media/.run.lock \
+  frontends/linux-m4/build/scaled-offline/native_scaled_offline --namespace-mib 256
+```
 
 The finite journey checks Identify capacity, nonzero Write/SELF near the last
 valid LBA, Flush, Read, complete runtime/media close, fresh-epoch recovery,
 readback and continued writes. The data mover must actually transfer Host
 bytes. Format is explicit and new-file-only; recovery neither creates nor
-formats, and a second format cannot replace an image.
+formats, and a second format cannot replace an image. A different supported
+capacity on recovery is rejected without changing the existing image's inode,
+size or modification time; correct-capacity recovery then checks the data.
 One adjacent constructor/close smoke also checks the unchanged legacy
 selection; it does not repeat the historical full runtime matrix on `/tmp`.
 
@@ -140,10 +150,33 @@ remain in the storage engines.
 ## Selected scaled worker
 
 `make -C frontends/linux-m4 scaled-worker` builds
-`build/scaled-offline/fwlab_native_scaled_worker`. It selects the same fixed
-64 MiB physical-v2 construction at compile time, while sharing the ordinary
+`build/scaled-offline/fwlab_native_scaled_worker`. It selects the same
+physical-v2 construction at compile time, while sharing the ordinary
 worker's execution loop, host mover and owner-control code. No per-I/O storage
 fallback or second executor is added. The default `worker` remains legacy.
+
+Scaled, PUMP, Large and MQ2 workers accept `--namespace-mib 64|256|65536`,
+defaulting to 64 MiB. They use the same capacity/geometry presets as the
+headless scaled test. The tiny legacy worker rejects this option. Namespace
+size is owned by the formatted/recovered FTL volume: the Linux protocol adapter
+already uses that volume for Identify NSZE/NCAP/NUSE and command LBA bounds.
+Neither PCI BAR size nor Host transfer size grows with namespace capacity.
+
+This selects a **fresh volume's capacity**, not online expansion or conversion
+of an existing image. On later startup supply the same capacity and UUID,
+without `--format`; mismatches fail rather than resizing or formatting.
+Fresh format checks actual tmpfs space and available RAM before allocation.
+The 64 GiB preset explicitly permits an image up to 90 GiB, including NAND
+overprovisioning/OOB/metadata; small presets retain the 600 MiB mapping limit.
+Recovery does not demand a second image's RAM for already allocated tmpfs data.
+The normal synchronization calls, exclusive holder, FTL format and PAGE2
+semantics remain unchanged.
+
+Large-volume startup/drain have finite capacity-aware iteration allowances and
+30-second progress output. These software allowances do not extend the
+controller's advertised readiness timeout. Native 64 GiB bind/reset/rebind and
+owner-switch readiness still need actual Linux/HIF qualification; a headless
+64 GiB PASS or the offline 256 MiB fixture does not prove those timings.
 
 The scaled entry requires the explicit `FWLAB_M4_ATTACH_IDENTITY` ioctl from
 the matching kernel. It records UUID, media format and the supplied
@@ -208,8 +241,9 @@ single-thread bandwidth.
 
 ## Large serialized Host profile (adopted development)
 
-`large-worker` / `check-large-runtime` select 1 MiB maximum I/O on the existing
-64 MiB namespace and unchanged scaled FTL/PAGE2/physical-v2 path. Namespace
+`large-worker` / `check-large-runtime` select 1 MiB maximum I/O on the default
+64 MiB namespace and unchanged scaled FTL/PAGE2/physical-v2 path. The worker's
+namespace capacity is selectable independently via `--namespace-mib`. Namespace
 capacity and Host command size are independent. Match this worker with a PUMP
 kernel built using `FWLAB_M4_HOST_PROFILE=2`. The separate 160-byte attachment-v3
 binds exact Host limits before identity pinning; old 112/128-byte messages remain

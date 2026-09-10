@@ -493,12 +493,12 @@ static void run_script(struct native_context *context, struct native_scaled_medi
 #endif
 }
 
-static void check_identify(const struct host_row *row)
+static void check_identify(const struct host_row *row, uint64_t lba_count)
 {
     REQUIRE(row->length == 4096 && row->copied == 4096);
-    REQUIRE(get_le64(row->bytes) == NATIVE_SCALED_LBA_COUNT);
-    REQUIRE(get_le64(row->bytes + 8) == NATIVE_SCALED_LBA_COUNT);
-    REQUIRE(get_le64(row->bytes + 16) == NATIVE_SCALED_LBA_COUNT);
+    REQUIRE(get_le64(row->bytes) == lba_count);
+    REQUIRE(get_le64(row->bytes + 8) == lba_count);
+    REQUIRE(get_le64(row->bytes + 16) == lba_count);
 }
 
 static uint64_t wall_ns(void)
@@ -559,7 +559,7 @@ static void legacy_constructor_smoke(int directory_fd, const char *directory,
 }
 #endif
 
-int main(void)
+int main(int argc, char **argv)
 {
     const char *root = getenv("FWLAB_TEST_MEDIA_DIR");
     const uint8_t uuid[16] = {0x4d,0x31,0x41,0x2d,0x53,0x43,0x41,0x4c,0x45,1,2,3,4,5,6,7};
@@ -573,8 +573,15 @@ int main(void)
     struct native_owner owner;
     static uint8_t expected[TEST_IO_BYTES]; /* independent expected Host data */
     uint64_t prior_ftl, prior_nfc, started;
+    uint32_t logical_mib = NATIVE_SCALED_DEFAULT_MIB;
+    uint64_t lba_count;
     int directory_fd, name_length;
 
+    REQUIRE(argc == 1 || (argc == 3 && !strcmp(argv[1], "--namespace-mib") &&
+            (!strcmp(argv[2], "64") || !strcmp(argv[2], "256"))));
+    if (argc == 3 && !strcmp(argv[2], "256"))
+        logical_mib = 256;
+    lba_count = (uint64_t)logical_mib * 2048u;
     REQUIRE(root && statfs(root, &fs) == 0 && (unsigned long)fs.f_type == TMPFS_MAGIC);
     REQUIRE((uint64_t)fs.f_bavail * (uint64_t)fs.f_bsize >= UINT64_C(200000000));
     REQUIRE(context && media);
@@ -584,7 +591,7 @@ int main(void)
     directory_fd = open(directory, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     REQUIRE(directory_fd >= 0);
     setvbuf(stdout, NULL, _IOLBF, 0);
-    printf("NATIVE_SCALED_OFFLINE_BEGIN|media=%s/nand.bin|64MiB|max_io_bytes=%u|fake_ioctl_only|no_attach_M5_or_throughput_claim\n", directory, TEST_IO_BYTES);
+    printf("NATIVE_SCALED_OFFLINE_BEGIN|media=%s/nand.bin|logical_mib=%u|max_io_bytes=%u|fake_ioctl_only|no_attach_M5_or_throughput_claim\n", directory, logical_mib, TEST_IO_BYTES);
     context->descriptor = OFFLINE_DESCRIPTOR;
     context->function_nonce = UINT64_C(0x4d31414f46464c49);
     context->epoch = 1;
@@ -596,10 +603,11 @@ int main(void)
     REQUIRE(native_exchange(context, &unsupported) == -ENOTTY && unsupported.result == INT32_MIN);
     errno = 0;
     REQUIRE(__wrap_ioctl(OFFLINE_DESCRIPTOR, 0UL, NULL) == -1 && errno == ENOTTY);
-    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 0));
+    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 0, logical_mib));
+    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 1, 65));
     REQUIRE(fstatat(directory_fd, "nand.bin", &before, AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
     started = wall_ns();
-    REQUIRE(native_scaled_media_open(media, context, directory, uuid, 1));
+    REQUIRE(native_scaled_media_open(media, context, directory, uuid, 1, logical_mib));
     phase_end("media-format", context->epoch, started);
 #if FWLAB_NATIVE_LARGE
     REQUIRE(native_attach_profile(context, TEST_HOST_PROFILE,
@@ -614,7 +622,7 @@ int main(void)
     REQUIRE(native_runtime_create(context, &media->native, 1));
     check_runtime_profile(context);
     phase_end("runtime-format", context->epoch, started);
-    REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == NATIVE_SCALED_LBA_COUNT &&
+    REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == lba_count &&
             !context->runtime->config.file && context->runtime->storage.context &&
             context->runtime->config.media_binding == &media->binding &&
             context->runtime->config.storage_factory == &media->factory);
@@ -630,11 +638,11 @@ int main(void)
     prior_nfc = context->runtime->nfc_instance_nonce;
     script_begin(context);
     add_command(6, 0, 0);
-    add_command(1, NATIVE_SCALED_LBA_COUNT - TEST_IO_LBAS, 0x5a);
+    add_command(1, lba_count - TEST_IO_LBAS, 0x5a);
     add_command(0, 0, 0);
-    add_command(2, NATIVE_SCALED_LBA_COUNT - TEST_IO_LBAS, 0);
+    add_command(2, lba_count - TEST_IO_LBAS, 0);
     run_script(context, media);
-    check_identify(&host.row[0]);
+    check_identify(&host.row[0], lba_count);
     pattern(expected, sizeof(expected), 0x5a);
     REQUIRE(memcmp(host.row[3].bytes, expected, sizeof(expected)) == 0);
     REQUIRE(host.dma_in == 1 && host.dma_out == 2);
@@ -647,33 +655,38 @@ int main(void)
     ++context->epoch;
     REQUIRE(native_runtime_create(context, owner.media, 0));
     check_runtime_profile(context);
-    REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == NATIVE_SCALED_LBA_COUNT &&
+    REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == lba_count &&
             context->runtime->m3p_instance_nonce != prior_ftl && context->runtime->nfc_instance_nonce != prior_nfc);
     prior_ftl = context->runtime->m3p_instance_nonce;
     prior_nfc = context->runtime->nfc_instance_nonce;
     puts("NATIVE_RETAINED_MEDIA_PASS|same_holder_between_runtimes=1|not_kernel_owner_switch=1");
     close_epoch(context, media);
     REQUIRE(fstatat(directory_fd, "nand.bin", &before, AT_SYMLINK_NOFOLLOW) == 0);
-    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 1));
+    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 1, logical_mib));
+    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 0,
+                                      logical_mib == 64 ? 256 : 64));
     REQUIRE(fstatat(directory_fd, "nand.bin", &after, AT_SYMLINK_NOFOLLOW) == 0 &&
-            after.st_ino == before.st_ino && after.st_size == before.st_size);
+            after.st_ino == before.st_ino && after.st_size == before.st_size &&
+            after.st_mtim.tv_sec == before.st_mtim.tv_sec &&
+            after.st_mtim.tv_nsec == before.st_mtim.tv_nsec);
+    puts("NATIVE_CAPACITY_MISMATCH_PASS|recovery_rejected=1|image_identity_size_mtime_unchanged=1|no_resize_or_conversion=1");
     ++context->epoch;
     started = wall_ns();
-    REQUIRE(native_scaled_media_open(media, context, directory, uuid, 0));
+    REQUIRE(native_scaled_media_open(media, context, directory, uuid, 0, logical_mib));
     phase_end("media-recover", context->epoch, started);
     started = wall_ns();
     REQUIRE(native_runtime_create(context, &media->native, 0));
     check_runtime_profile(context);
     phase_end("runtime-recover", context->epoch, started);
-    REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == NATIVE_SCALED_LBA_COUNT &&
+    REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == lba_count &&
             context->runtime->m3p_instance_nonce != prior_ftl && context->runtime->nfc_instance_nonce != prior_nfc);
     script_begin(context);
     add_command(6, 0, 0);
-    add_command(2, NATIVE_SCALED_LBA_COUNT - TEST_IO_LBAS, 0);
+    add_command(2, lba_count - TEST_IO_LBAS, 0);
     add_command(1, 0, 0xa6);
     add_command(2, 0, 0);
     run_script(context, media);
-    check_identify(&host.row[0]);
+    check_identify(&host.row[0], lba_count);
     REQUIRE(memcmp(host.row[1].bytes, expected, sizeof(expected)) == 0);
     pattern(expected, sizeof(expected), 0xa6);
     REQUIRE(memcmp(host.row[3].bytes, expected, sizeof(expected)) == 0);
@@ -684,6 +697,6 @@ int main(void)
     free(media);
     REQUIRE(native_frame_storage_fini(context));
     free(context);
-    puts("NATIVE_SCALED_OFFLINE_PASS|actual_native_constructor_host_loop=1|real_FTL_PAGE2_physical_v2=1|capacity64MiB=1|SELF_Flush_Read_recovery_continue=1|new_epoch=1|runtime_media_released=1|no_kernel_format_claim=1");
+    printf("NATIVE_SCALED_OFFLINE_PASS|actual_native_constructor_host_loop=1|real_FTL_PAGE2_physical_v2=1|logical_mib=%u|SELF_Flush_Read_recovery_continue=1|new_epoch=1|runtime_media_released=1|no_kernel_format_claim=1\n", logical_mib);
     return 0;
 }

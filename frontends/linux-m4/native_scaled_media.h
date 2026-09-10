@@ -7,7 +7,7 @@
 #include "../headless-scale/scale_storage.h"
 #include "physical_nand.h"
 
-#define NATIVE_SCALED_LBA_COUNT UINT64_C(131072)
+#define NATIVE_SCALED_DEFAULT_MIB 64u
 
 /* Initialize this process-lived owner to zero before first use; do not move it
  * while open. Its context outlives it. Keep it across reset and NO_OWNER even
@@ -27,11 +27,12 @@ struct native_scaled_media {
     uint8_t opened;
 };
 
-/* Explicit new-file format or existing-file recovery, no fallback/conversion.
- * Fixed 64 MiB/8 KiB-consumer profile on the bounded mapped tmpfs backend. */
+/* Explicit new-file format or matching-capacity recovery, no resize,
+ * fallback/conversion. Select 64, 256 or 65536 MiB using the shared storage
+ * geometry presets; this does not change Host transfer or queue limits. */
 int native_scaled_media_open(struct native_scaled_media *media,
     struct native_context *owner, const char *directory,
-    const uint8_t uuid[16], int format);
+    const uint8_t uuid[16], int format, uint32_t logical_mib);
 /* Refuses while the owner's runtime is live. On an unexpected lower close
  * failure retain the owner for diagnosis; never pretend it was released. */
 int native_scaled_media_close(struct native_scaled_media *media);

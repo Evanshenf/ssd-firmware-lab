@@ -14,7 +14,8 @@ using 80 MiB and 320 MiB of physical NAND main area. They are connected through
 the headless Linux-profile path. The released native worker still uses its
 original 1-MiB profile; it has not silently gained larger capacity. A subsequent
 64-GiB ARM64 headless tmpfs campaign passed at `cec2c5d`. New native workers
-separately use 64 MiB and selected 8-KiB/1-MiB transfer profiles; see the
+default to64MiB and accept explicit64/256/65536MiB construction presets, with
+separately selected8-KiB/1-MiB transfer profiles; see the
 [current scope matrix](../../docs/current-status.md). That old large campaign
 is not current-format native or whole-SSD performance evidence.
 
@@ -262,13 +263,23 @@ limit, and this permission does not extend to a 64-GiB image.
 
 ### Explicit 64-GiB functional profile
 
-An isolated validation branch also provides `--plan-64g` and `--full-64g`.
-The first checks sizing/resources without NAND I/O; the second runs a64-GiB
+The current `--plan-64g` and `--full-64g` entries select the same PAGE2/window-v2/
+mapped-physical-v2 implementation used by scaled native workers. The first
+checks sizing/resources without NAND I/O; the second runs a64-GiB
 namespace over80GiB modeled main area on an explicitly selected large tmpfs.
 It requires separately approved memory provisioning. The small regression's
 1-GiB mount is not enlarged or reused automatically. Large preflight checks the
 actual image size, free filesystem space and MemAvailable, with a90-GiB maximum
 mount size and headroom for runtime/OS memory.
+
+Headless and native creation share `scale_storage_capacity_mib()`, including
+the same64/256/65536MiB physical geometries. Large mapped creation explicitly
+sets the90GiB admission budget; small defaults retain600MiB. The former C3/
+compact-v1 campaign is preserved as `--plan-64g-reference-v1` and
+`--full-64g-reference-v1` (matching Make targets), not the current default.
+Its archived PASS is not evidence for the new PAGE2/v2 large execution.
+`--full-window-v2-mapped` runs the existing64/256MiB full journeys serially
+through the current path before large qualification; no additional framework.
 
 The large entry preserves the production firmware, NFC, media format, locks
 and synchronization calls. It skips the tiny1100-write journal-rollover setup

@@ -69,6 +69,7 @@ CRC_PROGRAM := $(BUILD)/test_crc
 FAST_CRC_PROGRAM := $(BUILD)/test_crc_fast
 FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
 .PHONY: all check check-crc check-crc-fast check-full check-cuts check-cost check-parent check-parent-window-v2 check-parent-window-v2-operation check-parent-window-v2-mapped check-media-v2 check-media-v2-cuts check-media-v2-cost check-window-v2 check-window-v2-operation check-window-v2-mapped check-window-v2-cost plan-64g check-64g
+.PHONY: check-full-window-v2-mapped plan-64g-reference-v1 check-64g-reference-v1
 all: $(PROGRAM)
 .PHONY: FORCE_MEDIA_CONFIG
 FORCE_MEDIA_CONFIG:
@@ -108,12 +109,19 @@ check-window-v2-operation: $(PROGRAM)
 	$(PROGRAM) --window-v2-operation
 check-window-v2-mapped: $(PROGRAM)
 	$(PROGRAM) --window-v2-mapped
+check-full-window-v2-mapped: $(PROGRAM)
+	$(PROGRAM) --full-window-v2-mapped
 check-window-v2-cost: $(PROGRAM)
 	$(PROGRAM) --window-v2-cost
 plan-64g: $(PROGRAM)
 	$(PROGRAM) --plan-64g
 check-64g: $(PROGRAM)
 	$(PROGRAM) --full-64g
+# Historical C3/compact-v1 campaign; never selected by the current large entry.
+plan-64g-reference-v1: $(PROGRAM)
+	$(PROGRAM) --plan-64g-reference-v1
+check-64g-reference-v1: $(PROGRAM)
+	$(PROGRAM) --full-64g-reference-v1
 $(PROGRAM): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LDLIBS)
 $(CRC_PROGRAM): $(CRC_OBJECTS)
