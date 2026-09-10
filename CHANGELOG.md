@@ -3,6 +3,21 @@
 
 # Development history
 
+## 2026-09-10 — shared capacity and current 64-GiB qualification
+
+- Share 64/256/65536-MiB construction presets between headless and native scaled
+  workers; add explicit matching-capacity creation/recovery and native client
+  expectations without resizing existing images or changing PCI/HIF policy.
+- Retain the default 600-MiB mapped budget and permit explicit budgets up to
+  90 GiB; NAND format, checksums, synchronization and exclusive ownership remain.
+- Make the current 64-GiB entry select PAGE2/window-v2/mapped physical-v2;
+  preserve the old C3/v1 entry under an explicit reference name.
+- Complete current-path ARM64 64-GiB fill/overwrite/GC/recovery/readback and
+  native Linux 256-MiB reset/rebind/cold-recovery/ext4 checks. Native 64-GiB
+  reset timing, ARM PCI and SSD performance remain unqualified.
+- Record the construction amendment in ADR-0015 and exact capacity evidence
+  separately from the earlier performance and C3/v1 campaigns.
+
 ## 2026-09-10 — current userspace cross-architecture coverage
 
 - Extend the existing current-spine cross job to AArch64, RISC-V64 and

@@ -17,6 +17,7 @@
 - [ADR-0012: Versioned physical NAND media and explicit substrate profiles](0012-versioned-physical-nand-media.md)
 - [ADR-0013: Ready-volume scalable FTL, retained parents and PAGE2 windows](0013-scalable-ftl-and-page-windows.md)
 - [ADR-0014: Construction-selected native profiles and serial-credit MQ2](0014-native-profile-and-serial-mq2.md)
+- [ADR-0015: Shared capacity construction and explicit mapped-media budgets](0015-capacity-presets-and-mapped-budgets.md)
 
 Accepted ADRs define the design baseline, not an assertion that the component is already implemented or validated. A superseding decision must link the prior ADR and describe migration and compatibility impact.
 

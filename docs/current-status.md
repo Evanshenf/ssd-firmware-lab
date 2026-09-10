@@ -17,14 +17,20 @@ code without treating historical directory names as dependency boundaries.
 | Tagged preview / ordinary `worker` | 1 MiB / 8 KiB, one I/O pair | Reference M3-P + C3 NFC + file-NAND-v0; [frozen results](results/2026-09-05-vertical-spine-preview.md) |
 | Scalable headless FTL | 64 / 256 MiB qualification profiles; explicit retained parents up to 1 MiB | Real FTL/NFC/physical-media path; original full disk and tmpfs regressions are distinct records |
 | Historical ARM64 scale campaign at `cec2c5d` | 64 GiB namespace | Full fill, half-volume overwrite and full recovered readback on tmpfs; not current MQ2, disk persistence or native ARM PCI evidence |
+| Current ARM64 PAGE2/v2 headless at `11cb8a8` | 64 GiB namespace | Full fill, half overwrite, GC/checkpoint, close/reopen recovery and full readback passed; not native PCI or a throughput benchmark |
 | `scaled-worker` / `scaled-pump-worker` | 64 MiB / 8 KiB | Scalable FTL format 2 + PAGE2-R0 + mapped physical-v2 on bounded tmpfs |
 | `large-worker`, Host profile 2 | 64 MiB / 1 MiB, one I/O pair | Same storage stack, explicit PUMP construction, bounded PRP graph |
 | `mq2-worker`, Host profile 3 | 64 MiB / 1 MiB, two depth-32 I/O pairs, three MSI-X vectors | Same storage stack, **one global I/O frame plus one Admin reserve**; serialized FTL execution, not parallel storage throughput |
 
-Native workers intentionally select a fixed 64-MiB capacity. The headless FTL
-is not still hard-coded to 1 MiB; nor does a 64-GiB headless result automatically
-make the native namespace 64 GiB. Logical capacity, physical geometry, arena
-budget, media-format version and Host transfer profile are separate choices.
+The table's native capacities are the default 64-MiB configurations. Scaled native
+workers now accept `--namespace-mib 64|256|65536` using the same construction
+presets as headless. Native Linux 256 MiB has passed Identify, tail I/O, reset,
+rebind, cold recovery and an ext4 mount/fsync/reset/remount check. Native 64-GiB
+and ARM PCI/reset timing remain unqualified; a headless result does not prove
+them. Recovery never grows an existing image. Logical capacity, physical
+geometry, arena budget, media-format version and Host transfer profile remain
+separate choices. See [capacity results](results/2026-09-10-current-capacity.md)
+and [ADR-0015](adr/0015-capacity-presets-and-mapped-budgets.md).
 See [ADR-0013](adr/0013-scalable-ftl-and-page-windows.md) and
 [ADR-0014](adr/0014-native-profile-and-serial-mq2.md).
 

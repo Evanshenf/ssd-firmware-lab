@@ -50,6 +50,10 @@ scaled native media constructor explicitly selects 131072 512-byte LBAs
 supplies Identify/range policy. Selecting a large transfer profile does not
 resize a namespace, and a larger backend alone does not create a larger one.
 
+[ADR-0015](0015-capacity-presets-and-mapped-budgets.md) later parameterizes this
+construction with shared capacity presets, preserving the default64MiB and
+the same ready-volume authority. The transport limit table is unchanged.
+
 The unqualified default kernel build remains SMALL/BAR and the original
 `worker` target remains the historical reference. `scaled-worker`,
 `scaled-pump-worker`, `large-worker` and `mq2-worker` are separate explicit

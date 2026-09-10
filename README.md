@@ -27,9 +27,11 @@ budgets**. Large-capacity and production-readiness claims are not made. See the
 **Development source has advanced beyond that tag.** Adopted changes through
 `a6ee009` add scalable FTL, physical NAND v2/PAGE2, and an explicit 64-MiB native
 profile with up to 1-MiB I/O, two I/O queues and three MSI-X vectors. MQ2 still
-has one global I/O frame and serialized storage execution. A separate ARM64
-64-GiB headless functional campaign passed on an earlier exact revision; it is
-not 64-GiB native or whole-SSD performance evidence.
+has one global I/O frame and serialized storage execution. Capacity construction
+now shares 64/256/65536-MiB presets. The current PAGE2/v2 path passed a full
+64-GiB ARM64 headless journey, and a 256-MiB native namespace passed Linux
+reset/recovery and ext4 mount checks. See [capacity evidence](docs/results/2026-09-10-current-capacity.md).
+These are not native 64-GiB, ARM PCI or whole-SSD performance claims.
 See [current constructions and platform limits](docs/current-status.md),
 [development evidence](docs/results/2026-09-10-scaled-storage-mq2.md) and
 [performance samples](docs/results/2026-09-10-throughput.md). This is development

@@ -21,7 +21,9 @@
 **开发分支已超过上述旧标签。** 截至 `a6ee009`，已加入可扩展 FTL、物理 NAND v2／PAGE2，
 以及显式选择的 **64 MiB 原生 namespace、最大 1 MiB I/O、两个 I/O 队列和三个 MSI-X 向量**。
 两个队列仍共享一个 I/O buffer，FTL 串行执行，不是并行吞吐承诺。
-另有早期精确版本的 ARM64 **64 GiB headless 完整功能验证**，不能等同于当前原生大容量或 SSD 性能验证。
+容量构造现已共用 **64／256／65536 MiB** 配置。当前 PAGE2／v2 路径已通过 ARM64 **64 GiB 满写、覆盖、GC、恢复及全盘回读**；
+原生 **256 MiB NVMe** 已通过 Linux reset／恢复和 ext4 挂载验证。详见[容量验证记录](docs/results/2026-09-10-current-capacity.md)。
+这不等于原生 64 GiB、ARM PCI 或整盘性能已经验证；早期 C3／v1 大容量结果仍单独保留。
 见[当前能力与平台边界](docs/current-status.md)、[开发证据](docs/results/2026-09-10-scaled-storage-mq2.md)
 和[分层性能与全部成对样本](docs/results/2026-09-10-throughput.md)。本次公开开发成果，不改旧标签，也不宣称新的冻结版本。
 

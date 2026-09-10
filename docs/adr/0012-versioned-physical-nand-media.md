@@ -84,6 +84,10 @@ automatic ordinary-I/O fallback. Range checks, CRC/OOB, physical-state checks,
 the lock and synchronization are not removed. No mapped pointer escapes to NFC
 or FTL, and mapped copies are not zero-copy.
 
+Construction follow-up: [ADR-0015](0015-capacity-presets-and-mapped-budgets.md)
+retains600MiB as the default and permits an explicit bounded per-open budget.
+It does not change this baseline's on-media format or broaden its old evidence.
+
 The operation descriptor assumes exclusive backend control for the whole
 operation; it does not promise per-callback detection of an external truncate
 and regrowth. The optional exclusive build additionally requires stable
