@@ -58,34 +58,91 @@ jobs:
             rmdir -- "$FWLAB_TEST_MEDIA_DIR"
           fi
 
-  lower-arm64:
+  cross-current:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            cc: aarch64-linux-gnu-gcc
+            compiler_package: gcc-aarch64-linux-gnu
+            libc_package: libc6-dev-arm64-cross
+            runner: qemu-aarch64
+            sysroot: /usr/aarch64-linux-gnu
+            elf_machine: 183
+            elf_data: 1
+          - arch: riscv64
+            cc: riscv64-linux-gnu-gcc
+            compiler_package: gcc-riscv64-linux-gnu
+            libc_package: libc6-dev-riscv64-cross
+            runner: qemu-riscv64
+            sysroot: /usr/riscv64-linux-gnu
+            elf_machine: 243
+            elf_data: 1
+          - arch: s390x
+            cc: s390x-linux-gnu-gcc
+            compiler_package: gcc-s390x-linux-gnu
+            libc_package: libc6-dev-s390x-cross
+            runner: qemu-s390x
+            sysroot: /usr/s390x-linux-gnu
+            elf_machine: 22
+            elf_data: 2
+    env:
+      FWLAB_CROSS_CC: ${{ matrix.cc }}
+      FWLAB_CROSS_RUNNER: ${{ matrix.runner }}
+      FWLAB_CROSS_SYSROOT: ${{ matrix.sysroot }}
+      FWLAB_ELF_MACHINE: ${{ matrix.elf_machine }}
+      FWLAB_ELF_DATA: ${{ matrix.elf_data }}
     steps:
       - name: Check out the exact candidate
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Install ARM64 userspace tools
+      - name: Install the selected userspace cross tools
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends \
-            gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
-      - name: Run current PAGE2 and physical-media ARM64 userspace fixtures
+            '${{ matrix.compiler_package }}' '${{ matrix.libc_package }}' qemu-user
+      - name: Cross-compile the complete current MQ2 userspace worker
+        # Compile the actual production source inventory, not only old C4 or
+        # lower fixtures. No kernel module, device, raw media or worker startup.
+        run: |
+          test "$(id -u)" -ne 0
+          "$FWLAB_CROSS_CC" --version
+          make -j1 -C frontends/linux-m4 CC="$FWLAB_CROSS_CC" \
+            SCALED_BUILD=build/ci-cross mq2-worker
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          path = Path('frontends/linux-m4/build/ci-cross/fwlab_native_mq2_worker')
+          with path.open('rb') as stream:
+              header = stream.read(20)
+          data = int(os.environ['FWLAB_ELF_DATA'])
+          machine = int(os.environ['FWLAB_ELF_MACHINE'])
+          assert len(header) == 20 and header[:4] == b'\x7fELF'
+          assert header[4] == 2 and header[5] == data
+          assert int.from_bytes(header[18:20], 'little' if data == 1 else 'big') == machine
+          print(f'CURRENT_WORKER_ELF_PASS|class=64|data={data}|machine={machine}|compile_only=1')
+          PY
+          sha256sum frontends/linux-m4/build/ci-cross/fwlab_native_mq2_worker
+      - name: Run current PAGE2 and physical-media userspace fixtures
         # Keep the frozen c4-portable workflow unchanged. These existing small
         # in-process fixtures cover current lower-layer portability, not POSIX
         # persistence, the scaled FTL or native M4/M5. No media mount is needed.
         run: |
           test "$(id -u)" -ne 0
-          make -j1 -B -C core/nfc-page-v2 CC=aarch64-linux-gnu-gcc \
-            BUILD_DIR=build/ci-aarch64 all
-          qemu-aarch64 -L /usr/aarch64-linux-gnu \
-            core/nfc-page-v2/build/ci-aarch64/test_nfc_page_v2
-          make -j1 -B -C media/file-nand-v2 CC=aarch64-linux-gnu-gcc \
-            BUILD_DIR=build/ci-aarch64 FWLAB_MEDIA_EXCLUSIVE=0 all
-          qemu-aarch64 -L /usr/aarch64-linux-gnu \
-            media/file-nand-v2/build/ci-aarch64/physical_nand_test
+          make -j1 -B -C core/nfc-page-v2 CC="$FWLAB_CROSS_CC" \
+            BUILD_DIR=build/ci-cross all
+          "$FWLAB_CROSS_RUNNER" -L "$FWLAB_CROSS_SYSROOT" \
+            core/nfc-page-v2/build/ci-cross/test_nfc_page_v2
+          make -j1 -B -C media/file-nand-v2 CC="$FWLAB_CROSS_CC" \
+            BUILD_DIR=build/ci-cross FWLAB_MEDIA_EXCLUSIVE=0 all
+          "$FWLAB_CROSS_RUNNER" -L "$FWLAB_CROSS_SYSROOT" \
+            media/file-nand-v2/build/ci-cross/physical_nand_test
       - name: Check the explicit ARM CRC implementation under emulation
+        if: matrix.arch == 'aarch64'
         # Reuse the same oracle, not a new test framework or ARM speed claim.
         run: |
           test "$(id -u)" -ne 0
