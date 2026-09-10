@@ -11,6 +11,8 @@ out/
 *.raw
 *.qcow2
 *.wal
+nand.bin
+/native-binding.sha256
 compile_commands.json
 *.ko
 *.o
