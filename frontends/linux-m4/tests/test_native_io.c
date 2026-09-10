@@ -29,7 +29,7 @@
 #define FWLAB_NATIVE_TEST_SCALED 0
 #endif
 _Static_assert(FWLAB_NATIVE_TEST_SCALED == 0 || FWLAB_NATIVE_TEST_SCALED == 1,
-               "native test profile must be legacy or scaled64");
+               "native test profile must be legacy or scaled");
 #if FWLAB_NATIVE_TEST_SCALED
 #define NATIVE_TEST_BYTES UINT64_C(67108864)
 #else
@@ -41,7 +41,7 @@ _Static_assert(FWLAB_NATIVE_TEST_SCALED == 0 || FWLAB_NATIVE_TEST_SCALED == 1,
 #endif
 _Static_assert(FWLAB_NATIVE_TEST_LARGE == 0 ||
                (FWLAB_NATIVE_TEST_LARGE == 1 && FWLAB_NATIVE_TEST_SCALED),
-               "large client requires the explicit scaled64 profile");
+               "large client requires the explicit scaled profile");
 #if FWLAB_NATIVE_TEST_LARGE
 #define NATIVE_CLIENT_BUFFER_BYTES (1048576u + 4096u)
 #else
@@ -56,7 +56,7 @@ int native_owner_qemu_journey(const char *directory, const char *bdf,
                               const char *kernel, const char *initrd, const char *workdir, unsigned cut);
 int native_owner_postkill_journey(const char *directory, const char *bdf,
                                   const char *kernel, const char *initrd, const char *workdir);
-static const struct native_case cases[] = {
+static struct native_case cases[] = {
     { 128, 512, 0, 0x31 },
     { 129, 4096, 0, 0x52 },
     { 137, 8192, 512, 0x73 },
@@ -69,7 +69,40 @@ static const struct native_case cases[] = {
 #endif
 };
 #define NATIVE_CASE_COUNT (sizeof(cases) / sizeof(cases[0]))
+static uint64_t expected_namespace_bytes = NATIVE_TEST_BYTES;
 static uint8_t pattern_delta;
+
+static int select_namespace_capacity(int *argc, char **argv)
+{
+    if (*argc < 3 || strcmp(argv[*argc - 2], "--namespace-mib"))
+        return 1;
+#if FWLAB_NATIVE_TEST_SCALED
+    /* Only these finite standalone modes carry an explicit expectation.
+     * Owner/guest subprocesses retain the existing default 64 MiB contract. */
+    if (!((*argc == 4 && !strcmp(argv[1], "profile-plan")) ||
+          (*argc == 6 && (!strcmp(argv[1], "write") ||
+                         !strcmp(argv[1], "verify") ||
+                         !strcmp(argv[1], "verify-b")))))
+        return 0;
+    if (!strcmp(argv[*argc - 1], "64"))
+        expected_namespace_bytes = UINT64_C(64) << 20;
+    else if (!strcmp(argv[*argc - 1], "256"))
+        expected_namespace_bytes = UINT64_C(256) << 20;
+    else if (!strcmp(argv[*argc - 1], "65536"))
+        expected_namespace_bytes = UINT64_C(65536) << 20;
+    else
+        return 0;
+    /* The fourth case is the scaled 8 KiB tail witness. Selected capacities
+     * fit its existing 32-bit LBA field; no device-provided value is trusted. */
+    cases[3].lba = (uint32_t)(expected_namespace_bytes / 512u - 16u);
+    *argc -= 2;
+    return 1;
+#else
+    (void)argv;
+    return 0;
+#endif
+}
+
 #if FWLAB_NATIVE_TEST_LARGE
 /* Workload size is not the Linux queue's per-command submission ceiling.
  * Only L1 may split, selected before I/O; the L2 large witness is strict. */
@@ -143,7 +176,7 @@ static int identity_guard(int fd, const char *bdf, int guest)
         (!guest && !strstr(resolved, "/ssd_fwlab_native_pci/")) ||
         (guest && (statfs("/", &rootfs) ||
                    (rootfs.f_type != 0x858458f6 && rootfs.f_type != 0x01021994))) ||
-        ioctl(fd, BLKGETSIZE64, &bytes) || bytes != NATIVE_TEST_BYTES ||
+        ioctl(fd, BLKGETSIZE64, &bytes) || bytes != expected_namespace_bytes ||
         ioctl(fd, NVME_IOCTL_ID) != 1)
         goto done;
     memset(identify, 0, 4096);
@@ -553,16 +586,21 @@ int main(int argc, char **argv)
     uint8_t *allocation;
     int fd, write_mode, result = 1, guest = 0, guest_phase = 0, guest_hold = 0, pba = 0;
     uint32_t index, iteration, cut = 0;
-    int budget = argc == 4 && !strcmp(argv[1], "budget");
-    int aer = argc == 4 && !strcmp(argv[1], "aer");
-    int mq_pba = FWLAB_NATIVE_TEST_LARGE && argc == 6 && !strcmp(argv[1], "mq-pba-b");
+    int budget, aer, mq_pba;
     unsigned mq_cpu1 = 0, mq_cpu2 = 0;
 
     setvbuf(stdout, NULL, _IOLBF, 0);
+    if (!select_namespace_capacity(&argc, argv)) {
+        fputs("--namespace-mib requires scaled profile-plan/write/verify/verify-b and 64, 256 or 65536 MiB\n", stderr);
+        return 2;
+    }
+    budget = argc == 4 && !strcmp(argv[1], "budget");
+    aer = argc == 4 && !strcmp(argv[1], "aer");
+    mq_pba = FWLAB_NATIVE_TEST_LARGE && argc == 6 && !strcmp(argv[1], "mq-pba-b");
 
     if (argc == 2 && !strcmp(argv[1], "profile-plan")) {
         printf("NATIVE_CLIENT_PLAN expected_bytes=%" PRIu64 " shapes=%zu no_device_open=1\n",
-               NATIVE_TEST_BYTES, NATIVE_CASE_COUNT);
+               expected_namespace_bytes, NATIVE_CASE_COUNT);
         for (index = 0; index < NATIVE_CASE_COUNT; ++index)
             printf("PLAN_CASE lba=%u bytes=%u buffer_offset=%u\n",
                    cases[index].lba, cases[index].bytes, cases[index].offset);
@@ -594,7 +632,8 @@ int main(int argc, char **argv)
     if ((!mq_pba && argc != 4) || (!mq_pba && !cut && !guest && !pba && !budget && !aer && strcmp(argv[1], "write") &&
                       strcmp(argv[1], "verify") && strcmp(argv[1], "verify-b"))) {
         fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3|cut4|aer|budget /dev/nvmeXn1 BDF\n"
-                        "       %s mq-pba-b /dev/nvmeXn1 BDF Q1_CPU Q2_CPU (LARGE client only)\n", argv[0], argv[0]);
+                        "       %s mq-pba-b /dev/nvmeXn1 BDF Q1_CPU Q2_CPU (LARGE client only)\n"
+                        "       scaled profile-plan/write/verify/verify-b accept trailing --namespace-mib 64|256|65536\n", argv[0], argv[0]);
         return 2;
     }
     if (mq_pba) {

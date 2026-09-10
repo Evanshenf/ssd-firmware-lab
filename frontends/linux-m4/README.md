@@ -197,9 +197,17 @@ of every earlier BAR/scaled combination. No performance or multi-queue claim
 follows from building this target alone.
 
 The matching `native-io-scaled` / `native-io-scaled-static` clients retain exact
-device/BDF/identity and exclusive-open checks, but require exactly64MiB and add
-an8KiB case ending at the last LBA. Default clients still require1MiB. Both
-provide `profile-plan` as a no-device-open description, not a test PASS. The
+device/BDF/identity and exclusive-open checks. Standalone `profile-plan`,
+`write`, `verify` and `verify-b` accept a trailing
+`--namespace-mib 64|256|65536`, default 64 MiB. The block device must match that
+explicit expected capacity exactly; the 8 KiB tail case follows its last LBA.
+No capacity is inferred from an arbitrary device. Legacy clients still require
+1 MiB and reject this option. Owner/QEMU, guest and other modes retain 64 MiB and
+reject the option rather than silently passing a different capacity to child
+processes. Both clients provide `profile-plan` as a no-device-open description,
+not a test PASS. For example,
+`j1_native_scaled_io profile-plan --namespace-mib 256` describes a 256 MiB test
+without opening a namespace. The
 existing initramfs builder accepts the chosen static client as its second
 argument; owner subprocesses execute that same client binary.
 
@@ -273,8 +281,9 @@ and retained cancelled kernel requests are cleaned before the zero certificate.
 owner with fake adjacent inputs. `attach-check` includes exact v3 reply/retry
 and profile-pin checks. The existing offline worker journey also has a selected
 1 MiB variant; fake syscall results do not establish kernel/IOMMU execution.
-`native-io-large` / `native-io-large-static` require the same exact 64 MiB/BDF
-guard plus MDTS 8, and add aligned and offset 1 MiB cases. Their `aer` command
+`native-io-large` / `native-io-large-static` use the same explicit-capacity/BDF
+guard (default 64 MiB) plus MDTS 8, and add aligned and offset 1 MiB cases. Capacity
+selection remains limited to the standalone modes above. Their `aer` command
 checks Unsupported followed by Identify; the scoped lab runner adds reset.
 
 The LARGE client distinguishes a logical workload from a wire command. On L1
