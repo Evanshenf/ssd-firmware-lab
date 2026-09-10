@@ -76,6 +76,22 @@ checkpoints, verification, recovery and cleanup; it is not a bandwidth benchmark
 The64GiB recovery leg recreates storage/runtime objects in the same process,
 not a process-kill or host-power-loss test.
 
+### Functional-journey phase rates (not a bandwidth benchmark)
+
+Derived from the existing byte counters and whole-second monotonic phase
+timestamps, with one CPU and 8-KiB requests. MB/s is decimal; these rates include
+the command/lifecycle/FTL/NFC/media path and the functional harness's work.
+
+| Phase | Host data | Logged interval | Approximate effective rate |
+|---|---:|---:|---:|
+| Fill | 64 GiB | 47 -> 624 s (577 s) | 119 MB/s |
+| Interleaved overwrite, including GC/checkpoint | 32 GiB | 624 -> 1022 s (398 s) | 86 MB/s |
+| Recovered readback and verification | 64 GiB | 1045 -> 1198 s (153 s) | 449 MB/s |
+
+These are not standalone media/NFC rates, native NVMe throughput, a matched
+performance A/B, or evidence for the 10-GB/s target. No new native throughput
+measurement was performed by the separate 256-MiB driver/filesystem episode.
+
 Complete artifact identities:
 
 - full log:`4e293e1fb8f32dbd0c2f172da1e1d95778b7fe0f0826c94e542bcf2c689cb45a`
