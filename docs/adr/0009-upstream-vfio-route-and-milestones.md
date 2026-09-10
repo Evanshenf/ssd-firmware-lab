@@ -9,6 +9,13 @@
 - Preserves: ADR-0001 owner revocation, zero-reference, destructive-reset, quarantine and graduation requirements
 - Depends on and preserves: ADR-0003, ADR-0004 and ADR-0008
 
+Implementation refinement (2026-09-10):
+[ADR-0014](0014-native-profile-and-serial-mq2.md) records the adopted scaled/MQ2
+software construction and process-lived media ownership. Same-function identity
+preserves the PCI function, persistent medium and implementation bindings;
+drained volatile runtime objects may be reconstructed under fresh epochs. This
+does not waive the separate bare-metal graduation gates or expand old profiles.
+
 ## Context
 
 The project needs one synthetic PCI function that a Host native driver can use

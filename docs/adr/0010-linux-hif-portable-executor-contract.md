@@ -9,6 +9,14 @@
 - Supersedes only: ADR-0003 placement of usable data capabilities/ranges in the initial canonical descriptor
 - Required by: ADR-0009 M4/M5 route
 
+Implemented refinements (2026-09-10):
+[ADR-0013](0013-scalable-ftl-and-page-windows.md) records the actual aggregate
+Block/FTL/PAGE2 path; [ADR-0014](0014-native-profile-and-serial-mq2.md) records
+native profile attachment, one-producer construction and serial-credit MQ2.
+The historical pending status does not negate these implementations. The outer
+Host action program stops at aggregate Block operations; NAND/GC/metadata
+children remain private to FTL/NFC, not added to the Host command graph.
+
 ## Context
 
 A disposable Host transport fixture can combine queue walking, protocol

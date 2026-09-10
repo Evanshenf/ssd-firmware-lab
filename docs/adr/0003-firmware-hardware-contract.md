@@ -6,6 +6,13 @@
 - Status: Accepted semantic baseline; binary layouts await prototype
 - Date: 2026-08-28
 
+Implemented refinements are recorded in
+[ADR-0013](0013-scalable-ftl-and-page-windows.md) for ready-volume Block/FTL/PAGE2
+and [ADR-0014](0014-native-profile-and-serial-mq2.md) for native HIF construction.
+They preserve the authority split below and do not establish real-NAND or
+arbitrary-platform portability. The historical "await prototype" status is not
+a claim that those later software bindings remain unimplemented.
+
 ## Goal
 
 Software HIF, an ISS SoC model and future endpoint HIF logic present the same policy-facing semantics to firmware. Firmware does not absorb queue walking, Host address resolution, physical completion writing or interrupt-generation mechanics.

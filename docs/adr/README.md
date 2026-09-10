@@ -14,5 +14,14 @@
 - [ADR-0009: Upstream VFIO route and M2/M4/M5 milestones](0009-upstream-vfio-route-and-milestones.md)
 - [ADR-0010: Linux HIF to portable executor contract](0010-linux-hif-portable-executor-contract.md)
 - [ADR-0011: C4 fixed-profile policy and command graph v1](0011-c4-command-graph-v1.md)
+- [ADR-0012: Versioned physical NAND media and explicit substrate profiles](0012-versioned-physical-nand-media.md)
+- [ADR-0013: Ready-volume scalable FTL, retained parents and PAGE2 windows](0013-scalable-ftl-and-page-windows.md)
+- [ADR-0014: Construction-selected native profiles and serial-credit MQ2](0014-native-profile-and-serial-mq2.md)
 
 Accepted ADRs define the design baseline, not an assertion that the component is already implemented or validated. A superseding decision must link the prior ADR and describe migration and compatibility impact.
+
+ADR-0012--0014 record implemented decisions at source
+`a6ee009bbca5932857d51c3a5f265e0b60183a76`; they are not release approval.
+Historical status and fixed-profile limits in older records describe their
+original gates. Use the explicit refinement/supersession links for newer
+construction, without broadening old test evidence or silently converting media.

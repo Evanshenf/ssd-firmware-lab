@@ -6,6 +6,13 @@
 - Status: Accepted semantic baseline; on-media encoding awaits prototype
 - Date: 2026-08-28
 
+Implementation refinement (2026-09-10):
+[ADR-0012](0012-versioned-physical-nand-media.md) supersedes the inactive-payload
+redo layout and interrupted-operation replay prescription **for physical NAND
+v2 only** with reservation/direct homes/terminal and explicit abort recovery.
+The three truth domains, firmware durability dependency and separate failure
+events below remain authoritative; older media formats retain their own rules.
+
 ## Truth domains
 
 1. Firmware truth: logical/physical mapping, journal, trim tombstones, checkpoints and recovery policy. Persistent copies are written by firmware through NFC into reserved NAND pages/OOB.
