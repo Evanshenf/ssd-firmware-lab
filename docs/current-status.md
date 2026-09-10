@@ -58,10 +58,18 @@ drained volatile runtime objects may be rebuilt under a new epoch.
 | Linux x86-64 userspace | Current software paths with GCC/Clang; existing targeted sanitizer runs | Arbitrary operating systems or production endurance |
 | Linux ARM64 userspace | Native scalable-storage/lower-layer checks and the separately versioned 64-GiB campaign | ARM kernel M4/M5, every current profile/configuration |
 | x86-64 native test VM | Ubuntu kernel `7.0.0-30-generic` (package `7.0.0-30.30`), 4-KiB pages, reserved 16-KiB BAR; named native/reset/owner/MQ2 cases | Bare-metal requester DMA, arbitrary kernels, an ARM native endpoint |
-| Hosted cross CI | Historical C4 portable matrix; separately named current PAGE2/media and explicit ARM CRC oracle under user-mode emulation | Full current-stack portability, native ARM PCI or ARM performance from those checks |
+| Hosted cross CI | Current MQ2 userspace worker cross-compiles for AArch64, RISC-V64 and big-endian s390x, with ELF identity checks; existing PAGE2/media fixtures run under QEMU user mode, plus explicit ARM CRC | Full-stack execution on those targets, native PCI/kernel portability or hardware performance from compilation/lower fixtures |
 | Regular-file disk backend | Earlier exact-source small-volume persistence/restart cases | Physical host power loss or performance of current mapped-tmpfs workers |
 | Local tmpfs | Functional recovery after process interruption and explicitly scoped software throughput | Survival of reboot/power loss, physical NAND or SSD bandwidth |
 | NFS backed by remote tmpfs | No deployed/qualified route claimed | Treating a non-tmpfs client mount as persistent disk evidence |
+
+The tracked ISA baseline is **x86-64, AArch64, RISC-V64 and s390x**, matching
+the original portable matrix; it does not mean every CPU architecture. x86-64
+retains GCC/Clang current-spine execution. The cross-worker build includes the
+current protocol/lifecycle, native userspace binding, scalable FTL, PAGE2 and
+physical-v2 source inventory, not just historical C4 code. It does not start
+that worker or load `kernel/m4-native` on the cross targets. Existing small
+lower-layer emulator tests and the old C4 matrix keep their separate scopes.
 
 The mapped native construction requires tmpfs; its startup rejects another
 filesystem rather than falling back. All modeled CRC, ordering, synchronization

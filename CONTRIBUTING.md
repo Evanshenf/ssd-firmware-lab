@@ -42,9 +42,11 @@ elapsed time, media usage and available memory; CI also captures peak RSS with
 fixtures retain their existing temporary byte stores; the new scaled/POSIX
 entries use the explicit tmpfs mount. The selected storage
 smokes do not repeat the completed full-capacity campaigns or claim disk
-durability, host-power-loss recovery or SSD performance. The ARM64 additions
-exercise only the current PAGE2/physical-media in-process fixtures under
-QEMU user mode; they are not ARM native M4/M5 qualification.
+durability, host-power-loss recovery or SSD performance. The current cross job
+builds the full MQ2 userspace worker for AArch64, RISC-V64 and big-endian s390x,
+then checks its ELF identity. It separately executes only the existing small
+PAGE2/physical-media fixtures under QEMU user mode. These results are not full
+cross-target worker execution, native kernel M4/M5 or real-board qualification.
 
 The unfrozen PAGE2, physical-v2 and scale Makefiles record effective compiler
 and build flags, so changing those settings invalidates cached outputs. This

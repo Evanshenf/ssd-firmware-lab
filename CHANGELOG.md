@@ -3,6 +3,17 @@
 
 # Development history
 
+## 2026-09-10 — current userspace cross-architecture coverage
+
+- Extend the existing current-spine cross job to AArch64, RISC-V64 and
+  big-endian s390x, retaining x86-64 GCC/Clang execution and the frozen C4 lane.
+- Compile the actual current MQ2 userspace worker and check ELF class,
+  endianness and machine. Reuse existing small PAGE2/physical-media emulator
+  tests and retain the ARM-only explicit CRC check.
+- Distinguish compile coverage from whole-worker execution and native kernel
+  support; label the current 64-GiB entry as the C3/compact-v1 reference route.
+  No firmware algorithm, media-format or large-capacity qualification change.
+
 ## 2026-09-10 — bounded maintenance after publication
 
 - Track compiler/build flags in the three unfrozen current-layer Makefiles;
