@@ -4,7 +4,7 @@
 # Native Linux firmware binding
 
 This work area connects the synthetic PCI/HIF to the portable firmware,
-M3-P, NFC and physical file-NAND path. The native worker and owner-control
+selected FTL/NFC and physical file-NAND path. The native worker and owner-control
 binding are implemented. The integration is experimental; implementation and
 lab execution do not themselves establish reviewed architecture graduation.
 
@@ -25,7 +25,7 @@ origin and exact shape with no input array; the later DMA action reads the
 Host bytes through that binding. Firmware, FTL and NFC retain their existing
 address-free interfaces.
 
-Run the current prerequisite matrix with:
+Run the retained tiny-reference runtime matrix with:
 
 ```sh
 make -C frontends/linux-m4 check-runtime
@@ -54,13 +54,15 @@ ordinary user. Hosted `current-spine` runs those same semantics.
 Historical frozen leaf/changed-path checks retain their old scope and are not
 silently relaxed to approve the evolved integration.
 
-The native binding selects one finite lab budget: 65536 NFC identifiers and
+The tiny-reference native binding selects one finite lab budget: 65536 NFC identifiers and
 record sequences, 4096 Host mutation sequences, compatible lifecycle ranges,
 and 65536 file-media transactions. These are ceilings, not capacity or endurance
 claims. NFC diagnostic trace windows are retired only when no operation/event
 is live; sequence numbers, cache, epochs and media are not reset. The small
 reference binding retains full traces. Exhausted admission returns a terminal
-resource error; recovery does not erase persistent record history.
+resource error; recovery does not erase persistent record history. These limits
+describe the retained M3P/C3 binding, not the scalable FTL/PAGE2 constructor's
+capacity or resource configuration.
 
 The native binding provides the referenced Host transfer, queue effects and
 CQE publication through the private kernel interface. The kernel owns PCI/BAR,
@@ -135,7 +137,7 @@ power-loss durability or throughput evidence. No WRITE-loan or READ-copy change
 is included. Existing snapshot, CRC/OOB and actual synchronization semantics
 remain in the storage engines.
 
-## Selected scaled worker candidate
+## Selected scaled worker
 
 `make -C frontends/linux-m4 scaled-worker` builds
 `build/scaled-offline/fwlab_native_scaled_worker`. It selects the same fixed
@@ -144,7 +146,7 @@ worker's execution loop, host mover and owner-control code. No per-I/O storage
 fallback or second executor is added. The default `worker` remains legacy.
 
 The scaled entry requires the explicit `FWLAB_M4_ATTACH_IDENTITY` ioctl from
-the matching candidate kernel. It records UUID, media format and the supplied
+the matching kernel. It records UUID, media format and the supplied
 binding digest once. The attachment schema version, ordinary I/O wire version
 and media-format identity are distinct. Unsupported kernels fail startup;
 there is no fallback to legacy ATTACH or automatic image conversion. Exact
@@ -154,8 +156,12 @@ is supplied build provenance, not cryptographic attestation of a running image.
 The CLI retains explicit new-only `--format` versus recovery without that flag.
 Use fresh disposable media for a separately scoped online qualification; this
 build is not authorization to replace a running worker or existing NAND file.
-Actual Linux probe/reset timing, native I/O and M5 remain to be qualified for
-this candidate. No performance or multi-queue claim follows from its build.
+Native qualification was still pending when this entry was introduced.
+Subsequent selected-profile native/reset/owner evidence is indexed in the
+[development results](../../docs/results/2026-09-10-scaled-storage-mq2.md),
+under its actual source and profile identities. That is not a rerun or approval
+of every earlier BAR/scaled combination. No performance or multi-queue claim
+follows from building this target alone.
 
 The matching `native-io-scaled` / `native-io-scaled-static` clients retain exact
 device/BDF/identity and exclusive-open checks, but require exactly64MiB and add
@@ -164,7 +170,7 @@ provide `profile-plan` as a no-device-open description, not a test PASS. The
 existing initramfs builder accepts the chosen static client as its second
 argument; owner subprocesses execute that same client binary.
 
-## Selected singleton-pump candidate
+## Selected singleton-pump worker
 
 `scaled-pump-worker` builds the separate `fwlab_native_scaled_pump_worker` in
 the same build directory. Match it with kernel `FWLAB_M4_PRODUCER=2`; existing
@@ -193,10 +199,14 @@ kernel fault/locking claim is created by these offline checks.
 The native client adds `cut4` to the existing one-shot cut/reset/readback
 journey, matching the kernel's single service-capture fault point. Actual kernel
 mode compatibility, native I/O/reset, pending-mask/unmask and owner switching
-remain required before candidate qualification. Removing the BAR producer does
-not remove deferred IRQ work or establish whole-system single-thread bandwidth.
+were separate qualification requirements, not consequences of the offline
+check. The later selected Large/MQ2 episodes have their own
+[recorded evidence](../../docs/results/2026-09-10-scaled-storage-mq2.md);
+those results do not cover arbitrary producer/profile combinations. Removing
+the BAR producer does not remove deferred IRQ work or establish whole-system
+single-thread bandwidth.
 
-## Large serialized Host profile (development candidate)
+## Large serialized Host profile (adopted development)
 
 `large-worker` / `check-large-runtime` select 1 MiB maximum I/O on the existing
 64 MiB namespace and unchanged scaled FTL/PAGE2/physical-v2 path. Namespace
@@ -252,7 +262,7 @@ Subsequent native and performance evidence is now indexed in the
 It is separate from these offline checks; no 1-MiB atomicity, new NAND algorithm
 or 10-GB/s claim follows from a successful build.
 
-### MQ2 serialized candidate
+### MQ2 serialized profile (adopted development)
 
 `mq2-worker` selects private Host profile 3: two paired I/O queues, depth 32,
 Admin vector 0 and I/O vectors 1/2. It retains one **global** I/O credit/frame
@@ -261,15 +271,17 @@ of requested SQ count, requested CQ count and two. Its captured result remains
 stable on retry. Queue deletion drains captured holders before reuse; CQE
 publication uses the captured SQ/CQ incarnations and association.
 
-The candidate loop uses private per-call `advanced` / `runnable` facts from the
+The selected loop uses private per-call `advanced` / `runnable` facts from the
 native, J0 and PAGE2 storage owners. Polling budget and occupied slots are not
 progress. The old loop entry remains unchanged for reference builds. Neither
 these facts nor a buffer lease grants Host DMA or durability authority.
 
 `profile-check` includes the MQ2 policy's NoQ/paired-queue/retry cases with fake
-queue effects. `check-progress-runtime` reuses the real LARGE storage journey
-with a controlled waiting executor and observed, still-executed `nanosleep`.
-It tests progress versus idle, not a two-queue kernel. Actual Linux two-queue,
+queue effects. `check-progress-runtime` selects actual MQ2 profile 3, checks its
+constructed limits and reuses the real 1-MiB storage journey with a controlled
+waiting executor and observed, still-executed `nanosleep`. Its fake Host drives
+Q1 only: it tests profile binding and progress versus idle, not a two-queue
+kernel or IRQ delivery. Actual Linux two-queue,
 three-vector, deletion/reset/owner and cost episodes subsequently passed in
 their [recorded scope](../../docs/results/2026-09-10-scaled-storage-mq2.md).
 This offline entry alone is not that native evidence or a release approval.

@@ -3,6 +3,24 @@
 
 # Development history
 
+## 2026-09-10 — bounded maintenance after publication
+
+- Track compiler/build flags in the three unfrozen current-layer Makefiles;
+  unchanged configuration keeps cached outputs, changed configuration rebuilds.
+- Select and assert actual MQ2 profile 3 in the existing progress fixture,
+  including reset/recovery; retain its fake-Q1/real-storage evidence boundary.
+- Reuse the existing CRC oracle with required x86 SSE4.2 and ARM CRC backends
+  in hosted CI; do not infer ISA coverage from a generic fast-named target.
+- Align live architecture/requirements and directory/result navigation with
+  current production/reference/test roles, without moving or rewriting frozen
+  files. Correct the FTL cuts command's missing environment inheritance.
+- Publish the existing ARM sample/timing records and complete the rejected
+  experiment's executable identities; no performance campaign rerun and no
+  independent benchmark-harness portability claim.
+
+This maintenance changes build/test/documentation, not firmware algorithms,
+on-media formats or the existing preview tag.
+
 ## 2026-09-10 — adopted scalable storage and serial-credit MQ2
 
 Development publication, not a new frozen release. The 29 source commits from

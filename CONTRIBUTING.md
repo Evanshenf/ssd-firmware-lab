@@ -46,4 +46,12 @@ durability, host-power-loss recovery or SSD performance. The ARM64 additions
 exercise only the current PAGE2/physical-media in-process fixtures under
 QEMU user mode; they are not ARM native M4/M5 qualification.
 
+The unfrozen PAGE2, physical-v2 and scale Makefiles record effective compiler
+and build flags, so changing those settings invalidates cached outputs. This
+does not fingerprint replacement compiler binaries at the same path; use a
+fresh build directory or `-B` after toolchain installation changes. The hosted
+workflow also runs the existing CRC oracle with explicit x86/ARM ISA flags and
+a required-backend guard; the generic `check-crc-fast` name alone is not ISA
+coverage. ARM ISA execution is under emulation, not native performance evidence.
+
 Behavior observed from a third-party implementation may inform a test oracle. It must not be used to disguise copied code, translated code or a line-by-line AI rewrite as original BSD source.

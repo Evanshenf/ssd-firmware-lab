@@ -5,6 +5,22 @@
 
 Results record the exact evidence profile and stop boundary. A passing sub-gate does not imply that a later BAR, DMA, IRQ, protocol or bare-metal gate passed.
 
+## Current entry points
+
+- [2026-09-10: adopted scalable storage and serial-credit MQ2](2026-09-10-scaled-storage-mq2.md): source checkpoints, separate disk/tmpfs/ARM/native scopes and retained evidence identities; not a new frozen release.
+- [2026-09-10: separated throughput results and samples](2026-09-10-throughput.md): isolated ARM layers, paired native comparisons and the rejected experiment; no end-to-end 10-GB/s claim.
+- [2026-09-05: frozen vertical-spine preview](2026-09-05-vertical-spine-preview.md): the tagged 1-MiB/8-KiB reference, including its disclosed limits; not enlarged by later development.
+
+The [current status matrix](../current-status.md) owns current support wording.
+The [source map](../source-map.md) separates live implementations, historical
+oracles and test entries. A published workflow or test target is not proof of
+an execution; a historical result retains its recorded source/profile scope.
+
+## Historical gate records
+
+Opening, hold and closure records below are retained together. Read the later
+scoped closure before treating an old opening/hold as the live project state.
+
 - [2026-08-28: M0 H0 synthetic PCI enumeration on Profile-Nested](2026-08-28-m0-h0-nested.md)
 - [2026-08-28: M0 V0 emulated VFIO cdev contract on Profile-Nested](2026-08-28-m0-vfio-cdev-v0-nested.md)
 - [2026-08-28: Cycle 01 evidence manifest and review disposition](2026-08-28-cycle-01-evidence-manifest.md)

@@ -6,7 +6,9 @@
 This page describes the adopted development source through `a6ee009`, not an
 expansion of the immutable `v0.1.0-spine-preview.1` tag. The project remains
 **pre-alpha research software**. Publishing source is not a production release
-or a claim that every historical test was rerun on the newest revision.
+or a claim that every historical test was rerun on the newest revision. The
+[source map](source-map.md) identifies current production, reference and test
+code without treating historical directory names as dependency boundaries.
 
 ## Capacity is not one global constant
 
@@ -41,7 +43,7 @@ BAR and controller state use volatile memory. The storage file contains
 physical NAND state, not executable firmware or a logical LBA shortcut.
 Physical-v2 uses reservation records and direct physical homes with ordered
 barriers; it is not the old payload-redo format. NFC PAGE2-R0 is a functional
-one-slot batch executor. It **does not inherit C3's calibrated timing, ECC/retry
+one-slot batch executor. It **does not inherit C3's timing model, ECC/retry
 or injected-fault coverage** merely because both are called NFC.
 
 One kernel SQ consumer and CQE publisher remain authoritative. The old PoC's
@@ -56,7 +58,7 @@ drained volatile runtime objects may be rebuilt under a new epoch.
 | Linux x86-64 userspace | Current software paths with GCC/Clang; existing targeted sanitizer runs | Arbitrary operating systems or production endurance |
 | Linux ARM64 userspace | Native scalable-storage/lower-layer checks and the separately versioned 64-GiB campaign | ARM kernel M4/M5, every current profile/configuration |
 | x86-64 native test VM | Ubuntu kernel `7.0.0-30-generic` (package `7.0.0-30.30`), 4-KiB pages, reserved 16-KiB BAR; named native/reset/owner/MQ2 cases | Bare-metal requester DMA, arbitrary kernels, an ARM native endpoint |
-| Hosted cross CI | Historical C4 portable matrix; current lower PAGE2/media fixture entries are separately named | Full current-stack portability from the old C4 matrix alone |
+| Hosted cross CI | Historical C4 portable matrix; separately named current PAGE2/media and explicit ARM CRC oracle under user-mode emulation | Full current-stack portability, native ARM PCI or ARM performance from those checks |
 | Regular-file disk backend | Earlier exact-source small-volume persistence/restart cases | Physical host power loss or performance of current mapped-tmpfs workers |
 | Local tmpfs | Functional recovery after process interruption and explicitly scoped software throughput | Survival of reboot/power loss, physical NAND or SSD bandwidth |
 | NFS backed by remote tmpfs | No deployed/qualified route claimed | Treating a non-tmpfs client mount as persistent disk evidence |

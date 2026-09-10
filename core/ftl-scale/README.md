@@ -174,9 +174,11 @@ Host transport, multi-queue, physical power-loss or 10-GB/s qualification.
 ### Root/checkpoint/journal persistence
 
 The FTL uses its own magic and format version, separate from both M3P's formats
-and [compact physical file-NAND](../../media/file-nand-v1/README.md). The latter
-persists physical pages/OOB/erase state and physical redo; it does not interpret
-or logically commit mappings. The file nevertheless contains FTL roots,
+and the physical NAND format. The original
+[compact v1](../../media/file-nand-v1/README.md) persists physical redo;
+current [physical v2](../../media/file-nand-v2/README.md) persists reservations,
+direct physical homes and terminal records instead. Neither interprets or
+logically commits mappings. The file nevertheless contains FTL roots,
 checkpoints and mapping journals, encoded by FTL into ordinary NAND pages.
 
 Two fixed root blocks select two streamed checkpoint banks and two journal
@@ -220,13 +222,14 @@ From the repository root, as an ordinary user:
 
 ```sh
 make -C frontends/headless-scale -f ftl.mk check
-frontends/headless-scale/build/scale-ftl/test_scale_ftl --cuts
+make -C frontends/headless-scale -f ftl.mk check-cuts
 make -C frontends/headless-scale -f ftl.mk check-full
 ```
 
 The default journey covers both capacities, real page/OOB I/O, edge/range/RMW,
 caller-specific witnesses, live GC, journal reuse, recovery and early close.
-`--cuts` adds the ten fixed process-cut/active-close/expectation cases.
+`check-cuts` adds the ten fixed process-cut/active-close/expectation cases and
+passes the configured media directory through the existing Make entry.
 `check-full` writes every logical block, overwrites half the namespace to force
 reclamation, reopens and verifies the whole volume using deterministic data.
 It is deliberately separate from the quick iteration target and may take a

@@ -1,7 +1,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Evanshenf -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
-# Architecture baseline
+# Architecture and implemented bindings
+
+This page maps the current source onto the existing architecture; it does not
+expand the frozen preview or historical C3/C4 evidence. Use the
+[construction/status matrix](current-status.md) for selected capacities,
+profiles and evidence, and the [source map](source-map.md) for code ownership.
 
 ## Layering
 
@@ -13,22 +18,54 @@
                            │ versioned async ABI
 ┌──────────────────────────▼───────────────────────────────┐
 │ portable controller firmware                            │
-│ protocol policy · lifecycle/dependencies · FTL/GC/WL    │
+│ protocol policy · lifecycle/dependencies · FTL/GC      │
 │ metadata · checkpoint · recovery                        │
 └──────────────────────────┬───────────────────────────────┘
                            │ NFC descriptor ABI
 ┌──────────────────────────▼───────────────────────────────┐
-│ NFC model / future RTL                                  │
-│ resources · timing · ECC · retry · fault outcome        │
+│ selected NFC model / future hardware adapter            │
+│ physical operation · payload/result ownership           │
 └──────────────────────────┬───────────────────────────────┘
                            │ physical PPA operations
 ┌──────────────────────────▼───────────────────────────────┐
 │ persistent media                                        │
-│ pages/OOB · erase generations · wear/bad blocks · WAL   │
+│ pages/OOB · erase generations · health · transactions  │
 └──────────────────────────────────────────────────────────┘
 ```
 
 The firmware source is portable C with explicit platform/HIF/NFC contracts. Native and ISA-target builds share source, not necessarily a binary. Only an ISS and endpoint implementing the same SoC profile can be expected to run the same ELF.
+
+### Actual storage bindings
+
+These are constructor selections, not automatic fallback chains:
+
+| Binding | Protocol/lifecycle and Block consumer | NFC and physical medium |
+|---|---|---|
+| Tagged preview / ordinary native `worker` | Shared `command-spine` and reference `core/m3p` | C3 model in `nfc/`, file-NAND-v0 |
+| Original scalable headless format 1 | Same profile/lifecycle seam, `core/ftl-scale` | Scaled C3 construction in `core/nfc-runtime`, original compact file-NAND-v1 qualification |
+| Current scaled/large/MQ2 native workers | Same profile/lifecycle seam, retained scalable FTL parents and format-2 windows | `core/nfc-page-v2` PAGE2-R0, physical NAND v2, explicitly selected mapped-tmpfs byte adapter |
+
+`j0_construction.c` binds a ready volume and its actual Block service;
+`scale_storage.c` constructs the selected FTL/NFC pair. Both reside below
+historically named `frontends/headless-*` directories, but they are also linked
+into the native worker and are **production composition code**, not fake
+storage. See the [source map](source-map.md) and
+[ADR-0013](adr/0013-scalable-ftl-and-page-windows.md).
+
+The original C3 model implements functional resource/timing, ECC/retry and
+seeded-fault behavior. Its ticks are not calibrated physical NAND timing.
+PAGE2-R0 is instead a one-slot functional batch executor: page/OOB, health,
+generation and failure facts participate, but unsupported nonzero timing,
+retry and injected-fault settings are rejected. A 64-page group is not 64-way
+NAND parallelism. Neither the current path nor this diagram implies advanced
+wear leveling or a real NAND/RTOS implementation.
+
+Physical versions v0/v1 retain their own redo-based engines. Physical v2 orders
+INTENT, physical homes and terminal COMMIT; interrupted reservations recover
+to an explicit abort outcome instead of reconstructing payload redo. The byte
+adapter still sits below PPA/main/OOB operations, never below a direct-LBA
+shortcut. [ADR-0012](adr/0012-versioned-physical-nand-media.md) fixes this
+version-specific persistence distinction.
 
 ## Safety and protocol truth
 
@@ -40,17 +77,18 @@ The expanded owner/queue identity is HIF-private. Per ADR-0006, HIF binds it
 into an opaque origin token; portable firmware interprets only its own instance,
 controller epoch and command UID and never parses QID, CID or ring layout.
 
-Cycle 04 further distinguishes the address-free policy from its headless
-memory-transport reference. Doorbells, memory queues, data-pointer graphs and
-physical completion placement are not transport-neutral. The generalized
-`c4_command_graph_v1` will own multi-action protocol commands; frozen C31/C35
-remain unchanged regression references and are not a Cycle 04 runtime
-dependency. See [ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md).
+The historical Cycle 04 design distinguishes address-free policy from its
+headless memory-transport reference. Doorbells, memory queues, data-pointer
+graphs and physical completion placement are not transport-neutral. Its
+`c4_command_graph_v1` and frozen C31/C35 implementations remain regression
+references, not the current native executor. See
+[ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md).
 
 The earlier C4.3 `c4_command_graph_v1` implementation and ADR-0011 remain bounded
 references, not the native executor. The current vertical path uses
 `core/command-spine/spine_lifecycle.c`, two real profile adapters and aggregate
-Block operations. GC, RMW, metadata and NAND child work stay inside M3-P/NFC.
+Block operations. GC, RMW, metadata and NAND child work stay inside the selected
+FTL/NFC, not in the shared command graph.
 The native PCI/HIF performs queue capture and completion publication through
 `frontends/linux-m4`; no old whole NVMe/media fixture is linked into that path.
 
@@ -116,14 +154,24 @@ Replaced by hardware: PCIe link/config/BAR, requester DMA, queue walkers, comple
 
 Platform-specific: boot, RTOS/runtime, linker map, interrupt controller, timers, cache/coherency and atomics.
 
-Physical NAND is not yet a drop-in backend. Current recovery consumes NFC
-`final_erase_generation` in `core/m3p/m3p_recovery.c`; `nfc/nfc_media.c` obtains it
-from file-NAND block-health slots restored by the physical-media WAL/checkpoint
-engine. The generation also validates page/OOB identity. A raw-block substrate
-can preserve this same simulated format and health metadata. Real NAND needs a
+Physical NAND is not yet a drop-in backend. The reference M3P recovery consumes
+NFC `final_erase_generation` in `core/m3p/m3p_recovery.c`; `nfc/nfc_media.c`
+obtains it from file-NAND block-health state. The current scaled path consumes
+the same fact through `core/ftl-scale/ftl_scale_nfc_v2.c` and
+`ftl_scale_recovery.c`; PAGE2 obtains it from physical-v2's independent
+persistent block records. It also participates in DATA/OOB identity checks.
+A future raw-block byte adapter can preserve the simulated format and health
+metadata, but that adapter is not implemented. Real NAND needs a
 separate, still-open contract specifying who durably owns erase/wear generations,
 how blank blocks recover them and how interrupted erases are reconciled. The
 current simulator's explicit health metadata is not itself evidence of data
 corruption, nor evidence of lossless physical migration by replacing one backend.
 
-Detailed decisions are frozen in [ADR-0001](adr/0001-system-architecture.md), [ADR-0002](adr/0002-power-domains-and-persistence.md), [ADR-0003](adr/0003-firmware-hardware-contract.md), [ADR-0004](adr/0004-kernel-baseline.md), [ADR-0005](adr/0005-synchronous-ioas-copy-gate.md), [ADR-0006](adr/0006-portable-command-lifecycle-contract.md), [ADR-0007](adr/0007-command-durability-and-persistence-policy.md), [ADR-0008](adr/0008-generalized-nvme-command-graph-boundary.md), [ADR-0009](adr/0009-upstream-vfio-route-and-milestones.md), [ADR-0010](adr/0010-linux-hif-portable-executor-contract.md) and [ADR-0011](adr/0011-c4-command-graph-v1.md).
+Historical decisions and frozen scopes are indexed in the [ADR index](adr/README.md).
+The adopted development decisions are
+[ADR-0012: physical NAND versions](adr/0012-versioned-physical-nand-media.md),
+[ADR-0013: scalable FTL and PAGE2](adr/0013-scalable-ftl-and-page-windows.md) and
+[ADR-0014: native profiles and serial-credit MQ2](adr/0014-native-profile-and-serial-mq2.md).
+Their explicit refinements/partial supersessions do not rewrite old images,
+source hashes or test results. Recording an implemented decision is separate
+from freezing a new release.
