@@ -1,0 +1,523 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+schema_version = 1
+adopted_source_commit = "a6ee009bbca5932857d51c3a5f265e0b60183a76"
+
+[units]
+throughput = "decimal MB/s"
+latency = "ns"
+
+[shared_native_scope]
+os = "Ubuntu 26.04"
+kernel = "7.0.0-30-generic (7.0.0-30.30)"
+architecture = "x86_64"
+compiler = "GCC 15.2 O2"
+fio = "3.41"
+medium = "local tmpfs"
+io_engine = "psync"
+block_bytes = 131072
+queue_depth = 1
+jobs = 1
+warm_extent_bytes = 1048576
+offset_bytes = 4194304
+read_bytes_per_sample = 67108864
+firmware_cpu = 7
+host_producer_cpu = 6
+media_exclusive_build = 0
+logs = "normal"
+sync_and_crc = "retained"
+not_proven = ["whole-system single CPU","sustained whole-device throughput","parallel FTL","disk persistence","10 GB/s end-to-end"]
+
+[[campaigns]]
+id = "crc-isa"
+private_archive_sha256 = "228017e577e4b4bf5bcce6abae43ad68c0345eaa10e5841ba342d63bbab862d3"
+archive_publicly_available = false
+source_commit = "ab81faa8993ca7f6641f41e230fbf3eb71d7ac42"
+A = "generic Large profile2"
+B = "same source, explicit -msse4.2, Large profile2"
+A_worker_sha256 = "72783c4b7800bc349aa19b29317467347f633c4f6ed8b5f0d300bbe7f58b3f10"
+B_worker_sha256 = "7e41786875aa44ea03b2cf13c0b9c2f58c20093bbf694c810c0fe937dc33f037"
+disposition = "explicit ISA build adopted; portable default unchanged"
+
+[campaigns.summary]
+median_A_MB_s = 167.353775
+median_B_MB_s = 441.505684
+paired_median_ratio = 2.642384110015848
+wins = 5
+ties = 0
+losses = 0
+
+[[campaigns.samples]]
+label = "p1-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 168192641
+runtime_ms = 399
+clat_mean_ns = 775489.794922
+p99_clat_ns = 905216
+
+[[campaigns.samples]]
+label = "p1-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 444429562
+runtime_ms = 151
+clat_mean_ns = 293304.40625
+p99_clat_ns = 415744
+
+[[campaigns.samples]]
+label = "p2-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 169466828
+runtime_ms = 396
+clat_mean_ns = 771034.113281
+p99_clat_ns = 905216
+
+[[campaigns.samples]]
+label = "p2-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 435771844
+runtime_ms = 154
+clat_mean_ns = 298510.207031
+p99_clat_ns = 407552
+
+[[campaigns.samples]]
+label = "p3-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 165292768
+runtime_ms = 406
+clat_mean_ns = 790362.347656
+p99_clat_ns = 970752
+
+[[campaigns.samples]]
+label = "p3-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 441505684
+runtime_ms = 152
+clat_mean_ns = 295183.292969
+p99_clat_ns = 411648
+
+[[campaigns.samples]]
+label = "p4-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 165700898
+runtime_ms = 405
+clat_mean_ns = 788786.642578
+p99_clat_ns = 1056768
+
+[[campaigns.samples]]
+label = "p4-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 444429562
+runtime_ms = 151
+clat_mean_ns = 293055.882813
+p99_clat_ns = 411648
+
+[[campaigns.samples]]
+label = "p5-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 167353775
+runtime_ms = 401
+clat_mean_ns = 780614.847656
+p99_clat_ns = 929792
+
+[[campaigns.samples]]
+label = "p5-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 419430400
+runtime_ms = 160
+clat_mean_ns = 309657.890625
+p99_clat_ns = 448512
+
+[[campaigns.pairs]]
+pair = 1
+order = "AB"
+A_MB_s = 168.192641
+B_MB_s = 444.429562
+ratio = 2.642384110015848
+
+[[campaigns.pairs]]
+pair = 2
+order = "BA"
+A_MB_s = 169.466828
+B_MB_s = 435.771844
+ratio = 2.5714285748004913
+
+[[campaigns.pairs]]
+pair = 3
+order = "AB"
+A_MB_s = 165.292768
+B_MB_s = 441.505684
+ratio = 2.6710526379472332
+
+[[campaigns.pairs]]
+pair = 4
+order = "BA"
+A_MB_s = 165.700898
+B_MB_s = 444.429562
+ratio = 2.682119212172284
+
+[[campaigns.pairs]]
+pair = 5
+order = "AB"
+A_MB_s = 167.353775
+B_MB_s = 419.4304
+ratio = 2.506250008402858
+
+[[campaigns]]
+id = "serial-mq2"
+private_archive_sha256 = "faf393136fd719fef2b092ae24c453b250d5f8613bda890e67f287621e8d4658"
+archive_publicly_available = false
+A = "ab81faa, explicit SSE4.2 Large profile2"
+B = "a6ee009 production intake, explicit SSE4.2 MQ2 profile3"
+A_worker_sha256 = "7e41786875aa44ea03b2cf13c0b9c2f58c20093bbf694c810c0fe937dc33f037"
+B_worker_sha256 = "23b584c56c2b960e44d9af42c15981276a721eadb35b327ed504e5450d213014"
+disposition = "measured gain; not isolation of one change or parallel-storage gain"
+
+[campaigns.summary]
+median_A_MB_s = 438.620026
+median_B_MB_s = 588.674245
+paired_median_ratio = 1.3421052621979463
+wins = 5
+ties = 0
+losses = 0
+
+[campaigns.host_cpu6_queue]
+A = "Q1"
+B = "Q2"
+
+[[campaigns.samples]]
+label = "p1-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 438620026
+runtime_ms = 153
+clat_mean_ns = 295465.914062
+p99_clat_ns = 415744
+
+[[campaigns.samples]]
+label = "p1-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 588674245
+runtime_ms = 114
+clat_mean_ns = 221705.027344
+p99_clat_ns = 248832
+
+[[campaigns.samples]]
+label = "p2-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 435771844
+runtime_ms = 154
+clat_mean_ns = 297628.083984
+p99_clat_ns = 411648
+
+[[campaigns.samples]]
+label = "p2-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 559240533
+runtime_ms = 120
+clat_mean_ns = 232463.138672
+p99_clat_ns = 268288
+
+[[campaigns.samples]]
+label = "p3-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 438620026
+runtime_ms = 153
+clat_mean_ns = 296629.402344
+p99_clat_ns = 411648
+
+[[campaigns.samples]]
+label = "p3-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 588674245
+runtime_ms = 114
+clat_mean_ns = 220865.392578
+p99_clat_ns = 248832
+
+[[campaigns.samples]]
+label = "p4-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 441505684
+runtime_ms = 152
+clat_mean_ns = 295109.921875
+p99_clat_ns = 419840
+
+[[campaigns.samples]]
+label = "p4-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 563940033
+runtime_ms = 119
+clat_mean_ns = 231448.748047
+p99_clat_ns = 254976
+
+[[campaigns.samples]]
+label = "p5-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 435771844
+runtime_ms = 154
+clat_mean_ns = 297104.746094
+p99_clat_ns = 419840
+
+[[campaigns.samples]]
+label = "p5-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 593883752
+runtime_ms = 113
+clat_mean_ns = 220147.916016
+p99_clat_ns = 250880
+
+[[campaigns.pairs]]
+pair = 1
+order = "AB"
+A_MB_s = 438.620026
+B_MB_s = 588.674245
+ratio = 1.3421052621979463
+
+[[campaigns.pairs]]
+pair = 2
+order = "BA"
+A_MB_s = 435.771844
+B_MB_s = 559.240533
+ratio = 1.2833333330273629
+
+[[campaigns.pairs]]
+pair = 3
+order = "AB"
+A_MB_s = 438.620026
+B_MB_s = 588.674245
+ratio = 1.3421052621979463
+
+[[campaigns.pairs]]
+pair = 4
+order = "BA"
+A_MB_s = 441.505684
+B_MB_s = 563.940033
+ratio = 1.2773109235893778
+
+[[campaigns.pairs]]
+pair = 5
+order = "AB"
+A_MB_s = 435.771844
+B_MB_s = 593.883752
+ratio = 1.3628318584070795
+
+[[campaigns]]
+id = "combined-control-not-adopted"
+private_archive_sha256 = "974411d38ccf3dad4f5fe75e3bbac4eb6f8fc84e3125c5e51986eba60beb7322"
+archive_publicly_available = false
+A = "a6ee009 selected MQ2"
+B = "7a2e258 separate combined-PUMP/STATUS experiment"
+criterion = "all correct, at least 4 wins and paired median >= 1.05"
+disposition = "NOT_ADOPTED; criterion not met; code excluded"
+
+[campaigns.summary]
+median_A_MB_s = 588.674245
+median_B_MB_s = 588.674245
+paired_median_ratio = 1
+wins = 2
+ties = 1
+losses = 2
+
+[[campaigns.samples]]
+label = "p1-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 588674245
+runtime_ms = 114
+clat_mean_ns = 221033.322266
+p99_clat_ns = 264192
+
+[[campaigns.samples]]
+label = "p1-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 588674245
+runtime_ms = 114
+clat_mean_ns = 221560.398437
+p99_clat_ns = 242688
+
+[[campaigns.samples]]
+label = "p2-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 588674245
+runtime_ms = 114
+clat_mean_ns = 221246.451172
+p99_clat_ns = 246784
+
+[[campaigns.samples]]
+label = "p2-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 593883752
+runtime_ms = 113
+clat_mean_ns = 219722.892578
+p99_clat_ns = 246784
+
+[[campaigns.samples]]
+label = "p3-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 563940033
+runtime_ms = 119
+clat_mean_ns = 230585.326172
+p99_clat_ns = 268288
+
+[[campaigns.samples]]
+label = "p3-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 593883752
+runtime_ms = 113
+clat_mean_ns = 218997.880859
+p99_clat_ns = 242688
+
+[[campaigns.samples]]
+label = "p4-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 593883752
+runtime_ms = 113
+clat_mean_ns = 218736.894531
+p99_clat_ns = 236544
+
+[[campaigns.samples]]
+label = "p4-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 588674245
+runtime_ms = 114
+clat_mean_ns = 220518.734375
+p99_clat_ns = 242688
+
+[[campaigns.samples]]
+label = "p5-A"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 583555339
+runtime_ms = 115
+clat_mean_ns = 221694.244141
+p99_clat_ns = 246784
+
+[[campaigns.samples]]
+label = "p5-B"
+error = 0
+read_bytes = 67108864
+read_ios = 512
+write_bytes = 0
+bw_bytes_per_second = 550072655
+runtime_ms = 122
+clat_mean_ns = 235971.761719
+p99_clat_ns = 254976
+
+[[campaigns.pairs]]
+pair = 1
+order = "AB"
+A_MB_s = 588.674245
+B_MB_s = 588.674245
+ratio = 1
+
+[[campaigns.pairs]]
+pair = 2
+order = "BA"
+A_MB_s = 588.674245
+B_MB_s = 593.883752
+ratio = 1.0088495582136432
+
+[[campaigns.pairs]]
+pair = 3
+order = "AB"
+A_MB_s = 563.940033
+B_MB_s = 593.883752
+ratio = 1.0530973459016697
+
+[[campaigns.pairs]]
+pair = 4
+order = "BA"
+A_MB_s = 593.883752
+B_MB_s = 588.674245
+ratio = 0.991228069495998
+
+[[campaigns.pairs]]
+pair = 5
+order = "AB"
+A_MB_s = 583.555339
+B_MB_s = 550.072655
+ratio = 0.9426229497662089
