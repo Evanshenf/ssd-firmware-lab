@@ -36,6 +36,18 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
         run: /usr/bin/time -v sh scripts/check_current_spine.sh
+      - name: Check the explicit x86 SSE4.2 CRC implementation
+        env:
+          CC: ${{ matrix.cc }}
+        # The existing oracle rejects a generic fallback at compile time.
+        # This is correctness evidence, not another throughput measurement.
+        run: |
+          test "$(id -u)" -ne 0
+          test "$(uname -m)" = x86_64
+          make -j1 -C frontends/headless-scale -f ftl.mk \
+            CC="$CC" BUILD=build/ci-crc-sse42 FWLAB_CRC_NATIVE=0 \
+            CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic -fno-common -msse4.2 -DFWLAB_TEST_EXPECT_BACKEND=1' \
+            check-crc-fast
       - name: Unmount only this job's disposable test medium
         if: always()
         run: |
@@ -73,3 +85,13 @@ jobs:
             BUILD_DIR=build/ci-aarch64 FWLAB_MEDIA_EXCLUSIVE=0 all
           qemu-aarch64 -L /usr/aarch64-linux-gnu \
             media/file-nand-v2/build/ci-aarch64/physical_nand_test
+      - name: Check the explicit ARM CRC implementation under emulation
+        # Reuse the same oracle, not a new test framework or ARM speed claim.
+        run: |
+          test "$(id -u)" -ne 0
+          make -j1 -C frontends/headless-scale -f ftl.mk \
+            CC=aarch64-linux-gnu-gcc BUILD=build/ci-crc-arm64 FWLAB_CRC_NATIVE=0 \
+            CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror -Wpedantic -fno-common -march=armv8-a+crc -DFWLAB_TEST_EXPECT_BACKEND=2' \
+            build/ci-crc-arm64/test_crc_fast
+          qemu-aarch64 -cpu max -L /usr/aarch64-linux-gnu \
+            frontends/headless-scale/build/ci-crc-arm64/test_crc_fast
