@@ -1,0 +1,4864 @@
+# SPDX-FileCopyrightText: 2026 Evanshenf
+# SPDX-License-Identifier: BSD-3-Clause
+
+# Sanitized transcription of existing records, not a new benchmark run.
+# 80 media/NFC transfer samples + 80 FTL phase records; no sample excluded.
+# A/B identify baseline/candidate. Runs are in actual AB/BA execution order.
+schema_version = 1
+export_date = "2026-09-10"
+transfer_sample_count = 80
+FTL_phase_record_count = 80
+process_count = 50
+private_archives_publicly_available = false
+benchmark_package_publicly_available = false
+source_identity_note = "Benchmarks used pre-commit candidate exports. Adopted product-file hashes match measured candidate bytes; later test/README edits do not retroactively change benchmark ELF identity."
+
+[units]
+bytes = "bytes; MiB and GiB in prose are binary"
+duration = "ns unless an explicit _us or _seconds suffix"
+rate = "decimal GB/s; one byte/ns equals one decimal GB/s"
+process_elapsed_hms = "GNU time rounded whole-process wall time, not transfer/service denominator"
+process_max_rss_KiB = "GNU time process maximum RSS; excludes separate tmpfs file allocation"
+FTL_counters = "requests/operations/calls; host_read and host_write are payload bytes; read_bytes and write_bytes are substrate bytes"
+FTL_roots_ns = "zero with D167_PROBE=0; not proof that product work had zero cost"
+auxiliary_times = "separately timed lifecycle/erase/setup intervals; not throughput samples and not all mutually additive"
+
+[shared_scope]
+architecture = "aarch64"
+os = "Ubuntu 26.04"
+kernel = "7.0.0-30-generic"
+compiler = "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0"
+system_page_bytes = 4096
+pinned_cpu = 7
+medium = "local tmpfs; mapped physical-v2 runtime; ordinary POSIX format/recovery"
+tmpfs_limit_bytes = 1073741824
+media_exclusive_build = 1
+CRC_backend = "2: compile-time ARM CRC32; native ISA selection"
+progress = "one caller-serialized software executor"
+sync_CRC_NAND = "retained"
+samples_removed = 0
+remeasurements_for_export = 0
+not_proven = ["native NVMe throughput", "whole-system single CPU", "disk persistence", "host power-loss recovery", "calibrated NAND timing", "PCIe 4/5 saturation", "10 GB/s end-to-end", "1-3% overhead"]
+
+[[campaigns]]
+id = "media-intent"
+layer = "physical NAND v2 only; NFC linked but not executed; no FTL"
+baseline_product_commit = "fc303a2567d49e85665056e969cf9f4284d07809"
+adopted_product_commit = "f27b590b4c7312f6b2de08e79b0b9b85f477e6e4"
+measured_product_file = "media/file-nand-v2/physical_nand.c"
+A_product_file_sha256 = "8fc0bd8ac1d91a03b5a12020c8e3e54c0c64bd94281e756d9ec98a7f78150240"
+B_product_file_sha256 = "c04b941ae5f53249f02a1571756bf63795d2ce8f96d6474be4417e7c68644b37"
+A_executable_sha256 = "1232a8e43fcb9350d1310cf2587d60989046e60cfde163990823a57fde2ace75"
+B_executable_sha256 = "7179057d832d6bfd5f9fe19fe20b7627bab5741fb9d40017f08e7231fb5d387e"
+benchmark_source_sha256 = "527c926d8a4bc70e9563b4f1a9a57d8e8d805766f2b2c877b40e66bac7898497"
+private_runner_sha256 = "6725c21ba555db92de1babafd8b172e84bb43c1e484d883082c769279a80189d"
+private_source_archive_sha256 = "2f81e1d0cc905ccfe0952ac419f2218253634a052caafd01fcc41509be14ceb3"
+private_evidence_archive_sha256 = "86e12a915d45bb6250f6dbffeec5d6290081155de8a3be19059f78f4ee79ae67"
+build_flags = ["-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror", "-Wpedantic", "-fno-common", "-march=native", "-DFWLAB_MEDIA_EXCLUSIVE=1"]
+main_working_set_bytes = 134217728
+main_bytes_per_sample = 134217728
+physical_image_bytes = 142655488
+interval = "main_bytes / elapsed_ns; decimal GB/s for timed PROGRAM or READ only"
+criterion = "8-KiB Write paired median >= 1.05 and at least 4 wins; every other paired median >= 0.97"
+read_control = "Read implementation unchanged; read differences are controls, not caused speedups"
+disposition = "adopted after separate correctness/source confirmation; one set, no dropped sample"
+run_count = 20
+sample_count = 40
+
+[[campaigns.summaries]]
+phase = "write"
+group_main_bytes = 8192
+A_median_GB_per_second = 4.487366922
+B_median_GB_per_second = 4.831879569
+paired_B_over_A = [1.0648323814515117, 1.08872515825871, 1.0821243861375618, 1.0802496812815947, 1.078029227986497]
+paired_median_ratio = 1.0802496812815947
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.summaries]]
+phase = "read"
+group_main_bytes = 8192
+A_median_GB_per_second = 11.843810132
+B_median_GB_per_second = 12.171547913
+paired_B_over_A = [1.06728131031558, 1.0714544166615203, 0.9551524724538811, 1.086184025125674, 0.9583225232281978]
+paired_median_ratio = 1.06728131031558
+B_wins = 3
+ties = 0
+B_losses = 2
+
+[[campaigns.summaries]]
+phase = "write"
+group_main_bytes = 262144
+A_median_GB_per_second = 12.544005981
+B_median_GB_per_second = 12.675227265
+paired_B_over_A = [1.018352605567689, 0.997422677981081, 1.0052858602029073, 1.01217208200032, 1.0314572320252164]
+paired_median_ratio = 1.01217208200032
+B_wins = 4
+ties = 0
+B_losses = 1
+
+[[campaigns.summaries]]
+phase = "read"
+group_main_bytes = 262144
+A_median_GB_per_second = 12.481724222
+B_median_GB_per_second = 12.468737331
+paired_B_over_A = [0.9911889235565031, 1.0001226271300754, 0.9841807702238472, 1.0226961796887224, 1.0013586564402785]
+paired_median_ratio = 1.0001226271300754
+B_wins = 3
+ties = 0
+B_losses = 2
+
+[[campaigns.runs]]
+id = "g2-p1-A"
+run_index = 1
+pair = 1
+order = "AB"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "806bff5f4152bd755091a69deb78b096c58332cc86fb3190a7ea492486f6bab7"
+exit_code = 0
+process_user_seconds = 0.17
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.31"
+process_max_rss_KiB = 411204
+process_major_faults = 0
+process_minor_faults = 71926
+process_voluntary_cs = 1
+process_involuntary_cs = 4
+private_time_log_sha256 = "bc1db8674af38c89ffb5cddbe72b4d3f8145e473d5397fae901a49ff173ee2fe"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 24298800, process_cpu_ns = 24300020 },
+  { phase = "format_constructor", elapsed_ns = 53337040, process_cpu_ns = 53320000 },
+  { phase = "erase_prepare", elapsed_ns = 559050, process_cpu_ns = 559590 },
+  { phase = "close_before_recovery", elapsed_ns = 5844230, process_cpu_ns = 5844360 },
+  { phase = "recovery_constructor", elapsed_ns = 18412000, process_cpu_ns = 18411880 },
+  { phase = "close_cleanup", elapsed_ns = 24099930, process_cpu_ns = 24085710 },
+]
+
+[[campaigns.runs]]
+id = "g2-p1-B"
+run_index = 2
+pair = 1
+order = "AB"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "644d1b4b8fbccdcee5eca2fb223d69e06c6be29cba85be1e807080b2176a7d74"
+exit_code = 0
+process_user_seconds = 0.17
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 411076
+process_major_faults = 0
+process_minor_faults = 71926
+process_voluntary_cs = 1
+process_involuntary_cs = 5
+private_time_log_sha256 = "a2990f1ad5ffc48b0985ac2b7096ae4fba0fd5c3c9f9aa242d7b505a56262131"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23155040, process_cpu_ns = 23144700 },
+  { phase = "format_constructor", elapsed_ns = 53006090, process_cpu_ns = 52991870 },
+  { phase = "erase_prepare", elapsed_ns = 530940, process_cpu_ns = 531720 },
+  { phase = "close_before_recovery", elapsed_ns = 5838650, process_cpu_ns = 5839330 },
+  { phase = "recovery_constructor", elapsed_ns = 20679050, process_cpu_ns = 20678930 },
+  { phase = "close_cleanup", elapsed_ns = 24067650, process_cpu_ns = 24068460 },
+]
+
+[[campaigns.runs]]
+id = "g2-p2-B"
+run_index = 3
+pair = 2
+order = "BA"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "9203ea6ebbf8a93f393d4b24dd4bfbad5c07069469c8f4c6ceae6769a7ddd1a4"
+exit_code = 0
+process_user_seconds = 0.16
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.29"
+process_max_rss_KiB = 411140
+process_major_faults = 0
+process_minor_faults = 71928
+process_voluntary_cs = 1
+process_involuntary_cs = 5
+private_time_log_sha256 = "45b0f31ef6303586272ec8e5ac8a78133fac845016ec8ee45b76d7aa3447c7de"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22746230, process_cpu_ns = 22722950 },
+  { phase = "format_constructor", elapsed_ns = 52539360, process_cpu_ns = 52539120 },
+  { phase = "erase_prepare", elapsed_ns = 497870, process_cpu_ns = 498380 },
+  { phase = "close_before_recovery", elapsed_ns = 5827220, process_cpu_ns = 5827550 },
+  { phase = "recovery_constructor", elapsed_ns = 19036070, process_cpu_ns = 19035970 },
+  { phase = "close_cleanup", elapsed_ns = 24049170, process_cpu_ns = 24005150 },
+]
+
+[[campaigns.runs]]
+id = "g2-p2-A"
+run_index = 4
+pair = 2
+order = "BA"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "ed5daaed84e352ff2aa42d5871149be180293883b15278075512112a9f804109"
+exit_code = 0
+process_user_seconds = 0.17
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 411076
+process_major_faults = 0
+process_minor_faults = 71928
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "45b97e0ba416d3838b36715819da1b73d921eddc49b3d37186781bbde79c76a3"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22885150, process_cpu_ns = 22875170 },
+  { phase = "format_constructor", elapsed_ns = 52962060, process_cpu_ns = 52961930 },
+  { phase = "erase_prepare", elapsed_ns = 577850, process_cpu_ns = 577860 },
+  { phase = "close_before_recovery", elapsed_ns = 5857220, process_cpu_ns = 5858370 },
+  { phase = "recovery_constructor", elapsed_ns = 19339230, process_cpu_ns = 19339080 },
+  { phase = "close_cleanup", elapsed_ns = 23999780, process_cpu_ns = 23917750 },
+]
+
+[[campaigns.runs]]
+id = "g2-p3-A"
+run_index = 5
+pair = 3
+order = "AB"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "c1f75270b0e504988385ff54af297e00c3cedbd69f14d3e2369c6cd201ea9ede"
+exit_code = 0
+process_user_seconds = 0.17
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 411140
+process_major_faults = 0
+process_minor_faults = 71927
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "643d5891d12ae8cf84594df9c5f7dca80e6ea5c4ea9b3ea9c5b69ad3e1e1cc19"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23451760, process_cpu_ns = 23453310 },
+  { phase = "format_constructor", elapsed_ns = 52151490, process_cpu_ns = 52151090 },
+  { phase = "erase_prepare", elapsed_ns = 558150, process_cpu_ns = 558430 },
+  { phase = "close_before_recovery", elapsed_ns = 5828510, process_cpu_ns = 5828890 },
+  { phase = "recovery_constructor", elapsed_ns = 18522860, process_cpu_ns = 18522650 },
+  { phase = "close_cleanup", elapsed_ns = 23975560, process_cpu_ns = 23976150 },
+]
+
+[[campaigns.runs]]
+id = "g2-p3-B"
+run_index = 6
+pair = 3
+order = "AB"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "2b7c91ecb95148cbc675cf68d62ed469514d29718dd0d10628387eaf80eee645"
+exit_code = 0
+process_user_seconds = 0.16
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 411076
+process_major_faults = 0
+process_minor_faults = 71927
+process_voluntary_cs = 1
+process_involuntary_cs = 0
+private_time_log_sha256 = "b1f5e19f25da943db711be38879da6851fa917792c0d848d85ffac95e7226f12"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23219050, process_cpu_ns = 23220330 },
+  { phase = "format_constructor", elapsed_ns = 52506350, process_cpu_ns = 52505890 },
+  { phase = "erase_prepare", elapsed_ns = 494900, process_cpu_ns = 495240 },
+  { phase = "close_before_recovery", elapsed_ns = 5909570, process_cpu_ns = 5910290 },
+  { phase = "recovery_constructor", elapsed_ns = 19906110, process_cpu_ns = 19905990 },
+  { phase = "close_cleanup", elapsed_ns = 24264770, process_cpu_ns = 24264770 },
+]
+
+[[campaigns.runs]]
+id = "g2-p4-B"
+run_index = 7
+pair = 4
+order = "BA"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "edb39ac85826a60ddbf63d2826ce0204171e01fdbc7672960b46cc8bbc4a1699"
+exit_code = 0
+process_user_seconds = 0.16
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 411136
+process_major_faults = 0
+process_minor_faults = 71926
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "95a344f93f6ae1dc32258529eb6140ee4d59a94a389e2317403f5b62a7ca42ad"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23298530, process_cpu_ns = 23299620 },
+  { phase = "format_constructor", elapsed_ns = 52274430, process_cpu_ns = 52273900 },
+  { phase = "erase_prepare", elapsed_ns = 494910, process_cpu_ns = 495330 },
+  { phase = "close_before_recovery", elapsed_ns = 6012830, process_cpu_ns = 6013460 },
+  { phase = "recovery_constructor", elapsed_ns = 19787460, process_cpu_ns = 19787200 },
+  { phase = "close_cleanup", elapsed_ns = 24389650, process_cpu_ns = 24321530 },
+]
+
+[[campaigns.runs]]
+id = "g2-p4-A"
+run_index = 8
+pair = 4
+order = "BA"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "7f7d87f6c120bafd9c685de323403641870b4cedf5840025d270342011aa87d9"
+exit_code = 0
+process_user_seconds = 0.17
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 413172
+process_major_faults = 0
+process_minor_faults = 71917
+process_voluntary_cs = 1
+process_involuntary_cs = 4
+private_time_log_sha256 = "744b2e266e0f4cdea91b27a06fc1b339aa2a1f704d198c4d2c79355093cf2c43"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23354070, process_cpu_ns = 23355400 },
+  { phase = "format_constructor", elapsed_ns = 53461370, process_cpu_ns = 53461170 },
+  { phase = "erase_prepare", elapsed_ns = 575020, process_cpu_ns = 575370 },
+  { phase = "close_before_recovery", elapsed_ns = 5865880, process_cpu_ns = 5866450 },
+  { phase = "recovery_constructor", elapsed_ns = 18578000, process_cpu_ns = 18577890 },
+  { phase = "close_cleanup", elapsed_ns = 23822940, process_cpu_ns = 23807830 },
+]
+
+[[campaigns.runs]]
+id = "g2-p5-A"
+run_index = 9
+pair = 5
+order = "AB"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "b5152880beafdd71593464279522e2d66d80bd9d38e7505e624d4c76d27e4d74"
+exit_code = 0
+process_user_seconds = 0.18
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 411172
+process_major_faults = 0
+process_minor_faults = 71927
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "3400d2c16c41fbb1ccd1afe9eda22eeb1dd82d4241db2bee1316d3feb8d58457"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23184400, process_cpu_ns = 23185940 },
+  { phase = "format_constructor", elapsed_ns = 52003460, process_cpu_ns = 52003220 },
+  { phase = "erase_prepare", elapsed_ns = 574900, process_cpu_ns = 575180 },
+  { phase = "close_before_recovery", elapsed_ns = 5882580, process_cpu_ns = 5881830 },
+  { phase = "recovery_constructor", elapsed_ns = 18619970, process_cpu_ns = 18604640 },
+  { phase = "close_cleanup", elapsed_ns = 23781260, process_cpu_ns = 23762660 },
+]
+
+[[campaigns.runs]]
+id = "g2-p5-B"
+run_index = 10
+pair = 5
+order = "AB"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "2a2ecb87b74a6bbe97cbfa22a76ebc571ec9cec401daa6bf7e0801f7ee69a7f7"
+exit_code = 0
+process_user_seconds = 0.16
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 411168
+process_major_faults = 0
+process_minor_faults = 71926
+process_voluntary_cs = 1
+process_involuntary_cs = 4
+private_time_log_sha256 = "1e14f32636c65d34bba64a280c96a3f4385e529b6e7ab36eff08d9055ab270c8"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23037430, process_cpu_ns = 23038430 },
+  { phase = "format_constructor", elapsed_ns = 51920540, process_cpu_ns = 51909690 },
+  { phase = "erase_prepare", elapsed_ns = 495190, process_cpu_ns = 495900 },
+  { phase = "close_before_recovery", elapsed_ns = 5993640, process_cpu_ns = 5994180 },
+  { phase = "recovery_constructor", elapsed_ns = 19343340, process_cpu_ns = 19330970 },
+  { phase = "close_cleanup", elapsed_ns = 24371410, process_cpu_ns = 24316690 },
+]
+
+[[campaigns.runs]]
+id = "g64-p1-A"
+run_index = 11
+pair = 1
+order = "AB"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "1586c118a59bcb34cfc3c193cb4b1aa02fc8a9e051d13191cb9d48ab83440e34"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.24"
+process_max_rss_KiB = 411712
+process_major_faults = 0
+process_minor_faults = 72054
+process_voluntary_cs = 1
+process_involuntary_cs = 4
+private_time_log_sha256 = "a45e2e3c5bcb1097087c7b8213a95cfa9340640fbc52c536de64f496da300240"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22888430, process_cpu_ns = 22878420 },
+  { phase = "format_constructor", elapsed_ns = 52120180, process_cpu_ns = 52108420 },
+  { phase = "erase_prepare", elapsed_ns = 573730, process_cpu_ns = 574510 },
+  { phase = "close_before_recovery", elapsed_ns = 5827940, process_cpu_ns = 5828250 },
+  { phase = "recovery_constructor", elapsed_ns = 18856890, process_cpu_ns = 18844490 },
+  { phase = "close_cleanup", elapsed_ns = 23999340, process_cpu_ns = 23944100 },
+]
+
+[[campaigns.runs]]
+id = "g64-p1-B"
+run_index = 12
+pair = 1
+order = "AB"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "f518d86a5bee9a880609199d9c0e812c053e72fd3ce49e6f4777ff91c91b0254"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.24"
+process_max_rss_KiB = 413216
+process_major_faults = 0
+process_minor_faults = 71931
+process_voluntary_cs = 1
+process_involuntary_cs = 1
+private_time_log_sha256 = "d98797f43f1bf91e07a9fd0e5139f686f6e5de2ed791f30d92c1faa6166c13a5"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22894170, process_cpu_ns = 22884510 },
+  { phase = "format_constructor", elapsed_ns = 54102160, process_cpu_ns = 54101760 },
+  { phase = "erase_prepare", elapsed_ns = 513450, process_cpu_ns = 514080 },
+  { phase = "close_before_recovery", elapsed_ns = 5875280, process_cpu_ns = 5876000 },
+  { phase = "recovery_constructor", elapsed_ns = 19568740, process_cpu_ns = 19568630 },
+  { phase = "close_cleanup", elapsed_ns = 24324110, process_cpu_ns = 24324810 },
+]
+
+[[campaigns.runs]]
+id = "g64-p2-B"
+run_index = 13
+pair = 2
+order = "BA"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "13d6167b277c66c51a5c3d9b537e4b7e47191c3c7e748553ba22507e9b77d289"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.24"
+process_max_rss_KiB = 411716
+process_major_faults = 0
+process_minor_faults = 72053
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "15400240a5d3a7a382fe3614ca585f8ba38d0ce2727f060519b66817e560ea8f"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22760990, process_cpu_ns = 22762110 },
+  { phase = "format_constructor", elapsed_ns = 52274340, process_cpu_ns = 52274100 },
+  { phase = "erase_prepare", elapsed_ns = 497290, process_cpu_ns = 497970 },
+  { phase = "close_before_recovery", elapsed_ns = 5872200, process_cpu_ns = 5872400 },
+  { phase = "recovery_constructor", elapsed_ns = 19913720, process_cpu_ns = 19913060 },
+  { phase = "close_cleanup", elapsed_ns = 24412040, process_cpu_ns = 24371770 },
+]
+
+[[campaigns.runs]]
+id = "g64-p2-A"
+run_index = 14
+pair = 2
+order = "BA"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "432c1617e0dbb83b85fba695bf8303d3058f23577370547dfc22de077a0d9799"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.24"
+process_max_rss_KiB = 411652
+process_major_faults = 0
+process_minor_faults = 72055
+process_voluntary_cs = 1
+process_involuntary_cs = 1
+private_time_log_sha256 = "80660e61f4c1aafe6b209c2f9562663e6947b1f8276aa774b714428ac3c3aa99"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22600770, process_cpu_ns = 22601930 },
+  { phase = "format_constructor", elapsed_ns = 53311520, process_cpu_ns = 53311040 },
+  { phase = "erase_prepare", elapsed_ns = 585060, process_cpu_ns = 585890 },
+  { phase = "close_before_recovery", elapsed_ns = 5870250, process_cpu_ns = 5870450 },
+  { phase = "recovery_constructor", elapsed_ns = 19875070, process_cpu_ns = 19862680 },
+  { phase = "close_cleanup", elapsed_ns = 24094240, process_cpu_ns = 24095010 },
+]
+
+[[campaigns.runs]]
+id = "g64-p3-A"
+run_index = 15
+pair = 3
+order = "AB"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "5b200c6072d59eac3124cbb19676ab866e2df2e27f5db994efefab385a2ab7d8"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.25"
+process_max_rss_KiB = 411648
+process_major_faults = 0
+process_minor_faults = 72054
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "79261b66783ca7d4e8e858378f9bbc52e365bfdc07a8dde3e7a38f2d5ee82bec"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22759790, process_cpu_ns = 22761030 },
+  { phase = "format_constructor", elapsed_ns = 51903870, process_cpu_ns = 51893090 },
+  { phase = "erase_prepare", elapsed_ns = 579300, process_cpu_ns = 580790 },
+  { phase = "close_before_recovery", elapsed_ns = 5910330, process_cpu_ns = 5910970 },
+  { phase = "recovery_constructor", elapsed_ns = 20152200, process_cpu_ns = 20139370 },
+  { phase = "close_cleanup", elapsed_ns = 24456420, process_cpu_ns = 24457090 },
+]
+
+[[campaigns.runs]]
+id = "g64-p3-B"
+run_index = 16
+pair = 3
+order = "AB"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "69ccf280ca0e361a2a731ca38d3a5af44057bf2cf5f2415b05718f888db2ad08"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.24"
+process_max_rss_KiB = 411588
+process_major_faults = 0
+process_minor_faults = 72055
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "e04447bf3c4ab4b7c19a0dd2612578fb7d4bcc8d11d4a7c726e13badc20fcbeb"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23250050, process_cpu_ns = 23251130 },
+  { phase = "format_constructor", elapsed_ns = 53482000, process_cpu_ns = 53469800 },
+  { phase = "erase_prepare", elapsed_ns = 533500, process_cpu_ns = 534270 },
+  { phase = "close_before_recovery", elapsed_ns = 5873650, process_cpu_ns = 5874530 },
+  { phase = "recovery_constructor", elapsed_ns = 19423300, process_cpu_ns = 19423120 },
+  { phase = "close_cleanup", elapsed_ns = 24206480, process_cpu_ns = 24172690 },
+]
+
+[[campaigns.runs]]
+id = "g64-p4-B"
+run_index = 17
+pair = 4
+order = "BA"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "f383e97d87ba2874be760d1da7b50b9b2b1747053fc37363949a3bc6127d0904"
+exit_code = 0
+process_user_seconds = 0.14
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.26"
+process_max_rss_KiB = 411588
+process_major_faults = 0
+process_minor_faults = 72056
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "737a3e82ab1e8c1b48963c359131908a5dd9d2e661e08a47ed122ddaa4165158"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22881270, process_cpu_ns = 22882630 },
+  { phase = "format_constructor", elapsed_ns = 52500200, process_cpu_ns = 52499010 },
+  { phase = "erase_prepare", elapsed_ns = 498420, process_cpu_ns = 498990 },
+  { phase = "close_before_recovery", elapsed_ns = 6007550, process_cpu_ns = 5993640 },
+  { phase = "recovery_constructor", elapsed_ns = 19998110, process_cpu_ns = 19997820 },
+  { phase = "close_cleanup", elapsed_ns = 24576250, process_cpu_ns = 24520640 },
+]
+
+[[campaigns.runs]]
+id = "g64-p4-A"
+run_index = 18
+pair = 4
+order = "BA"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "da1fa6df53478da69ea9d391e83cbbe98f78e60f924aad0ddb7cf07ab78f181b"
+exit_code = 0
+process_user_seconds = 0.14
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.26"
+process_max_rss_KiB = 411652
+process_major_faults = 0
+process_minor_faults = 72055
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "24fb652c727dd4924cb7d76df50064552303d4274732f1948f8144b56e5f011f"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22892080, process_cpu_ns = 22882110 },
+  { phase = "format_constructor", elapsed_ns = 53351240, process_cpu_ns = 53350740 },
+  { phase = "erase_prepare", elapsed_ns = 579680, process_cpu_ns = 580220 },
+  { phase = "close_before_recovery", elapsed_ns = 6020000, process_cpu_ns = 6020040 },
+  { phase = "recovery_constructor", elapsed_ns = 19943450, process_cpu_ns = 19943340 },
+  { phase = "close_cleanup", elapsed_ns = 24058890, process_cpu_ns = 24059200 },
+]
+
+[[campaigns.runs]]
+id = "g64-p5-A"
+run_index = 19
+pair = 5
+order = "AB"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "a5fd7aa8efa89d5c53ec083920a9181b3dd4753a85ce1a798a1b4da4284140aa"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.24"
+process_max_rss_KiB = 411652
+process_major_faults = 0
+process_minor_faults = 72053
+process_voluntary_cs = 1
+process_involuntary_cs = 4
+private_time_log_sha256 = "f4508edad225e2918414fb81f911c183b5d5d5fcd49762128ef4ad390de2bc34"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22746420, process_cpu_ns = 22728050 },
+  { phase = "format_constructor", elapsed_ns = 52116770, process_cpu_ns = 52115710 },
+  { phase = "erase_prepare", elapsed_ns = 583020, process_cpu_ns = 583770 },
+  { phase = "close_before_recovery", elapsed_ns = 5900490, process_cpu_ns = 5901320 },
+  { phase = "recovery_constructor", elapsed_ns = 19955370, process_cpu_ns = 19955250 },
+  { phase = "close_cleanup", elapsed_ns = 24820430, process_cpu_ns = 24771690 },
+]
+
+[[campaigns.runs]]
+id = "g64-p5-B"
+run_index = 20
+pair = 5
+order = "AB"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "152ecf568665254e7989999a0c64e2b6a3fe3426f284bcac0da88112aab95a5f"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.24"
+process_max_rss_KiB = 413772
+process_major_faults = 0
+process_minor_faults = 71544
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "5ca2f6014d061feab78b2702213d668b530ef84b6c28880f64b6130fcd87c765"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22942500, process_cpu_ns = 22914420 },
+  { phase = "format_constructor", elapsed_ns = 54770810, process_cpu_ns = 54770490 },
+  { phase = "erase_prepare", elapsed_ns = 522880, process_cpu_ns = 523840 },
+  { phase = "close_before_recovery", elapsed_ns = 6079510, process_cpu_ns = 6080360 },
+  { phase = "recovery_constructor", elapsed_ns = 20492830, process_cpu_ns = 20491770 },
+  { phase = "close_cleanup", elapsed_ns = 24791070, process_cpu_ns = 24791950 },
+]
+
+[[campaigns.samples]]
+run_id = "g2-p1-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 29910130
+process_cpu_ns = 29909390
+GB_per_second = 4.487366922
+user_us = 25605
+system_us = 3635
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p1-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 11650240
+process_cpu_ns = 11649840
+GB_per_second = 11.520597687
+user_us = 11296
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p1-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 28089050
+process_cpu_ns = 28079810
+GB_per_second = 4.778293606
+user_us = 21795
+system_us = 5855
+voluntary_cs = 0
+involuntary_cs = 1
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p1-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 10915810
+process_cpu_ns = 10915100
+GB_per_second = 12.295718595
+user_us = 10536
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p2-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 27458390
+process_cpu_ns = 27457540
+GB_per_second = 4.888040704
+user_us = 14630
+system_us = 12630
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p2-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 11027170
+process_cpu_ns = 11026770
+GB_per_second = 12.171547913
+user_us = 10768
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p2-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 29894640
+process_cpu_ns = 29893770
+GB_per_second = 4.489692065
+user_us = 22834
+system_us = 6806
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p2-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 11815110
+process_cpu_ns = 11814540
+GB_per_second = 11.359837361
+user_us = 11715
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p3-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 29403170
+process_cpu_ns = 29402740
+GB_per_second = 4.564736659
+user_us = 21590
+system_us = 7547
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p3-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 10884440
+process_cpu_ns = 10883560
+GB_per_second = 12.331156036
+user_us = 10700
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p3-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 27171710
+process_cpu_ns = 27171270
+GB_per_second = 4.939612855
+user_us = 16719
+system_us = 9682
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p3-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 11395500
+process_cpu_ns = 11394540
+GB_per_second = 11.778134176
+user_us = 11198
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p4-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 27990890
+process_cpu_ns = 27974790
+GB_per_second = 4.79505039
+user_us = 21786
+system_us = 5634
+voluntary_cs = 0
+involuntary_cs = 1
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p4-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 10433140
+process_cpu_ns = 10432460
+GB_per_second = 12.864557362
+user_us = 10412
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p4-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 30237150
+process_cpu_ns = 30209490
+GB_per_second = 4.438835274
+user_us = 19832
+system_us = 9804
+voluntary_cs = 0
+involuntary_cs = 1
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p4-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 11332310
+process_cpu_ns = 11331650
+GB_per_second = 11.843810132
+user_us = 10392
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p5-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 29945000
+process_cpu_ns = 29944730
+GB_per_second = 4.482141526
+user_us = 22895
+system_us = 6891
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p5-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 10638070
+process_cpu_ns = 10637260
+GB_per_second = 12.616736682
+user_us = 9809
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p5-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 27777540
+process_cpu_ns = 27776750
+GB_per_second = 4.831879569
+user_us = 15641
+system_us = 11601
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p5-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 11100720
+process_cpu_ns = 11099770
+GB_per_second = 12.090902932
+user_us = 10434
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p1-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10723090
+process_cpu_ns = 10722180
+GB_per_second = 12.516702555
+user_us = 10462
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p1-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10574390
+process_cpu_ns = 10573120
+GB_per_second = 12.692715892
+user_us = 9711
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p1-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10529840
+process_cpu_ns = 10528990
+GB_per_second = 12.74641666
+user_us = 9558
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p1-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10668390
+process_cpu_ns = 10666960
+GB_per_second = 12.580879402
+user_us = 9992
+system_us = 4
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p2-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10635070
+process_cpu_ns = 10634290
+GB_per_second = 12.620295682
+user_us = 9683
+system_us = 595
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p2-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10764340
+process_cpu_ns = 10763640
+GB_per_second = 12.468737331
+user_us = 10613
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p2-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10607660
+process_cpu_ns = 10606850
+GB_per_second = 12.652906296
+user_us = 10509
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p2-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10765660
+process_cpu_ns = 10763990
+GB_per_second = 12.467208513
+user_us = 9868
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p3-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10699750
+process_cpu_ns = 10674350
+GB_per_second = 12.544005981
+user_us = 9789
+system_us = 729
+voluntary_cs = 0
+involuntary_cs = 1
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p3-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10723240
+process_cpu_ns = 10721790
+GB_per_second = 12.516527467
+user_us = 9800
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p3-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10643490
+process_cpu_ns = 10617670
+GB_per_second = 12.610311843
+user_us = 8858
+system_us = 867
+voluntary_cs = 0
+involuntary_cs = 1
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p3-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10895600
+process_cpu_ns = 10893320
+GB_per_second = 12.318525643
+user_us = 10077
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p4-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10533120
+process_cpu_ns = 10532330
+GB_per_second = 12.742447442
+user_us = 9575
+system_us = 554
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p4-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10883770
+process_cpu_ns = 10882810
+GB_per_second = 12.331915136
+user_us = 10567
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p4-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10661330
+process_cpu_ns = 10660980
+GB_per_second = 12.589210539
+user_us = 10574
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p4-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 11130790
+process_cpu_ns = 11129780
+GB_per_second = 12.058239173
+user_us = 10883
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p5-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10922080
+process_cpu_ns = 10921410
+GB_per_second = 12.288660035
+user_us = 8832
+system_us = 2109
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p5-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10753140
+process_cpu_ns = 10751320
+GB_per_second = 12.481724222
+user_us = 9991
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p5-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10588980
+process_cpu_ns = 10588040
+GB_per_second = 12.675227265
+user_us = 9817
+system_us = 794
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p5-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 10738550
+process_cpu_ns = 10736930
+GB_per_second = 12.498682597
+user_us = 9978
+system_us = 12
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns]]
+id = "nfc-alignment"
+layer = "PAGE2-R0 NFC and physical NAND v2; no FTL"
+baseline_product_commit = "f27b590b4c7312f6b2de08e79b0b9b85f477e6e4"
+adopted_product_commit = "6f4b53f298033c8312aa3313403e89804dfef2d7"
+measured_product_file = "core/nfc-page-v2/nfc_page_v2.c"
+A_product_file_sha256 = "69daeb0f6d68d13d7ae0e149a64b4c4cd1417527d84e5aef2eb9025c691accac"
+B_product_file_sha256 = "8ee7ceacbd621025f1914a5e7a58a7e6d0442c26f690cbca0f4a844642083d09"
+A_executable_sha256 = "26d11df0c08ba87396a06111f433385e853547c63f44a8f1406aebbcf290d482"
+B_executable_sha256 = "34931896c0b090eb3b49723db3e01df8773ce42ed2bda01a7df66922cb3500e3"
+benchmark_source_sha256 = "f75a366a1c1439dffe789ede97b8ca5a44c18ed2fe23963d413758ee5973cb60"
+private_runner_sha256 = "4cf900c21b27985c2ecea76796fbfe3a518d52df58385e84fada62238827ad63"
+private_source_archive_sha256 = "4955519affbdd313e6bd7b104e7fb0673c7818b862bdadfa7967489fa16f7665"
+private_evidence_archive_sha256 = "a8fdff3c1ccf84a5218410517a91b165c1b362e4cec24193a751be7b9460b071"
+build_flags = ["-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror", "-Wpedantic", "-fno-common", "-march=native", "-DFWLAB_MEDIA_EXCLUSIVE=1", "-DFWLAB_BENCH_MAPPED=1"]
+main_working_set_bytes = 134217728
+main_bytes_per_sample = 134217728
+physical_image_bytes = 142655488
+A_NFC_arena_bytes = 279032
+A_NFC_arena_alignment = 8
+B_NFC_arena_bytes = 279040
+B_NFC_arena_alignment = 64
+benchmark_allocation_alignment_both_arms = 4096
+interval = "main_bytes / elapsed_ns; decimal GB/s for timed PROGRAM or READ through NFC"
+criterion = "At least one 256-KiB direction has paired median >= 1.05 and at least 4 wins; every other shape/direction paired median >= 0.97"
+disposition = "adopted after separate allocator/correctness/source confirmation; one set, no dropped sample"
+run_count = 20
+sample_count = 40
+
+[[campaigns.summaries]]
+phase = "write"
+group_main_bytes = 8192
+A_median_GB_per_second = 3.48046408
+B_median_GB_per_second = 3.749413791
+paired_B_over_A = [1.0906253570359823, 1.0967049683226426, 1.087962515923807, 1.0756516118162267, 1.0563026583512392]
+paired_median_ratio = 1.087962515923807
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.summaries]]
+phase = "read"
+group_main_bytes = 8192
+A_median_GB_per_second = 6.887138608
+B_median_GB_per_second = 7.790587868
+paired_B_over_A = [1.131256076095347, 1.1557729727921864, 1.1092952887486778, 1.1687338412738137, 1.1055100926143504]
+paired_median_ratio = 1.131256076095347
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.summaries]]
+phase = "write"
+group_main_bytes = 262144
+A_median_GB_per_second = 8.398218712
+B_median_GB_per_second = 10.09341022
+paired_B_over_A = [1.1864964091538923, 1.2159752729115563, 1.1932136422642912, 1.1907357616871626, 1.2123220490140527]
+paired_median_ratio = 1.1932136422642912
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.summaries]]
+phase = "read"
+group_main_bytes = 262144
+A_median_GB_per_second = 8.689920118
+B_median_GB_per_second = 9.583585244
+paired_B_over_A = [1.1015834236389053, 1.1656344937149976, 1.0673369820498044, 1.073607089200868, 1.0906471707284384]
+paired_median_ratio = 1.0906471707284384
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.runs]]
+id = "g2-p1-A"
+run_index = 1
+pair = 1
+order = "AB"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "5c3d3497bd458f339011471ee993eeaf46435e88116992af7cd2f8165d14f361"
+exit_code = 0
+process_user_seconds = 0.2
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.33"
+process_max_rss_KiB = 413288
+process_major_faults = 0
+process_minor_faults = 71940
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "29ed16a5c7b9df5df78927d1b9045a13cfbf36bc32f17d8c6268814e818437e3"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 24372410, process_cpu_ns = 24373970 },
+  { phase = "format_constructor", elapsed_ns = 53692770, process_cpu_ns = 53692130 },
+  { phase = "erase_prepare", elapsed_ns = 1080390, process_cpu_ns = 1081030 },
+  { phase = "close_before_recovery", elapsed_ns = 5793510, process_cpu_ns = 5794240 },
+  { phase = "recovery_constructor", elapsed_ns = 20232180, process_cpu_ns = 20231980 },
+  { phase = "close_cleanup", elapsed_ns = 24728540, process_cpu_ns = 24693590 },
+]
+
+[[campaigns.runs]]
+id = "g2-p1-B"
+run_index = 2
+pair = 1
+order = "AB"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "130694ae0f81adc8ba926de64aff5b1a9c09ba1645ba433a7b0497ddf44b0969"
+exit_code = 0
+process_user_seconds = 0.18
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.31"
+process_max_rss_KiB = 411456
+process_major_faults = 0
+process_minor_faults = 71996
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "43f967d9814602743ff427b8fa443f0cc7e6024aef31b9e4582633e973acc29b"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23131410, process_cpu_ns = 23132780 },
+  { phase = "format_constructor", elapsed_ns = 52481890, process_cpu_ns = 52481720 },
+  { phase = "erase_prepare", elapsed_ns = 1071680, process_cpu_ns = 1072480 },
+  { phase = "close_before_recovery", elapsed_ns = 5772440, process_cpu_ns = 5772660 },
+  { phase = "recovery_constructor", elapsed_ns = 19394220, process_cpu_ns = 19393970 },
+  { phase = "close_cleanup", elapsed_ns = 23932900, process_cpu_ns = 23933390 },
+]
+
+[[campaigns.runs]]
+id = "g2-p2-B"
+run_index = 3
+pair = 2
+order = "BA"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "b4abd6720ef649f056a6c04266c6b3324dc33cef0f8952d9448de250dea5e20c"
+exit_code = 0
+process_user_seconds = 0.16
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 411396
+process_major_faults = 0
+process_minor_faults = 71996
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "9203ba4f8e9f04f9f31983116f660f70a83b51c0ed8abab3d3471f1b263fcfa0"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22646030, process_cpu_ns = 22634900 },
+  { phase = "format_constructor", elapsed_ns = 50066070, process_cpu_ns = 50065800 },
+  { phase = "erase_prepare", elapsed_ns = 1070540, process_cpu_ns = 1070500 },
+  { phase = "close_before_recovery", elapsed_ns = 5756340, process_cpu_ns = 5756890 },
+  { phase = "recovery_constructor", elapsed_ns = 19876520, process_cpu_ns = 19876190 },
+  { phase = "close_cleanup", elapsed_ns = 24523530, process_cpu_ns = 24524050 },
+]
+
+[[campaigns.runs]]
+id = "g2-p2-A"
+run_index = 4
+pair = 2
+order = "BA"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "0b84867988d92fe91cab0d296088374a422f7eaa7f8a38fbd9ba86f7f72ed823"
+exit_code = 0
+process_user_seconds = 0.19
+process_system_seconds = 0.13
+process_elapsed_hms = "0:00.32"
+process_max_rss_KiB = 411332
+process_major_faults = 0
+process_minor_faults = 71996
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "72b8f7dfa288cb337a22ee8bafa6e63b1053a998c8ef4a093f8cd9766037b2c0"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22269690, process_cpu_ns = 22271040 },
+  { phase = "format_constructor", elapsed_ns = 52806470, process_cpu_ns = 52790680 },
+  { phase = "erase_prepare", elapsed_ns = 1089090, process_cpu_ns = 1087410 },
+  { phase = "close_before_recovery", elapsed_ns = 5755180, process_cpu_ns = 5756050 },
+  { phase = "recovery_constructor", elapsed_ns = 20216920, process_cpu_ns = 20216690 },
+  { phase = "close_cleanup", elapsed_ns = 24236910, process_cpu_ns = 24237190 },
+]
+
+[[campaigns.runs]]
+id = "g2-p3-A"
+run_index = 5
+pair = 3
+order = "AB"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "de3a57230ff5e1a2ac7e03a54d7d59f8e658afe8783f20972c7487e67d91c2e3"
+exit_code = 0
+process_user_seconds = 0.19
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.32"
+process_max_rss_KiB = 411460
+process_major_faults = 0
+process_minor_faults = 71995
+process_voluntary_cs = 1
+process_involuntary_cs = 1
+private_time_log_sha256 = "907568cddc40a77693ee42ffe015b2b7a71095318d867059fcebcb8f0624ee31"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22298540, process_cpu_ns = 22300240 },
+  { phase = "format_constructor", elapsed_ns = 50664800, process_cpu_ns = 50664480 },
+  { phase = "erase_prepare", elapsed_ns = 1045250, process_cpu_ns = 1045630 },
+  { phase = "close_before_recovery", elapsed_ns = 5826240, process_cpu_ns = 5826610 },
+  { phase = "recovery_constructor", elapsed_ns = 19998700, process_cpu_ns = 19998490 },
+  { phase = "close_cleanup", elapsed_ns = 24576240, process_cpu_ns = 24576410 },
+]
+
+[[campaigns.runs]]
+id = "g2-p3-B"
+run_index = 6
+pair = 3
+order = "AB"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "62023d529a94d2ddb74129623d94b7015a008c3723060a8dec5c3f0a01b02644"
+exit_code = 0
+process_user_seconds = 0.17
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 413280
+process_major_faults = 0
+process_minor_faults = 71920
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "e2194c39c48650bc1a1118139357f1e836eaf7c20a8297b15ee4b19e95ca02f2"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22637680, process_cpu_ns = 22638620 },
+  { phase = "format_constructor", elapsed_ns = 52159850, process_cpu_ns = 52159680 },
+  { phase = "erase_prepare", elapsed_ns = 1391580, process_cpu_ns = 1391350 },
+  { phase = "close_before_recovery", elapsed_ns = 5871060, process_cpu_ns = 5856980 },
+  { phase = "recovery_constructor", elapsed_ns = 18755870, process_cpu_ns = 18755740 },
+  { phase = "close_cleanup", elapsed_ns = 23830180, process_cpu_ns = 23781800 },
+]
+
+[[campaigns.runs]]
+id = "g2-p4-B"
+run_index = 7
+pair = 4
+order = "BA"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "ff4d36fbd8939028f5ce755cb9350f1d99c194950abc329a10ecc9daae49c4b6"
+exit_code = 0
+process_user_seconds = 0.18
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.30"
+process_max_rss_KiB = 411444
+process_major_faults = 0
+process_minor_faults = 71995
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "a4d335103f2b6cb031484720b665f7c41682a63cb686bf315292debb52a40dbe"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22417680, process_cpu_ns = 22407440 },
+  { phase = "format_constructor", elapsed_ns = 51597420, process_cpu_ns = 51597020 },
+  { phase = "erase_prepare", elapsed_ns = 1089520, process_cpu_ns = 1089930 },
+  { phase = "close_before_recovery", elapsed_ns = 5797770, process_cpu_ns = 5798400 },
+  { phase = "recovery_constructor", elapsed_ns = 18601760, process_cpu_ns = 18601640 },
+  { phase = "close_cleanup", elapsed_ns = 23756460, process_cpu_ns = 23738400 },
+]
+
+[[campaigns.runs]]
+id = "g2-p4-A"
+run_index = 8
+pair = 4
+order = "BA"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "6413a9a7aecd37c8400b031dba02b30e1410d38e1cf6f1d6ee89ae46968a62a8"
+exit_code = 0
+process_user_seconds = 0.2
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.32"
+process_max_rss_KiB = 411396
+process_major_faults = 0
+process_minor_faults = 71994
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "2ee1baedb01c925104ea13d32132ceb1a003c04ac6573f52ada50ab0cf2e7a6e"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22816320, process_cpu_ns = 22807440 },
+  { phase = "format_constructor", elapsed_ns = 52616640, process_cpu_ns = 52616120 },
+  { phase = "erase_prepare", elapsed_ns = 1053750, process_cpu_ns = 1054290 },
+  { phase = "close_before_recovery", elapsed_ns = 5820030, process_cpu_ns = 5806910 },
+  { phase = "recovery_constructor", elapsed_ns = 18636260, process_cpu_ns = 18636140 },
+  { phase = "close_cleanup", elapsed_ns = 23661340, process_cpu_ns = 23661630 },
+]
+
+[[campaigns.runs]]
+id = "g2-p5-A"
+run_index = 9
+pair = 5
+order = "AB"
+arm = "A"
+group_pages = 2
+private_raw_log_sha256 = "1865f21dd2be48e4a6f2bfbd488c4c09bb4b4e353195739292874094d776a248"
+exit_code = 0
+process_user_seconds = 0.19
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.32"
+process_max_rss_KiB = 411396
+process_major_faults = 0
+process_minor_faults = 71994
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "b00035ac1acde92a3f14d0a8fd6b67823e69e73e97dd8543fd2e466ee4409773"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22451830, process_cpu_ns = 22443120 },
+  { phase = "format_constructor", elapsed_ns = 50481970, process_cpu_ns = 50481510 },
+  { phase = "erase_prepare", elapsed_ns = 1074280, process_cpu_ns = 1075140 },
+  { phase = "close_before_recovery", elapsed_ns = 5760970, process_cpu_ns = 5761640 },
+  { phase = "recovery_constructor", elapsed_ns = 18603330, process_cpu_ns = 18603140 },
+  { phase = "close_cleanup", elapsed_ns = 23704440, process_cpu_ns = 23681560 },
+]
+
+[[campaigns.runs]]
+id = "g2-p5-B"
+run_index = 10
+pair = 5
+order = "AB"
+arm = "B"
+group_pages = 2
+private_raw_log_sha256 = "ef76611435dc24deb08bb1f78f052239ddfdbbedf46666e1ee6b19835d0688d7"
+exit_code = 0
+process_user_seconds = 0.18
+process_system_seconds = 0.12
+process_elapsed_hms = "0:00.31"
+process_max_rss_KiB = 411456
+process_major_faults = 0
+process_minor_faults = 71994
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "66f308b8fb0dd7771a192fb557fa4f41a7d44144b3a9ec1b2b4d0347bcdcbe67"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22693470, process_cpu_ns = 22682750 },
+  { phase = "format_constructor", elapsed_ns = 52990600, process_cpu_ns = 52979040 },
+  { phase = "erase_prepare", elapsed_ns = 1057460, process_cpu_ns = 1057800 },
+  { phase = "close_before_recovery", elapsed_ns = 5780520, process_cpu_ns = 5780880 },
+  { phase = "recovery_constructor", elapsed_ns = 20847450, process_cpu_ns = 20847260 },
+  { phase = "close_cleanup", elapsed_ns = 24395770, process_cpu_ns = 24396730 },
+]
+
+[[campaigns.runs]]
+id = "g64-p1-A"
+run_index = 11
+pair = 1
+order = "AB"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "16e75f4f1bd460d7deed969c8aaf667b401c442f0128900390fed29d71f2cf3f"
+exit_code = 0
+process_user_seconds = 0.13
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.25"
+process_max_rss_KiB = 411844
+process_major_faults = 0
+process_minor_faults = 72124
+process_voluntary_cs = 1
+process_involuntary_cs = 1
+private_time_log_sha256 = "482c424b265721892c8b76f41043419df1eaedd0f485016bc7ca37f3f82aceb6"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22847870, process_cpu_ns = 22849190 },
+  { phase = "format_constructor", elapsed_ns = 50727950, process_cpu_ns = 50727520 },
+  { phase = "erase_prepare", elapsed_ns = 1090620, process_cpu_ns = 1091300 },
+  { phase = "close_before_recovery", elapsed_ns = 5819210, process_cpu_ns = 5820020 },
+  { phase = "recovery_constructor", elapsed_ns = 18698100, process_cpu_ns = 18697930 },
+  { phase = "close_cleanup", elapsed_ns = 23770040, process_cpu_ns = 23742500 },
+]
+
+[[campaigns.runs]]
+id = "g64-p1-B"
+run_index = 12
+pair = 1
+order = "AB"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "ae4bb2781a5db56cec0a9a29dcbb79b1602f6feecea6333b2a4c52deb784898a"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.24"
+process_max_rss_KiB = 411900
+process_major_faults = 0
+process_minor_faults = 72122
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "946d1e35a3a21195a38b72767ff7c8f7c4a3dcd15424271a66df68df4e33445a"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22486750, process_cpu_ns = 22488080 },
+  { phase = "format_constructor", elapsed_ns = 51254980, process_cpu_ns = 51253380 },
+  { phase = "erase_prepare", elapsed_ns = 1022890, process_cpu_ns = 1023520 },
+  { phase = "close_before_recovery", elapsed_ns = 5837210, process_cpu_ns = 5839000 },
+  { phase = "recovery_constructor", elapsed_ns = 20141750, process_cpu_ns = 20141510 },
+  { phase = "close_cleanup", elapsed_ns = 24693050, process_cpu_ns = 24693590 },
+]
+
+[[campaigns.runs]]
+id = "g64-p2-B"
+run_index = 13
+pair = 2
+order = "BA"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "3ea78ab788ead63553da216c233192bf1e560c44623c39b237c4a44d757e1d80"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.23"
+process_max_rss_KiB = 411972
+process_major_faults = 0
+process_minor_faults = 72125
+process_voluntary_cs = 1
+process_involuntary_cs = 1
+private_time_log_sha256 = "65b5075dc6b8704b5b2b01a72100ee2b2bb6df78b8c704747fb44c09c8db643c"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23026120, process_cpu_ns = 23026140 },
+  { phase = "format_constructor", elapsed_ns = 50905480, process_cpu_ns = 50892920 },
+  { phase = "erase_prepare", elapsed_ns = 1044560, process_cpu_ns = 1044940 },
+  { phase = "close_before_recovery", elapsed_ns = 5862730, process_cpu_ns = 5863470 },
+  { phase = "recovery_constructor", elapsed_ns = 20209610, process_cpu_ns = 20209400 },
+  { phase = "close_cleanup", elapsed_ns = 23824290, process_cpu_ns = 23824950 },
+]
+
+[[campaigns.runs]]
+id = "g64-p2-A"
+run_index = 14
+pair = 2
+order = "BA"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "5ce32d4786fefc73677758f8c355bd0f54b7fc3bc195577d021172a1127e9c8e"
+exit_code = 0
+process_user_seconds = 0.14
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.25"
+process_max_rss_KiB = 411908
+process_major_faults = 0
+process_minor_faults = 72126
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "f0c02794825d3b6a0943134d678917bc550ddb26d3f14b8a91c29a8e62d5cc78"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23517500, process_cpu_ns = 23503790 },
+  { phase = "format_constructor", elapsed_ns = 52035970, process_cpu_ns = 52035470 },
+  { phase = "erase_prepare", elapsed_ns = 1099920, process_cpu_ns = 1100670 },
+  { phase = "close_before_recovery", elapsed_ns = 5774610, process_cpu_ns = 5776310 },
+  { phase = "recovery_constructor", elapsed_ns = 18608460, process_cpu_ns = 18608250 },
+  { phase = "close_cleanup", elapsed_ns = 23730250, process_cpu_ns = 23730990 },
+]
+
+[[campaigns.runs]]
+id = "g64-p3-A"
+run_index = 15
+pair = 3
+order = "AB"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "dfd9713866e64485732ddacc5df5da29f12f39b53be0118e2249adb3f0bc45b7"
+exit_code = 0
+process_user_seconds = 0.13
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.25"
+process_max_rss_KiB = 411844
+process_major_faults = 0
+process_minor_faults = 72124
+process_voluntary_cs = 1
+process_involuntary_cs = 4
+private_time_log_sha256 = "0a604e2089b9ad1af5ef7ca75d5d0e256b348ec12949d0c3a9ed319fb10ce176"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22554370, process_cpu_ns = 22546170 },
+  { phase = "format_constructor", elapsed_ns = 51089440, process_cpu_ns = 51089300 },
+  { phase = "erase_prepare", elapsed_ns = 1077820, process_cpu_ns = 1077230 },
+  { phase = "close_before_recovery", elapsed_ns = 5805920, process_cpu_ns = 5806060 },
+  { phase = "recovery_constructor", elapsed_ns = 19703590, process_cpu_ns = 19687880 },
+  { phase = "close_cleanup", elapsed_ns = 24080300, process_cpu_ns = 24041060 },
+]
+
+[[campaigns.runs]]
+id = "g64-p3-B"
+run_index = 16
+pair = 3
+order = "AB"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "cbc13df2b7f430916567864f20c027c84e417f255c4322f5421f2f9bd18649e1"
+exit_code = 0
+process_user_seconds = 0.13
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.25"
+process_max_rss_KiB = 411908
+process_major_faults = 0
+process_minor_faults = 72125
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "6171200548e30e01df74ea65ba15b57cb22951f266ef4e6be2051d7bb1dab2b8"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23071760, process_cpu_ns = 23063370 },
+  { phase = "format_constructor", elapsed_ns = 51238890, process_cpu_ns = 51238580 },
+  { phase = "erase_prepare", elapsed_ns = 1056800, process_cpu_ns = 1057460 },
+  { phase = "close_before_recovery", elapsed_ns = 5822370, process_cpu_ns = 5823100 },
+  { phase = "recovery_constructor", elapsed_ns = 20179470, process_cpu_ns = 20167240 },
+  { phase = "close_cleanup", elapsed_ns = 24432270, process_cpu_ns = 24432700 },
+]
+
+[[campaigns.runs]]
+id = "g64-p4-B"
+run_index = 17
+pair = 4
+order = "BA"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "cfe1783e01568115ddc229dff6fc268732a4da50856af9b1fad8722e740a3ed1"
+exit_code = 0
+process_user_seconds = 0.13
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.24"
+process_max_rss_KiB = 411876
+process_major_faults = 0
+process_minor_faults = 72123
+process_voluntary_cs = 1
+process_involuntary_cs = 4
+private_time_log_sha256 = "21e3935d30ec2f38e4e6040c5a3031cee94c5552f7512d1f23194f62391dca0a"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22382250, process_cpu_ns = 22383610 },
+  { phase = "format_constructor", elapsed_ns = 50662340, process_cpu_ns = 50651330 },
+  { phase = "erase_prepare", elapsed_ns = 1061140, process_cpu_ns = 1061900 },
+  { phase = "close_before_recovery", elapsed_ns = 5804930, process_cpu_ns = 5805870 },
+  { phase = "recovery_constructor", elapsed_ns = 18728270, process_cpu_ns = 18728090 },
+  { phase = "close_cleanup", elapsed_ns = 23895960, process_cpu_ns = 23855800 },
+]
+
+[[campaigns.runs]]
+id = "g64-p4-A"
+run_index = 18
+pair = 4
+order = "BA"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "363672590a51db623985c46ee630d24a90563c9f4f79c5aa3507158451fd057d"
+exit_code = 0
+process_user_seconds = 0.14
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.25"
+process_max_rss_KiB = 411968
+process_major_faults = 0
+process_minor_faults = 72125
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "f6f3dfc127422460b194a63017f6f270f81a98ee7f717f66ae706a9e574218ce"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 22728120, process_cpu_ns = 22728870 },
+  { phase = "format_constructor", elapsed_ns = 52971080, process_cpu_ns = 52970920 },
+  { phase = "erase_prepare", elapsed_ns = 1090270, process_cpu_ns = 1091360 },
+  { phase = "close_before_recovery", elapsed_ns = 5802770, process_cpu_ns = 5803480 },
+  { phase = "recovery_constructor", elapsed_ns = 19337550, process_cpu_ns = 19337390 },
+  { phase = "close_cleanup", elapsed_ns = 23912570, process_cpu_ns = 23898500 },
+]
+
+[[campaigns.runs]]
+id = "g64-p5-A"
+run_index = 19
+pair = 5
+order = "AB"
+arm = "A"
+group_pages = 64
+private_raw_log_sha256 = "2417c3e0f0c4ebf5562e1e7a057c56330a98710f203517908a8656f9daaa0f2f"
+exit_code = 0
+process_user_seconds = 0.13
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.25"
+process_max_rss_KiB = 411968
+process_major_faults = 0
+process_minor_faults = 72122
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "8c0ac2f4647d33324c01e130d666cf4ff0d4ed8897f2e8a84ac06e38abe48ed2"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23145050, process_cpu_ns = 23136130 },
+  { phase = "format_constructor", elapsed_ns = 52243160, process_cpu_ns = 52242460 },
+  { phase = "erase_prepare", elapsed_ns = 1054090, process_cpu_ns = 1054210 },
+  { phase = "close_before_recovery", elapsed_ns = 5846410, process_cpu_ns = 5847050 },
+  { phase = "recovery_constructor", elapsed_ns = 19578870, process_cpu_ns = 19578540 },
+  { phase = "close_cleanup", elapsed_ns = 23923290, process_cpu_ns = 23923820 },
+]
+
+[[campaigns.runs]]
+id = "g64-p5-B"
+run_index = 20
+pair = 5
+order = "AB"
+arm = "B"
+group_pages = 64
+private_raw_log_sha256 = "888e14eb9f2f10c9b15581a2911fc945ce8a2116dc59aeffabf8c58e27186ce0"
+exit_code = 0
+process_user_seconds = 0.12
+process_system_seconds = 0.11
+process_elapsed_hms = "0:00.23"
+process_max_rss_KiB = 411844
+process_major_faults = 0
+process_minor_faults = 72124
+process_voluntary_cs = 1
+process_involuntary_cs = 1
+private_time_log_sha256 = "13d861178ec4ffc6804e0a1abde5c251419075b2b1c207e882397a41ef3487a2"
+full_main_OOB_verified = true
+reopen_verified = true
+owned_image_removed = true
+auxiliary_times = [
+  { phase = "buffer_setup", elapsed_ns = 23197440, process_cpu_ns = 23198680 },
+  { phase = "format_constructor", elapsed_ns = 53171850, process_cpu_ns = 53171630 },
+  { phase = "erase_prepare", elapsed_ns = 1050680, process_cpu_ns = 1050760 },
+  { phase = "close_before_recovery", elapsed_ns = 5897650, process_cpu_ns = 5898100 },
+  { phase = "recovery_constructor", elapsed_ns = 19840660, process_cpu_ns = 19840380 },
+  { phase = "close_cleanup", elapsed_ns = 24126560, process_cpu_ns = 24127080 },
+]
+
+[[campaigns.samples]]
+run_id = "g2-p1-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 39140690
+process_cpu_ns = 39139860
+GB_per_second = 3.429109911
+user_us = 30979
+system_us = 8018
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p1-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 19537030
+process_cpu_ns = 19536390
+GB_per_second = 6.869914619
+user_us = 18829
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p1-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 35888300
+process_cpu_ns = 35887870
+GB_per_second = 3.739874221
+user_us = 29453
+system_us = 5610
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p1-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 17270210
+process_cpu_ns = 17270030
+GB_per_second = 7.771632655
+user_us = 17140
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p2-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 35792370
+process_cpu_ns = 35791740
+GB_per_second = 3.749897758
+user_us = 26808
+system_us = 8797
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p2-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 16861590
+process_cpu_ns = 16861400
+GB_per_second = 7.959968663
+user_us = 16784
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p2-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 39253670
+process_cpu_ns = 39253220
+GB_per_second = 3.419240239
+user_us = 28744
+system_us = 9795
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p2-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 19488170
+process_cpu_ns = 19487770
+GB_per_second = 6.887138608
+user_us = 19247
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p3-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 38416990
+process_cpu_ns = 38416220
+GB_per_second = 3.49370755
+user_us = 30751
+system_us = 6768
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p3-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 19111150
+process_cpu_ns = 19110520
+GB_per_second = 7.02300636
+user_us = 19075
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p3-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 35310950
+process_cpu_ns = 35310740
+GB_per_second = 3.801022856
+user_us = 29644
+system_us = 5562
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p3-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 17228190
+process_cpu_ns = 17227840
+GB_per_second = 7.790587868
+user_us = 16862
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p4-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 35796990
+process_cpu_ns = 35796510
+GB_per_second = 3.749413791
+user_us = 27883
+system_us = 7581
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p4-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 16910360
+process_cpu_ns = 16910270
+GB_per_second = 7.937011867
+user_us = 16634
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p4-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 38505090
+process_cpu_ns = 38504470
+GB_per_second = 3.485713915
+user_us = 27952
+system_us = 9965
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p4-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 19763710
+process_cpu_ns = 19763300
+GB_per_second = 6.791120088
+user_us = 19731
+system_us = 3
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p5-A"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 38563170
+process_cpu_ns = 38546060
+GB_per_second = 3.48046408
+user_us = 31978
+system_us = 5973
+voluntary_cs = 0
+involuntary_cs = 1
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p5-A"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 19269660
+process_cpu_ns = 19269030
+GB_per_second = 6.96523592
+user_us = 18373
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p5-B"
+phase = "write"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 36507690
+process_cpu_ns = 36507330
+GB_per_second = 3.67642346
+user_us = 27659
+system_us = 8780
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g2-p5-B"
+phase = "read"
+group_main_bytes = 8192
+main_bytes = 134217728
+elapsed_ns = 17430560
+process_cpu_ns = 17430010
+GB_per_second = 7.700138607
+user_us = 16900
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p1-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 15913100
+process_cpu_ns = 15910370
+GB_per_second = 8.43441743
+user_us = 15456
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p1-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 15185680
+process_cpu_ns = 15184700
+GB_per_second = 8.838440425
+user_us = 14515
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p1-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 13411840
+process_cpu_ns = 13407850
+GB_per_second = 10.007405994
+user_us = 12759
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p1-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 13785320
+process_cpu_ns = 13784160
+GB_per_second = 9.736279463
+user_us = 13322
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p2-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 13248600
+process_cpu_ns = 13247640
+GB_per_second = 10.130710264
+user_us = 12498
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p2-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 13413450
+process_cpu_ns = 13412910
+GB_per_second = 10.006204817
+user_us = 13221
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p2-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 16109970
+process_cpu_ns = 16109160
+GB_per_second = 8.33134562
+user_us = 15977
+system_us = 22
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p2-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 15635180
+process_cpu_ns = 15634310
+GB_per_second = 8.584341722
+user_us = 14882
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p3-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 15866830
+process_cpu_ns = 15866130
+GB_per_second = 8.459013426
+user_us = 15666
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p3-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 15445220
+process_cpu_ns = 15444800
+GB_per_second = 8.689920118
+user_us = 14769
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p3-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 13297560
+process_cpu_ns = 13296700
+GB_per_second = 10.09341022
+user_us = 12760
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p3-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 14470800
+process_cpu_ns = 14470560
+GB_per_second = 9.275073113
+user_us = 14432
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p4-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 13434240
+process_cpu_ns = 13415930
+GB_per_second = 9.990719832
+user_us = 12655
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 1
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p4-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 14390190
+process_cpu_ns = 14389440
+GB_per_second = 9.327029594
+user_us = 14203
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p4-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 15996630
+process_cpu_ns = 15995920
+GB_per_second = 8.390375223
+user_us = 15334
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p4-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 15449410
+process_cpu_ns = 15448830
+GB_per_second = 8.687563344
+user_us = 15303
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p5-A"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 15981690
+process_cpu_ns = 15978840
+GB_per_second = 8.398218712
+user_us = 15903
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p5-A"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 15274470
+process_cpu_ns = 15273660
+GB_per_second = 8.787062857
+user_us = 14894
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p5-B"
+phase = "write"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 13182710
+process_cpu_ns = 13181990
+GB_per_second = 10.181345717
+user_us = 12470
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns.samples]]
+run_id = "g64-p5-B"
+phase = "read"
+group_main_bytes = 262144
+main_bytes = 134217728
+elapsed_ns = 14004960
+process_cpu_ns = 14004170
+GB_per_second = 9.583585244
+user_us = 13260
+system_us = 0
+voluntary_cs = 0
+involuntary_cs = 0
+minor_faults = 0
+major_faults = 0
+
+[[campaigns]]
+id = "ftl-spine-zero"
+layer = "real retained Block parent -> FTL -> PAGE2-R0 -> physical NAND v2; fake adjacent controller buffer; not native Host"
+baseline_product_commit = "8d8a1a105c89645e8ebd16d0966634704c0acff7"
+adopted_product_commit = "80023c67ddfbaf00cea7e6257228f9a1d7abedbc"
+measured_product_file = "core/command-spine/spine_contracts.c"
+A_product_file_sha256 = "64395dff9023009df6ccd3d70ba69795b36d1bb283d02f4056ee31000ec5665f"
+B_product_file_sha256 = "2987d7101262c7b1a2e20c3919c5f1cc4b79909a7ec60b7f7f35f85f3d724bee"
+A_executable_sha256 = "2a5882a8b515ed3c31b650ab1764b8f047a840f0a29957520444a85b021c2395"
+B_executable_sha256 = "3d5ff225a2c8c0209d52c3b48e4d215814aeeef695e799d52c8d2333ed3b0d13"
+common_harness_object_sha256 = "28fed51e5c4f783a4e6c5d7ab22ea58af8def45183f752e68a618b61cb094236"
+benchmark_source_sha256 = "1497b466b89313fd1be60d5b6791b5eb02a82c7f1356a457bf9571d70f8f85b9"
+benchmark_cost_include_sha256 = "73f1df5c4da3392607ec844c2c687852ff01ca87a7f5eb39ee14ba043fed8bd8"
+benchmark_cost_header_sha256 = "21aff2f5952a0e59dff48178a11b950c3448c626b188e281bd86974ec7740a4b"
+benchmark_window_include_sha256 = "ae22d09a233e269c02212eb5ea72bcd2579d4fb094142f82c5a042d9bc7ee3e7"
+private_runner_sha256 = "ec8ec227d057b79a1824e731d14e9485bbf2e0afdd59c4fb9fbfd5034a892270"
+private_source_archive_sha256 = "c03fe5ddf8fee23aae825b77f41d86544cd4f1e9861d5e46639cac0602524cf8"
+private_evidence_archive_sha256 = "3f9fd2e5bd5a291507b3f4b52bb7fefebf01c4f9faeabe2049e4313ffbc54cec"
+build_flags = ["-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror", "-Wpedantic", "-fno-common", "-march=native", "-fno-lto", "-DD167_PROBE=0", "-DFWLAB_MEDIA_EXCLUSIVE=1"]
+product_build = "existing ftl.mk, FWLAB_CRC_NATIVE=1 and FWLAB_MEDIA_EXCLUSIVE=1; 42 product objects excluding test_parent.o"
+harness_linkage = "one identical non-LTO harness object linked to both product arms"
+logical_volume_bytes = 67108864
+parent_limit_bytes = 1048576
+physical_image_bytes = 89165824
+interval = "(host_read + host_write) / service_ns; accumulated request service, not full fixture wall time"
+criterion = "at least one of interleaved4K/read_all64/recovered_read64 paired median >= 1.05 with >= 4 wins; main phases including fill64 >= 0.97; all work counters equal"
+retained_outlier = "pair 5 GC_readback B/A = 0.5927568655418674; retained in summary"
+disposition = "adopted after separate equivalent-validator/correctness/source confirmation; one set, no dropped sample"
+run_count = 10
+sample_count = 80
+
+[[campaigns.summaries]]
+phase = "fill64"
+A_median_GB_per_second = 3.1523365781044417
+B_median_GB_per_second = 3.2282299562298293
+paired_B_over_A = [1.0077597167229568, 1.0348632612357724, 0.9838634018200583, 1.0833092434128995, 1.027607226774974]
+paired_median_ratio = 1.027607226774974
+B_wins = 4
+ties = 0
+B_losses = 1
+
+[[campaigns.summaries]]
+phase = "interleaved4K"
+A_median_GB_per_second = 0.24503200365821257
+B_median_GB_per_second = 0.2634762516449167
+paired_B_over_A = [1.077045651168926, 1.0716080137057185, 1.065986664971806, 1.0734533749661188, 1.1056314653773889]
+paired_median_ratio = 1.0734533749661188
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.summaries]]
+phase = "GC_parent1M"
+A_median_GB_per_second = 0.47372282559589424
+B_median_GB_per_second = 0.5126282699988756
+paired_B_over_A = [1.1583401107625575, 1.066428984390056, 1.0600931806070917, 1.087123187906583, 1.1192575636942674]
+paired_median_ratio = 1.087123187906583
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.summaries]]
+phase = "GC_readback"
+A_median_GB_per_second = 2.6172523961661343
+B_median_GB_per_second = 2.8477920008690774
+paired_B_over_A = [1.1214450996491752, 1.0351974271931392, 1.0988575256649344, 1.0940630207260678, 0.5927568655418675]
+paired_median_ratio = 1.0940630207260678
+B_wins = 4
+ties = 0
+B_losses = 1
+
+[[campaigns.summaries]]
+phase = "read_all64"
+A_median_GB_per_second = 2.528421734773075
+B_median_GB_per_second = 2.7599870367659034
+paired_B_over_A = [1.1031134267420115, 1.101539214368432, 1.0606236795551276, 1.097996209734599, 1.089555561111456]
+paired_median_ratio = 1.097996209734599
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.summaries]]
+phase = "recovered_read64"
+A_median_GB_per_second = 2.5409629394035775
+B_median_GB_per_second = 2.780661088400084
+paired_B_over_A = [1.0902186559289062, 1.0678612532726715, 1.0777526891018165, 1.098663552958589, 1.0808841946040098]
+paired_median_ratio = 1.0808841946040098
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.summaries]]
+phase = "continued_write1M"
+A_median_GB_per_second = 0.4743335610210664
+B_median_GB_per_second = 0.515060687778449
+paired_B_over_A = [1.0892593176577252, 1.091991963965557, 1.0691693446294674, 1.0785693991319598, 1.1190182651793097]
+paired_median_ratio = 1.0892593176577252
+B_wins = 5
+ties = 0
+B_losses = 0
+
+[[campaigns.summaries]]
+phase = "continued_read1M"
+A_median_GB_per_second = 5.451962772318411
+B_median_GB_per_second = 5.727419707231811
+paired_B_over_A = [1.0092669663170746, 1.0400713822193381, 1.0226676862573738, 0.9760576240235366, 1.1273245099681688]
+paired_median_ratio = 1.0226676862573738
+B_wins = 4
+ties = 0
+B_losses = 1
+
+[[campaigns.runs]]
+id = "p1-A"
+run_index = 1
+pair = 1
+order = "AB"
+arm = "A"
+private_raw_log_sha256 = "19edf7fe4570cee1a51c48fbd70b7f60feaafdda70fa38af6dce816897a60fb7"
+exit_code = 0
+process_user_seconds = 0.25
+process_system_seconds = 0.07
+process_elapsed_hms = "0:00.33"
+process_max_rss_KiB = 91944
+process_major_faults = 0
+process_minor_faults = 44216
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "08c21351fe37ac3703be8b5812948c1bbbc86d6792c98ee872eb348fcc058398"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 335134630
+auxiliary_times = [
+  { phase = "format", wall_ns = 40061300 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 127156970 },
+  { phase = "full_read_with_verification", wall_ns = 64252740 },
+  { phase = "drain_close", wall_ns = 4659950 },
+  { phase = "recovery", wall_ns = 15228180 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 63942700 },
+  { phase = "final_close_cleanup", wall_ns = 15991270 },
+]
+
+[[campaigns.runs]]
+id = "p1-B"
+run_index = 2
+pair = 1
+order = "AB"
+arm = "B"
+private_raw_log_sha256 = "4fe5bc66aa16f1572d8b8f5502eef05d9a541bf307069d6cbefb0536edf71e04"
+exit_code = 0
+process_user_seconds = 0.24
+process_system_seconds = 0.07
+process_elapsed_hms = "0:00.32"
+process_max_rss_KiB = 90864
+process_major_faults = 0
+process_minor_faults = 44154
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "e9fd16ff4032ea2d0959465fc790f952658ba695258e02c14021601502fb63d6"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 325705510
+auxiliary_times = [
+  { phase = "format", wall_ns = 38521600 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 123910890 },
+  { phase = "full_read_with_verification", wall_ns = 61731040 },
+  { phase = "drain_close", wall_ns = 4682710 },
+  { phase = "recovery", wall_ns = 15342490 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 61463820 },
+  { phase = "final_close_cleanup", wall_ns = 16426650 },
+]
+
+[[campaigns.runs]]
+id = "p2-B"
+run_index = 3
+pair = 2
+order = "BA"
+arm = "B"
+private_raw_log_sha256 = "b851209b395feada4007e52d768d271bbb7264a08f2e124ac39df92c61d905a9"
+exit_code = 0
+process_user_seconds = 0.24
+process_system_seconds = 0.07
+process_elapsed_hms = "0:00.32"
+process_max_rss_KiB = 92396
+process_major_faults = 0
+process_minor_faults = 44160
+process_voluntary_cs = 1
+process_involuntary_cs = 1
+private_time_log_sha256 = "e8bae6b4385ea4b5f8156033ffe777c8fa94ee0764b98a7eb0110a048d4ca62e"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 323228740
+auxiliary_times = [
+  { phase = "format", wall_ns = 37763170 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 122529840 },
+  { phase = "full_read_with_verification", wall_ns = 61183680 },
+  { phase = "drain_close", wall_ns = 4687860 },
+  { phase = "recovery", wall_ns = 14978390 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 61955680 },
+  { phase = "final_close_cleanup", wall_ns = 16471920 },
+]
+
+[[campaigns.runs]]
+id = "p2-A"
+run_index = 4
+pair = 2
+order = "BA"
+arm = "A"
+private_raw_log_sha256 = "c1e616cb19b477701491fd55919bc3afd974caf3f0a5665462c84a335eec0ca6"
+exit_code = 0
+process_user_seconds = 0.25
+process_system_seconds = 0.07
+process_elapsed_hms = "0:00.33"
+process_max_rss_KiB = 92584
+process_major_faults = 0
+process_minor_faults = 44188
+process_voluntary_cs = 1
+process_involuntary_cs = 0
+private_time_log_sha256 = "4cde35d441a166b31702ecdc3920e1104eb0d590dd41efeb932e01289bbd25fe"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 333124120
+auxiliary_times = [
+  { phase = "format", wall_ns = 38618860 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 126690580 },
+  { phase = "full_read_with_verification", wall_ns = 63785920 },
+  { phase = "drain_close", wall_ns = 4687780 },
+  { phase = "recovery", wall_ns = 15513180 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 63892420 },
+  { phase = "final_close_cleanup", wall_ns = 16087840 },
+]
+
+[[campaigns.runs]]
+id = "p3-A"
+run_index = 5
+pair = 3
+order = "AB"
+arm = "A"
+private_raw_log_sha256 = "afd0606fe34342575efa960a90fcce61ca6aa899fac4574f38fa1cdf582a753b"
+exit_code = 0
+process_user_seconds = 0.25
+process_system_seconds = 0.07
+process_elapsed_hms = "0:00.33"
+process_max_rss_KiB = 92216
+process_major_faults = 0
+process_minor_faults = 44207
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "fb33f3d30a5fcb19db3b13d2123fc114b4862c56475db10e9313a385a16f138c"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 333338600
+auxiliary_times = [
+  { phase = "format", wall_ns = 37459780 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 126685280 },
+  { phase = "full_read_with_verification", wall_ns = 64391480 },
+  { phase = "drain_close", wall_ns = 4944580 },
+  { phase = "recovery", wall_ns = 15151710 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 64368880 },
+  { phase = "final_close_cleanup", wall_ns = 16486660 },
+]
+
+[[campaigns.runs]]
+id = "p3-B"
+run_index = 6
+pair = 3
+order = "AB"
+arm = "B"
+private_raw_log_sha256 = "28c63a26ea2862d2e902337c5700e0925825084236524a4f42fcb764ee405384"
+exit_code = 0
+process_user_seconds = 0.25
+process_system_seconds = 0.07
+process_elapsed_hms = "0:00.33"
+process_max_rss_KiB = 92096
+process_major_faults = 0
+process_minor_faults = 44160
+process_voluntary_cs = 1
+process_involuntary_cs = 1
+private_time_log_sha256 = "355dbd7f1bc1359c17594cdf909d210421218956ed8d8a0e4168ac27d0f056f9"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 332468630
+auxiliary_times = [
+  { phase = "format", wall_ns = 40902930 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 124934390 },
+  { phase = "full_read_with_verification", wall_ns = 63384430 },
+  { phase = "drain_close", wall_ns = 4959450 },
+  { phase = "recovery", wall_ns = 15319750 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 62697880 },
+  { phase = "final_close_cleanup", wall_ns = 16492610 },
+]
+
+[[campaigns.runs]]
+id = "p4-B"
+run_index = 7
+pair = 4
+order = "BA"
+arm = "B"
+private_raw_log_sha256 = "10a4efc86aa91fd83d10267661ea56fd79661fb6f5e20f14975aa262c4041722"
+exit_code = 0
+process_user_seconds = 0.25
+process_system_seconds = 0.07
+process_elapsed_hms = "0:00.32"
+process_max_rss_KiB = 90788
+process_major_faults = 0
+process_minor_faults = 44153
+process_voluntary_cs = 1
+process_involuntary_cs = 5
+private_time_log_sha256 = "4fb2d0f19310c73383b3e4096e19290481d4b3c677876b496b0f34d238a451ce"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 326991230
+auxiliary_times = [
+  { phase = "format", wall_ns = 40039910 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 123223520 },
+  { phase = "full_read_with_verification", wall_ns = 62409860 },
+  { phase = "drain_close", wall_ns = 4648920 },
+  { phase = "recovery", wall_ns = 15263220 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 61755210 },
+  { phase = "final_close_cleanup", wall_ns = 15989900 },
+]
+
+[[campaigns.runs]]
+id = "p4-A"
+run_index = 8
+pair = 4
+order = "BA"
+arm = "A"
+private_raw_log_sha256 = "187cb59da369495c19fd7a60873065ef2c9190205bb26a2973cc0065cfbff709"
+exit_code = 0
+process_user_seconds = 0.25
+process_system_seconds = 0.08
+process_elapsed_hms = "0:00.33"
+process_max_rss_KiB = 92712
+process_major_faults = 0
+process_minor_faults = 44220
+process_voluntary_cs = 1
+process_involuntary_cs = 3
+private_time_log_sha256 = "d2fd8d0cd2e85504367ff3c9f81754145479c917004f1bebd87cab42386c5c1c"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 338829460
+auxiliary_times = [
+  { phase = "format", wall_ns = 41768080 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 128116790 },
+  { phase = "full_read_with_verification", wall_ns = 64401830 },
+  { phase = "drain_close", wall_ns = 4814370 },
+  { phase = "recovery", wall_ns = 15140480 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 64466520 },
+  { phase = "final_close_cleanup", wall_ns = 16296510 },
+]
+
+[[campaigns.runs]]
+id = "p5-A"
+run_index = 9
+pair = 5
+order = "AB"
+arm = "A"
+private_raw_log_sha256 = "a8576104d01215c9fe7f1b614481e347023f4a745c50c94bf4edbc1308856adc"
+exit_code = 0
+process_user_seconds = 0.26
+process_system_seconds = 0.08
+process_elapsed_hms = "0:00.34"
+process_max_rss_KiB = 91820
+process_major_faults = 0
+process_minor_faults = 44184
+process_voluntary_cs = 1
+process_involuntary_cs = 2
+private_time_log_sha256 = "ecfcc949503c848207efed9f6369c69ed06995623b72e33fa46dbc28dccfd22d"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 341795800
+auxiliary_times = [
+  { phase = "format", wall_ns = 40881640 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 129613320 },
+  { phase = "full_read_with_verification", wall_ns = 65009080 },
+  { phase = "drain_close", wall_ns = 5019240 },
+  { phase = "recovery", wall_ns = 15773410 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 64629090 },
+  { phase = "final_close_cleanup", wall_ns = 16624630 },
+]
+
+[[campaigns.runs]]
+id = "p5-B"
+run_index = 10
+pair = 5
+order = "AB"
+arm = "B"
+private_raw_log_sha256 = "cc5f92ca7a2556572f7b16b1e05c623873458cde5304912b80444adc82443c7b"
+exit_code = 0
+process_user_seconds = 0.25
+process_system_seconds = 0.07
+process_elapsed_hms = "0:00.33"
+process_max_rss_KiB = 91884
+process_major_faults = 0
+process_minor_faults = 44179
+process_voluntary_cs = 1
+process_involuntary_cs = 0
+private_time_log_sha256 = "21c1bfb069173a165606a2edea4b5aa5f60d1628fbbd1cea0976c00a0da3d90e"
+full_main_verified = true
+real_GC_CP = true
+recovery_continued_write = true
+original_checks_retained = true
+owned_image_removed = true
+whole_journey_wall_ns = 330842920
+auxiliary_times = [
+  { phase = "format", wall_ns = 41177620 },
+  { phase = "naturalGC_workload_inclusive", wall_ns = 124389730 },
+  { phase = "full_read_with_verification", wall_ns = 62735730 },
+  { phase = "drain_close", wall_ns = 5058960 },
+  { phase = "recovery", wall_ns = 15231360 },
+  { phase = "recovered_full_read_with_verification", wall_ns = 62157990 },
+  { phase = "final_close_cleanup", wall_ns = 16471790 },
+]
+
+[[campaigns.samples]]
+run_id = "p1-A"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47183190
+service_ns = 20949440
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.2033726915850735
+
+[[campaigns.samples]]
+run_id = "p1-A"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7807640
+service_ns = 43846550
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.24503200365821257
+
+[[campaigns.samples]]
+run_id = "p1-A"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 773760
+service_ns = 2392760
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.4382286564469483
+
+[[campaigns.samples]]
+run_id = "p1-A"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2091620
+service_ns = 600960
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.6172523961661343
+
+[[campaigns.samples]]
+run_id = "p1-A"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1369280
+service_ns = 26283310
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.5532881513021
+
+[[campaigns.samples]]
+run_id = "p1-A"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1667500
+service_ns = 25797070
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.601414191611683
+
+[[campaigns.samples]]
+run_id = "p1-A"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 723860
+service_ns = 2210630
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.4743335610210664
+
+[[campaigns.samples]]
+run_id = "p1-A"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 28960
+service_ns = 181880
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.765207829338025
+
+[[campaigns.samples]]
+run_id = "p1-B"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47718560
+service_ns = 20788130
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.2282299562298293
+
+[[campaigns.samples]]
+run_id = "p1-B"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7697740
+service_ns = 40710020
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.2639106539372862
+
+[[campaigns.samples]]
+run_id = "p1-B"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 739020
+service_ns = 2065680
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.5076178304480848
+
+[[campaigns.samples]]
+run_id = "p1-B"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2149960
+service_ns = 535880
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.9351048742255728
+
+[[campaigns.samples]]
+run_id = "p1-B"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1317070
+service_ns = 23826480
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.816566442042635
+
+[[campaigns.samples]]
+run_id = "p1-B"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1446780
+service_ns = 23662290
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.836110283493271
+
+[[campaigns.samples]]
+run_id = "p1-B"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 723860
+service_ns = 2029480
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.5166722510199657
+
+[[campaigns.samples]]
+run_id = "p1-B"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 23430
+service_ns = 180210
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.818633816103435
+
+[[campaigns.samples]]
+run_id = "p2-B"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47072230
+service_ns = 20005300
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.354554243125572
+
+[[campaigns.samples]]
+run_id = "p2-B"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7709630
+service_ns = 40777140
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.2634762516449167
+
+[[campaigns.samples]]
+run_id = "p2-B"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 741520
+service_ns = 2075600
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.5051917517826171
+
+[[campaigns.samples]]
+run_id = "p2-B"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2074130
+service_ns = 559700
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.81019117384313
+
+[[campaigns.samples]]
+run_id = "p2-B"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1284440
+service_ns = 23582810
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.845668688336971
+
+[[campaigns.samples]]
+run_id = "p2-B"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1535080
+service_ns = 24059090
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.7893350912274735
+
+[[campaigns.samples]]
+run_id = "p2-B"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 739520
+service_ns = 2035830
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.515060687778449
+
+[[campaigns.samples]]
+run_id = "p2-B"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 25290
+service_ns = 184920
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.670430456413584
+
+[[campaigns.samples]]
+run_id = "p2-A"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47267380
+service_ns = 20702750
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.2415434664476943
+
+[[campaigns.samples]]
+run_id = "p2-A"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7794860
+service_ns = 43697110
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.24586999002908888
+
+[[campaigns.samples]]
+run_id = "p2-A"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 738670
+service_ns = 2213480
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.47372282559589424
+
+[[campaigns.samples]]
+run_id = "p2-A"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2184190
+service_ns = 579400
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.7146427338626165
+
+[[campaigns.samples]]
+run_id = "p2-A"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1347970
+service_ns = 25977390
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.5833566805595174
+
+[[campaigns.samples]]
+run_id = "p2-A"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1395240
+service_ns = 25691770
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.6120763186031946
+
+[[campaigns.samples]]
+run_id = "p2-A"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 734660
+service_ns = 2223110
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.4716707675283724
+
+[[campaigns.samples]]
+run_id = "p2-A"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 24480
+service_ns = 192330
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.451962772318411
+
+[[campaigns.samples]]
+run_id = "p3-A"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47052090
+service_ns = 21288610
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.1523365781044417
+
+[[campaigns.samples]]
+run_id = "p3-A"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7727050
+service_ns = 43523500
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.24685073580939032
+
+[[campaigns.samples]]
+run_id = "p3-A"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 727700
+service_ns = 2168410
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.48356906673553435
+
+[[campaigns.samples]]
+run_id = "p3-A"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2097030
+service_ns = 606910
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.591593481735348
+
+[[campaigns.samples]]
+run_id = "p3-A"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1305220
+service_ns = 26541800
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.528421734773075
+
+[[campaigns.samples]]
+run_id = "p3-A"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1490570
+service_ns = 26423780
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.5397147569348517
+
+[[campaigns.samples]]
+run_id = "p3-A"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 732510
+service_ns = 2195860
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.4775240680189083
+
+[[campaigns.samples]]
+run_id = "p3-A"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 24440
+service_ns = 187230
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.600470010147946
+
+[[campaigns.samples]]
+run_id = "p3-B"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47869850
+service_ns = 21637770
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.1014685894156377
+
+[[campaigns.samples]]
+run_id = "p3-B"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7711540
+service_ns = 40829310
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.26313959261128833
+
+[[campaigns.samples]]
+run_id = "p3-B"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 751030
+service_ns = 2045490
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.5126282699988756
+
+[[campaigns.samples]]
+run_id = "p3-B"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2006950
+service_ns = 552310
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.8477920008690774
+
+[[campaigns.samples]]
+run_id = "p3-B"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1318010
+service_ns = 25024710
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.681703963802178
+
+[[campaigns.samples]]
+run_id = "p3-B"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1395120
+service_ns = 24517480
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.7371844088381025
+
+[[campaigns.samples]]
+run_id = "p3-B"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 737270
+service_ns = 2053800
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.5105540948485734
+
+[[campaigns.samples]]
+run_id = "p3-B"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 23370
+service_ns = 183080
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.727419707231811
+
+[[campaigns.samples]]
+run_id = "p4-B"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47360930
+service_ns = 20375050
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.2936784940405053
+
+[[campaigns.samples]]
+run_id = "p4-B"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7745400
+service_ns = 40878040
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.26282590848289206
+
+[[campaigns.samples]]
+run_id = "p4-B"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 756780
+service_ns = 2032180
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.5159857886604533
+
+[[campaigns.samples]]
+run_id = "p4-B"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2000230
+service_ns = 534110
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.944831588998521
+
+[[campaigns.samples]]
+run_id = "p4-B"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1282650
+service_ns = 24314920
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.7599870367659034
+
+[[campaigns.samples]]
+run_id = "p4-B"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1379560
+service_ns = 24134140
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.780661088400084
+
+[[campaigns.samples]]
+run_id = "p4-B"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 724200
+service_ns = 2041380
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.5136603670066328
+
+[[campaigns.samples]]
+run_id = "p4-B"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 24160
+service_ns = 197140
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.3189408542152785
+
+[[campaigns.samples]]
+run_id = "p4-A"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47354010
+service_ns = 22072480
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.040386218494705
+
+[[campaigns.samples]]
+run_id = "p4-A"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7718720
+service_ns = 43880670
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.24484147575686516
+
+[[campaigns.samples]]
+run_id = "p4-A"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 749500
+service_ns = 2209230
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.4746341485494946
+
+[[campaigns.samples]]
+run_id = "p4-A"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2027390
+service_ns = 584350
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.6916471292889534
+
+[[campaigns.samples]]
+run_id = "p4-A"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1282930
+service_ns = 26697690
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.513658073039278
+
+[[campaigns.samples]]
+run_id = "p4-A"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1343790
+service_ns = 26515300
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.5309486975444364
+
+[[campaigns.samples]]
+run_id = "p4-A"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 728480
+service_ns = 2201770
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.4762422959709688
+
+[[campaigns.samples]]
+run_id = "p4-A"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 22880
+service_ns = 192420
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.4494127429581125
+
+[[campaigns.samples]]
+run_id = "p5-A"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47977190
+service_ns = 22151050
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.0296019376056664
+
+[[campaigns.samples]]
+run_id = "p5-A"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7822770
+service_ns = 44469570
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.24159909798992885
+
+[[campaigns.samples]]
+run_id = "p5-A"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 752990
+service_ns = 2249260
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.46618710153561616
+
+[[campaigns.samples]]
+run_id = "p5-A"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2001770
+service_ns = 606740
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.5923196097175065
+
+[[campaigns.samples]]
+run_id = "p5-A"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1270810
+service_ns = 27019300
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.4837380687138455
+
+[[campaigns.samples]]
+run_id = "p5-A"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1363840
+service_ns = 26410800
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.5409629394035775
+
+[[campaigns.samples]]
+run_id = "p5-A"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 1078190
+service_ns = 2260070
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.46395731105673715
+
+[[campaigns.samples]]
+run_id = "p5-A"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 24000
+service_ns = 201870
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.194313171843265
+
+[[campaigns.samples]]
+run_id = "p5-B"
+phase = "fill64"
+requests = 64
+host_read = 0
+host_write = 67108864
+setup_ns = 47550360
+service_ns = 21555950
+roots_ns = 0
+read_bytes = 5094656
+write_bytes = 78667392
+read_calls = 5756
+write_calls = 23290
+syncs = 4326
+CP = 2
+GC = 0
+NFC_children = 1442
+commits = 1442
+OPEN = 256
+CLOSE = 0
+MAP = 256
+service_GB_per_second = 3.1132408453350466
+
+[[campaigns.samples]]
+run_id = "p5-B"
+phase = "interleaved4K"
+requests = 2623
+host_read = 0
+host_write = 10743808
+setup_ns = 7695210
+service_ns = 40220970
+roots_ns = 0
+read_bytes = 6026880
+write_bytes = 51623232
+read_calls = 35034
+write_calls = 43565
+syncs = 26283
+CP = 10
+GC = 0
+NFC_children = 8761
+commits = 8761
+OPEN = 41
+CLOSE = 0
+MAP = 2623
+service_GB_per_second = 0.2671195647444604
+
+[[campaigns.samples]]
+run_id = "p5-B"
+phase = "GC_parent1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 738450
+service_ns = 2009600
+roots_ns = 0
+read_bytes = 1386560
+write_bytes = 3081664
+read_calls = 2101
+write_calls = 1946
+syncs = 1029
+CP = 0
+GC = 8
+NFC_children = 586
+commits = 343
+OPEN = 8
+CLOSE = 0
+MAP = 10
+service_GB_per_second = 0.5217834394904458
+
+[[campaigns.samples]]
+run_id = "p5-B"
+phase = "GC_readback"
+requests = 129
+host_read = 1572864
+host_write = 0
+setup_ns = 2036830
+service_ns = 1023590
+roots_ns = 0
+read_bytes = 1684352
+write_bytes = 0
+read_calls = 661
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 138
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 1.5366152463388663
+
+[[campaigns.samples]]
+run_id = "p5-B"
+phase = "read_all64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1239270
+service_ns = 24798460
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.706170625111398
+
+[[campaigns.samples]]
+run_id = "p5-B"
+phase = "recovered_read64"
+requests = 64
+host_read = 67108864
+host_write = 0
+setup_ns = 1345180
+service_ns = 24434440
+roots_ns = 0
+read_bytes = 71650432
+write_bytes = 0
+read_calls = 27236
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 5426
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 2.746486680275873
+
+[[campaigns.samples]]
+run_id = "p5-B"
+phase = "continued_write1M"
+requests = 1
+host_read = 0
+host_write = 1048576
+setup_ns = 730500
+service_ns = 2019690
+roots_ns = 0
+read_bytes = 1364032
+write_bytes = 3038400
+read_calls = 2057
+write_calls = 1907
+syncs = 1005
+CP = 0
+GC = 8
+NFC_children = 574
+commits = 335
+OPEN = 8
+CLOSE = 0
+MAP = 8
+service_GB_per_second = 0.5191767053359674
+
+[[campaigns.samples]]
+run_id = "p5-B"
+phase = "continued_read1M"
+requests = 1
+host_read = 1048576
+host_write = 0
+setup_ns = 23170
+service_ns = 179070
+roots_ns = 0
+read_bytes = 1114624
+write_bytes = 0
+read_calls = 272
+write_calls = 0
+syncs = 0
+CP = 0
+GC = 0
+NFC_children = 8
+commits = 0
+OPEN = 0
+CLOSE = 0
+MAP = 0
+service_GB_per_second = 5.855676551069414

@@ -10,6 +10,9 @@ and NFC rates must not be substituted for the native NVMe result.
 
 All 30 native samples, durations, bytes, errors, completion latency, pair order
 and computed medians are in [the machine-readable data](2026-09-10-throughput.toml).
+The [separate ARM data](2026-09-10-arm-throughput.toml) retains all 80 physical
+media/NFC transfer samples and all 80 FTL phase records, including per-process
+resource use, separately timed lifecycle intervals and exact build identities.
 No samples were dropped or rerun to obtain a desired result. MiB/GiB denote
 binary sizes; MB/s and GB/s in this report are decimal rates.
 
@@ -76,6 +79,11 @@ performance criterion did not. It remains excluded from the adopted source.
 The result is retained because fewer control calls did **not** establish a
 meaningful performance gain. No rescue optimization or favorable rerun followed.
 
+The data file now binds both full source revisions, the corrected candidate's
+11-path source manifest and the actual archived A/B worker ELFs. Those files
+were rehashed during report maintenance; no performance run was repeated and
+the rejected code remains outside the adopted branch.
+
 ## ARM64 isolated layers: different experiments, not native PCI
 
 ARM64 Linux VM, GCC 15.2 `-O2`/native ISA, one CPU 7, explicit mapped tmpfs and
@@ -84,6 +92,9 @@ NFC-only fixtures each use a 128-MiB main working set with reusable windows.
 Initialization, prefault, warmup/erase and reopen/readback execute outside the
 timed transfers. Full main/OOB checks and reopen passed. Each shape has one
 five-pair alternating set; all timed samples recorded zero major faults.
+The ARM data preserves the 40 media and 40 NFC Write/Read records separately
+from buffer setup, format, erase preparation, close and recovery durations.
+An erase-preparation interval is not counted as bytes programmed or read.
 
 | Isolated experiment and shape | Baseline median W / R GB/s | Candidate median W / R GB/s | Paired median W / R ratio |
 |---|---:|---:|---:|
@@ -112,6 +123,10 @@ divide Host payload by **accumulated service time**, not total fixture wall
 time; setup, recovery and outer verification have separately logged durations.
 Service intervals still contain the invoked software/harness checks. They are
 not pure FTL instruction rates or a native-driver benchmark.
+Each of the ten complete fixtures contributes eight phase records. The ARM
+data retains their Host/substrate byte counts, operation counters, setup and
+service times, the seven separately logged lifecycle durations and the whole
+journey wall time. These overlapping intervals are not summed into one rate.
 
 | Phase | Baseline / candidate GB/s | Paired median ratio |
 |---|---:|---:|
@@ -131,7 +146,10 @@ for this code or current native MQ2.
 
 ## Identity, reproduction and limitations
 
-The TOML data contains native source labels, exact worker ELF and archive hashes.
+The native and ARM TOML files contain source labels, exact A/B executable,
+benchmark-source and archive hashes. The ARM data names the measured product
+file hashes separately from later adopted commits: private pre-commit benchmark
+exports and final source/README/test integration are not the same artifact.
 Additional retained ARM artifact identities are:
 
 | Artifact | SHA-256 |
