@@ -15,7 +15,13 @@
 #include <linux/spinlock.h>
 #include <linux/version.h>
 
+#ifdef CONFIG_ARM64
+#include <linux/pci-ecam.h>
+#elif defined(CONFIG_X86)
 #include <asm/pci.h>
+#else
+#error "Native M4 platform binding currently supports x86 and ARM64 only"
+#endif
 
 #include "m4_hif.h"
 #include "m4_dma_api.h"
@@ -107,8 +113,12 @@ struct fwlab_m4_irq_route {
 };
 
 struct fwlab_m4_pci_ctx {
-	/* pci_bus::sysdata must point at this object on x86. */
+	/* Architecture hooks consume sysdata; our callbacks use bridge private. */
+#ifdef CONFIG_ARM64
+	struct pci_config_window sysdata;
+#else
 	struct pci_sysdata sysdata;
+#endif
 	struct pci_host_bridge *bridge;
 	struct device *root_dev;
 	struct pci_dev *pdev;

@@ -19,6 +19,9 @@
 #include <linux/module.h>
 #include <linux/numa.h>
 #include <linux/pci.h>
+#ifdef CONFIG_ARM64
+#include <linux/efi.h>
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
 #include <linux/unaligned.h>
@@ -493,6 +496,37 @@ static int fwlab_m4_bar_worker(void *data)
 }
 #endif
 
+static int fwlab_m4_validate_platform_aperture(struct fwlab_m4_pci_ctx *ctx)
+{
+#ifdef CONFIG_ARM64
+	efi_memory_desc_t md;
+	phys_addr_t offset;
+	int ret;
+
+	/*
+	 * The ARM lab binding uses a dedicated EFI Unusable reservation (e.g.
+	 * GRUB cutmem), not RAM still present in the cached linear map. Merely
+	 * reserving pages does not make an ARM Device ioremap alias safe.
+	 * Boot-time before/after EFI-map evidence establishes lab ownership.
+	 */
+	if (PAGE_SIZE != SZ_4K || !efi_enabled(EFI_BOOT))
+		return -EOPNOTSUPP;
+	ret = efi_mem_desc_lookup(ctx->bar_start, &md);
+	if (ret)
+		return ret;
+	if (md.type != EFI_UNUSABLE_MEMORY ||
+	    md.phys_addr != ctx->bar_start ||
+	    md.num_pages != ctx->bar_size / EFI_PAGE_SIZE ||
+	    !(md.attribute & EFI_MEMORY_WB) ||
+	    (md.attribute & (EFI_MEMORY_RUNTIME | EFI_MEMORY_RP | EFI_MEMORY_WP)))
+		return -EINVAL;
+	for (offset = 0; offset < ctx->bar_size; offset += PAGE_SIZE)
+		if (pfn_is_map_memory(PHYS_PFN(ctx->bar_start + offset)))
+			return -EINVAL;
+#endif
+	return 0;
+}
+
 static int fwlab_m4_prepare_aperture(struct fwlab_m4_pci_ctx *ctx)
 {
 	struct resource *probe;
@@ -513,6 +547,11 @@ static int fwlab_m4_prepare_aperture(struct fwlab_m4_pci_ctx *ctx)
 	    ctx->bar_start + ctx->bar_size - 1 < ctx->bar_start)
 		return -EINVAL;
 
+	ret = fwlab_m4_validate_platform_aperture(ctx);
+	if (ret) {
+		dev_err(ctx->root_dev, "BAR platform reservation rejected: %d\n", ret);
+		return ret;
+	}
 	end = ctx->bar_start + ctx->bar_size - 1;
 	probe = request_mem_region(ctx->bar_start, ctx->bar_size,
 				   FWLAB_M4_PCI_NAME "-parent-probe");
@@ -522,7 +561,13 @@ static int fwlab_m4_prepare_aperture(struct fwlab_m4_pci_ctx *ctx)
 	if (!ctx->reserved_parent ||
 	    ctx->reserved_parent->start != ctx->bar_start ||
 	    ctx->reserved_parent->end != end ||
-	    (ctx->reserved_parent->flags & IORESOURCE_BUSY)) {
+	    (ctx->reserved_parent->flags & IORESOURCE_BUSY)
+#ifdef CONFIG_ARM64
+	    || (ctx->reserved_parent->flags & IORESOURCE_SYSRAM)
+	    || !ctx->reserved_parent->name
+	    || strcmp(ctx->reserved_parent->name, "reserved")
+#endif
+	    ) {
 		release_mem_region(ctx->bar_start, ctx->bar_size);
 		ctx->reserved_parent = NULL;
 		return -EINVAL;
@@ -574,8 +619,7 @@ static int fwlab_m4_cfg_read(struct pci_bus *bus, unsigned int devfn,
 	if (!fwlab_m4_cfg_access_valid(where, size))
 		return PCIBIOS_BAD_REGISTER_NUMBER;
 
-	ctx = container_of(to_pci_sysdata(bus), struct fwlab_m4_pci_ctx,
-			   sysdata);
+	ctx = pci_host_bridge_priv(pci_find_host_bridge(bus));
 	spin_lock_irqsave(&ctx->config_lock, flags);
 	switch (size) {
 	case 1:
@@ -612,8 +656,7 @@ static int fwlab_m4_cfg_write(struct pci_bus *bus, unsigned int devfn,
 	if (!fwlab_m4_cfg_access_valid(where, size))
 		return PCIBIOS_BAD_REGISTER_NUMBER;
 
-	ctx = container_of(to_pci_sysdata(bus), struct fwlab_m4_pci_ctx,
-			   sysdata);
+	ctx = pci_host_bridge_priv(pci_find_host_bridge(bus));
 	spin_lock_irqsave(&ctx->config_lock, flags);
 
 	if (where == PCI_COMMAND && (size == 2 || size == 4)) {
@@ -787,8 +830,19 @@ int fwlab_m4_pci_prepare(struct device *root_dev,
 		return domain_nr;
 	}
 
+	/* Transfer domain ownership before any subsequent fallible setup. */
+	bridge->domain_nr = domain_nr;
+#ifdef CONFIG_ARM64
+	/*
+	 * ACPI's ARM root-bridge hook expects pci_config_window even for a
+	 * software bridge. NULL parent is its supported non-ACPI-root case;
+	 * root_dev is not an acpi_device and must never be placed here.
+	 */
+	ctx->sysdata.parent = NULL;
+#else
 	ctx->sysdata.domain = domain_nr;
 	ctx->sysdata.node = NUMA_NO_NODE;
+#endif
 	ret = fwlab_m4_create_msi_domain(ctx);
 	if (ret) {
 		fwlab_m4_release_aperture(ctx);
@@ -806,7 +860,6 @@ int fwlab_m4_pci_prepare(struct device *root_dev,
 	bridge->sysdata = &ctx->sysdata;
 	bridge->ops = &fwlab_m4_pci_ops;
 	bridge->busnr = FWLAB_M4_BUS_NR;
-	bridge->domain_nr = domain_nr;
 	bridge->msi_domain = ctx->msi_domain != NULL;
 	pci_add_resource(&bridge->windows, &ctx->busn_res);
 	pci_add_resource(&bridge->windows, &ctx->mem_window);
