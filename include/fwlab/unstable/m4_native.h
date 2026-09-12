@@ -25,7 +25,9 @@ enum fwlab_m4_native_operation {
     FWLAB_M4_NATIVE_DMA_CANCEL = 12,
     FWLAB_M4_NATIVE_DMA_RETIRE = 13,
     FWLAB_M4_NATIVE_AUTHORITY_RELEASE = 14,
-    FWLAB_M4_NATIVE_REVOKE = 15
+    FWLAB_M4_NATIVE_REVOKE = 15,
+    /* LARGE/PUMP: old work drained, not permission to enable a new runtime. */
+    FWLAB_M4_NATIVE_DRAIN_ACK = 16
 };
 
 enum fwlab_m4_native_event {

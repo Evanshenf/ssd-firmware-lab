@@ -157,6 +157,22 @@ static int runtime_progress(const struct native_context *context,
     return 1;
 }
 
+static void runtime_complete(const struct native_context *context,
+    const char *phase, uint32_t iterations, const struct timespec *started)
+{
+    struct timespec finished;
+    int64_t elapsed_ns;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &finished))
+        return;
+    elapsed_ns = (int64_t)(finished.tv_sec - started->tv_sec) * INT64_C(1000000000) +
+        finished.tv_nsec - started->tv_nsec;
+    if (elapsed_ns < 0)
+        return;
+    printf("NATIVE_RUNTIME_COMPLETE|phase=%s|epoch=%u|iterations=%u|elapsed_ns=%" PRIu64 "\n",
+           phase, context->epoch, iterations, (uint64_t)elapsed_ns);
+}
+
 int native_runtime_create(struct native_context *context,
                           struct native_media *media, int format)
 {
@@ -167,6 +183,8 @@ int native_runtime_create(struct native_context *context,
     uint32_t iteration, limit;
 
     if (context->runtime || context->next_runtime_seed >= UINT64_C(0xfffff))
+        return 0;
+    if (clock_gettime(CLOCK_MONOTONIC, &now))
         return 0;
     context->runtime = calloc(1, sizeof(*context->runtime));
     if (!context->runtime)
@@ -201,19 +219,26 @@ int native_runtime_create(struct native_context *context,
         memset(&context->buffer, 0, sizeof(context->buffer));
         return 0;
     }
-    if (clock_gettime(CLOCK_MONOTONIC, &now))
-        return 0;
     started = last = (uint64_t)now.tv_sec;
     limit = runtime_iteration_limit(context);
     for (iteration = 0; iteration < limit; ++iteration) {
         uint32_t units;
+#if FWLAB_NATIVE_LARGE
+        if (context->recovery_pump && !(iteration & 1023u)) {
+            int service_result = 0;
+            if (native_pump(context, &service_result) || service_result)
+                return 0;
+        }
+#endif
         if (!(iteration & 1023u) && !runtime_progress(context,
                 format ? "format" : "recovery", iteration, started, &last))
             return 0;
         if (j0_runtime_step(context->runtime, 3, &units) != FWLAB_SPINE_V0_OK)
             return 0;
-        if (context->runtime->ready)
+        if (context->runtime->ready) {
+            runtime_complete(context, format ? "format" : "recovery", iteration + 1u, &now);
             return 1;
+        }
     }
     return 0;
 }
@@ -519,8 +544,10 @@ static int runtime_close(struct native_context *context)
             !runtime_progress(context, "drain", iteration, started, &last))
             return 0;
         enum fwlab_spine_result_v0 result = native_runtime_close_step(context, 48);
-        if (result == FWLAB_SPINE_V0_OK)
+        if (result == FWLAB_SPINE_V0_OK) {
+            runtime_complete(context, "drain", iteration + 1u, &now);
             return 1;
+        }
         if (result != FWLAB_SPINE_V0_IN_PROGRESS) {
             fprintf(stderr, "drain result=%u iteration=%u\n", (unsigned)result, iteration);
             return 0;
@@ -560,7 +587,15 @@ static int firmware_loop(struct native_context *context, struct native_media *me
                 return 0;
             }
             context->epoch = next_epoch;
-            if (!native_runtime_create(context, media, 0))
+#if FWLAB_NATIVE_LARGE
+            native_message_init(context, NULL, FWLAB_M4_NATIVE_DRAIN_ACK, &message);
+            if (native_exchange(context, &message))
+                return 0;
+            context->recovery_pump = 1;
+#endif
+            int recovered = native_runtime_create(context, media, 0);
+            context->recovery_pump = 0;
+            if (!recovered)
                 return 0;
             native_message_init(context, NULL, FWLAB_M4_NATIVE_RESET_ACK, &message);
             if (native_exchange(context, &message))

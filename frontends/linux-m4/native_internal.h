@@ -107,6 +107,7 @@ struct native_context {
     } canary;
     int descriptor;
     uint8_t closing;
+    uint8_t recovery_pump; /* Only after kernel accepts reset drain completion. */
     uint8_t progressed; /* Per-turn native capture/admission/retirement fact. */
 };
 

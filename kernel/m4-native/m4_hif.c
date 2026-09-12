@@ -187,6 +187,7 @@ struct fwlab_m4_hif {
 	bool attached;
 	bool firmware_ready;
 	bool reset_pending;
+	bool reset_drained;
 	bool shutdown;
 	bool faulted;
 	bool quarantined;
@@ -302,6 +303,25 @@ static int native_requests_clear(struct fwlab_m4_hif *hif)
 	return hif->frame[0].held || hif->frame[1].held ? -EIO : 0;
 }
 
+static int native_reset_cleanup(struct fwlab_m4_hif *hif)
+{
+	u32 index;
+
+	if (native_large(hif)) {
+		for (index = 0; index < NATIVE_DEPTH; index++) {
+			struct native_request *held = &hif->request[index];
+			if (held->active && (held->publication == FWLAB_M4_NATIVE_UNPUBLISHED ||
+			    (native_mq2(hif) && held->queue_started && !held->queue_done) ||
+			    (held->shaped && (!held->authority_released || !held->dma_retired))))
+				return -EBUSY;
+		}
+	}
+	if (native_requests_clear(hif)) return -EIO;
+	if (native_mq2(hif) && native_queues_clear(hif)) return -EIO;
+	hif->delivery_uid = 0;
+	return 0;
+}
+
 static void native_frames_free(struct fwlab_m4_hif *hif)
 {
 	u32 index;
@@ -372,8 +392,19 @@ static int native_copy(struct fwlab_m4_hif *hif,
 
 static void native_registers_init(struct fwlab_m4_hif *hif)
 {
+	u64 cap = 0x000000200101001fULL;
+
+#if FWLAB_M4_HOST_PROFILE != FWLAB_M4_HOST_PROFILE_SMALL
+	/*
+	 * LARGE/MQ2 reconstruct the full FTL before RESET_ACK. Advertise a
+	 * fixed 60-second readiness budget for that construction, independent
+	 * of namespace geometry. The SMALL reference keeps its original TO.
+	 * CAP.TO does not extend Linux's separate shutdown-complete timeout.
+	 */
+	cap = (cap & ~GENMASK_ULL(31, 24)) | (120ULL << 24);
+#endif
 	memset_io(hif->pci->bar_mapping, 0, FWLAB_M4_BAR_MAP_SIZE);
-	writeq(0x000000200101001fULL, hif->pci->bar_mapping + REG_CAP);
+	writeq(cap, hif->pci->bar_mapping + REG_CAP);
 	writel(0x00010000, hif->pci->bar_mapping + REG_VS);
 	wmb();
 }
@@ -384,6 +415,7 @@ static void native_cancel_transport(struct fwlab_m4_hif *hif)
 
 	fwlab_m4_close_effects(hif->pci);
 	hif->firmware_ready = false;
+	hif->reset_drained = false;
 	hif->delivery_uid = 0;
 	for (index = 0; index < NATIVE_DEPTH; index++) {
 		struct native_request *request = &hif->request[index];
@@ -466,6 +498,23 @@ static u32 native_fault_status(struct fwlab_m4_hif *hif)
 {
 	return CSTS_FATAL | ((readl(hif->pci->bar_mapping + REG_CC) & CC_ENABLE)
 			    ? CSTS_READY : 0);
+}
+
+/* Old work is drained; this never makes the successor firmware ready. */
+static void native_drained_status(struct fwlab_m4_hif *hif)
+{
+	u32 cc = readl(hif->pci->bar_mapping + REG_CC);
+
+	if (!(cc & CC_ENABLE)) {
+		hif->faulted = false;
+		hif->shutdown = false;
+		writel(0, hif->pci->bar_mapping + REG_CSTS);
+	} else if (hif->faulted) {
+		writel(native_fault_status(hif), hif->pci->bar_mapping + REG_CSTS);
+	} else if (hif->shutdown) {
+		writel(CSTS_READY | CSTS_SHUTDOWN_COMPLETE,
+		       hif->pci->bar_mapping + REG_CSTS);
+	}
 }
 
 static void native_fault(struct fwlab_m4_hif *hif)
@@ -709,7 +758,14 @@ static int native_service_locked(struct fwlab_m4_hif *hif, u32 visits, u32 *capt
 	flr = READ_ONCE(hif->requested_flr_epoch);
 	if (flr != hif->seen_flr_epoch) {
 		hif->seen_flr_epoch = flr;
-		if (hif->pci->owner_phase == FWLAB_M4_OWNER_OWNED)
+		if (hif->pci->owner_phase == FWLAB_M4_OWNER_OWNED &&
+		    hif->reset_pending && hif->reset_drained) {
+			/* Coalesce another FLR while no old references or effects exist. */
+			native_registers_init(hif);
+			hif->shutdown = false;
+			hif->faulted = false;
+			cc = readl(hif->pci->bar_mapping + REG_CC);
+		} else if (hif->pci->owner_phase == FWLAB_M4_OWNER_OWNED)
 			native_begin_reset(hif, false, true);
 		else
 			native_registers_init(hif);
@@ -720,7 +776,10 @@ static int native_service_locked(struct fwlab_m4_hif *hif, u32 visits, u32 *capt
 		native_begin_reset(hif, !!(cc & CC_SHUTDOWN), false);
 	if (!(cc & CC_ENABLE)) {
 		hif->faulted = false;
-		if (!hif->reset_pending && !hif->pci->effects_open)
+		if (hif->reset_pending && hif->reset_drained) {
+			hif->shutdown = false;
+			writel(0, hif->pci->bar_mapping + REG_CSTS);
+		} else if (!hif->reset_pending && !hif->pci->effects_open)
 			writel(0, hif->pci->bar_mapping + REG_CSTS);
 	}
 	if (hif->reset_pending || !hif->firmware_ready)
@@ -1392,25 +1451,33 @@ static int native_exchange(struct fwlab_m4_hif *hif,
 		memcpy(message->sqe, request->sqe, sizeof(message->sqe));
 		return 0;
 	}
+	if (message->operation == FWLAB_M4_NATIVE_DRAIN_ACK) {
+		int ret;
+
+		if (!native_large(hif)) return -EOPNOTSUPP;
+		if (message->controller_epoch != hif->controller_epoch || hif->quarantined ||
+		    hif->pci->owner_phase != FWLAB_M4_OWNER_OWNED || !hif->reset_pending ||
+		    hif->firmware_ready || READ_ONCE(hif->pci->effects_open))
+			return -ESTALE;
+		if (hif->reset_drained) return 0;
+		ret = native_reset_cleanup(hif);
+		if (ret) return ret;
+		hif->reset_drained = true;
+		native_drained_status(hif);
+		return 0;
+	}
 	if (message->operation == FWLAB_M4_NATIVE_RESET_ACK) {
+		int ret;
+
 		if (message->controller_epoch != hif->controller_epoch || hif->quarantined ||
 		    hif->pci->owner_phase != FWLAB_M4_OWNER_OWNED)
 			return -ESTALE;
 		if (!hif->reset_pending && hif->firmware_ready)
 			return 0;
-		if (native_large(hif)) {
-			for (index = 0; index < NATIVE_DEPTH; index++) {
-				struct native_request *held = &hif->request[index];
-				if (held->active && (held->publication == FWLAB_M4_NATIVE_UNPUBLISHED ||
-				    (native_mq2(hif) && held->queue_started && !held->queue_done) ||
-				    (held->shaped && (!held->authority_released || !held->dma_retired))))
-					return -EBUSY;
-			}
-		}
-		if (native_requests_clear(hif)) return -EIO;
-		if (native_mq2(hif) && native_queues_clear(hif)) return -EIO;
-		hif->delivery_uid = 0;
+		ret = native_reset_cleanup(hif);
+		if (ret) return ret;
 		hif->reset_pending = false;
+		hif->reset_drained = false;
 		hif->firmware_ready = true;
 		/* SHST completion is not a controller-disable acknowledgement.
 		 * Keep RDY set until the Host clears CC.EN, so a polling BAR backend
@@ -1628,6 +1695,7 @@ static int native_owner_exchange(struct fwlab_m4_hif *hif,
 		hif->controller_epoch = 0;
 		hif->faulted = false;
 		hif->shutdown = false;
+		hif->reset_drained = false;
 		spin_lock_irqsave(&hif->pci->config_lock, flags);
 		hif->pci->owner_phase = FWLAB_M4_OWNER_NONE;
 		spin_unlock_irqrestore(&hif->pci->config_lock, flags);
@@ -1683,6 +1751,7 @@ static int native_owner_exchange(struct fwlab_m4_hif *hif,
 		hif->controller_epoch = message->controller_epoch;
 		hif->firmware_ready = true;
 		hif->reset_pending = false;
+		hif->reset_drained = false;
 		hif->grant_key = input;
 		spin_lock_irqsave(&hif->pci->config_lock, flags);
 		hif->pci->owner_kind = message->target_owner;

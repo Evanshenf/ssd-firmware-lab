@@ -47,6 +47,7 @@ static struct {
     uint64_t next_uid, function;
     uint32_t epoch;
     uint32_t pump_ticks, pump_captures, pump_losses, reset_acks;
+    uint32_t drain_acks, recovery_pumps;
     uint8_t delivered, service_fault_once, reset_pending;
     uint32_t shape_losses;
 } host;
@@ -177,6 +178,10 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
         REQUIRE(attached_identity.media_format_version == FWLAB_M4_MEDIA_SCALED &&
                 pump->function_nonce == host.function);
         ++host.pump_ticks;
+        if (host.reset_pending && host.drain_acks) {
+            REQUIRE(!host.occupied && !host.next);
+            ++host.recovery_pumps;
+        }
         pump->result = 0;
         if (host.service_fault_once) {
             REQUIRE(!host.occupied && !host.next);
@@ -254,9 +259,16 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
         message->controller_epoch = host.epoch + (host.reset_pending ? 1u : 0u);
         return 0;
     }
+    if (message->operation == FWLAB_M4_NATIVE_DRAIN_ACK) {
+        REQUIRE(FWLAB_NATIVE_LARGE && host.reset_pending && !host.occupied && !host.next);
+        REQUIRE(message->controller_epoch == host.epoch + 1u && !host.drain_acks);
+        ++host.drain_acks;
+        return 0;
+    }
     if (message->operation == FWLAB_M4_NATIVE_RESET_ACK) {
         REQUIRE(FWLAB_NATIVE_PUMP && host.reset_pending && !host.occupied && !host.next);
         REQUIRE(message->controller_epoch == host.epoch + 1u);
+        REQUIRE(!FWLAB_NATIVE_LARGE || (host.drain_acks == 1 && host.recovery_pumps));
         ++host.epoch;
         ++host.reset_acks;
         host.reset_pending = 0;
@@ -484,6 +496,8 @@ static void run_script(struct native_context *context, struct native_scaled_medi
         REQUIRE(!context->slot[index].occupied);
 #if FWLAB_NATIVE_LARGE
     REQUIRE(!host.shape_losses && native_frames_quiescent(context));
+    REQUIRE(host.drain_acks == 1 && host.recovery_pumps && !context->recovery_pump);
+    puts("NATIVE_DRAIN_READY_PASS|drain_before_recovery=1|pump_while_closed=1|no_early_capture=1|final_ready_after_recovery=1|not_kernel_SHST_proof=1");
     puts("NATIVE_LARGE_LOOP_PASS|one_MiB_real_storage=1|same_key_SHAPE_reply_loss=1|separate_frames_returned=1|not_kernel_graph_proof=1");
 #endif
 #if FWLAB_NATIVE_PUMP
