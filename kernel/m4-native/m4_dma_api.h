@@ -18,7 +18,7 @@ enum fwlab_m4_dma_direction {
 };
 
 /* Kernel HIF only: an immutable mapping snapshot, never a firmware token.
- * Copy revalidates every mapping identity under the IOMMU read lock. */
+ * Copy revalidates every mapping identity under the IOMMU authority lock. */
 struct fwlab_m4_mapping {
 	u64 domain_nonce;
 	u64 attach_generation;

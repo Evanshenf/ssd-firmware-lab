@@ -17,7 +17,6 @@
 #include <linux/rcupdate.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
-#include <linux/rwsem.h>
 #include <linux/version.h>
 #include <linux/xarray.h>
 
@@ -32,7 +31,8 @@ struct fwlab_m4_domain {
 	struct iommu_domain domain;
 	struct xarray pages;
 	struct xarray mapping_ids;
-	struct rw_semaphore authority;
+	/* DMA map/unmap/translate can run in IRQ/RCU atomic context. */
+	spinlock_t authority;
 	u64 nonce;
 	unsigned long next_mapping_uid;
 };
@@ -154,6 +154,7 @@ static int fwlab_m4_map_pages(struct iommu_domain *domain,
 	struct fwlab_m4_domain *fwdom = fwlab_m4_to_domain(domain);
 	unsigned long first;
 	unsigned long last;
+	unsigned long flags;
 	phys_addr_t paddr_last;
 	size_t size;
 	size_t done;
@@ -170,9 +171,11 @@ static int fwlab_m4_map_pages(struct iommu_domain *domain,
 	    last > domain->geometry.aperture_end)
 		return -EINVAL;
 
-	down_write(&fwdom->authority);
+	/* xa_insert must not drop into reclaim while authority is held. */
+	gfp &= ~__GFP_DIRECT_RECLAIM;
+	spin_lock_irqsave(&fwdom->authority, flags);
 	if (fwdom->next_mapping_uid >= LONG_MAX) {
-		up_write(&fwdom->authority);
+		spin_unlock_irqrestore(&fwdom->authority, flags);
 		return -EOVERFLOW;
 	}
 	fwdom->next_mapping_uid++;
@@ -197,13 +200,13 @@ static int fwlab_m4_map_pages(struct iommu_domain *domain,
 			xa_erase(&fwdom->pages, first + done);
 			xa_erase(&fwdom->mapping_ids, first + done);
 		}
-		up_write(&fwdom->authority);
+		spin_unlock_irqrestore(&fwdom->authority, flags);
 		return ret;
 	}
 
 	if (mapped)
 		*mapped = size;
-	up_write(&fwdom->authority);
+	spin_unlock_irqrestore(&fwdom->authority, flags);
 	pr_info(FWLAB_M4_IOMMU_NAME
 		": map iova=%#lx paddr=%pa size=%zu prot=%#x\n",
 		iova, &paddr, size, prot);
@@ -217,6 +220,7 @@ static size_t fwlab_m4_unmap_pages(struct iommu_domain *domain,
 {
 	struct fwlab_m4_domain *fwdom = fwlab_m4_to_domain(domain);
 	unsigned long first;
+	unsigned long flags;
 	size_t done;
 
 	(void)gather;
@@ -224,14 +228,14 @@ static size_t fwlab_m4_unmap_pages(struct iommu_domain *domain,
 	    !IS_ALIGNED(iova, PAGE_SIZE))
 		return 0;
 
-	down_write(&fwdom->authority);
+	spin_lock_irqsave(&fwdom->authority, flags);
 	first = iova >> PAGE_SHIFT;
 	for (done = 0; done < pgcount; done++) {
 		if (!xa_erase(&fwdom->pages, first + done))
 			break;
 		xa_erase(&fwdom->mapping_ids, first + done);
 	}
-	up_write(&fwdom->authority);
+	spin_unlock_irqrestore(&fwdom->authority, flags);
 	if (done)
 		pr_info(FWLAB_M4_IOMMU_NAME
 			": unmap iova=%#lx size=%zu\n", iova,
@@ -243,16 +247,17 @@ static phys_addr_t fwlab_m4_iova_to_phys(struct iommu_domain *domain,
 					 dma_addr_t iova)
 {
 	struct fwlab_m4_domain *fwdom = fwlab_m4_to_domain(domain);
+	unsigned long flags;
 	void *entry;
 	phys_addr_t paddr = 0;
 
-	down_read(&fwdom->authority);
+	spin_lock_irqsave(&fwdom->authority, flags);
 	rcu_read_lock();
 	entry = xa_load(&fwdom->pages, iova >> PAGE_SHIFT);
 	if (xa_is_value(entry))
 		paddr = fwlab_m4_pte_decode(entry) + offset_in_page(iova);
 	rcu_read_unlock();
-	up_read(&fwdom->authority);
+	spin_unlock_irqrestore(&fwdom->authority, flags);
 	return paddr;
 }
 
@@ -266,6 +271,7 @@ int fwlab_m4_dma_transfer(struct device *dev, dma_addr_t iova, void *buffer,
 	dma_addr_t cursor;
 	size_t remaining;
 	size_t copied;
+	unsigned long flags;
 	int required;
 	int ret = 0;
 
@@ -287,7 +293,7 @@ int fwlab_m4_dma_transfer(struct device *dev, dma_addr_t iova, void *buffer,
 		goto out_endpoint;
 	}
 	fwdom = fwlab_m4_to_domain(domain);
-	down_read(&fwdom->authority);
+	spin_lock_irqsave(&fwdom->authority, flags);
 
 	/* Preflight the whole range so a hole cannot cause a partial transfer. */
 	cursor = iova;
@@ -349,7 +355,7 @@ int fwlab_m4_dma_transfer(struct device *dev, dma_addr_t iova, void *buffer,
 	}
 
 out_authority:
-	up_read(&fwdom->authority);
+	spin_unlock_irqrestore(&fwdom->authority, flags);
 out_endpoint:
 	mutex_unlock(&endpoint->attach_lock);
 	return ret;
@@ -397,6 +403,7 @@ int fwlab_m4_mapping_capture(struct device *dev, dma_addr_t iova, u32 length,
 	struct fwlab_m4_domain *domain;
 	dma_addr_t last;
 	unsigned long first;
+	unsigned long flags;
 	u32 index;
 	int required;
 	int ret = 0;
@@ -418,7 +425,7 @@ int fwlab_m4_mapping_capture(struct device *dev, dma_addr_t iova, u32 length,
 		goto out_endpoint;
 	}
 	domain = fwlab_m4_to_domain(endpoint->attached_domain);
-	down_read(&domain->authority);
+	spin_lock_irqsave(&domain->authority, flags);
 	candidate.domain_nonce = domain->nonce;
 	candidate.attach_generation = endpoint->attach_generation;
 	candidate.iova = iova;
@@ -438,7 +445,7 @@ int fwlab_m4_mapping_capture(struct device *dev, dma_addr_t iova, u32 length,
 		candidate.pte[index] = xa_to_value(pte);
 		candidate.mapping_uid[index] = xa_to_value(uid);
 	}
-	up_read(&domain->authority);
+	spin_unlock_irqrestore(&domain->authority, flags);
 	if (!ret)
 		*mapping = candidate;
 out_endpoint:
@@ -457,6 +464,7 @@ int fwlab_m4_mapping_copy(struct device *dev,
 	u64 cursor;
 	unsigned long first;
 	unsigned long flags;
+	unsigned long authority_flags;
 	u32 index, copied = 0;
 	int ret = 0;
 
@@ -475,7 +483,7 @@ int fwlab_m4_mapping_copy(struct device *dev,
 		goto out_endpoint;
 	}
 	domain = fwlab_m4_to_domain(endpoint->attached_domain);
-	down_read(&domain->authority);
+	spin_lock_irqsave(&domain->authority, authority_flags);
 	if (domain->nonce != mapping->domain_nonce) {
 		ret = -ESTALE;
 		goto out_domain;
@@ -518,7 +526,7 @@ int fwlab_m4_mapping_copy(struct device *dev,
 out_guard:
 	spin_unlock_irqrestore(guard->lock, flags);
 out_domain:
-	up_read(&domain->authority);
+	spin_unlock_irqrestore(&domain->authority, authority_flags);
 out_endpoint:
 	mutex_unlock(&endpoint->attach_lock);
 	return ret;
@@ -571,7 +579,7 @@ fwlab_m4_domain_alloc_paging(struct device *dev)
 		return ERR_PTR(-ENOMEM);
 	xa_init_flags(&fwdom->pages, XA_FLAGS_LOCK_IRQ);
 	xa_init_flags(&fwdom->mapping_ids, XA_FLAGS_LOCK_IRQ);
-	init_rwsem(&fwdom->authority);
+	spin_lock_init(&fwdom->authority);
 	fwdom->nonce = atomic64_inc_return(&fwlab_m4_domain_nonce);
 	fwdom->domain.ops = &fwlab_m4_domain_ops;
 	fwdom->domain.pgsize_bitmap = PAGE_SIZE;
@@ -601,6 +609,16 @@ static struct iommu_device *fwlab_m4_probe_device(struct device *dev)
 	endpoint->dev = dev;
 	endpoint->requester_id = pci_dev_id(to_pci_dev(dev));
 	mutex_init(&endpoint->attach_lock);
+#ifdef CONFIG_ARM64
+	/*
+	 * This exact synthetic endpoint performs DMA with CPU cached copies.
+	 * Set coherency before IOMMU-DMA queue allocation/mapping; advertising
+	 * IOMMU_CAP_CACHE_COHERENCY alone does not configure ARM DMA syncing.
+	 * Noncoherent invalidation could otherwise discard our CPU-written CQ
+	 * or payload bytes. This does not describe a physical NAND controller.
+	 */
+	dev->dma_coherent = true;
+#endif
 	dev_iommu_priv_set(dev, endpoint);
 	return &fwlab_m4_iommu.iommu;
 }
