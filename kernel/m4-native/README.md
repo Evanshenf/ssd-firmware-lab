@@ -4,7 +4,8 @@
 # Native firmware PCI/HIF (experimental J1)
 
 This builds a Host-visible software PCI function and software IOMMU for a
-disposable x86-64 Linux lab VM. It is not a physical endpoint or a vfio-user
+disposable x86-64 Linux lab VM, with an ARM64 platform candidate described in
+[ADR-0016](../../docs/adr/0016-arm64-native-platform.md). It is not a physical endpoint or a vfio-user
 device. It requires an explicitly reserved, exactly 16-KiB memory aperture;
 the module refuses ordinary/unreserved RAM. Do not load it on a production host.
 The current integration target is Ubuntu `7.0.0-30-generic`; other kernels are
@@ -70,6 +71,12 @@ or create the BAR thread; it is not a runtime module parameter or owner option.
 Both use the same HIF capture/control and CQE implementation and unchanged
 mapping/IRQ gates. Deferred IRQ work still exists and must be counted.
 
+LARGE/MQ2 now use a separate post-drain acknowledgement and fixed readiness
+budget so shutdown completion need not wait for successor FTL reconstruction.
+This requires matching worker/kernel revisions; see
+[ADR-0017](../../docs/adr/0017-large-controller-readiness.md). Admission remains
+closed until actual recovery completes; SMALL/BAR reference behavior is retained.
+
 Use the separately named `scaled-pump-worker` userspace target. Its 128-byte
 `FWLAB_M4_ATTACH_MODE` v2 command negotiates the producer before identity pinning;
 the old 112-byte attachment and legacy EXCHANGE attachment remain BAR-only.
@@ -98,7 +105,8 @@ The development `FWLAB_M4_HOST_PROFILE=2` construction requires producer 2
 uses a distinct 160-byte ioctl command and exact profile/limit matching before
 media identity pinning. This does not change media format or old 112/128-byte
 attachment layouts. Large construction is restricted to the tested 4 KiB kernel
-page environment and does not claim ARM kernel portability.
+page environment. ARM64 has bounded native L1 bring-up evidence, not a general
+ARM kernel or nested-KVM portability claim; see ADR-0016 above.
 
 Profile 2 has one I/O and one Admin ingress reservation from SQ capture through
 transport RETIRE, including payload-free commands. Separate snapshot/graph

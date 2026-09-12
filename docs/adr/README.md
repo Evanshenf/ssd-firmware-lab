@@ -18,6 +18,8 @@
 - [ADR-0013: Ready-volume scalable FTL, retained parents and PAGE2 windows](0013-scalable-ftl-and-page-windows.md)
 - [ADR-0014: Construction-selected native profiles and serial-credit MQ2](0014-native-profile-and-serial-mq2.md)
 - [ADR-0015: Shared capacity construction and explicit mapped-media budgets](0015-capacity-presets-and-mapped-budgets.md)
+- [ADR-0016: ARM64 native platform binding and atomic DMA callbacks](0016-arm64-native-platform.md)
+- [ADR-0017: Drained shutdown and successor controller readiness](0017-large-controller-readiness.md)
 
 Accepted ADRs define the design baseline, not an assertion that the component is already implemented or validated. A superseding decision must link the prior ADR and describe migration and compatibility impact.
 
