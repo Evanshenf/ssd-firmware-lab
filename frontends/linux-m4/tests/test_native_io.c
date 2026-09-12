@@ -12,6 +12,7 @@
 #include <linux/fs.h>
 #include <linux/nvme_ioctl.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdio.h>
@@ -19,6 +20,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/random.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/vfs.h>
@@ -82,7 +84,10 @@ static int select_namespace_capacity(int *argc, char **argv)
     if (!((*argc == 4 && !strcmp(argv[1], "profile-plan")) ||
           (*argc == 6 && (!strcmp(argv[1], "write") ||
                          !strcmp(argv[1], "verify") ||
-                         !strcmp(argv[1], "verify-b")))))
+                         !strcmp(argv[1], "verify-b") ||
+                         !strcmp(argv[1], "cut1") || !strcmp(argv[1], "cut2") ||
+                         !strcmp(argv[1], "cut3") || !strcmp(argv[1], "cut4"))) ||
+          (*argc == 9 && !strcmp(argv[1], "receipt"))))
         return 0;
     if (!strcmp(argv[*argc - 1], "64"))
         expected_namespace_bytes = UINT64_C(64) << 20;
@@ -285,6 +290,8 @@ static int cut_journey(int fd, const char *device, const char *bdf,
 {
     struct child_result { int result; int untouched; } report;
     struct native_case test = cases[0];
+    struct native_case neighbor = { 127, 512, 0, 0 };
+    uint8_t *neighbors = NULL;
     char control_path[64], sysfs[128], resolved[PATH_MAX], component[64], text[32];
     struct stat st;
     int control = -1, parameter = -1, channel[2] = { -1, -1 };
@@ -305,6 +312,14 @@ static int cut_journey(int fd, const char *device, const char *bdf,
     if (!realpath(sysfs, resolved) || !strstr(resolved, component) ||
         !strstr(resolved, "/ssd_fwlab_native_pci/"))
         goto done;
+    neighbors = aligned_alloc(4096, 4096);
+    if (!neighbors)
+        goto done;
+    for (index = 0; index < 2; ++index) {
+        neighbor.lba = index ? test.lba + 1u : test.lba - 1u;
+        if (transfer(fd, 2, &neighbor, neighbors + index * 512u, 0, 0))
+            goto done;
+    }
     if (!read_compare(fd, &test, buffer, 0, 0))
         goto done;
     test.seed = 0xd4;
@@ -389,6 +404,14 @@ static int cut_journey(int fd, const char *device, const char *bdf,
             !read_compare(fd, &test, buffer, 0, 0))
             goto done;
     }
+    for (index = 0; index < 2; ++index) {
+        neighbor.lba = index ? test.lba + 1u : test.lba - 1u;
+        if (transfer(fd, 2, &neighbor, buffer, 0, 0) ||
+            memcmp(buffer, neighbors + index * 512u, 512u)) {
+            fprintf(stderr, "cut neighbor changed point=%u lba=%u\n", point, neighbor.lba);
+            goto done;
+        }
+    }
     success = 1;
 done:
     if (parameter >= 0) {
@@ -403,10 +426,11 @@ done:
     if (channel[0] >= 0) close(channel[0]);
     if (channel[1] >= 0) close(channel[1]);
     if (control >= 0) close(control);
+    free(neighbors);
     if (!success)
         fprintf(stderr, "native cut %u failed (fired=%d)\n", point, fired);
     else
-        printf("NATIVE_CUT_PASS point=%u host_result=%d host_buffer_untouched=%d media=%s\n",
+        printf("NATIVE_CUT_PASS point=%u host_result=%d host_buffer_untouched=%d media=%s neighbors=exact\n",
                point, report.result, report.untouched, point == 3 ? "durable-new" : "old");
     return success;
 }
@@ -581,6 +605,157 @@ static int budget_journey(int fd, uint8_t *buffer)
     return 0;
 }
 
+/* Fixed local-host evidence file, not a firmware ABI or a portable disk format.
+ * Every ACK byte is persisted only after one successful 512-byte NVMe ioctl.
+ * This client has no NAND-file access and never calls a firmware executor. */
+#define RECEIPT_SECTORS 64u
+#define RECEIPT_LBA 32768u
+struct receipt_file {
+    uint8_t magic[16];
+    uint64_t namespace_bytes;
+    uint32_t mode, prepared;
+    uint8_t payload[RECEIPT_SECTORS + 2u][512];
+    uint8_t acknowledged[RECEIPT_SECTORS];
+    uint8_t flush_ack, complete;
+    uint8_t reserved[14];
+};
+
+static int receipt_store(int fd, const void *data, size_t bytes, off_t offset)
+{
+    return pwrite(fd, data, bytes, offset) == (ssize_t)bytes && !fdatasync(fd);
+}
+
+static int receipt_journey(const char *action, const char *device, const char *bdf,
+                           const char *mode_name, const char *path)
+{
+    static const uint8_t magic[16] = "FWLAB-D205-ACK1";
+    struct receipt_file *record = NULL;
+    struct native_case target = { RECEIPT_LBA, 512, 0, 0 };
+    struct nvme_passthru_cmd flush = { .opcode = 0, .nsid = 1 };
+    struct stat st;
+    uint8_t *buffer = NULL, one = 1;
+    unsigned mode, index, byte, acknowledged = 0;
+    int fd = -1, journal = -1, ok = 0;
+    int prepare = !strcmp(action, "prepare"), issue = !strcmp(action, "issue");
+    int verify = !strcmp(action, "verify");
+
+    if (!FWLAB_NATIVE_TEST_SCALED || (!prepare && !issue && !verify)) return 2;
+    if (!strcmp(mode_name, "ordinary")) mode = 0;
+    else if (!strcmp(mode_name, "fua")) mode = 1;
+    else if (!strcmp(mode_name, "flush")) mode = 2;
+    else return 2;
+    fd = open(device, (verify ? O_RDONLY : O_RDWR) | O_EXCL | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0 || !identity_guard(fd, bdf, 0)) goto done;
+    journal = open(path, (prepare ? O_RDWR | O_CREAT | O_EXCL : verify ? O_RDONLY : O_RDWR) |
+                         O_NOFOLLOW | O_CLOEXEC, 0600);
+    if (journal < 0 || fstat(journal, &st) || !S_ISREG(st.st_mode) ||
+        st.st_uid != geteuid() || st.st_nlink != 1) goto done;
+    record = calloc(1, sizeof(*record));
+    buffer = aligned_alloc(4096, 4096);
+    if (!record || !buffer) goto done;
+    if (prepare) {
+        size_t generated = 0;
+        memcpy(record->magic, magic, sizeof(magic));
+        record->namespace_bytes = expected_namespace_bytes;
+        record->mode = mode;
+        while (generated < sizeof(record->payload)) {
+            ssize_t n = getrandom((uint8_t *)record->payload + generated,
+                                  sizeof(record->payload) - generated, 0);
+            if (n < 0 && errno == EINTR) continue;
+            if (n <= 0) goto done;
+            generated += (size_t)n;
+        }
+        if (!receipt_store(journal, record, sizeof(*record), 0)) goto done;
+        for (index = 0; index < RECEIPT_SECTORS + 2u; ++index) {
+            target.lba = index < RECEIPT_SECTORS ? RECEIPT_LBA + index :
+                index == RECEIPT_SECTORS ? RECEIPT_LBA - 1u : RECEIPT_LBA + RECEIPT_SECTORS;
+            for (byte = 0; byte < 512; ++byte)
+                buffer[byte] = record->payload[index][byte] ^ (index < RECEIPT_SECTORS ? 0xff : 0);
+            if (transfer(fd, 1, &target, buffer, 0, 0)) goto done;
+        }
+        if (exchange(fd, NVME_IOCTL_IO_CMD, &flush)) goto done;
+        for (index = 0; index < RECEIPT_SECTORS + 2u; ++index) {
+            target.lba = index < RECEIPT_SECTORS ? RECEIPT_LBA + index :
+                index == RECEIPT_SECTORS ? RECEIPT_LBA - 1u : RECEIPT_LBA + RECEIPT_SECTORS;
+            if (transfer(fd, 2, &target, buffer, 0, 0)) goto done;
+            for (byte = 0; byte < 512; ++byte)
+                if (buffer[byte] != (uint8_t)(record->payload[index][byte] ^
+                                            (index < RECEIPT_SECTORS ? 0xff : 0))) goto done;
+        }
+        record->prepared = 1;
+        if (!receipt_store(journal, &record->prepared, sizeof(record->prepared),
+                           offsetof(struct receipt_file, prepared))) goto done;
+        printf("NATIVE_RECEIPT_PREPARED mode=%s targets=64 baseline_flush=1 canaries=exact\n", mode_name);
+        ok = 1;
+        goto done;
+    }
+    if (st.st_size != (off_t)sizeof(*record) ||
+        pread(journal, record, sizeof(*record), 0) != (ssize_t)sizeof(*record) ||
+        memcmp(record->magic, magic, sizeof(magic)) || record->prepared != 1 ||
+        record->namespace_bytes != expected_namespace_bytes || record->mode != mode ||
+        record->flush_ack > 1 || record->complete > 1 ||
+        (mode != 2 && record->flush_ack)) goto done;
+    for (index = 0; index < sizeof(record->reserved); ++index)
+        if (record->reserved[index]) goto done;
+    for (index = 0; index < RECEIPT_SECTORS; ++index) {
+        if (record->acknowledged[index] > 1 ||
+            (index && record->acknowledged[index] && !record->acknowledged[index - 1u])) goto done;
+        acknowledged += record->acknowledged[index];
+    }
+    if ((record->complete && acknowledged != RECEIPT_SECTORS) ||
+        (record->flush_ack && acknowledged != RECEIPT_SECTORS) ||
+        (mode == 2 && record->complete && !record->flush_ack)) goto done;
+    if (issue) {
+        if (acknowledged || record->complete || record->flush_ack) goto done;
+        for (index = 0; index < RECEIPT_SECTORS; ++index) {
+            target.lba = RECEIPT_LBA + index;
+            memcpy(buffer, record->payload[index], 512);
+            if (transfer(fd, 1, &target, buffer, mode == 1 ? UINT32_C(0x40000000) : 0, 0)) goto done;
+            if (!receipt_store(journal, &one, 1,
+                offsetof(struct receipt_file, acknowledged) + index)) goto done;
+            printf("NATIVE_WRITE_ACK mode=%s ordinal=%u lba=%u bytes=512 status=0 receipt_synced=1\n",
+                   mode_name, index, target.lba);
+        }
+        if (mode == 2) {
+            if (exchange(fd, NVME_IOCTL_IO_CMD, &flush) || !receipt_store(journal, &one, 1,
+                offsetof(struct receipt_file, flush_ack))) goto done;
+            puts("NATIVE_FLUSH_ACK status=0 receipt_synced=1");
+        }
+        if (!receipt_store(journal, &one, 1, offsetof(struct receipt_file, complete))) goto done;
+        printf("NATIVE_RECEIPT_ISSUED mode=%s acknowledged=64 postwrite_flush=%u\n", mode_name, mode == 2);
+        ok = 1;
+        goto done;
+    }
+    if (!acknowledged) goto done;
+    for (index = 0; index < RECEIPT_SECTORS + 2u; ++index) {
+        /* One serial issue invocation stops at its first failed operation.
+         * Only the first non-ACK target may have been submitted; later ones
+         * must still contain the durable preparation baseline. */
+        if (index < RECEIPT_SECTORS && index == acknowledged) continue;
+        target.lba = index < RECEIPT_SECTORS ? RECEIPT_LBA + index :
+            index == RECEIPT_SECTORS ? RECEIPT_LBA - 1u : RECEIPT_LBA + RECEIPT_SECTORS;
+        if (transfer(fd, 2, &target, buffer, 0, 0)) goto done;
+        for (byte = 0; byte < 512; ++byte)
+            if (buffer[byte] != (uint8_t)(record->payload[index][byte] ^
+                (index < RECEIPT_SECTORS && index > acknowledged ? 0xff : 0))) {
+                fprintf(stderr, "receipt read mismatch lba=%u byte=%u\n", target.lba, byte);
+                goto done;
+            }
+    }
+    printf("NATIVE_RECEIPT_VERIFY_PASS mode=%s acknowledged=%u uncertain=%u untouched=%u complete=%u flush_ack=%u canaries=exact\n",
+           mode_name, acknowledged, acknowledged < RECEIPT_SECTORS,
+           RECEIPT_SECTORS - acknowledged - (acknowledged < RECEIPT_SECTORS),
+           record->complete, record->flush_ack);
+    ok = 1;
+done:
+    if (!ok) fprintf(stderr, "receipt %s failed mode=%s errno=%d; preserve evidence\n", action, mode_name, errno);
+    free(buffer);
+    free(record);
+    if (journal >= 0 && close(journal)) ok = 0;
+    if (fd >= 0) close(fd);
+    return ok ? 0 : 1;
+}
+
 int main(int argc, char **argv)
 {
     uint8_t *allocation;
@@ -591,12 +766,14 @@ int main(int argc, char **argv)
 
     setvbuf(stdout, NULL, _IOLBF, 0);
     if (!select_namespace_capacity(&argc, argv)) {
-        fputs("--namespace-mib requires scaled profile-plan/write/verify/verify-b and 64, 256 or 65536 MiB\n", stderr);
+        fputs("--namespace-mib requires scaled profile-plan/write/verify/verify-b/cut1..4/receipt and 64, 256 or 65536 MiB\n", stderr);
         return 2;
     }
     budget = argc == 4 && !strcmp(argv[1], "budget");
     aer = argc == 4 && !strcmp(argv[1], "aer");
     mq_pba = FWLAB_NATIVE_TEST_LARGE && argc == 6 && !strcmp(argv[1], "mq-pba-b");
+    if (argc == 7 && !strcmp(argv[1], "receipt"))
+        return receipt_journey(argv[2], argv[3], argv[4], argv[5], argv[6]);
 
     if (argc == 2 && !strcmp(argv[1], "profile-plan")) {
         printf("NATIVE_CLIENT_PLAN expected_bytes=%" PRIu64 " shapes=%zu no_device_open=1\n",
@@ -633,7 +810,8 @@ int main(int argc, char **argv)
                       strcmp(argv[1], "verify") && strcmp(argv[1], "verify-b"))) {
         fprintf(stderr, "usage: %s write|verify|verify-b|guest-ab|cut1|cut2|cut3|cut4|aer|budget /dev/nvmeXn1 BDF\n"
                         "       %s mq-pba-b /dev/nvmeXn1 BDF Q1_CPU Q2_CPU (LARGE client only)\n"
-                        "       scaled profile-plan/write/verify/verify-b accept trailing --namespace-mib 64|256|65536\n", argv[0], argv[0]);
+                        "       receipt prepare|issue|verify DEVICE BDF ordinary|fua|flush NEW_RECEIPT_PATH (scaled only)\n"
+                        "       scaled profile-plan/write/verify/verify-b/cut1..4/receipt accept trailing --namespace-mib 64|256|65536\n", argv[0], argv[0]);
         return 2;
     }
     if (mq_pba) {
