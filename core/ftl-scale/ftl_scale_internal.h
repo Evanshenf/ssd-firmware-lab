@@ -154,6 +154,9 @@ struct sf_io {
     uint8_t window_transfer;
     uint8_t cancel_allowed;
     uint8_t cancel_sent;
+    uint8_t lower_owned;
+    uint8_t *transfer_main;
+    uint8_t *transfer_oob;
     uint8_t main[SF_FRAMES][SF_PAGE_BYTES];
     uint8_t oob[SF_FRAMES][SF_OOB_BYTES];
 };
@@ -164,6 +167,7 @@ struct sf_io {
 #include "ftl_scale_work.h"
 #include "ftl_scale_parent.h"
 #include "ftl_scale_window.h"
+#include "ftl_scale_read.h"
 
 struct sf_nfc_adapter {
     enum fwlab_spine_result_v0 (*start)(struct fwlab_ftl_scale *, uint32_t,
@@ -224,6 +228,8 @@ struct fwlab_ftl_scale {
     struct sf_work work;
     struct sf_parent parent;
     struct sf_window window;
+    struct sf_read_pool *reads;
+    uint8_t read_only;
 };
 
 /* NFC boundary: consumes only NFC completion facts, never media page_info. */
@@ -236,6 +242,10 @@ enum fwlab_spine_result_v0 sf_io_erase_start(
 bool sf_io_idle(const struct fwlab_ftl_scale *ftl);
 bool sf_io_take(struct fwlab_ftl_scale *ftl, struct sf_io_result *result);
 bool sf_io_step(struct fwlab_ftl_scale *ftl);
+enum fwlab_spine_result_v0 sf_page_start_io(struct fwlab_ftl_scale *,
+    struct sf_io *, uint32_t, uint8_t, uint8_t, uint32_t, bool,
+    uint8_t *, uint8_t *, bool);
+bool sf_page_step_io(struct fwlab_ftl_scale *, struct sf_io *, bool, bool);
 enum fwlab_spine_result_v0 sf_io_read_group_start(struct fwlab_ftl_scale *, uint32_t, uint32_t);
 enum fwlab_spine_result_v0 sf_io_program_group_start(struct fwlab_ftl_scale *, uint32_t, uint32_t);
 struct fwlab_nfc_ppa sf_ppa(const struct fwlab_ftl_scale *ftl, uint32_t linear);

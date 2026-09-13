@@ -80,7 +80,7 @@ struct fwlab_nfc_ppa sf_ppa(const struct fwlab_ftl_scale *ftl, uint32_t linear)
 
 bool sf_io_idle(const struct fwlab_ftl_scale *ftl)
 {
-    return ftl && ftl->io.phase == SF_IO_IDLE;
+    return ftl && ftl->io.phase == SF_IO_IDLE && !ftl->io.lower_owned && !sf_read_pool_busy(ftl);
 }
 
 static void request_init(struct fwlab_ftl_scale *ftl,

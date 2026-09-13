@@ -75,6 +75,11 @@ size_t fwlab_ftl_scale_window_v2_arena_size(const struct fwlab_ftl_scale_extende
     size_t base = fwlab_ftl_scale_extended_arena_size(c);
     return base && base <= SIZE_MAX - SF_WINDOW_BYTES ? base + SF_WINDOW_BYTES : 0;
 }
+size_t fwlab_ftl_scale_parallel_read_arena_size(const struct fwlab_ftl_scale_extended_config *c)
+{
+    size_t base = fwlab_ftl_scale_window_v2_arena_size(c);
+    return base && base <= SIZE_MAX - sizeof(struct sf_read_pool) ? base + sizeof(struct sf_read_pool) : 0;
+}
 
 static void submit_result(struct fwlab_block_submit_result_v0 *out,
                           const struct fwlab_block_request_v0 *r,
@@ -123,7 +128,7 @@ static enum fwlab_spine_result_v0 block_submit(void *opaque,
         submit_result(out, r, FWLAB_HOST_ACTION_V0_BACKPRESSURE, 0);
         return FWLAB_SPINE_V0_OK;
     }
-    if (!request_valid(f, r)) {
+    if (!request_valid(f, r) || (f->read_only && r->operation != FWLAB_BLOCK_V0_READ)) {
         submit_result(out, r, FWLAB_HOST_ACTION_V0_REJECTED, SF_FAULT_STATE);
         return FWLAB_SPINE_V0_OK;
     }
@@ -363,6 +368,39 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init_window_v2(void *arena, size_t si
     return result;
 }
 
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_parallel_read(void *arena, size_t size,
+    const struct fwlab_ftl_scale_extended_config *c,
+    const struct fwlab_controller_buffer_port_v0 *buffer,
+    const struct fwlab_nfc_page_v2_provider *nfc, struct fwlab_ftl_scale **out)
+{
+    size_t total = fwlab_ftl_scale_parallel_read_arena_size(c);
+    size_t base = fwlab_ftl_scale_window_v2_arena_size(c);
+    struct fwlab_ftl_scale *f;
+    enum fwlab_spine_result_v0 result;
+    if (!total || size < total || !out) return FWLAB_SPINE_V0_INVALID;
+    result = fwlab_ftl_scale_init_window_v2(arena, size, c, buffer, nfc, &f);
+    if (result != FWLAB_SPINE_V0_OK) return result;
+    f->reads = (struct sf_read_pool *)((uint8_t *)arena + base);
+    memset(f->reads, 0, sizeof(*f->reads));
+    f->arena_bytes = total;
+    *out = f;
+    return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 fwlab_ftl_scale_can_enter_read_only(const struct fwlab_ftl_scale *f)
+{
+    if (!live(f) || !f->reads) return FWLAB_SPINE_V0_INVALID;
+    return f->ready && !f->read_only && !f->admission_closed && !f->quarantined &&
+        !sf_work_busy(f) && sf_parent_clean_boundary(f) && !f->erase_intent_sequence ?
+        FWLAB_SPINE_V0_OK : FWLAB_SPINE_V0_WRONG_STATE;
+}
+enum fwlab_spine_result_v0 fwlab_ftl_scale_enter_read_only(struct fwlab_ftl_scale *f)
+{
+    enum fwlab_spine_result_v0 result = fwlab_ftl_scale_can_enter_read_only(f);
+    if (result == FWLAB_SPINE_V0_OK) f->read_only = 1;
+    return result;
+}
+
 void sf_host_fail(struct fwlab_ftl_scale *f, uint32_t fault)
 {
     sf_parent_fail(f, fault);
@@ -555,7 +593,8 @@ static enum fwlab_spine_result_v0 step_internal(struct fwlab_ftl_scale *f,
     if (progress) memset(progress, 0, sizeof(*progress));
     while (count < budget && !f->quarantined) {
         bool advanced;
-        if (f->work.step_cursor == 0) advanced = sf_io_step(f);
+        if (sf_read_pool_busy(f)) advanced = sf_read_pool_step(f);
+        else if (f->work.step_cursor == 0) advanced = sf_io_step(f);
         else if (f->work.step_cursor == 1) advanced = sf_meta_step(f);
         else {
             advanced = sf_work_step(f);
@@ -570,6 +609,7 @@ static enum fwlab_spine_result_v0 step_internal(struct fwlab_ftl_scale *f,
     if (progress && !f->quarantined && f->io.phase == SF_IO_DONE &&
         (sf_work_busy(f) || sf_meta_busy(f)))
         progress->runnable = 1;
+    if (progress && !f->quarantined && sf_read_pool_runnable(f)) progress->runnable = 1;
     *used = count;
     return f->quarantined ? FWLAB_SPINE_V0_QUARANTINED : FWLAB_SPINE_V0_OK;
 }
@@ -653,7 +693,7 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_query(const struct fwlab_ftl_scale *f
 
 enum fwlab_spine_result_v0 fwlab_ftl_scale_checkpoint_start(struct fwlab_ftl_scale *f)
 {
-    if (!live(f) || !f->ready || f->admission_closed || f->quarantined ||
+    if (!live(f) || !f->ready || f->admission_closed || f->quarantined || f->read_only ||
         sf_work_busy(f) || sf_meta_busy(f) || !sf_io_idle(f)) return FWLAB_SPINE_V0_WRONG_STATE;
     return sf_checkpoint_start(f);
 }
@@ -661,7 +701,7 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_checkpoint_start(struct fwlab_ftl_sca
 enum fwlab_spine_result_v0 fwlab_ftl_scale_gc_start(struct fwlab_ftl_scale *f,
                                                  uint32_t needed)
 {
-    if (live(f) && sf_parent_owned(f)) return FWLAB_SPINE_V0_WRONG_STATE;
+    if (live(f) && (sf_parent_owned(f) || f->read_only)) return FWLAB_SPINE_V0_WRONG_STATE;
     return live(f) ? sf_space_start(f, needed, true) : FWLAB_SPINE_V0_INVALID;
 }
 

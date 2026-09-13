@@ -67,6 +67,7 @@ static enum fwlab_spine_result_v0 prepare_group(struct fwlab_ftl_scale *f,
     struct sf_work *w = &f->work;
     uint32_t pages = 0;
     enum fwlab_spine_result_v0 result;
+    if (f->read_only) return sf_read_parent_prepare(f, p);
     if (f->disk_format == SF_WINDOW_FORMAT_VERSION) return sf_window_prepare(f, p);
     if (!subgroup_request(p, &group)) return FWLAB_SPINE_V0_INVALID;
     if (group.operation != FWLAB_BLOCK_V0_FLUSH)

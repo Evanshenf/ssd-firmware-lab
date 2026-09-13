@@ -90,6 +90,19 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init_window_v2(
     const struct fwlab_controller_buffer_port_v0 *controller_buffer,
     const struct fwlab_nfc_page_v2_provider *nfc,
     struct fwlab_ftl_scale **ftl);
+/* Explicit four-run construction. Initial operation preserves serial format-2
+ * behavior; the caller can close write admission at a live idle boundary. */
+size_t fwlab_ftl_scale_parallel_read_arena_size(
+    const struct fwlab_ftl_scale_extended_config *config);
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_parallel_read(
+    void *arena, size_t arena_size,
+    const struct fwlab_ftl_scale_extended_config *config,
+    const struct fwlab_controller_buffer_port_v0 *controller_buffer,
+    const struct fwlab_nfc_page_v2_provider *nfc, struct fwlab_ftl_scale **ftl);
+enum fwlab_spine_result_v0 fwlab_ftl_scale_can_enter_read_only(
+    const struct fwlab_ftl_scale *ftl);
+enum fwlab_spine_result_v0 fwlab_ftl_scale_enter_read_only(
+    struct fwlab_ftl_scale *ftl);
 /* Obtain after allocating the arena, before constructing NFC. No operation
  * may execute until NFC and FTL initialization have both succeeded. */
 struct fwlab_nfc_buffer_provider fwlab_ftl_scale_staging_provider(

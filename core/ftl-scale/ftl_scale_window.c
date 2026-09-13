@@ -3,7 +3,7 @@
 #include "ftl_scale_internal.h"
 #include <string.h>
 
-static bool map_valid(const struct fwlab_ftl_scale *f, const struct sf_map_entry *e)
+bool sf_read_map_valid(const struct fwlab_ftl_scale *f, const struct sf_map_entry *e)
 {
     uint32_t ppb = f->config.geometry.pages_per_block;
     const struct sf_block_disk *b;
@@ -24,10 +24,20 @@ static uint8_t mask_for(const struct fwlab_block_request_v0 *r, uint32_t lpn)
         if (first + n >= r->lba && first + n < end) mask |= (uint8_t)(1u << n);
     return mask;
 }
-static void zero_invalid(uint8_t *main, uint8_t mask)
+void sf_read_zero_invalid(uint8_t *main, uint8_t mask)
 {
     for (unsigned n = 0; n < SF_SECTORS_PER_PAGE; ++n)
         if (!(mask & (1u << n))) memset(main + n * FWLAB_FTL_SCALE_LBA_BYTES, 0, FWLAB_FTL_SCALE_LBA_BYTES);
+}
+bool sf_read_page_valid(const struct fwlab_ftl_scale *f, uint32_t lpn,
+    const struct sf_map_entry *entry, uint64_t block_uid, const struct sf_io_facts *facts,
+    const uint8_t *main, const uint8_t *oob)
+{
+    return !memcmp(entry, &f->map[lpn], sizeof(*entry)) &&
+        (facts->available & FWLAB_NFC_PAGE_V2_FACT_GENERATION) != 0 &&
+        facts->final_erase_generation == entry->erase_generation &&
+        f->blocks[entry->ppa / f->config.geometry.pages_per_block].disk.block_uid == block_uid &&
+        sf_data_oob_validate(f, lpn, entry, block_uid, main, oob);
 }
 static bool subspan(const struct sf_parent *p, struct fwlab_block_request_v0 *r, uint32_t lbas)
 {
@@ -80,13 +90,13 @@ enum fwlab_spine_result_v0 sf_window_prepare(struct fwlab_ftl_scale *f, const st
     } else if (p->request.operation == FWLAB_BLOCK_V0_READ) {
         const struct sf_map_entry *first = &f->map[first_lpn];
         uint32_t count = 0;
-        if (!map_valid(f, first)) { sf_fail(f, SF_FAULT_STATE); return FWLAB_SPINE_V0_QUARANTINED; }
+        if (!sf_read_map_valid(f, first)) { sf_fail(f, SF_FAULT_STATE); return FWLAB_SPINE_V0_QUARANTINED; }
         f->window.zero_read = (uint8_t)(first->state != SF_VALUE);
         f->window.first_ppa = first->ppa;
         f->window.block_uid = f->window.zero_read ? 0 : f->blocks[first->ppa / ppb].disk.block_uid;
         while (count < pages) {
             const struct sf_map_entry *e = &f->map[first_lpn + count];
-            if (!map_valid(f, e)) { sf_fail(f, SF_FAULT_STATE); return FWLAB_SPINE_V0_QUARANTINED; }
+            if (!sf_read_map_valid(f, e)) { sf_fail(f, SF_FAULT_STATE); return FWLAB_SPINE_V0_QUARANTINED; }
             if (f->window.zero_read) { if (e->state == SF_VALUE) break; }
             else if (e->state != SF_VALUE || e->ppa != first->ppa + count ||
                      e->ppa / ppb != first->ppa / ppb || e->erase_generation != first->erase_generation) break;
@@ -100,7 +110,7 @@ enum fwlab_spine_result_v0 sf_window_prepare(struct fwlab_ftl_scale *f, const st
     for (uint32_t n = 0; n < pages; ++n) {
         struct sf_delta *d = &w->record.delta[n];
         d->lpn = first_lpn + n; d->before = f->map[d->lpn];
-        if (!map_valid(f, &d->before)) { sf_fail(f, SF_FAULT_STATE); return FWLAB_SPINE_V0_QUARANTINED; }
+        if (!sf_read_map_valid(f, &d->before)) { sf_fail(f, SF_FAULT_STATE); return FWLAB_SPINE_V0_QUARANTINED; }
         if (r.operation == FWLAB_BLOCK_V0_WRITE) {
             d->after.ppa = f->window.first_ppa + n;
             d->after.erase_generation = f->blocks[f->host_head].disk.erase_generation;
@@ -144,7 +154,7 @@ static void merge_partial(struct fwlab_ftl_scale *f)
 {
     struct sf_work *w = &f->work;
     uint32_t offset = (uint32_t)(w->request.lba % SF_SECTORS_PER_PAGE) * FWLAB_FTL_SCALE_LBA_BYTES;
-    zero_invalid(f->window.main[0], w->record.delta[0].before.valid_mask);
+    sf_read_zero_invalid(f->window.main[0], w->record.delta[0].before.valid_mask);
     memcpy(f->window.main[0] + offset, w->host_bytes, w->request.buffer_span.length);
 }
 static bool publish_read(struct fwlab_ftl_scale *f)
@@ -157,16 +167,13 @@ static bool publish_read(struct fwlab_ftl_scale *f)
         if (memcmp(&d->before, &f->map[d->lpn], sizeof(d->before))) { sf_fail(f, SF_FAULT_STATE); return true; }
         if (!f->window.zero_read) {
             const struct sf_io_facts *facts = &f->io.page_facts[n];
-            if ((facts->available & FWLAB_NFC_PAGE_V2_FACT_GENERATION) == 0 ||
-                facts->final_erase_generation != d->before.erase_generation ||
-                f->blocks[d->before.ppa / f->config.geometry.pages_per_block].disk.block_uid != f->window.block_uid ||
-                !sf_data_oob_validate(f, d->lpn, &d->before, f->window.block_uid,
-                                      f->window.main[n], f->window.oob[n])) {
+            if (!sf_read_page_valid(f, d->lpn, &d->before, f->window.block_uid,
+                                    facts, f->window.main[n], f->window.oob[n])) {
                 sf_parent_fail(f, SF_FAULT_IO); return true;
             }
         }
     }
-    for (uint32_t n = 0; n < w->page_count; ++n) zero_invalid(f->window.main[n], w->record.delta[n].before.valid_mask);
+    for (uint32_t n = 0; n < w->page_count; ++n) sf_read_zero_invalid(f->window.main[n], w->record.delta[n].before.valid_mask);
     if (f->controller_buffer.ops->write(f->controller_buffer.context, &w->request.buffer,
         &w->request.buffer_span, &f->window.main[0][0] + offset, w->request.buffer_span.length) != FWLAB_CONTROLLER_BUFFER_V0_OK)
         sf_parent_fail(f, SF_FAULT_STATE);
