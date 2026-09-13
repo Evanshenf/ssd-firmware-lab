@@ -32,5 +32,9 @@ enum fwlab_nfc_api_result fwlab_nfc_page_v2_init(
     struct fwlab_nfc_page_v2_model **model);
 struct fwlab_nfc_page_v2_provider fwlab_nfc_page_v2_provider(
     struct fwlab_nfc_page_v2_model *model);
+/* Private construction seam; unlike quiescent(), requires an open, healthy,
+ * empty instance. No reset, epoch or UID changes. */
+enum fwlab_nfc_api_result fwlab_nfc_page_v2_live_idle(
+    const struct fwlab_nfc_page_v2_model *model, bool *idle);
 
 #endif

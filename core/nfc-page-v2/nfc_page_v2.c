@@ -1,6 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 Evanshenf */
 /* SPDX-License-Identifier: BSD-3-Clause */
 #include "fwlab/private/nfc_page_v2_model.h"
+#include "nfc_page_v2_internal.h"
 
 #include <stdalign.h>
 #include <string.h>
@@ -74,56 +75,19 @@ static bool geometry_valid(const struct fwlab_nfc_geometry *g)
 
 static bool key_equal(const struct fwlab_nfc_operation_token *a,
                       const struct fwlab_nfc_operation_token *b)
-{
-    return a->instance_nonce == b->instance_nonce && a->operation_uid == b->operation_uid &&
-        a->controller_epoch == b->controller_epoch && a->generation == b->generation;
-}
+{ return page2_key_equal(a, b); }
 
 static bool key_valid(const struct fwlab_nfc_page_v2_model *m,
                       const struct fwlab_nfc_operation_token *key)
-{
-    return key && key->instance_nonce == m->config.instance_nonce &&
-        key->controller_epoch == m->config.controller_epoch &&
-        key->generation == m->config.generation && key->operation_uid &&
-        key->operation_uid <= m->config.operation_uid_limit;
-}
+{ return page2_key_valid(&m->config, key); }
 
 static uint8_t shape_reason(const struct fwlab_nfc_page_v2_model *m,
                             const struct fwlab_nfc_page_v2_request *r)
-{
-    const struct fwlab_nfc_geometry *g = &m->config.geometry;
-    if (!r || r->version != FWLAB_NFC_PAGE_V2_VERSION || r->size != sizeof(*r) ||
-        r->reserved0 || r->reserved1) return FWLAB_NFC_REASON_INTERNAL;
-    if (!key_valid(m, &r->operation)) return FWLAB_NFC_REASON_STALE;
-    if (r->retry_step || r->fault_tag) return FWLAB_NFC_REASON_UNSUPPORTED;
-    if (r->kind < FWLAB_NFC_PAGE_V2_READ_GROUP || r->kind > FWLAB_NFC_PAGE_V2_ERASE)
-        return FWLAB_NFC_REASON_UNSUPPORTED;
-    if (r->first.reserved || r->first.channel >= g->channels ||
-        r->first.lun >= g->luns_per_channel || r->first.plane >= g->planes_per_lun ||
-        r->first.block >= g->blocks_per_plane || r->first.page >= g->pages_per_block ||
-        !r->page_count || r->page_count > FWLAB_NFC_PAGE_V2_MAX_PAGES ||
-        r->page_count > (uint32_t)g->pages_per_block - r->first.page)
-        return FWLAB_NFC_REASON_RANGE;
-    if (r->kind == FWLAB_NFC_PAGE_V2_ERASE && (r->page_count != 1 || r->first.page))
-        return FWLAB_NFC_REASON_RANGE;
-    if (r->kind == FWLAB_NFC_PAGE_V2_PROGRAM_GROUP) {
-        if (!span(r->main, r->main_bytes) || !span(r->oob, r->oob_bytes) ||
-            r->main_bytes != (size_t)r->page_count * FWLAB_NFC_PAGE_V2_MAIN_BYTES ||
-            r->oob_bytes != (size_t)r->page_count * FWLAB_NFC_PAGE_V2_OOB_BYTES)
-            return FWLAB_NFC_REASON_RANGE;
-    } else if (r->main || r->main_bytes || r->oob || r->oob_bytes)
-        return FWLAB_NFC_REASON_RANGE;
-    return FWLAB_NFC_REASON_NONE;
-}
+{ return page2_shape_reason(&m->config, r); }
 
 static bool canonical_equal(const struct fwlab_nfc_page_v2_request *a,
                             const struct fwlab_nfc_page_v2_request *b)
-{
-    return a->kind == b->kind && a->page_count == b->page_count &&
-        memcmp(&a->first, &b->first, sizeof(a->first)) == 0 &&
-        a->main_bytes == b->main_bytes && a->oob_bytes == b->oob_bytes &&
-        a->retry_step == b->retry_step && a->fault_tag == b->fault_tag;
-}
+{ return page2_canonical_equal(a, b); }
 
 static struct fwlab_nfc_submit_result disposition(uint32_t value, uint32_t reason)
 {
@@ -192,34 +156,15 @@ static void failure(struct fwlab_nfc_page_v2_model *m, uint8_t reason,
 
 static bool block_valid(const struct fwlab_nfc_page_v2_model *m,
                         const struct fwlab_nand_block_info *b)
-{
-    return b->version == FWLAB_NFC_CONTRACT_VERSION && b->size == sizeof(*b) &&
-        !b->reserved0 && zeros(b->reserved1, sizeof(b->reserved1)) &&
-        b->health <= FWLAB_NFC_BLOCK_RUNTIME_BAD && b->erase_state <= FWLAB_NAND_ERASE_TORN &&
-        b->next_program_page <= m->config.geometry.pages_per_block &&
-        b->successful_erase_count <= b->erase_attempt_count;
-}
+{ return page2_block_valid(&m->config.geometry, b); }
 
 static bool page_valid(const struct fwlab_nand_page_info *p,
                        const struct fwlab_nand_block_info *b, uint32_t index)
-{
-    if (p->version != FWLAB_NFC_CONTRACT_VERSION || p->size != sizeof(*p) ||
-        !zeros(p->reserved, sizeof(p->reserved)) || p->state > FWLAB_NAND_PAGE_TORN ||
-        p->program_count > 1 || p->erase_generation_seen != b->erase_generation)
-        return false;
-    if (b->erase_state == FWLAB_NAND_ERASE_TORN) return true;
-    if (p->state == FWLAB_NAND_PAGE_ERASED)
-        return !p->program_count && index >= b->next_program_page;
-    return p->program_count == 1 && index < b->next_program_page;
-}
+{ return page2_cell_valid(p, b, index); }
 
 static void generation_health(struct fwlab_nfc_page_v2_page_result *p,
                               const struct fwlab_nand_block_info *b)
-{
-    p->facts_valid = FWLAB_NFC_PAGE_V2_FACT_GENERATION | FWLAB_NFC_PAGE_V2_FACT_HEALTH;
-    p->base_erase_generation = p->final_erase_generation = b->erase_generation;
-    p->block_health = b->health;
-}
+{ page2_generation_health(p, b); }
 
 static void read_group(struct fwlab_nfc_page_v2_model *m)
 {
@@ -244,24 +189,8 @@ static void read_group(struct fwlab_nfc_page_v2_model *m)
             failure(m, FWLAB_NFC_REASON_INTERNAL, FWLAB_NFC_API_INVARIANT_FAILURE, false);
             return;
         }
-        generation_health(out, &b);
-        out->facts_valid |= FWLAB_NFC_PAGE_V2_FACT_CELL | FWLAB_NFC_PAGE_V2_FACT_ECC |
-                            FWLAB_NFC_PAGE_V2_FACT_EFFECT;
-        out->page_state = p->state;
-        out->program_count = p->program_count;
-        out->integrity = p->state == FWLAB_NAND_PAGE_TORN || b.erase_state == FWLAB_NAND_ERASE_TORN ?
-            FWLAB_NFC_INTEGRITY_TORN : FWLAB_NFC_INTEGRITY_COMPLETE;
-        if (b.health != FWLAB_NFC_BLOCK_GOOD) {
-            out->reason = FWLAB_NFC_REASON_BAD_BLOCK;
-            valid = false;
-        } else if (b.erase_state == FWLAB_NAND_ERASE_TORN || p->state == FWLAB_NAND_PAGE_TORN) {
-            out->ecc_status = FWLAB_NFC_ECC_UNCORRECTABLE;
-            out->reason = FWLAB_NFC_REASON_ECC_UNCORRECTABLE;
-            valid = false;
-        } else {
-            out->ecc_status = FWLAB_NFC_ECC_CLEAN;
-            out->valid_region_mask = FWLAB_NFC_REGION_MASK;
-        }
+        page2_read_fact(out, p, &b);
+        if (out->reason) valid = false;
         if (!m->result.reason && out->reason) m->result.reason = out->reason;
     }
     m->result.read_valid = (uint8_t)valid;
@@ -520,4 +449,13 @@ struct fwlab_nfc_page_v2_provider fwlab_nfc_page_v2_provider(struct fwlab_nfc_pa
     struct fwlab_nfc_page_v2_provider p = {NULL, NULL};
     if (live(m)) { p.ops = &provider_ops; p.context = m; }
     return p;
+}
+
+enum fwlab_nfc_api_result fwlab_nfc_page_v2_live_idle(
+    const struct fwlab_nfc_page_v2_model *m, bool *idle)
+{
+    if (!live(m) || !idle || !outside(m, idle, sizeof(*idle)))
+        return FWLAB_NFC_API_INVALID_CONTRACT;
+    *idle = !m->closed && !m->quarantined && m->state == PAGE2_EMPTY;
+    return FWLAB_NFC_API_OK;
 }
