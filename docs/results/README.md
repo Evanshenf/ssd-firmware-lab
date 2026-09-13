@@ -21,6 +21,10 @@ an execution; a historical result retains its recorded source/profile scope.
 Opening, hold and closure records below are retained together. Read the later
 scoped closure before treating an old opening/hold as the live project state.
 
+The H0/V0 and C2 implementations and runners have moved out of `main`; the
+[legacy experiment archive](../legacy-experiments.md) links their exact retained
+source. The dated results and evidence hashes below keep their original scope.
+
 - [2026-08-28: M0 H0 synthetic PCI enumeration on Profile-Nested](2026-08-28-m0-h0-nested.md)
 - [2026-08-28: M0 V0 emulated VFIO cdev contract on Profile-Nested](2026-08-28-m0-vfio-cdev-v0-nested.md)
 - [2026-08-28: Cycle 01 evidence manifest and review disposition](2026-08-28-cycle-01-evidence-manifest.md)
