@@ -3,7 +3,8 @@
 
 # ADR-0017: Separate drained shutdown from successor readiness
 
-- Status: Implemented candidate; native 64-GiB reset/rebind confirmed, full-volume qualification pending
+- Status: Implemented; full-volume data passed at `c390611`, affected MSI controls
+  confirmed at `823f04c`; publication CI is tracked separately from runtime evidence
 - Date: 2026-09-12
 - Refines: [ADR-0014](0014-native-profile-and-serial-mq2.md), [ADR-0015](0015-capacity-presets-and-mapped-budgets.md)
 
