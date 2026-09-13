@@ -8,6 +8,11 @@ commit `f3438fee61f82cf305f29bc232aa2c0fa9e1b166`, specifically
 `kernel/m4-synthetic-pci-poc/m4_pci.c`, `m4_pci_main.c`, `m4_iommu.c`,
 `m4_internal.h` and `m4_dma_api.h`. Their GPL-2.0-only licenses are preserved.
 
+The donor is retained under the
+[`archive/m4-m5-profile-nested` tag](https://github.com/Evanshenf/ssd-firmware-lab/tree/archive/m4-m5-profile-nested).
+Its former development branch is retired; use the exact commit above for source
+identity. Archival retention does not make its fixture an active firmware path.
+
 This target removes the old whole-executor binding and vendor/NVMe mode switch.
 It does not link `m4_frontend`, `m4_nvme` or `m4_media_fixture`. The new HIF
 connects the synthetic function to the portable userspace firmware process.
