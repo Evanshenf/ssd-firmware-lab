@@ -23,7 +23,10 @@
 两个队列仍共享一个 I/O buffer，FTL 串行执行，不是并行吞吐承诺。
 容量构造现已共用 **64／256／65536 MiB** 配置。当前 PAGE2／v2 路径已通过 ARM64 **64 GiB 满写、覆盖、GC、恢复及全盘回读**；
 原生 **256 MiB NVMe** 已通过 Linux reset／恢复和 ext4 挂载验证。详见[容量验证记录](docs/results/2026-09-10-current-capacity.md)。
-这不等于原生 64 GiB、ARM PCI 或整盘性能已经验证；早期 C3／v1 大容量结果仍单独保留。
+后续已打通 ARM64 原生 Linux NVMe 的 **64 GiB namespace**，完成全盘数据、控制恢复及固定工作集性能测试，
+并通过 ext4 的 fsync／reset／重绑、真实 ENOSPC、重新分配及最终文件哈希验证。
+这是限定范围的原生 L1 结果，不代表生产可用或 ARM 客户机所有权切换已验证。各批次精确源码身份及性能边界见
+[ARM 原生结果](docs/results/2026-09-13-native-arm64.md)；早期 C3／v1 大容量结果仍单独保留。
 见[当前能力与平台边界](docs/current-status.md)、[开发证据](docs/results/2026-09-10-scaled-storage-mq2.md)
 和[分层性能与全部成对样本](docs/results/2026-09-10-throughput.md)。本次公开开发成果，不改旧标签，也不宣称新的冻结版本。
 

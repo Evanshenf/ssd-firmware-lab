@@ -174,9 +174,13 @@ semantics remain unchanged.
 
 Large-volume startup/drain have finite capacity-aware iteration allowances and
 30-second progress output. These software allowances do not extend the
-controller's advertised readiness timeout. Native 64 GiB bind/reset/rebind and
-owner-switch readiness still need actual Linux/HIF qualification; a headless
-64 GiB PASS or the offline 256 MiB fixture does not prove those timings.
+controller's advertised readiness timeout. The later native 64 GiB binding and
+reset/rebind cases required the distinct drained/readiness handshake in
+[ADR-0017](../../docs/adr/0017-large-controller-readiness.md), including the
+fixed LARGE/MQ2 CAP.TO budget. Their
+[native results](../../docs/results/2026-09-13-native-arm64.md) are not inferred
+from headless PASS markers. Large-capacity owner switching and ARM M5 keep
+their separate unqualified scope.
 
 The scaled entry requires the explicit `FWLAB_M4_ATTACH_IDENTITY` ioctl from
 the matching kernel. It records UUID, media format and the supplied

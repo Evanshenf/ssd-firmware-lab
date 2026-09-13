@@ -79,8 +79,8 @@ as an executed FLR or a product defect. No media was reformatted.
 Stop this readiness repair at those source and runtime confirmations. The
 candidate subsequently passed the full-volume fill/striped-overwrite/cold-read
 data group. A later cut campaign exposed the separate PCI/MSI lock inversion
-described in [ADR-0016](0016-arm64-native-platform.md); its correction still
-requires native runtime confirmation and does not reopen the drain handshake
+described in [ADR-0016](0016-arm64-native-platform.md); its correction now has
+native runtime confirmation and does not reopen the drain handshake
 as a general redesign. Comprehensive integrity acceptance, concurrent publication
 N01, performance, ARM L2/KVM and physical power-loss behavior retain their own
 evidence boundaries.

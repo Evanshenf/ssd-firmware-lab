@@ -3,7 +3,7 @@
 
 # ADR-0016: ARM64 native platform binding and atomic DMA callbacks
 
-- Status: Implemented candidate; 64-GiB data subsets passed, MSI/reset correction awaits native revalidation
+- Status: Implemented; named native L1 64-GiB data/control/filesystem matrix complete, ARM M5 unqualified
 - Date: 2026-09-11
 - Updated: 2026-09-13
 - Refines: [ADR-0014](0014-native-profile-and-serial-mq2.md), [ADR-0015](0015-capacity-presets-and-mapped-budgets.md)
@@ -86,8 +86,12 @@ releases the lock, synchronizes pending IRQ work, then frees IRQ data.
 
 This bounded correction changes only the shared Linux-7 PCI/MSI implementation.
 The older compatibility branch is unchanged and receives no new fix or runtime
-qualification claim. Source confirmation and compilation do not close the
-observed incident: the corrected native control cases still have to run.
+qualification claim. The correction subsequently passed all four fired native
+cuts, reset/rebind readback and normal teardown at both 64 MiB and 64 GiB,
+without new kernel warnings or lockups. It also passed the later controls with
+pending I/O. This closes the observed incident within that scope, not arbitrary
+MSI clients or the complete release. See the
+[native result boundaries](../results/2026-09-13-native-arm64.md).
 
 ## Evidence and limits
 
@@ -110,7 +114,9 @@ cold recovery with both complementary 32-GiB readbacks (224 GiB of native I/O).
 Seven finite random/mixed jobs and three separate ordinary/FUA/Flush worker-loss
 legs also passed within their recorded boundaries. Those are retained results
 for that source, not evidence that the later cut campaign or corrected candidate
-passed. Comprehensive native qualification remains open at the MSI incident.
+passed. The affected corrected control cases subsequently passed as described
+above; the subsequent ext4 full-space/recovery/hash episode also passed. These
+named L1 results do not establish arbitrary workloads, hardware or ARM M5.
 
 L1 does not prove ARM L2/KVM or owner switching. The current ARM guest lacks
 `/dev/kvm`; the existing QEMU journey launcher is x86-specific. Do not substitute

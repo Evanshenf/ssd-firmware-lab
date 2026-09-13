@@ -10,10 +10,13 @@ production machine or point them at a physical SSD.
 
 ## 1. Choose matching builds
 
-The tested native environment is x86-64, Ubuntu kernel `7.0.0-30-generic`
+The named native environments use x86-64 or ARM64, Ubuntu kernel `7.0.0-30-generic`
 (package `7.0.0-30.30`), 4-KiB system pages and an explicitly reserved 16-KiB BAR
 aperture. See [kernel preparation and owner control](../kernel/m4-native/README.md).
-An ARM64 userspace result does not establish ARM native support.
+The ARM64 route additionally requires the fresh EFI-map/NOMAP preparation in
+[ADR-0016](adr/0016-arm64-native-platform.md). Its
+[native evidence](results/2026-09-13-native-arm64.md) is separate from the
+userspace/headless results; ARM M5/nested KVM remains unqualified.
 
 For the adopted serial-credit MQ2 construction, build in a fresh checkout of
 one recorded commit, as an ordinary user:
@@ -122,7 +125,9 @@ script is supplied by this guide.
 ## Evidence and unresolved deployment work
 
 The [development results](results/2026-09-10-scaled-storage-mq2.md) identify the
-executed native and ownership cases. Full bare-metal qualification, ARM native
-M4/M5, raw-device admission, larger native capacity, real-NAND generation
+executed native and ownership cases. Later
+[ARM64 native data and control evidence](results/2026-09-13-native-arm64.md)
+covers the 64-GiB construction with explicit per-group source identities.
+Full bare-metal qualification, ARM M5, raw-device admission, real-NAND generation
 recovery and unattended deployment packaging remain separate work. Named reset
 tests do not close the previously disclosed concurrent-FLR question.

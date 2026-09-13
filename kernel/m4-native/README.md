@@ -4,7 +4,7 @@
 # Native firmware PCI/HIF (experimental J1)
 
 This builds a Host-visible software PCI function and software IOMMU for a
-disposable x86-64 Linux lab VM, with an ARM64 platform candidate described in
+disposable x86-64 or explicitly prepared ARM64 Linux lab VM, with the ARM64 binding described in
 [ADR-0016](../../docs/adr/0016-arm64-native-platform.md). It is not a physical endpoint or a vfio-user
 device. It requires an explicitly reserved, exactly 16-KiB memory aperture;
 the module refuses ordinary/unreserved RAM. Do not load it on a production host.
@@ -15,7 +15,8 @@ This page retains the tagged reference and development construction contracts.
 For the adopted 64-MiB/Large/MQ2 path, see the
 [current matrix](../../docs/current-status.md),
 [operator sequence](../../docs/native-scaled-usage.md) and
-[separately scoped native results](../../docs/results/2026-09-10-scaled-storage-mq2.md).
+[separately scoped native results](../../docs/results/2026-09-10-scaled-storage-mq2.md)
+and [ARM64/64-GiB evidence](../../docs/results/2026-09-13-native-arm64.md).
 
 The two modules are `ssd_fwlab_native_iommu` and `ssd_fwlab_native_pci`.
 `bar_start` must be supplied explicitly. The endpoint begins with
@@ -105,7 +106,7 @@ The development `FWLAB_M4_HOST_PROFILE=2` construction requires producer 2
 uses a distinct 160-byte ioctl command and exact profile/limit matching before
 media identity pinning. This does not change media format or old 112/128-byte
 attachment layouts. Large construction is restricted to the tested 4 KiB kernel
-page environment. ARM64 has bounded native L1 bring-up evidence, not a general
+page environment. ARM64 has native L1 64-GiB data/control evidence, not a general
 ARM kernel or nested-KVM portability claim; see ADR-0016 above.
 
 Profile 2 has one I/O and one Admin ingress reservation from SQ capture through

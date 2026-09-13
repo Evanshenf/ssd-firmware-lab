@@ -3,7 +3,8 @@
 
 # Development status and supported constructions
 
-This page describes the adopted development source through `a6ee009`, not an
+This page describes the development source, including the ARM native and
+MSI/readiness corrections through `823f04c`, not an
 expansion of the immutable `v0.1.0-spine-preview.1` tag. The project remains
 **pre-alpha research software**. Publishing source is not a production release
 or a claim that every historical test was rerun on the newest revision. The
@@ -25,9 +26,12 @@ code without treating historical directory names as dependency boundaries.
 The table's native capacities are the default 64-MiB configurations. Scaled native
 workers now accept `--namespace-mib 64|256|65536` using the same construction
 presets as headless. Native Linux 256 MiB has passed Identify, tail I/O, reset,
-rebind, cold recovery and an ext4 mount/fsync/reset/remount check. Native 64-GiB
-and ARM PCI/reset timing remain unqualified; a headless result does not prove
-them. Recovery never grows an existing image. Logical capacity, physical
+rebind, cold recovery and an ext4 mount/fsync/reset/remount check. Later ARM64
+native 64-GiB data/control/performance groups have their own
+[exact-source results](results/2026-09-13-native-arm64.md), including the completed
+ext4 full-space/recovery episode; ARM M5 is not qualified. These are actual native
+journeys, not deductions from headless tests. Recovery never grows an existing
+image. Logical capacity, physical
 geometry, arena budget, media-format version and Host transfer profile remain
 separate choices. See [capacity results](results/2026-09-10-current-capacity.md)
 and [ADR-0015](adr/0015-capacity-presets-and-mapped-budgets.md).
@@ -62,8 +66,9 @@ drained volatile runtime objects may be rebuilt under a new epoch.
 | Environment | What has evidence | What is not established |
 |---|---|---|
 | Linux x86-64 userspace | Current software paths with GCC/Clang; existing targeted sanitizer runs | Arbitrary operating systems or production endurance |
-| Linux ARM64 userspace | Native scalable-storage/lower-layer checks and the separately versioned 64-GiB campaign | ARM kernel M4/M5, every current profile/configuration |
-| x86-64 native test VM | Ubuntu kernel `7.0.0-30-generic` (package `7.0.0-30.30`), 4-KiB pages, reserved 16-KiB BAR; named native/reset/owner/MQ2 cases | Bare-metal requester DMA, arbitrary kernels, an ARM native endpoint |
+| Linux ARM64 userspace | Native scalable-storage/lower-layer checks and separately versioned 64-GiB campaigns | Every profile/configuration or a hardware port |
+| ARM64 native test VM | Ubuntu `7.0.0-30-generic`/4-KiB pages, fresh EFI-reserved 16-KiB BAR, native 64-GiB data/control/performance and ext4 full-space/recovery groups | No ARM M5/nested KVM, arbitrary page sizes or bare-metal qualification |
+| x86-64 native test VM | Ubuntu kernel `7.0.0-30-generic` (package `7.0.0-30.30`), 4-KiB pages, reserved 16-KiB BAR; named native/reset/owner/MQ2 cases | Bare-metal requester DMA or arbitrary kernels; ARM evidence is a separate row |
 | Hosted cross CI | Current MQ2 userspace worker cross-compiles for AArch64, RISC-V64 and big-endian s390x, with ELF identity checks; existing PAGE2/media fixtures run under QEMU user mode, plus explicit ARM CRC | Full-stack execution on those targets, native PCI/kernel portability or hardware performance from compilation/lower fixtures |
 | Regular-file disk backend | Earlier exact-source small-volume persistence/restart cases | Physical host power loss or performance of current mapped-tmpfs workers |
 | Local tmpfs | Functional recovery after process interruption and explicitly scoped software throughput | Survival of reboot/power loss, physical NAND or SSD bandwidth |
@@ -99,7 +104,8 @@ ISA-targeted CRC builds are also explicit, not the portable default.
 - The native worker still uses a bounded file, not an exclusive raw block
   device. A larger backend alone changes neither namespace nor FTL budgets.
 - No 10-GB/s end-to-end, PCIe 4/5 saturation, 1–3% overhead or production-ready
-  claim. See [separated performance results](results/2026-09-10-throughput.md).
+  claim. See [separated layer measurements](results/2026-09-10-throughput.md) and
+  [native ARM64 fixed-extent samples](results/2026-09-13-native-arm64.md).
 
 Start with the [software guide](getting-started.md). Use the
 [native construction guide](native-scaled-usage.md) only in a disposable,

@@ -30,8 +30,13 @@ profile with up to 1-MiB I/O, two I/O queues and three MSI-X vectors. MQ2 still
 has one global I/O frame and serialized storage execution. Capacity construction
 now shares 64/256/65536-MiB presets. The current PAGE2/v2 path passed a full
 64-GiB ARM64 headless journey, and a 256-MiB native namespace passed Linux
-reset/recovery and ext4 mount checks. See [capacity evidence](docs/results/2026-09-10-current-capacity.md).
-These are not native 64-GiB, ARM PCI or whole-SSD performance claims.
+reset/recovery and ext4 mount checks. Subsequent ARM64 native work connected the
+Linux driver to a 64-GiB namespace and exercised full-volume data, controls and
+fixed-extent performance, followed by ext4 fsync/reset/rebind, true ENOSPC,
+reallocation and final file-hash checks. These are bounded native L1 results,
+not production or ARM guest-owner qualification. See
+[capacity evidence](docs/results/2026-09-10-current-capacity.md) and the
+[exact-source ARM native results](docs/results/2026-09-13-native-arm64.md).
 See [current constructions and platform limits](docs/current-status.md),
 [development evidence](docs/results/2026-09-10-scaled-storage-mq2.md) and
 [performance samples](docs/results/2026-09-10-throughput.md). This is development
@@ -119,9 +124,10 @@ retains the tagged preview's reference implementation.
   one I/O queue pair of depth 32. It is not a general-purpose disk for real data.
 - Command/record/media-operation budgets are finite. Reopening an image does
   not erase persistent history or establish indefinite endurance.
-- Native integration was tested on a disposable x86-64 Linux VM with Ubuntu
+- The tagged native integration was tested on a disposable x86-64 Linux VM with Ubuntu
   `7.0.0-30-generic` and a specifically reserved 16-KiB BAR aperture. It is not
-  a drop-in module for arbitrary Linux kernels or production hosts.
+  a drop-in module for arbitrary Linux kernels or production hosts. Development
+  ARM64 evidence has its own EFI preparation and scope in the current result page.
 - Larger native capacity, richer FTL/wear-leveling, exclusive raw-block backing,
   RTOS ports and real FPGA/SoC/NAND adapters are future work, not released features.
 - Physical NAND requires a concrete metadata/erase-generation recovery contract;
