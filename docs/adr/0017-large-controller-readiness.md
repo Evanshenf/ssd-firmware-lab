@@ -76,6 +76,11 @@ The first FLR harness attempt ended before issuing FLR because it sampled the
 recovery-progress line too early. That guard failure is retained, not counted
 as an executed FLR or a product defect. No media was reformatted.
 
-Stop this repair at those source and runtime confirmations. Full 64-GiB data
-integrity, filled-volume recovery, concurrent publication N01, performance,
-ARM L2/KVM and physical power-loss behavior keep their separate pending scopes.
+Stop this readiness repair at those source and runtime confirmations. The
+candidate subsequently passed the full-volume fill/striped-overwrite/cold-read
+data group. A later cut campaign exposed the separate PCI/MSI lock inversion
+described in [ADR-0016](0016-arm64-native-platform.md); its correction still
+requires native runtime confirmation and does not reopen the drain handshake
+as a general redesign. Comprehensive integrity acceptance, concurrent publication
+N01, performance, ARM L2/KVM and physical power-loss behavior retain their own
+evidence boundaries.

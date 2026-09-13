@@ -3,8 +3,9 @@
 
 # ADR-0016: ARM64 native platform binding and atomic DMA callbacks
 
-- Status: Implemented candidate; native 64-MiB bring-up passed, larger and owner journeys pending
+- Status: Implemented candidate; 64-GiB data subsets passed, MSI/reset correction awaits native revalidation
 - Date: 2026-09-11
+- Updated: 2026-09-13
 - Refines: [ADR-0014](0014-native-profile-and-serial-mq2.md), [ADR-0015](0015-capacity-presets-and-mapped-budgets.md)
 
 ## Same data path, different Linux platform setup
@@ -63,6 +64,31 @@ clears direct-reclaim permission while authority is held, retaining rollback on
 failure. No sleeping allocation or user-memory copy occurs inside the lock.
 This correction applies to both architectures.
 
+## MSI allocation owns the IRQ lookup tuple
+
+The Linux-7 parent-domain path must not call `msi_get_virq()` while holding
+`config_lock` or from IRQ work. That lookup acquires the MSI descriptor mutex.
+During the subsequent native cut campaign, a worker waited for this mutex from
+`fwlab_m4_irq_valid_locked` under `config_lock`; concurrently Linux MSI shutdown
+held the descriptor mutex and entered the PCI configuration callback, waiting
+for `config_lock`. Both sides were recovered from the stalled guest's real
+stacks. This was a native transport deadlock, not an FTL or NAND-format defect.
+
+The parent-domain allocation/free callbacks already own the per-vector
+`allocated`, `virq` and `generation` record. IRQ preparation and validation use
+that record under `config_lock`, together with the existing owner, effects,
+BAR, permission and enable checks. Allocation advances the generation, performs
+hwirq/chip/handler setup outside `config_lock`, and only then publishes the
+usable tuple. Linux NVMe must finish MSI allocation and `request_irq` before
+queue/vector use; parent callback completion alone is not a generic MSI-client
+readiness guarantee. Free invalidates the tuple and tickets under the lock,
+releases the lock, synchronizes pending IRQ work, then frees IRQ data.
+
+This bounded correction changes only the shared Linux-7 PCI/MSI implementation.
+The older compatibility branch is unchanged and receives no new fix or runtime
+qualification claim. Source confirmation and compilation do not close the
+observed incident: the corrected native control cases still have to run.
+
 ## Evidence and limits
 
 Corrected ARM passed native 64-MiB Identify, six data shapes, reset, rebind and
@@ -78,8 +104,13 @@ warning remains disclosed. A Linux-6.8 build failed at the pre-existing
 
 Native 64-GiB probe and shaped read/write passed. The observed reset/shutdown
 deadline failures were corrected and confirmed as described in
-[ADR-0017](0017-large-controller-readiness.md). Full-volume qualification remains
-open; shaped I/O and clean reset do not prove a complete 64-GiB fill/readback.
+[ADR-0017](0017-large-controller-readiness.md). The pre-MSI-correction candidate
+subsequently passed a full 64-GiB fill/readback, 32-GiB striped overwrite and
+cold recovery with both complementary 32-GiB readbacks (224 GiB of native I/O).
+Seven finite random/mixed jobs and three separate ordinary/FUA/Flush worker-loss
+legs also passed within their recorded boundaries. Those are retained results
+for that source, not evidence that the later cut campaign or corrected candidate
+passed. Comprehensive native qualification remains open at the MSI incident.
 
 L1 does not prove ARM L2/KVM or owner switching. The current ARM guest lacks
 `/dev/kvm`; the existing QEMU journey launcher is x86-specific. Do not substitute
