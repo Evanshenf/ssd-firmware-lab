@@ -46,6 +46,7 @@ static bool fwlab_m4_irq_valid_locked(struct fwlab_m4_pci_ctx *ctx,
 {
 	const struct fwlab_m4_irq_route *route;
 	u16 command = get_unaligned_le16(&ctx->config[PCI_COMMAND]);
+	bool valid;
 
 	if (ticket->vector >= FWLAB_M4_VECTOR_COUNT)
 		return false;
@@ -54,7 +55,7 @@ static bool fwlab_m4_irq_valid_locked(struct fwlab_m4_pci_ctx *ctx,
 	if (!route->allocated || route->virq != ticket->virq)
 		return false;
 #endif
-	return ctx->effects_open && ctx->owner_phase == FWLAB_M4_OWNER_OWNED &&
+	valid = ctx->effects_open && ctx->owner_phase == FWLAB_M4_OWNER_OWNED &&
 	       ticket->owner_epoch == ctx->owner_epoch &&
 	       ticket->bus_generation == ctx->access_generation &&
 	       ticket->effects_generation == ctx->effects_generation &&
@@ -62,8 +63,12 @@ static bool fwlab_m4_irq_valid_locked(struct fwlab_m4_pci_ctx *ctx,
 	       ticket->bar_epoch == ctx->bar_epoch &&
 	       (command & (PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY)) ==
 		       (PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY) &&
-	       ctx->pdev && ctx->pdev->msix_enabled && ticket->virq &&
-	       msi_get_virq(&ctx->pdev->dev, ticket->vector) == ticket->virq;
+	       ctx->pdev && ctx->pdev->msix_enabled && ticket->virq;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(7, 0, 0)
+	if (valid)
+		valid = msi_get_virq(&ctx->pdev->dev, ticket->vector) == ticket->virq;
+#endif
+	return valid;
 }
 
 static u64 fwlab_m4_pending_bits_locked(struct fwlab_m4_pci_ctx *ctx)
@@ -155,7 +160,14 @@ int fwlab_m4_prepare_msix_vector(struct fwlab_m4_pci_ctx *ctx, u64 owner_epoch,
 	candidate.effects_generation = ctx->effects_generation;
 	candidate.route_generation = ctx->route[vector].generation;
 	candidate.vector = vector;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+	/* The MSI descriptor lookup takes a mutex. Allocation/free already give
+	 * this parent domain the authoritative vector/virq/generation tuple;
+	 * never reacquire the MSI mutex under config_lock or from irq_work. */
+	candidate.virq = ctx->route[vector].allocated ? ctx->route[vector].virq : 0;
+#else
 	candidate.virq = ctx->pdev ? msi_get_virq(&ctx->pdev->dev, vector) : 0;
+#endif
 	valid = fwlab_m4_irq_valid_locked(ctx, &candidate);
 	if (valid)
 		*ticket = candidate;
@@ -341,8 +353,6 @@ static int fwlab_m4_irq_domain_alloc(struct irq_domain *domain,
 		struct fwlab_m4_irq_route *route = &ctx->route[first + i];
 
 		route->generation++;
-		route->allocated = true;
-		route->virq = virq + i;
 	}
 	spin_unlock_irqrestore(&ctx->config_lock, flags);
 	for (i = 0; i < nr_irqs; i++) {
@@ -350,6 +360,17 @@ static int fwlab_m4_irq_domain_alloc(struct irq_domain *domain,
 					      &fwlab_m4_msi_chip, ctx);
 		__irq_set_handler(virq + i, handle_simple_irq, 0, "ssd-fwlab-simple");
 	}
+	/* Publish only after local IRQ setup; setup itself can call our mask
+	 * callback and must not run under config_lock. Linux NVMe starts using
+	 * the vector only after MSI allocation/request_irq and queue creation. */
+	spin_lock_irqsave(&ctx->config_lock, flags);
+	for (i = 0; i < nr_irqs; i++) {
+		struct fwlab_m4_irq_route *route = &ctx->route[first + i];
+
+		route->virq = virq + i;
+		route->allocated = true;
+	}
+	spin_unlock_irqrestore(&ctx->config_lock, flags);
 	return 0;
 }
 
