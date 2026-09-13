@@ -217,6 +217,28 @@ contract is not implemented, so replacing a backend alone is not a lossless
 silicon-port guarantee. Unrecoverable DATA/checkpoint corruption fails closed;
 all possible physical power failures or multiple media errors are not claimed.
 
+## Explicit bounded parallel READ construction
+
+`fwlab_ftl_scale_init_parallel_read` adds four private physical-read run slots
+while retaining the same Block parent and PAGE2 provider contract. It accepts
+no concrete simulator model or clock. The initial preparation remains serial;
+`fwlab_ftl_scale_can_enter_read_only` / `fwlab_ftl_scale_enter_read_only` close
+write admission at an idle boundary and enable the bounded parallel reader.
+Ordinary constructors and persistent formats are unchanged.
+
+Issued, completed and published positions are distinct. Eligible runs enter
+before NFC advancement; token results can arrive out of order, but actual
+controller-buffer writes advance only a verified logical prefix. Failure and
+cancellation stop new work/publication, not the collection needed to drain all
+accepted lower operations. No GC, writes or checkpoint overlap this first reader.
+
+The headless LAB composition owns timing/wiring and its one-way phase control.
+It checks J0, FTL and NFC idle; the FTL itself only knows generic read slots and
+read-only admission. See [ADR-0018](../../docs/adr/0018-resource-scheduled-nand-read-lab.md)
+and the [N1 result](../../docs/results/2026-09-13-ftl-parallel-read.md).
+This explicit experimental path is not native/default parallel-SSD throughput,
+a hardware NAND port, timed writes or a large-capacity qualification.
+
 ## Reproduce without a raw device
 
 From the repository root, as an ordinary user:

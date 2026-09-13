@@ -3,13 +3,14 @@
 
 # ADR-0018: Resource-scheduled NAND and the first parallel-read slice
 
-- Status: Selected design; N0 lower-binding implemented/checked, N1--N4 pending
+- Status: N0 and N1 bounded READ slices implemented/checked; N2--N4 pending
 - Date: 2026-09-13
 - Starting baseline: `bd522bb4505cc24e144920cd93319aaae947b01a`
 - Refines: [ADR-0012](0012-versioned-physical-nand-media.md) and
   [ADR-0013](0013-scalable-ftl-and-page-windows.md)
 - Preserves: ordinary PAGE2-R0 behavior, physical-v2 format and Host ownership
 - N0 evidence: [source-bound lower-binding results](../results/2026-09-13-nand-read-lab.md)
+- N1 evidence: [source-bound headless parallel-read results](../results/2026-09-13-ftl-parallel-read.md)
 
 ## Decision
 
