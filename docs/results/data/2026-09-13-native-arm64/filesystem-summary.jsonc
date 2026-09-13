@@ -1,0 +1,2958 @@
+// SPDX-FileCopyrightText: 2026 Evanshenf
+// SPDX-License-Identifier: BSD-3-Clause
+{
+  "schema_version": 1,
+  "status": "PASS_OFFLINE_EVIDENCE_RECONCILED",
+  "elapsed_s": 1659.699,
+  "archive": {
+    "filename": "filesystem-evidence.tar.gz",
+    "sha256": "b7af0d9672f11978428456120e9930a16fc67394d67b17019702c39a683f2c83"
+  },
+  "runner": {
+    "filename": "native64-filesystem.sh",
+    "sha256": "3fd9464e0defa9e62de789abf2b3fc8a368779b77fa9373806770a1c84610e90"
+  },
+  "unit_exit": {
+    "status": 0,
+    "basis": "primary execution report; local event log independently reaches the complete marker"
+  },
+  "filesystem": {
+    "type": "ext4",
+    "uuid": "b7f1c5cf-7f6f-48c4-8684-77f4b5fc5856",
+    "namespace_bytes": 68719476736,
+    "block_bytes": 4096,
+    "reserved_percent": 0,
+    "discard_tested": false,
+    "lazy_inode_init": false,
+    "lazy_journal_init": false,
+    "final_mounted": false
+  },
+  "ledger": {
+    "filename": "logs/filesystem/files.jsonl",
+    "rows": 127,
+    "committed_events": 126,
+    "deleted_events": 1,
+    "live_files": 125,
+    "live_verified_bytes": 66106425344,
+    "live_composition": {
+      "chunks_512MiB": 123,
+      "probe_bytes": 4194304,
+      "reused_file_bytes": 67108864
+    },
+    "deleted": {
+      "action": "DELETED",
+      "bytes": 536870912,
+      "generation": 1,
+      "path": "chunks/chunk-001.bin",
+      "sha256": "f18f9e236af4adacd6fe1a6832dc9c1d11359496b0a097f9fd8efbd1ec3f747c"
+    },
+    "events_match_external_ledger": true
+  },
+  "verification": [
+    {
+      "label": "after-reset",
+      "files": 1,
+      "bytes": 4194304,
+      "sha256_ok_lines": 1,
+      "manifest": "logs/filesystem/after-reset.sha256",
+      "completed_elapsed_s": 30.078
+    },
+    {
+      "label": "after-rebind",
+      "files": 1,
+      "bytes": 4194304,
+      "sha256_ok_lines": 1,
+      "manifest": "logs/filesystem/after-rebind.sha256",
+      "completed_elapsed_s": 36.965
+    },
+    {
+      "label": "final-remount",
+      "files": 125,
+      "bytes": 66106425344,
+      "sha256_ok_lines": 125,
+      "manifest": "logs/filesystem/final-remount.sha256",
+      "completed_elapsed_s": 1659.451
+    }
+  ],
+  "gold_sources": {
+    "count": 126,
+    "all_fio_exit_error_short_drop_checks_passed": true,
+    "all_source_sha256_distinct": true,
+    "committed_copy_hashes_match_source_records": true,
+    "generations": [
+      {
+        "generation": 1,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "f18f9e236af4adacd6fe1a6832dc9c1d11359496b0a097f9fd8efbd1ec3f747c",
+        "metadata": "logs/filesystem/gold-001.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 2,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "09a93a9ef3c1c75260402a6832bf8e7537749dd0ff33167e840df67d2eca5712",
+        "metadata": "logs/filesystem/gold-002.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 3,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "eaa363e2c4e5caaca71fc9025e6b9f44f2cf137c88612e8a708564ba19d4448b",
+        "metadata": "logs/filesystem/gold-003.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 4,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "14c5afea6de8932ee237fd973236f3d7090bbf7a5192cc7374f2f7989c0094a3",
+        "metadata": "logs/filesystem/gold-004.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 5,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "3670273dd96840967169b76ac7320fd9f0652a1f035cd565717de0fe69ea4ac4",
+        "metadata": "logs/filesystem/gold-005.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 6,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "eed5f6e0279b7bdcb3fd76685aa2ff16f8ae32d271d48a10017ec7752518e463",
+        "metadata": "logs/filesystem/gold-006.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 7,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "c40be6d6ebc0bd667b10866708e286ec9018de6489737f61a0fa678df6bf4d6f",
+        "metadata": "logs/filesystem/gold-007.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 8,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "85b4fef16923a4507d4463a997ac18c9566fb2d4d5226ecc1dd3e4caa7bea964",
+        "metadata": "logs/filesystem/gold-008.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 9,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b33872a32444317523510f04c31889a70b1cb933c9fd54ed19c6085370fc316d",
+        "metadata": "logs/filesystem/gold-009.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 10,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "9d8b5e8b2f00a77f92f6e973590135592b49001965b794b295e69556e24892bd",
+        "metadata": "logs/filesystem/gold-010.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 11,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "632ca34deb894520185531469df04e9a15511b2f63ffddaa8c123ad4e9d273fa",
+        "metadata": "logs/filesystem/gold-011.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 12,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "98719a26f39ab01c748c37826082baa17783f08088a37f4d4fec87d78f9c9e56",
+        "metadata": "logs/filesystem/gold-012.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 13,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "46cbdd3f492199f7fa66eeeda4a4a0087a7c7ea1c3ca8433a762ca0aa2f80b2e",
+        "metadata": "logs/filesystem/gold-013.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 14,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "3cbddda7c29ca24e0ca63a27ac9da741ad62ce076ab8d9d45051b6d79138b145",
+        "metadata": "logs/filesystem/gold-014.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 15,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "98229534cad09a1af9a18fb45e96fb34b4de6130be568796350cad9d9c2ed3b1",
+        "metadata": "logs/filesystem/gold-015.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 16,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "de1668f88fa224001935f2958138417019dd71febb0b99c0a4d90b06ca68e2d0",
+        "metadata": "logs/filesystem/gold-016.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 17,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b7fb0e9bafb1970847c3f5d424d119de9e1c3675d8a377fe1d41723a6e3b77ae",
+        "metadata": "logs/filesystem/gold-017.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 18,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "255e5e7c39eae37deddba1170cd52e64bc38efd08b73f1589b082b5090ef0e38",
+        "metadata": "logs/filesystem/gold-018.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 19,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b89208092cd9280069c833fdc95b04cd324fd6ba82eb434ea92f4cfa9c6ec7b8",
+        "metadata": "logs/filesystem/gold-019.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 20,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "1f44d925490f7303fb3bddc606b647a81e7c850024cfc8495df5c81e12e946ea",
+        "metadata": "logs/filesystem/gold-020.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 21,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "fe1c2412db49549fe9531db820e17c31eec6c90fdf6887d35dbcdf7c0fd43998",
+        "metadata": "logs/filesystem/gold-021.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 22,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "e0f58cb8d5ffe5ba4ea6a93dbcbd84f9a35fc78e017f92005e0ff3e0b998dcb6",
+        "metadata": "logs/filesystem/gold-022.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 23,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "2c559ce48d2fd3791ae159db905585c9387b105bdb08f1b30ae592665aad046a",
+        "metadata": "logs/filesystem/gold-023.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 24,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "f7332bf4f6be64d7044e12323d4e2c182eceeecf2ba0de5fa72fa4892b45d062",
+        "metadata": "logs/filesystem/gold-024.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 25,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "f8410285d143cd5dc40e9471d0254786310df602732f06a03a4c97733dd0533d",
+        "metadata": "logs/filesystem/gold-025.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 26,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "12a0ca7f9c5e333f74f2136ca3332b99dd2e66b2d3326b5123f708e5aa12219e",
+        "metadata": "logs/filesystem/gold-026.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 27,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "d6ee76ee39f4376aafe8b1349a2fe79854646739aced7db76fcaee3c87e1db61",
+        "metadata": "logs/filesystem/gold-027.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 28,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "a1c25ba89f4e79df27f8b5bf95f567e74c13b7d72e81cf2ef8b031de4b0dc75a",
+        "metadata": "logs/filesystem/gold-028.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 29,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "1f74e5f41d2a92a66756c8002f0ac02f817ac603d6049b34644bc9d4d1e4c392",
+        "metadata": "logs/filesystem/gold-029.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 30,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "32f2e7bea09ca2197163ecf93ea9197acfe1ecadd5696f2e54bf1185c35126ca",
+        "metadata": "logs/filesystem/gold-030.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 31,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "234101673d6296f670f47e817129d6fee04d0cd7b9d57f2178ea443da6b72805",
+        "metadata": "logs/filesystem/gold-031.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 32,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "21697619f2f0773179e7d730c4dcacaab8fbae5f57e19da93d8308e5ddbd3c86",
+        "metadata": "logs/filesystem/gold-032.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 33,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "eb71d7636e7c660b1bee04b268580b331107d776dd9cd35f3fc2d617e43a803f",
+        "metadata": "logs/filesystem/gold-033.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 34,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "1e827889c764e20b26070c94f34294215aec5a41376ca52b68f4a058bb54ef04",
+        "metadata": "logs/filesystem/gold-034.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 35,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "60adb0370e8b55fc6f779eea42aac7549b42e6319eb9fea3965c89f3848cacb6",
+        "metadata": "logs/filesystem/gold-035.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 36,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "0d03f87c99475e13009e13b364b4eccca8d281e47608f72db4f280e0a36cdc4a",
+        "metadata": "logs/filesystem/gold-036.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 37,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b10c9f6e71e5993ad70f0b63c9f32ec446a0be1a11ec04438753e6c1f9201e5c",
+        "metadata": "logs/filesystem/gold-037.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 38,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "fc1c89bf734b02b138749dd1c3b32a52b9e45db0edc2ed7883f82524bb0f703b",
+        "metadata": "logs/filesystem/gold-038.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 39,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "c91c459ad039bf3e613f3c066c93642d89b522d7a09896fd215f9fdc0295ec27",
+        "metadata": "logs/filesystem/gold-039.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 40,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b020a1eb5e4e2271b36d38b7764833275bbb87213daac48f57a8e7cde4325545",
+        "metadata": "logs/filesystem/gold-040.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 41,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "6bded9c2923e2128c7ccefa939a664c237775e3f5384ceb7e3cee0fd252e74bf",
+        "metadata": "logs/filesystem/gold-041.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 42,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "a3034c4b10f9054e43d70f28bc6672c5a8d01a70dcca1c0404b3a35b7d653ae5",
+        "metadata": "logs/filesystem/gold-042.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 43,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "bb66c3aa98f2fe8c6c27b070235b3e0062cd664722ad4edf08021c5144dd4e2a",
+        "metadata": "logs/filesystem/gold-043.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 44,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "48d65d1add1d8c79a87b5695ef65fcd56eb62b5ec66ce2110e22401111253dee",
+        "metadata": "logs/filesystem/gold-044.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 45,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "9c9f858b574cdf2299520ad418d234fad075d14fff44e54c7cba1f407a69d943",
+        "metadata": "logs/filesystem/gold-045.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 46,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "a0aa47f3c32de398d270f3e2ad2ee6a6115b2bfad50669a89099bc6f7eef7c96",
+        "metadata": "logs/filesystem/gold-046.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 47,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "3cfb267abb07e2eaeef22a747f2056ce3a7c6a2f80ad903d05935d90355dc6f7",
+        "metadata": "logs/filesystem/gold-047.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 48,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "393dfbbb9d1fecd72ba52659921138126cbbca7f76126babba3c85834abd3ab5",
+        "metadata": "logs/filesystem/gold-048.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 49,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "3af72cf74e5317ffcaf3400fc6e87419f5a8fb89709a2e21714f3692e5972067",
+        "metadata": "logs/filesystem/gold-049.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 50,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "facf36d83d89f2fc92880a681d74234a4524a6d8e56e187010185da565b2f8ea",
+        "metadata": "logs/filesystem/gold-050.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 51,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "07615bd56cdd20a4ff3d91e7bfb77d311bf5e9828dcb7c7f50fd3d853d43b63e",
+        "metadata": "logs/filesystem/gold-051.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 52,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "23ee01d9db797ec4a6d3acc100b89d1ae3756dbbab3cac5420458917395f3a4a",
+        "metadata": "logs/filesystem/gold-052.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 53,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "28a28b5552b2500dd5b8498decab27b1c7e9d0ac9f4bb19e8de2e1308fb0dee9",
+        "metadata": "logs/filesystem/gold-053.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 54,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "f713796b37e95b1eb4e75e56e3f1e7925759cb6ca6950cc1d7e517d6b56df0fa",
+        "metadata": "logs/filesystem/gold-054.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 55,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "d1877f6144e78b426a5452f5134874a48ea3fa2bf0bb068b60f6c06a8a7da831",
+        "metadata": "logs/filesystem/gold-055.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 56,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "48c83853020d785925318a6b20e3d14911ebd3e5f84ec13bd6e867b37bd6a90a",
+        "metadata": "logs/filesystem/gold-056.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 57,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "e471d570284beb1a906bd5d9d4d279e7f384bcddcc05c11506074688476c9511",
+        "metadata": "logs/filesystem/gold-057.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 58,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "ee80a9363c50fd0f3d3ddfa024d0629ecb537bf6d4f28822ffb713cd5a080302",
+        "metadata": "logs/filesystem/gold-058.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 59,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b1223cc061f45a3e004f43b7a645a444f3fa69cc787735e6135c934acf32055e",
+        "metadata": "logs/filesystem/gold-059.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 60,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "c976e32eb5de1f39068f5af5520aae0f1de908373e13779c90449574c7e319bf",
+        "metadata": "logs/filesystem/gold-060.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 61,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "7be64aea5ece1b66d451b001c84d9902515a4a535616e4afaf6ebf6798e58785",
+        "metadata": "logs/filesystem/gold-061.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 62,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "70f17a5d0145bcb121aeeda38689921ae017fb5c0bd10f82920f2bd3662834de",
+        "metadata": "logs/filesystem/gold-062.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 63,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "31b15b81a611e075d8cd6ab6e62686e04768111af78004c9b71b4ab5b005a793",
+        "metadata": "logs/filesystem/gold-063.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 64,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "09a22639016cdab1f4de63602d047a8933b85121d3541e5453c5887cdf9122ca",
+        "metadata": "logs/filesystem/gold-064.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 65,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "fe146f6d9c46bc1f275d20146e2ff739dd8cc4d100605245c066f503c7605779",
+        "metadata": "logs/filesystem/gold-065.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 66,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "0aec987ddc1199ee794bc8661eaaa02540b111ca73b28fa9993e521e19c7ad54",
+        "metadata": "logs/filesystem/gold-066.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 67,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b19c42279fd2e42d4f6ba366f5a608f659baeb73e3a9d472c2adba98241e2d03",
+        "metadata": "logs/filesystem/gold-067.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 68,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "36c9cb5604aee7827c3a9092d84546f7b5aaec97d529c2a3caf31d7c83d5ab5a",
+        "metadata": "logs/filesystem/gold-068.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 69,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "bfe5f2b651c13bd7eeafa1c8d5ea76991964b878a8c38880da64f4582769598f",
+        "metadata": "logs/filesystem/gold-069.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 70,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "f63a66a98cfeff29c4f83fef2f39fcafa33650782612df53152281667da0e412",
+        "metadata": "logs/filesystem/gold-070.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 71,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "e3374e1c1962ab6eced895c01ba97f581860f68485e9d1fc3f2f85cb479fb83a",
+        "metadata": "logs/filesystem/gold-071.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 72,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "d5fb611ce9aa555ccb7394fc6457d0daba71814675f3603cc5c2a7ed82007352",
+        "metadata": "logs/filesystem/gold-072.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 73,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "0ec07e6315386895c614bb967c5517a1bba8208201e75e489ea3fe1d74cd605a",
+        "metadata": "logs/filesystem/gold-073.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 74,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "3f0417e337e2d1d22165bd4105f6b47906467be23d70493faba568d5e7bd053e",
+        "metadata": "logs/filesystem/gold-074.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 75,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "a04d09a7276c4cd191e96b947cc566f6feae82cbbc09cb924717d817e7293f1b",
+        "metadata": "logs/filesystem/gold-075.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 76,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "a2be7bb6b0fc08b16ac3c65243fab24811c820652c2a15d69ecef948da59c50d",
+        "metadata": "logs/filesystem/gold-076.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 77,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "03bf5a9a020e514c0f1a7383f75b1275856ee5a6d6278059de0791620f632296",
+        "metadata": "logs/filesystem/gold-077.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 78,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "13e9993585a5d5a29f5eecc92c2c91279f91498cd2af442693944ac10d1ae7a1",
+        "metadata": "logs/filesystem/gold-078.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 79,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "c285d1d5b1db523121a961d658bf4275d4e6344ad696e9615fbb88c30312958d",
+        "metadata": "logs/filesystem/gold-079.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 80,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "0a07c1fad9c13fd8515f62b735faa98e2d7411b315b391f53d5771f9f7b11ee1",
+        "metadata": "logs/filesystem/gold-080.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 81,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "296c3b3246f25cc3c2fb848e365dcdbe66c1f5eec70b5e9db7dc489c2cc73aa5",
+        "metadata": "logs/filesystem/gold-081.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 82,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "4307a9352bdf9e07ae5717c44809012ee1947930525d69a65836bc1cf5a29aef",
+        "metadata": "logs/filesystem/gold-082.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 83,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "d2e9599df8aae5d32be25d7825c8d2dba69025ad00da4f9bd842e15e69c2f223",
+        "metadata": "logs/filesystem/gold-083.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 84,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "be56c354e193e5f005bf33aec3b0c2c266b23b3edba4f5e00d9873f673f0877f",
+        "metadata": "logs/filesystem/gold-084.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 85,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "f822eb999537d02fd656de39655ac1054caaf8a61588516d539545e50f124f70",
+        "metadata": "logs/filesystem/gold-085.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 86,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "f63818602fe97099580723ea27247c8f461b42bcb1c9254e1aac91f9898c06c7",
+        "metadata": "logs/filesystem/gold-086.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 87,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "8cc7504f37b3debe6ca605e1eba8fb07ad29ea9ef798b202391d8b74682b48b7",
+        "metadata": "logs/filesystem/gold-087.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 88,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b9357430a12fe017eaafce2d7edc9b2a08d6ba8b7145ac867b65add276c01d0a",
+        "metadata": "logs/filesystem/gold-088.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 89,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "ed3bff3be3112fe95701bd1cae17d673c2eec454509849d753a8767edb7d3fc6",
+        "metadata": "logs/filesystem/gold-089.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 90,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "6cfd98725226f6a6b71fa76e57a52611fe6e35ccb79257bc685972cfb5fe283a",
+        "metadata": "logs/filesystem/gold-090.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 91,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "0bea59631a4a8003c6b6776ccabaaf1ac475d697599281a36a260ec03a208baa",
+        "metadata": "logs/filesystem/gold-091.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 92,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "1717626d7c5e3c55d85467da003b40540551dce48dc969862bfeab95788fe1fa",
+        "metadata": "logs/filesystem/gold-092.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 93,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "24d71b5b078540547a5be386595c2592922882b37cc200c1e612fb3a80013e2e",
+        "metadata": "logs/filesystem/gold-093.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 94,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "89f50a76733aeef6e79521133b82e79f469043fab8ebc5955b791302fddedd79",
+        "metadata": "logs/filesystem/gold-094.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 95,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "166fd7c1fdca62f7aee0d8547e429f2bda97ec8732082fdea1d6564bbe3825f8",
+        "metadata": "logs/filesystem/gold-095.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 96,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "82c3a72ecb3d79023a56314924e70391ebd95e6e1bfdc6a4c70bafe34de7a28e",
+        "metadata": "logs/filesystem/gold-096.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 97,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "e0f7675d1e0a060f901a20b9fe069aa1bd90b33148a098482354bcc46e5b7d44",
+        "metadata": "logs/filesystem/gold-097.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 98,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "f6eca22222944773ce63daff389b9bca58e079a512a32ffd5f2181aca780d459",
+        "metadata": "logs/filesystem/gold-098.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 99,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b5f0bb508e30668de617b565bbcd2085572799abf18c3332f7f4cb51dc6dccf4",
+        "metadata": "logs/filesystem/gold-099.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 100,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "9eb3e37823265c2af9ffdf1700b1910448b5500cefac014b8ab1354028663ef9",
+        "metadata": "logs/filesystem/gold-100.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 101,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "40aae8a5ccae5bae8f2ae351ce6a1a4f09c9e46d846ba51b99d97f6491bf441a",
+        "metadata": "logs/filesystem/gold-101.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 102,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "241b7595fb733fef631357b01bdfee0ec718111a757d2ee18eec33fe809ec527",
+        "metadata": "logs/filesystem/gold-102.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 103,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "d746cf7843d28243860746bf93fcf46453086ace7a119ef1e2ae9145eda9568a",
+        "metadata": "logs/filesystem/gold-103.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 104,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "14aa0c829003611179ef1c3b252b0936a7a646eb41747a6495a6763113943e07",
+        "metadata": "logs/filesystem/gold-104.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 105,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "968edf3392bf33d4014f2c5441cd03404adbb1483cefc6eb5fdce8a95f623454",
+        "metadata": "logs/filesystem/gold-105.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 106,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "3cba8ab479b54c4d71b09e4816e63ab4dcaff868cf83a698b4207238cebed18f",
+        "metadata": "logs/filesystem/gold-106.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 107,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "83e3040911e33a94cae1abf4d720d6dbac9bea0636e0102a37d94dcbd4a88cf0",
+        "metadata": "logs/filesystem/gold-107.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 108,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "bc2888e464cabb1423a036d769a7e107cea95334a1ff142f8633291af5f015f0",
+        "metadata": "logs/filesystem/gold-108.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 109,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "cee1185ebb3005c873f89131711028f5c71c3aef16e7e4415c2928af590bdebc",
+        "metadata": "logs/filesystem/gold-109.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 110,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "68704b51f18de9fc2e5beac3e77648521d7ff12bf559a6364633575d71dcb7a2",
+        "metadata": "logs/filesystem/gold-110.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 111,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "6c070895298b6bc921db09f40fdd14cde8189b6aa8227a435224a3eb94e35203",
+        "metadata": "logs/filesystem/gold-111.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 112,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "29e94a6f6aa63d205c10f3b2209330080b2106ceb944e1f907e259533c22dddb",
+        "metadata": "logs/filesystem/gold-112.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 113,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "06298dc9ac7e1c21932d9ef1c354f22fbbc906e9d2ea0802c6465e6e2efdb5ad",
+        "metadata": "logs/filesystem/gold-113.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 114,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "94ef8ae21d251a54568e1c9fd0060824101440592c68931f04f74e813de431fa",
+        "metadata": "logs/filesystem/gold-114.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 115,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "e5c8c75d5ca0cea310be7ce6d126d99ab4642af23102c27210e5cecbe6013670",
+        "metadata": "logs/filesystem/gold-115.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 116,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "83375efe252aa0e66d3f93b3b44e41c02c9d77f155f86f98f2e7811c6079fa84",
+        "metadata": "logs/filesystem/gold-116.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 117,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "71d3631d2e2175687e939e992b98049950c2bc622384b70ed6c6f533c8a701d5",
+        "metadata": "logs/filesystem/gold-117.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 118,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "549483f37d8092e02adaaa5523b028c35bef5c947b27c1750ea6588add15eda4",
+        "metadata": "logs/filesystem/gold-118.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 119,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b679304cf9e5f536a9ca310bd35fd2bf0192f322c2e769afbc9660283c1df6ff",
+        "metadata": "logs/filesystem/gold-119.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 120,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "e60132305c9d049d8ffca6f5d4b833fac25ab3c1a6b5706fce12423861d76ef7",
+        "metadata": "logs/filesystem/gold-120.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 121,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "b7a01fc553a7329efc9bb2e5c27d63fbc99bdbf9e2b954cd663b82cea184996d",
+        "metadata": "logs/filesystem/gold-121.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 122,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "4d2575a0a5dbdc59f3037dfdb29ba6adc9e0df5ea9b37ad4a3c529d1d3328f39",
+        "metadata": "logs/filesystem/gold-122.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 123,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "cdbb8e6269b26651578c287b83da2e703aded4deea6c1a73a64cf9a9931f21e1",
+        "metadata": "logs/filesystem/gold-123.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 124,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "a3a0913f3c14a0e804a14f7fcb8ffc82f739006506be861d5727ea47c7acf160",
+        "metadata": "logs/filesystem/gold-124.json",
+        "copy_status": "COMMITTED"
+      },
+      {
+        "generation": 125,
+        "source_bytes": 536870912,
+        "source_range": {
+          "offset": 0,
+          "bytes": 536870912
+        },
+        "sha256": "07f0ba29c4a636ea90df5c8595ef9409f8fb77c22fa99dd4f5acde2e38ee5044",
+        "metadata": "logs/filesystem/gold-125.json",
+        "copy_status": "EXPECTED_ENOSPC_PARTIAL_NOT_COMMITTED"
+      },
+      {
+        "generation": 126,
+        "source_bytes": 67108864,
+        "source_range": {
+          "offset": 0,
+          "bytes": 67108864
+        },
+        "sha256": "a84fd0f391b2f72a4553d3b8f4ada493659b4e7192c2bf0c83f7c3552dd46cee",
+        "metadata": "logs/filesystem/gold-126.json",
+        "copy_status": "COMMITTED"
+      }
+    ]
+  },
+  "full_space": {
+    "complete_chunks": 124,
+    "committed_bytes_before_reclaim": 66576187392,
+    "initial_available_bytes": 67026567168,
+    "filesystem_statvfs_bytes": 67049664512,
+    "available_blocks": 0,
+    "free_blocks": 4096,
+    "block_bytes": 4096
+  },
+  "expected_enospc": {
+    "bulk_copy": "copy-125",
+    "bulk_copy_exit": 1,
+    "errno": 28,
+    "minimum_attempt_bytes": 4096,
+    "residual_returned_bytes": 98304,
+    "partial_filename": "chunks/chunk-125.part",
+    "partial_before_append_bytes": 454295552,
+    "partial_final_size_bytes": 454393856,
+    "partial_final_allocated_bytes": 454397952,
+    "full_source_sha256": "07f0ba29c4a636ea90df5c8595ef9409f8fb77c22fa99dd4f5acde2e38ee5044",
+    "partial_sha256_verified": false,
+    "partial_preserved": true,
+    "partial_in_verified_totals": false
+  },
+  "reclaim": {
+    "deleted_file": "chunks/chunk-001.bin",
+    "deleted_bytes": 536870912,
+    "new_file": "chunks/reused.bin",
+    "new_bytes": 67108864,
+    "victim_predelete_hash_guard": true,
+    "new_file_hash_verified": true
+  },
+  "controls": {
+    "probe_bytes": 4194304,
+    "file_fsync_then_rename_then_directory_fsync": true,
+    "reset_after_clean_unmount": true,
+    "rebind_after_clean_unmount": true,
+    "probe_hash_exact_after_each": true,
+    "same_worker_no_restart": true,
+    "no_NAND_backend_format": true,
+    "filesystem_format_only": true
+  },
+  "fsck": {
+    "command": "e2fsck -f -n",
+    "exit_status": 0,
+    "passes": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "final_state": "clean"
+  },
+  "commands": {
+    "total": 269,
+    "expected_nonzero": [
+      {
+        "name": "copy-125",
+        "status": 1
+      }
+    ],
+    "all_others_exit_zero": true
+  },
+  "kernel": {
+    "new_warning_matches": 0,
+    "scope": "saved before/final dmesg difference; not a new review wave"
+  },
+  "final_files": [
+    {
+      "bytes": 536870912,
+      "generation": 2,
+      "path": "chunks/chunk-002.bin",
+      "sha256": "09a93a9ef3c1c75260402a6832bf8e7537749dd0ff33167e840df67d2eca5712"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 3,
+      "path": "chunks/chunk-003.bin",
+      "sha256": "eaa363e2c4e5caaca71fc9025e6b9f44f2cf137c88612e8a708564ba19d4448b"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 4,
+      "path": "chunks/chunk-004.bin",
+      "sha256": "14c5afea6de8932ee237fd973236f3d7090bbf7a5192cc7374f2f7989c0094a3"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 5,
+      "path": "chunks/chunk-005.bin",
+      "sha256": "3670273dd96840967169b76ac7320fd9f0652a1f035cd565717de0fe69ea4ac4"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 6,
+      "path": "chunks/chunk-006.bin",
+      "sha256": "eed5f6e0279b7bdcb3fd76685aa2ff16f8ae32d271d48a10017ec7752518e463"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 7,
+      "path": "chunks/chunk-007.bin",
+      "sha256": "c40be6d6ebc0bd667b10866708e286ec9018de6489737f61a0fa678df6bf4d6f"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 8,
+      "path": "chunks/chunk-008.bin",
+      "sha256": "85b4fef16923a4507d4463a997ac18c9566fb2d4d5226ecc1dd3e4caa7bea964"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 9,
+      "path": "chunks/chunk-009.bin",
+      "sha256": "b33872a32444317523510f04c31889a70b1cb933c9fd54ed19c6085370fc316d"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 10,
+      "path": "chunks/chunk-010.bin",
+      "sha256": "9d8b5e8b2f00a77f92f6e973590135592b49001965b794b295e69556e24892bd"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 11,
+      "path": "chunks/chunk-011.bin",
+      "sha256": "632ca34deb894520185531469df04e9a15511b2f63ffddaa8c123ad4e9d273fa"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 12,
+      "path": "chunks/chunk-012.bin",
+      "sha256": "98719a26f39ab01c748c37826082baa17783f08088a37f4d4fec87d78f9c9e56"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 13,
+      "path": "chunks/chunk-013.bin",
+      "sha256": "46cbdd3f492199f7fa66eeeda4a4a0087a7c7ea1c3ca8433a762ca0aa2f80b2e"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 14,
+      "path": "chunks/chunk-014.bin",
+      "sha256": "3cbddda7c29ca24e0ca63a27ac9da741ad62ce076ab8d9d45051b6d79138b145"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 15,
+      "path": "chunks/chunk-015.bin",
+      "sha256": "98229534cad09a1af9a18fb45e96fb34b4de6130be568796350cad9d9c2ed3b1"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 16,
+      "path": "chunks/chunk-016.bin",
+      "sha256": "de1668f88fa224001935f2958138417019dd71febb0b99c0a4d90b06ca68e2d0"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 17,
+      "path": "chunks/chunk-017.bin",
+      "sha256": "b7fb0e9bafb1970847c3f5d424d119de9e1c3675d8a377fe1d41723a6e3b77ae"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 18,
+      "path": "chunks/chunk-018.bin",
+      "sha256": "255e5e7c39eae37deddba1170cd52e64bc38efd08b73f1589b082b5090ef0e38"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 19,
+      "path": "chunks/chunk-019.bin",
+      "sha256": "b89208092cd9280069c833fdc95b04cd324fd6ba82eb434ea92f4cfa9c6ec7b8"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 20,
+      "path": "chunks/chunk-020.bin",
+      "sha256": "1f44d925490f7303fb3bddc606b647a81e7c850024cfc8495df5c81e12e946ea"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 21,
+      "path": "chunks/chunk-021.bin",
+      "sha256": "fe1c2412db49549fe9531db820e17c31eec6c90fdf6887d35dbcdf7c0fd43998"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 22,
+      "path": "chunks/chunk-022.bin",
+      "sha256": "e0f58cb8d5ffe5ba4ea6a93dbcbd84f9a35fc78e017f92005e0ff3e0b998dcb6"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 23,
+      "path": "chunks/chunk-023.bin",
+      "sha256": "2c559ce48d2fd3791ae159db905585c9387b105bdb08f1b30ae592665aad046a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 24,
+      "path": "chunks/chunk-024.bin",
+      "sha256": "f7332bf4f6be64d7044e12323d4e2c182eceeecf2ba0de5fa72fa4892b45d062"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 25,
+      "path": "chunks/chunk-025.bin",
+      "sha256": "f8410285d143cd5dc40e9471d0254786310df602732f06a03a4c97733dd0533d"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 26,
+      "path": "chunks/chunk-026.bin",
+      "sha256": "12a0ca7f9c5e333f74f2136ca3332b99dd2e66b2d3326b5123f708e5aa12219e"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 27,
+      "path": "chunks/chunk-027.bin",
+      "sha256": "d6ee76ee39f4376aafe8b1349a2fe79854646739aced7db76fcaee3c87e1db61"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 28,
+      "path": "chunks/chunk-028.bin",
+      "sha256": "a1c25ba89f4e79df27f8b5bf95f567e74c13b7d72e81cf2ef8b031de4b0dc75a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 29,
+      "path": "chunks/chunk-029.bin",
+      "sha256": "1f74e5f41d2a92a66756c8002f0ac02f817ac603d6049b34644bc9d4d1e4c392"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 30,
+      "path": "chunks/chunk-030.bin",
+      "sha256": "32f2e7bea09ca2197163ecf93ea9197acfe1ecadd5696f2e54bf1185c35126ca"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 31,
+      "path": "chunks/chunk-031.bin",
+      "sha256": "234101673d6296f670f47e817129d6fee04d0cd7b9d57f2178ea443da6b72805"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 32,
+      "path": "chunks/chunk-032.bin",
+      "sha256": "21697619f2f0773179e7d730c4dcacaab8fbae5f57e19da93d8308e5ddbd3c86"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 33,
+      "path": "chunks/chunk-033.bin",
+      "sha256": "eb71d7636e7c660b1bee04b268580b331107d776dd9cd35f3fc2d617e43a803f"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 34,
+      "path": "chunks/chunk-034.bin",
+      "sha256": "1e827889c764e20b26070c94f34294215aec5a41376ca52b68f4a058bb54ef04"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 35,
+      "path": "chunks/chunk-035.bin",
+      "sha256": "60adb0370e8b55fc6f779eea42aac7549b42e6319eb9fea3965c89f3848cacb6"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 36,
+      "path": "chunks/chunk-036.bin",
+      "sha256": "0d03f87c99475e13009e13b364b4eccca8d281e47608f72db4f280e0a36cdc4a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 37,
+      "path": "chunks/chunk-037.bin",
+      "sha256": "b10c9f6e71e5993ad70f0b63c9f32ec446a0be1a11ec04438753e6c1f9201e5c"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 38,
+      "path": "chunks/chunk-038.bin",
+      "sha256": "fc1c89bf734b02b138749dd1c3b32a52b9e45db0edc2ed7883f82524bb0f703b"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 39,
+      "path": "chunks/chunk-039.bin",
+      "sha256": "c91c459ad039bf3e613f3c066c93642d89b522d7a09896fd215f9fdc0295ec27"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 40,
+      "path": "chunks/chunk-040.bin",
+      "sha256": "b020a1eb5e4e2271b36d38b7764833275bbb87213daac48f57a8e7cde4325545"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 41,
+      "path": "chunks/chunk-041.bin",
+      "sha256": "6bded9c2923e2128c7ccefa939a664c237775e3f5384ceb7e3cee0fd252e74bf"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 42,
+      "path": "chunks/chunk-042.bin",
+      "sha256": "a3034c4b10f9054e43d70f28bc6672c5a8d01a70dcca1c0404b3a35b7d653ae5"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 43,
+      "path": "chunks/chunk-043.bin",
+      "sha256": "bb66c3aa98f2fe8c6c27b070235b3e0062cd664722ad4edf08021c5144dd4e2a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 44,
+      "path": "chunks/chunk-044.bin",
+      "sha256": "48d65d1add1d8c79a87b5695ef65fcd56eb62b5ec66ce2110e22401111253dee"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 45,
+      "path": "chunks/chunk-045.bin",
+      "sha256": "9c9f858b574cdf2299520ad418d234fad075d14fff44e54c7cba1f407a69d943"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 46,
+      "path": "chunks/chunk-046.bin",
+      "sha256": "a0aa47f3c32de398d270f3e2ad2ee6a6115b2bfad50669a89099bc6f7eef7c96"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 47,
+      "path": "chunks/chunk-047.bin",
+      "sha256": "3cfb267abb07e2eaeef22a747f2056ce3a7c6a2f80ad903d05935d90355dc6f7"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 48,
+      "path": "chunks/chunk-048.bin",
+      "sha256": "393dfbbb9d1fecd72ba52659921138126cbbca7f76126babba3c85834abd3ab5"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 49,
+      "path": "chunks/chunk-049.bin",
+      "sha256": "3af72cf74e5317ffcaf3400fc6e87419f5a8fb89709a2e21714f3692e5972067"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 50,
+      "path": "chunks/chunk-050.bin",
+      "sha256": "facf36d83d89f2fc92880a681d74234a4524a6d8e56e187010185da565b2f8ea"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 51,
+      "path": "chunks/chunk-051.bin",
+      "sha256": "07615bd56cdd20a4ff3d91e7bfb77d311bf5e9828dcb7c7f50fd3d853d43b63e"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 52,
+      "path": "chunks/chunk-052.bin",
+      "sha256": "23ee01d9db797ec4a6d3acc100b89d1ae3756dbbab3cac5420458917395f3a4a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 53,
+      "path": "chunks/chunk-053.bin",
+      "sha256": "28a28b5552b2500dd5b8498decab27b1c7e9d0ac9f4bb19e8de2e1308fb0dee9"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 54,
+      "path": "chunks/chunk-054.bin",
+      "sha256": "f713796b37e95b1eb4e75e56e3f1e7925759cb6ca6950cc1d7e517d6b56df0fa"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 55,
+      "path": "chunks/chunk-055.bin",
+      "sha256": "d1877f6144e78b426a5452f5134874a48ea3fa2bf0bb068b60f6c06a8a7da831"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 56,
+      "path": "chunks/chunk-056.bin",
+      "sha256": "48c83853020d785925318a6b20e3d14911ebd3e5f84ec13bd6e867b37bd6a90a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 57,
+      "path": "chunks/chunk-057.bin",
+      "sha256": "e471d570284beb1a906bd5d9d4d279e7f384bcddcc05c11506074688476c9511"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 58,
+      "path": "chunks/chunk-058.bin",
+      "sha256": "ee80a9363c50fd0f3d3ddfa024d0629ecb537bf6d4f28822ffb713cd5a080302"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 59,
+      "path": "chunks/chunk-059.bin",
+      "sha256": "b1223cc061f45a3e004f43b7a645a444f3fa69cc787735e6135c934acf32055e"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 60,
+      "path": "chunks/chunk-060.bin",
+      "sha256": "c976e32eb5de1f39068f5af5520aae0f1de908373e13779c90449574c7e319bf"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 61,
+      "path": "chunks/chunk-061.bin",
+      "sha256": "7be64aea5ece1b66d451b001c84d9902515a4a535616e4afaf6ebf6798e58785"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 62,
+      "path": "chunks/chunk-062.bin",
+      "sha256": "70f17a5d0145bcb121aeeda38689921ae017fb5c0bd10f82920f2bd3662834de"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 63,
+      "path": "chunks/chunk-063.bin",
+      "sha256": "31b15b81a611e075d8cd6ab6e62686e04768111af78004c9b71b4ab5b005a793"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 64,
+      "path": "chunks/chunk-064.bin",
+      "sha256": "09a22639016cdab1f4de63602d047a8933b85121d3541e5453c5887cdf9122ca"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 65,
+      "path": "chunks/chunk-065.bin",
+      "sha256": "fe146f6d9c46bc1f275d20146e2ff739dd8cc4d100605245c066f503c7605779"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 66,
+      "path": "chunks/chunk-066.bin",
+      "sha256": "0aec987ddc1199ee794bc8661eaaa02540b111ca73b28fa9993e521e19c7ad54"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 67,
+      "path": "chunks/chunk-067.bin",
+      "sha256": "b19c42279fd2e42d4f6ba366f5a608f659baeb73e3a9d472c2adba98241e2d03"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 68,
+      "path": "chunks/chunk-068.bin",
+      "sha256": "36c9cb5604aee7827c3a9092d84546f7b5aaec97d529c2a3caf31d7c83d5ab5a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 69,
+      "path": "chunks/chunk-069.bin",
+      "sha256": "bfe5f2b651c13bd7eeafa1c8d5ea76991964b878a8c38880da64f4582769598f"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 70,
+      "path": "chunks/chunk-070.bin",
+      "sha256": "f63a66a98cfeff29c4f83fef2f39fcafa33650782612df53152281667da0e412"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 71,
+      "path": "chunks/chunk-071.bin",
+      "sha256": "e3374e1c1962ab6eced895c01ba97f581860f68485e9d1fc3f2f85cb479fb83a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 72,
+      "path": "chunks/chunk-072.bin",
+      "sha256": "d5fb611ce9aa555ccb7394fc6457d0daba71814675f3603cc5c2a7ed82007352"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 73,
+      "path": "chunks/chunk-073.bin",
+      "sha256": "0ec07e6315386895c614bb967c5517a1bba8208201e75e489ea3fe1d74cd605a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 74,
+      "path": "chunks/chunk-074.bin",
+      "sha256": "3f0417e337e2d1d22165bd4105f6b47906467be23d70493faba568d5e7bd053e"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 75,
+      "path": "chunks/chunk-075.bin",
+      "sha256": "a04d09a7276c4cd191e96b947cc566f6feae82cbbc09cb924717d817e7293f1b"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 76,
+      "path": "chunks/chunk-076.bin",
+      "sha256": "a2be7bb6b0fc08b16ac3c65243fab24811c820652c2a15d69ecef948da59c50d"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 77,
+      "path": "chunks/chunk-077.bin",
+      "sha256": "03bf5a9a020e514c0f1a7383f75b1275856ee5a6d6278059de0791620f632296"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 78,
+      "path": "chunks/chunk-078.bin",
+      "sha256": "13e9993585a5d5a29f5eecc92c2c91279f91498cd2af442693944ac10d1ae7a1"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 79,
+      "path": "chunks/chunk-079.bin",
+      "sha256": "c285d1d5b1db523121a961d658bf4275d4e6344ad696e9615fbb88c30312958d"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 80,
+      "path": "chunks/chunk-080.bin",
+      "sha256": "0a07c1fad9c13fd8515f62b735faa98e2d7411b315b391f53d5771f9f7b11ee1"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 81,
+      "path": "chunks/chunk-081.bin",
+      "sha256": "296c3b3246f25cc3c2fb848e365dcdbe66c1f5eec70b5e9db7dc489c2cc73aa5"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 82,
+      "path": "chunks/chunk-082.bin",
+      "sha256": "4307a9352bdf9e07ae5717c44809012ee1947930525d69a65836bc1cf5a29aef"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 83,
+      "path": "chunks/chunk-083.bin",
+      "sha256": "d2e9599df8aae5d32be25d7825c8d2dba69025ad00da4f9bd842e15e69c2f223"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 84,
+      "path": "chunks/chunk-084.bin",
+      "sha256": "be56c354e193e5f005bf33aec3b0c2c266b23b3edba4f5e00d9873f673f0877f"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 85,
+      "path": "chunks/chunk-085.bin",
+      "sha256": "f822eb999537d02fd656de39655ac1054caaf8a61588516d539545e50f124f70"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 86,
+      "path": "chunks/chunk-086.bin",
+      "sha256": "f63818602fe97099580723ea27247c8f461b42bcb1c9254e1aac91f9898c06c7"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 87,
+      "path": "chunks/chunk-087.bin",
+      "sha256": "8cc7504f37b3debe6ca605e1eba8fb07ad29ea9ef798b202391d8b74682b48b7"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 88,
+      "path": "chunks/chunk-088.bin",
+      "sha256": "b9357430a12fe017eaafce2d7edc9b2a08d6ba8b7145ac867b65add276c01d0a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 89,
+      "path": "chunks/chunk-089.bin",
+      "sha256": "ed3bff3be3112fe95701bd1cae17d673c2eec454509849d753a8767edb7d3fc6"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 90,
+      "path": "chunks/chunk-090.bin",
+      "sha256": "6cfd98725226f6a6b71fa76e57a52611fe6e35ccb79257bc685972cfb5fe283a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 91,
+      "path": "chunks/chunk-091.bin",
+      "sha256": "0bea59631a4a8003c6b6776ccabaaf1ac475d697599281a36a260ec03a208baa"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 92,
+      "path": "chunks/chunk-092.bin",
+      "sha256": "1717626d7c5e3c55d85467da003b40540551dce48dc969862bfeab95788fe1fa"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 93,
+      "path": "chunks/chunk-093.bin",
+      "sha256": "24d71b5b078540547a5be386595c2592922882b37cc200c1e612fb3a80013e2e"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 94,
+      "path": "chunks/chunk-094.bin",
+      "sha256": "89f50a76733aeef6e79521133b82e79f469043fab8ebc5955b791302fddedd79"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 95,
+      "path": "chunks/chunk-095.bin",
+      "sha256": "166fd7c1fdca62f7aee0d8547e429f2bda97ec8732082fdea1d6564bbe3825f8"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 96,
+      "path": "chunks/chunk-096.bin",
+      "sha256": "82c3a72ecb3d79023a56314924e70391ebd95e6e1bfdc6a4c70bafe34de7a28e"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 97,
+      "path": "chunks/chunk-097.bin",
+      "sha256": "e0f7675d1e0a060f901a20b9fe069aa1bd90b33148a098482354bcc46e5b7d44"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 98,
+      "path": "chunks/chunk-098.bin",
+      "sha256": "f6eca22222944773ce63daff389b9bca58e079a512a32ffd5f2181aca780d459"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 99,
+      "path": "chunks/chunk-099.bin",
+      "sha256": "b5f0bb508e30668de617b565bbcd2085572799abf18c3332f7f4cb51dc6dccf4"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 100,
+      "path": "chunks/chunk-100.bin",
+      "sha256": "9eb3e37823265c2af9ffdf1700b1910448b5500cefac014b8ab1354028663ef9"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 101,
+      "path": "chunks/chunk-101.bin",
+      "sha256": "40aae8a5ccae5bae8f2ae351ce6a1a4f09c9e46d846ba51b99d97f6491bf441a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 102,
+      "path": "chunks/chunk-102.bin",
+      "sha256": "241b7595fb733fef631357b01bdfee0ec718111a757d2ee18eec33fe809ec527"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 103,
+      "path": "chunks/chunk-103.bin",
+      "sha256": "d746cf7843d28243860746bf93fcf46453086ace7a119ef1e2ae9145eda9568a"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 104,
+      "path": "chunks/chunk-104.bin",
+      "sha256": "14aa0c829003611179ef1c3b252b0936a7a646eb41747a6495a6763113943e07"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 105,
+      "path": "chunks/chunk-105.bin",
+      "sha256": "968edf3392bf33d4014f2c5441cd03404adbb1483cefc6eb5fdce8a95f623454"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 106,
+      "path": "chunks/chunk-106.bin",
+      "sha256": "3cba8ab479b54c4d71b09e4816e63ab4dcaff868cf83a698b4207238cebed18f"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 107,
+      "path": "chunks/chunk-107.bin",
+      "sha256": "83e3040911e33a94cae1abf4d720d6dbac9bea0636e0102a37d94dcbd4a88cf0"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 108,
+      "path": "chunks/chunk-108.bin",
+      "sha256": "bc2888e464cabb1423a036d769a7e107cea95334a1ff142f8633291af5f015f0"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 109,
+      "path": "chunks/chunk-109.bin",
+      "sha256": "cee1185ebb3005c873f89131711028f5c71c3aef16e7e4415c2928af590bdebc"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 110,
+      "path": "chunks/chunk-110.bin",
+      "sha256": "68704b51f18de9fc2e5beac3e77648521d7ff12bf559a6364633575d71dcb7a2"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 111,
+      "path": "chunks/chunk-111.bin",
+      "sha256": "6c070895298b6bc921db09f40fdd14cde8189b6aa8227a435224a3eb94e35203"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 112,
+      "path": "chunks/chunk-112.bin",
+      "sha256": "29e94a6f6aa63d205c10f3b2209330080b2106ceb944e1f907e259533c22dddb"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 113,
+      "path": "chunks/chunk-113.bin",
+      "sha256": "06298dc9ac7e1c21932d9ef1c354f22fbbc906e9d2ea0802c6465e6e2efdb5ad"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 114,
+      "path": "chunks/chunk-114.bin",
+      "sha256": "94ef8ae21d251a54568e1c9fd0060824101440592c68931f04f74e813de431fa"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 115,
+      "path": "chunks/chunk-115.bin",
+      "sha256": "e5c8c75d5ca0cea310be7ce6d126d99ab4642af23102c27210e5cecbe6013670"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 116,
+      "path": "chunks/chunk-116.bin",
+      "sha256": "83375efe252aa0e66d3f93b3b44e41c02c9d77f155f86f98f2e7811c6079fa84"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 117,
+      "path": "chunks/chunk-117.bin",
+      "sha256": "71d3631d2e2175687e939e992b98049950c2bc622384b70ed6c6f533c8a701d5"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 118,
+      "path": "chunks/chunk-118.bin",
+      "sha256": "549483f37d8092e02adaaa5523b028c35bef5c947b27c1750ea6588add15eda4"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 119,
+      "path": "chunks/chunk-119.bin",
+      "sha256": "b679304cf9e5f536a9ca310bd35fd2bf0192f322c2e769afbc9660283c1df6ff"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 120,
+      "path": "chunks/chunk-120.bin",
+      "sha256": "e60132305c9d049d8ffca6f5d4b833fac25ab3c1a6b5706fce12423861d76ef7"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 121,
+      "path": "chunks/chunk-121.bin",
+      "sha256": "b7a01fc553a7329efc9bb2e5c27d63fbc99bdbf9e2b954cd663b82cea184996d"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 122,
+      "path": "chunks/chunk-122.bin",
+      "sha256": "4d2575a0a5dbdc59f3037dfdb29ba6adc9e0df5ea9b37ad4a3c529d1d3328f39"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 123,
+      "path": "chunks/chunk-123.bin",
+      "sha256": "cdbb8e6269b26651578c287b83da2e703aded4deea6c1a73a64cf9a9931f21e1"
+    },
+    {
+      "bytes": 536870912,
+      "generation": 124,
+      "path": "chunks/chunk-124.bin",
+      "sha256": "a3a0913f3c14a0e804a14f7fcb8ffc82f739006506be861d5727ea47c7acf160"
+    },
+    {
+      "bytes": 67108864,
+      "generation": 126,
+      "path": "chunks/reused.bin",
+      "sha256": "a84fd0f391b2f72a4553d3b8f4ada493659b4e7192c2bf0c83f7c3552dd46cee"
+    },
+    {
+      "bytes": 4194304,
+      "generation": 0,
+      "path": "probe.bin",
+      "sha256": "25369ffc295565fbfdaba57ecf0213d349b349a7eb5ae46b98f9ff925272a442"
+    }
+  ],
+  "boundaries": [
+    "GOLD SHA256 is for the entire separately generated source file at offset0 and its recorded length; it includes fio headers and payload.",
+    "Complete512MiB copies cover source bytes[0,536870912); reused64MiB file covers its newly truncated source bytes[0,67108864).",
+    "The partial file is not compared to the full-source hash; returned residual bytes are not a committed persistence claim.",
+    "The4MiB random probe has its own full-file digest and is checked after reset and rebind.",
+    "This offline reduction reconciles recorded native file SHA checks; it does not rehash absent native payloads locally.",
+    "Metadata is external to the tested filesystem; commit receipts follow file fsync, rename and directory fsync.",
+    "Zero available filesystem blocks and4KiB ENOSPC do not claim all NAND space or all f_bfree blocks are exhausted.",
+    "No worker restart, VM reboot or physical power-loss boundary occurs in this filesystem episode.",
+    "Only the synthetic logical namespace received ext4 mkfs; no NAND backend format or raw physical-disk format.",
+    "No discard/TRIM, physical NAND endurance, commercial filesystem qualification or performance-rate claim.",
+    "The final verified byte total excludes the intentional deletion and the preserved ENOSPC partial."
+  ],
+  "input_sha256": {
+    "native64-filesystem.sh": "3fd9464e0defa9e62de789abf2b3fc8a368779b77fa9373806770a1c84610e90",
+    "logs/filesystem.log": "681eca31210388b69d22058977e1982305266149b7835f119ee3ddf4046c9182",
+    "logs/filesystem/result.json": "045c61a7cd9e2bd46274e56252a91f375f81ee16d0e974fa07b0bc1c48fb5d12",
+    "logs/filesystem/full-space.json": "50202d0f002ff7ab96d12a09488ef34317bebffb692faa4ee7ae899b58fc30ed",
+    "logs/filesystem/initial-space.json": "0228ec413028e150f253f207646ed711ebaeffd83c092a58c85c7b3d00ba2e12",
+    "logs/filesystem/partial-tail.json": "b88f2a919584a9de9a9bfdabcfa9d95afa31d7dc50ce0cd0e7b602f65e5ead78",
+    "logs/filesystem/filesystem.json": "1c12b99014ead272e1dddf9885356835a0fa385b5dbb43c401ee7d28b7bda604",
+    "logs/filesystem/preflight.json": "541a3b1fabb6233ee3b73219daa762c97121f279e5586518e3b7c18d608262e7",
+    "logs/filesystem/files.jsonl": "969c1ee985224d2dbfbb6c15e2797b50d20e72bce4b67e881022d373ed18a3d8",
+    "logs/filesystem/gold-001.json": "a8a03d8f453557d6d1df3e94827be429ddd92992147a26d8ff525156cfb5d78c",
+    "logs/filesystem/gold-001.stdout": "b858d4e107fd83c3025eec02114529c6e5847ac1b20597e7401fb2ac09bb4bb9",
+    "logs/filesystem/gold-001.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-001.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-001.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-002.json": "da8be3d90984166e839c85d09d9a65cb006d1ed02ab3c1ec04579678119c8ab5",
+    "logs/filesystem/gold-002.stdout": "d71f9f1906aef01ac9f5c5f1ff6e45a3516959d3942761ebc73d57d0400881f1",
+    "logs/filesystem/gold-002.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-002.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-002.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-003.json": "dd3dd9cd96ff5beffd02d5c592ac1c746e6cb641419035e74cf64db800829ad8",
+    "logs/filesystem/gold-003.stdout": "0d498ccb526283ac38f0706d7acc9f8d87aa8db5aa160d9f7767378738756acf",
+    "logs/filesystem/gold-003.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-003.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-003.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-004.json": "eb9c0b8aa316ff1508f476cf5d0d3f95cfda2be01ed65a64d7d113eac5c80c05",
+    "logs/filesystem/gold-004.stdout": "af62f4390fff42a207b70083c7d7babba200bc36741cb4e1009d7dca32a38159",
+    "logs/filesystem/gold-004.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-004.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-004.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-005.json": "4b13b54563b66a7455afa993457840b836de515d15166acb6db3885e1c690dad",
+    "logs/filesystem/gold-005.stdout": "2e14e7f223968b74d6e010db017e383361d1c3be894f7607c6be57ed3e782c98",
+    "logs/filesystem/gold-005.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-005.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-005.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-006.json": "0359c9a0761837556237523018430014fc004974885a2b141c60861f35a44e61",
+    "logs/filesystem/gold-006.stdout": "8bf4b7269a5f7314838e8c6579b3ebd74234cc314586094d4ed6b57379bc92d6",
+    "logs/filesystem/gold-006.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-006.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-006.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-007.json": "426d319e8dc01e355cf50b9ad96d84e4aec321875401fd0404a19f2ec3a2f9d1",
+    "logs/filesystem/gold-007.stdout": "6b18e202f536d25c8bb637e724b2adbce6f65f50ec1cefb2f67607da1cbaf3b3",
+    "logs/filesystem/gold-007.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-007.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-007.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-008.json": "d594fff75d0dd96545f5ea23896cd5fbab679e91a259b988c3167829f90915c0",
+    "logs/filesystem/gold-008.stdout": "bdf7052702cc524c6b279b681a9de337c951d63d396ecd88fd8c1b534f181ffc",
+    "logs/filesystem/gold-008.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-008.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-008.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-009.json": "7925386fcb6897783304a6cc1e1cc91c64f6127757b015623369954c2199dfc5",
+    "logs/filesystem/gold-009.stdout": "95bf03281baaec88fcf9626ea553f34a6514613097fc49c59efe3c029d1ec75a",
+    "logs/filesystem/gold-009.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-009.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-009.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-010.json": "67e1c7388194ecb21b04e547ada0a956b185c7b80dcd46e3139aae4499acc342",
+    "logs/filesystem/gold-010.stdout": "af5273a65a667dfe7bd3722382d550f3f83583adb74c835d4dbe14fb32c8e8e3",
+    "logs/filesystem/gold-010.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-010.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-010.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-011.json": "e58bac54591811746fc2ccec23e7e6c6a36fde2e0a3f5163d29570f77a4e1260",
+    "logs/filesystem/gold-011.stdout": "0c02a4a5d5843615f0cac1a637182a8ad95c670d2926309b1f7e0b215d461fdd",
+    "logs/filesystem/gold-011.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-011.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-011.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-012.json": "30d85d9294e31fe293e1d468841a66c3efa32856e72447ea63fb008f4064c1ef",
+    "logs/filesystem/gold-012.stdout": "f61aa0b3424a2e8d1730372c1475767e0f82394748c65f6562f4ef900f4d4779",
+    "logs/filesystem/gold-012.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-012.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-012.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-013.json": "7ddba54140c78e0db4ddede9fcb12d3d41650d3d93050a307904abe4f98d6142",
+    "logs/filesystem/gold-013.stdout": "31202b34b3869301ff096ebc56de08faef3e6493b702ab85e3e31d6e13390cef",
+    "logs/filesystem/gold-013.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-013.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-013.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-014.json": "209aeb45350500a1e2267824f419fe2cbee559362a3745de5a6552f308b88ca3",
+    "logs/filesystem/gold-014.stdout": "7a48a5b7421b325d349c2551ca3228ea72558674b3aa99f43f24dd8ef060bc54",
+    "logs/filesystem/gold-014.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-014.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-014.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-015.json": "8e438cdd9e3d1ff45558edca3441160dda9f1351a9e9d77cd4933e481c4063ba",
+    "logs/filesystem/gold-015.stdout": "29c17b14dc14a9a67fbdc32d15cfcc4973f2d73e01a7487585b2c66f11a0619d",
+    "logs/filesystem/gold-015.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-015.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-015.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-016.json": "f9335986875d503b60a5b5527174c5fe8527c8a7b236f701aea2933d7010609c",
+    "logs/filesystem/gold-016.stdout": "155e590dac75f0a4b5fd8a8983ffa28a3450137585c2e764fa7b950dac5a416c",
+    "logs/filesystem/gold-016.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-016.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-016.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-017.json": "a71727128bb2603ed4e244ebf66f8a1fc181df1af4400cf1913e72e1e9b3c3c3",
+    "logs/filesystem/gold-017.stdout": "a76bfae3ae0e2f0229bbc2f15181adbc9e7b1cd2cf1161e957c3e637243827f6",
+    "logs/filesystem/gold-017.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-017.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-017.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-018.json": "c86833850c394f91a922c0fdd301f9846d95ea456d10319125fa7c04d05c7cfb",
+    "logs/filesystem/gold-018.stdout": "bcce769034a73f6c20071a5a9229a19c37e400428c48f02494c514041b8d2145",
+    "logs/filesystem/gold-018.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-018.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-018.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-019.json": "a9c93392c0c473a65566a5f252bdbb37e7093eef15183e31fcf619d8070428ce",
+    "logs/filesystem/gold-019.stdout": "2296002142133a6cdce8f478feed08dffb399c6fbc7363a0753c66af8ab7d16b",
+    "logs/filesystem/gold-019.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-019.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-019.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-020.json": "2cd45f900fc91eedf978d5ff964ab728243350445cbdb46007ca84e05467120d",
+    "logs/filesystem/gold-020.stdout": "abd2b20088c695145a650a4bada680f48ee145fa17649002821b77d21a483032",
+    "logs/filesystem/gold-020.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-020.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-020.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-021.json": "af28d918c4e1d1a13e83feb881d2a7770dda4c370287bfb45d6d5da9d9059805",
+    "logs/filesystem/gold-021.stdout": "892da0aa17631103c58ae01514e86d5ee83a10b44075da832013db84f7df144f",
+    "logs/filesystem/gold-021.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-021.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-021.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-022.json": "cdc2162c64834c923ed977d12196089fc38fb99b7262c6eaf5e5a6395d02f274",
+    "logs/filesystem/gold-022.stdout": "20a4dce1aee361d4b7ed8f1e9dabf83e9b8ef6dfa129768a76fb3ded722ec42c",
+    "logs/filesystem/gold-022.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-022.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-022.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-023.json": "6efe7e0ee501089f6e10fd872d096875f386df5ab2174c61343cf050bac855e1",
+    "logs/filesystem/gold-023.stdout": "65bea61a7710271b63c03be750e492d3af23fed0cf5cda6686fb8605db673990",
+    "logs/filesystem/gold-023.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-023.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-023.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-024.json": "405095e170181db171e1d1e3f8f400d565296bdc4bc4db91574de742d773dfce",
+    "logs/filesystem/gold-024.stdout": "fdc04b29668038b9bf10c08bb0c4381c58fb7016e0cb53ea0fd26cb4895ffd47",
+    "logs/filesystem/gold-024.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-024.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-024.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-025.json": "e4c9e37b26776e42fb5c2a2692452b5a38313dd9ca88ac29f4886491a70cc6a6",
+    "logs/filesystem/gold-025.stdout": "d83990918b715901c0397468dbe1a24495f0d2424ee51f49fb526c659a3da95d",
+    "logs/filesystem/gold-025.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-025.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-025.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-026.json": "0b284c49ad487431112831a831122e61f0b22a2115ba484bba3c8ff833d1e4cb",
+    "logs/filesystem/gold-026.stdout": "773f92392f62aafa01cfda27987d1afae4e8101fef68321f3d5527203c89e368",
+    "logs/filesystem/gold-026.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-026.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-026.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-027.json": "94e36a534004e05f66f3b836fb87e799d63cb9dee0b0d6e62c28d3a49dc6af3b",
+    "logs/filesystem/gold-027.stdout": "7f36f884d426c978e69010ca8377a0dbd1a181d7d7668df77de36091d1814357",
+    "logs/filesystem/gold-027.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-027.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-027.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-028.json": "397997daecabfa854b0cc2abd10529ded47df9680544382547aeff7a9fb81dc5",
+    "logs/filesystem/gold-028.stdout": "a0b236e6e7493a2d5c72ac69ec227397e602a897ff8c174ca5c366290bbc5562",
+    "logs/filesystem/gold-028.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-028.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-028.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-029.json": "35ad0c440e3e890b96cf6070ec8caf8c6ca3146fd90d97c93027d62dfde99b3d",
+    "logs/filesystem/gold-029.stdout": "c731eb58578ef67b1dced4875569cbcfd3c1df40388bb6fc032b6b5102613360",
+    "logs/filesystem/gold-029.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-029.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-029.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-030.json": "804a38a749f615fb2646375f7ed109908484fd609e4983f754f1fca94a5aa6a4",
+    "logs/filesystem/gold-030.stdout": "8487fb87f245cd5af5e2683458ec0b446730b793df5d640245e3a225ae7f923f",
+    "logs/filesystem/gold-030.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-030.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-030.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-031.json": "d4209bb1e2e206cef8795f26fe23df14b8613a9340648d1402a640cdbcd18783",
+    "logs/filesystem/gold-031.stdout": "25a35e27aa5a3865bb1133339e21a01270687b56ac5a028c1a55cf6042b81583",
+    "logs/filesystem/gold-031.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-031.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-031.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-032.json": "911d8afb5eeaaf7e1fbde8c9e69fdecae153a50ea82955be86639b30fe146986",
+    "logs/filesystem/gold-032.stdout": "59cb3104f384651a9ef7dc4572d6fa7e34d053f05af823ac6f202b416d420239",
+    "logs/filesystem/gold-032.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-032.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-032.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-033.json": "b264b14034c2bcc8852e37d38da642acbb9d87a4bc0335616411291e7b66466c",
+    "logs/filesystem/gold-033.stdout": "81d4f4444ac3d1c2d9ba82b62d9985962ef4d50bc2ef01f38c33b95754ea331e",
+    "logs/filesystem/gold-033.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-033.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-033.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-034.json": "8b76d49ed19c0cf894fce8bf05bdc0cba5ba16858c41e0d5940ed1da8e2f0566",
+    "logs/filesystem/gold-034.stdout": "01e01b4b171befc8c478e9ff745dab5964519dafd2cbdea75078ec6927bdea38",
+    "logs/filesystem/gold-034.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-034.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-034.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-035.json": "2424aac110897d76245fc0364ef26fca9937e80434634966c68c011d9628eaf2",
+    "logs/filesystem/gold-035.stdout": "f0b66a91c77fe48ee737e801e1ac5e3e23b19b8c95d1b4ff1e5beb8049112f51",
+    "logs/filesystem/gold-035.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-035.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-035.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-036.json": "a10dd2c16bbf5e906435f078b15cc9971c4d23b1d1458667c7613a6097434a61",
+    "logs/filesystem/gold-036.stdout": "2a22b71b57f0555c2e9dc64048b86f53b8cd4d0a6de0aad838214a468bce8977",
+    "logs/filesystem/gold-036.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-036.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-036.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-037.json": "eb590eb158177cf10e1d30ff80961519bcb2e801a2820054544b0fc4c18f77e6",
+    "logs/filesystem/gold-037.stdout": "b5ce7bdbfadee342bbd4ec1952588f06834efbb5e885115a427a6a665f7ca4cb",
+    "logs/filesystem/gold-037.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-037.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-037.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-038.json": "539e03d1c379e90c37ff0f44e11723fe296a1de47027d943f3ed9269642ab786",
+    "logs/filesystem/gold-038.stdout": "c41c4d4e3424006d2cb50279ce3b6aa4d19ea9a8c3c8da0a0ffceaee671992e1",
+    "logs/filesystem/gold-038.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-038.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-038.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-039.json": "e9a6633e7ccb29d1c7acc0c406b81f19293117ca2e5dc88cbb6b1b1ea1ba9fcf",
+    "logs/filesystem/gold-039.stdout": "828833fa54ad714ed3cd5fe153b1db76161b3722de9fad0215c0e1703b516a35",
+    "logs/filesystem/gold-039.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-039.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-039.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-040.json": "500d6827f865a7b83cf8c9d857aa3b99e29fb34e9a34bceade24699212416434",
+    "logs/filesystem/gold-040.stdout": "927e8fe718d2bb8bf02a504d4b02c593097f6bd5577da46bc50d183f44d93537",
+    "logs/filesystem/gold-040.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-040.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-040.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-041.json": "86c8c0a590bd33959057620d6bf014a681c410a3e57353cf72adfdc72ec7289d",
+    "logs/filesystem/gold-041.stdout": "4dc8c62a5318ca26a5b59db0774464101f580c671476849ef09e8c1905446cac",
+    "logs/filesystem/gold-041.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-041.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-041.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-042.json": "92a5ed94a1ebcf217ea86100cf85b029223e0225ca2ba0283cf69f7b36f7b47d",
+    "logs/filesystem/gold-042.stdout": "4e776770370fde322e3dd7e301da9465a218a1b6ee41528a5acf8da9bf50645a",
+    "logs/filesystem/gold-042.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-042.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-042.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-043.json": "a109a16cb398f6d0f23ae359f8159eb6387cf6099e90568de28c68bb32d3d817",
+    "logs/filesystem/gold-043.stdout": "cf14c6f3c7e8ebef875129e53acb1a08b9c2aa4bf5f626befe1693a10e8636d1",
+    "logs/filesystem/gold-043.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-043.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-043.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-044.json": "e6ce7bb3638037b5fb3fc68ceaf22478377893a03d8b899559fa5b29436898f4",
+    "logs/filesystem/gold-044.stdout": "3984187cc426f648d6f08bd052f3e7e38985ec543450ca9853151ebbddc61950",
+    "logs/filesystem/gold-044.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-044.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-044.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-045.json": "00e92c4a859f879a420bfa9c8e46680fb9849b8d4b1a98116ac289734558132f",
+    "logs/filesystem/gold-045.stdout": "f864d376de3d39f63f99a130639e012cf96247ac98c11c29202f676343ade942",
+    "logs/filesystem/gold-045.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-045.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-045.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-046.json": "b978511c2d66c9e2771a1e4428c724bf9fa9bae6c205f24f0e18f2c1288891ca",
+    "logs/filesystem/gold-046.stdout": "e674f0ba0e956cae8109f0558433849fbb4043fd97e339d8cb21a4e0fa8d3d90",
+    "logs/filesystem/gold-046.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-046.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-046.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-047.json": "1a70d0f38fa90e28304d034e6a8e1405095265ea438ba29ac3354051503d3e8e",
+    "logs/filesystem/gold-047.stdout": "055ba084dda8d3f8a24f289c735167f2a58561eecdda7908f2fa21f2709d3030",
+    "logs/filesystem/gold-047.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-047.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-047.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-048.json": "483be352e2be6f563e3b2787aa1fbb70b5648d15256cf77a1e38152c8996afc8",
+    "logs/filesystem/gold-048.stdout": "a626f6c54caf18dee80b94deed48aad94c1d7ab47316f218e200ba4cd8766bb9",
+    "logs/filesystem/gold-048.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-048.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-048.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-049.json": "693e78bfbabc9c6a4a3e3893bf6fc69fc32252d72c6bd9e5bc0f16872e24ac99",
+    "logs/filesystem/gold-049.stdout": "28a5e7daa2718a3824522667a7aec3a8da5ae1a9320f6d048461282bb692ac23",
+    "logs/filesystem/gold-049.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-049.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-049.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-050.json": "314045f2f5c8713e94f63289320d688c6247e5d9369420f7297f2ada8242f4bb",
+    "logs/filesystem/gold-050.stdout": "a10fbd815a1390c0bacf4b0b12cf92c53d0ce5390f7afbcba2c70fa5515f8aea",
+    "logs/filesystem/gold-050.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-050.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-050.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-051.json": "4d889cc1e56f970d7713291d575e841010f837ab31b2c1743348cd45f0d86e3e",
+    "logs/filesystem/gold-051.stdout": "3c5ba1665a4373bf97c7455b9f66104477cf1b95ce3f0eeda4e600e6c34c55f4",
+    "logs/filesystem/gold-051.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-051.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-051.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-052.json": "ca261777f0e0c3e85f476c074e69d3f88a4f13fb709626eab6d905fe75c38394",
+    "logs/filesystem/gold-052.stdout": "590c1248c1189cf83e4b75baa6e386fd3c73be87f9b266bd4bae05f72a50fae5",
+    "logs/filesystem/gold-052.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-052.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-052.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-053.json": "e56efa9a0caa2c0f2035175a844db0eaa592a087e3478122d05a30e4dade46ec",
+    "logs/filesystem/gold-053.stdout": "056c0a3af109bd2f433a181dc0c43446629a06acd73ec3dcad80d31c185546f5",
+    "logs/filesystem/gold-053.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-053.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-053.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-054.json": "ce1e42050f8f998a1a42654276969e3cf2787257145020ee37e9454db7794030",
+    "logs/filesystem/gold-054.stdout": "5bda557a68827293d149f24531898b5ab211ecac513187c060b4664b54122c35",
+    "logs/filesystem/gold-054.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-054.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-054.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-055.json": "9617b22fa2820f4059841448bef9cbf816c9a7a6b40526935f969acbacf466f9",
+    "logs/filesystem/gold-055.stdout": "14b260191758aa453ee37630d4b4b317746d2e046727039b23bac8020637a04e",
+    "logs/filesystem/gold-055.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-055.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-055.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-056.json": "a4750b84540dceb3c91ea4f6ce5689f0f486bdc3023f1071643cf939b24b09db",
+    "logs/filesystem/gold-056.stdout": "b7ae035cc3a2a8450362c930cbb8d14b80e5c2af41d5b946a36650ef6a482a75",
+    "logs/filesystem/gold-056.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-056.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-056.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-057.json": "eb018c3df4331882218db453f3ae12cd2e4ad6f801fe7185f0c66f7eda03a10c",
+    "logs/filesystem/gold-057.stdout": "d48ffc0bfd218d173f4fe8fb91e41c526f49fcd5fa37fcd788ead92771331c0f",
+    "logs/filesystem/gold-057.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-057.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-057.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-058.json": "0f7ca9c216996ebe63c5bfe6d672fb8e8a5e17a2c42ad40ee28e24a65411c34a",
+    "logs/filesystem/gold-058.stdout": "be034d433ffd12b876927384daac34259fedd0da47d813a9b3dd795f0dc80d90",
+    "logs/filesystem/gold-058.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-058.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-058.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-059.json": "f5f51dea9a37c466c429c7b969e7d04b16081d93fc33b8e03435b0d3e3e9af55",
+    "logs/filesystem/gold-059.stdout": "391a038b51c9e5c55b31d8fe4ed1fe3c14fc61061d71190714365c2c66e38620",
+    "logs/filesystem/gold-059.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-059.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-059.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-060.json": "3a8d191f190dcc87eeabc9ac985b1d7a64236fafde53a5835a7b3f311f1b7db0",
+    "logs/filesystem/gold-060.stdout": "00fbbd1ff0daa9ed3e4461e098f31cd92e61b3b7d9e9afa55994d3359fbbbc4e",
+    "logs/filesystem/gold-060.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-060.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-060.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-061.json": "8fa2c9f22e79a7c808b7eac97632e2d97005100ad0904932136f96eebfa0f789",
+    "logs/filesystem/gold-061.stdout": "9b6d7a95c2c4c31354677b46bc334e241ec27528365c1f3b4dc4ff8835cdb967",
+    "logs/filesystem/gold-061.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-061.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-061.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-062.json": "81f77a5405c3137bfcb7ab78e9f6f075f0ec14bd80783a9ea2ff29ba73939d41",
+    "logs/filesystem/gold-062.stdout": "891528df69b0ffb3a268004b3ee4f301a182d600c23370d2a3139eba3c53d378",
+    "logs/filesystem/gold-062.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-062.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-062.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-063.json": "4179cbd7661fb5439bc24544129af55c86f492f85674e2047d17cbac1c97bf58",
+    "logs/filesystem/gold-063.stdout": "7e09199e815291b6dd28989df80515f3f2bfaf64674643bd7c6c3a4089dd54e0",
+    "logs/filesystem/gold-063.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-063.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-063.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-064.json": "5b908500fe50cbfb3c2cf57c7f25894405b21fa9e42b15500bf03153071756aa",
+    "logs/filesystem/gold-064.stdout": "1f6de312b25575c36b30a0bc913a5e15ba12d9153f42e55d0d734003ca7a4547",
+    "logs/filesystem/gold-064.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-064.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-064.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-065.json": "e6ee123cccb4276be56f755ec992c0b4b41bebe3cc9b9d36a294b9134acbb569",
+    "logs/filesystem/gold-065.stdout": "25e744cffae3366f95a4d9ce5d94dd4efb7b46c86037b7697b761890d6ff2be3",
+    "logs/filesystem/gold-065.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-065.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-065.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-066.json": "2f9d884fc893a0d43159a8016a045f6cfa5e989488414dddab757efcf2295ae0",
+    "logs/filesystem/gold-066.stdout": "774104f4349d9b2eb674baaf8e73c7cb7eb35605eaea09a021154ee86b2aa043",
+    "logs/filesystem/gold-066.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-066.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-066.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-067.json": "6cb75f33332a4c78d20e25de08ef768990587c7e493872a5d85b45f1b521305d",
+    "logs/filesystem/gold-067.stdout": "7a121ad803f087c4a9c3fac4d34981c5d9c5b98ea466c3752e6b236a03c4783a",
+    "logs/filesystem/gold-067.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-067.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-067.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-068.json": "317119424d069dcb4e260a9cb20ca178172f1470f774e4c5d547d044010ba85d",
+    "logs/filesystem/gold-068.stdout": "63ac14dbcece6b4ea9ff6adce37dbd480b5c9b30a88193f2ffaf69b58ac46479",
+    "logs/filesystem/gold-068.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-068.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-068.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-069.json": "08ef2b34fcdd85c08eef74647d0d4695d3940587b13bae79913cb152c90669f5",
+    "logs/filesystem/gold-069.stdout": "b3c9f11265cbce95775205cd4db4d67c5c2258ec6d924a819fc9f458ae36ba6f",
+    "logs/filesystem/gold-069.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-069.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-069.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-070.json": "38323c95dc6aff7d65d4c1898bacb3e5a46f4af3c9c1e23091c7d40ed1215022",
+    "logs/filesystem/gold-070.stdout": "96e8d4fc52a27b2a1bf0b3a408c468f1f03a354929ef69f773a5ef97f0b9231f",
+    "logs/filesystem/gold-070.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-070.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-070.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-071.json": "851bf5b0495364fcf13c2791c88bebde01049fe5c7a72380c74d80116b6cc305",
+    "logs/filesystem/gold-071.stdout": "edee2f65e2a1f42b09a4a19a57f3275116ea14f375c1d28439b2874be864b252",
+    "logs/filesystem/gold-071.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-071.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-071.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-072.json": "9fd6c89d39d19a8d895dc94a93c2b573d6d2a140e69fea84b8fa7c939b7c156d",
+    "logs/filesystem/gold-072.stdout": "c13a701693b84b0a7262b8bc53b158ce5f85fd819c44ae5d22d59523a2b434c5",
+    "logs/filesystem/gold-072.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-072.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-072.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-073.json": "890df11d9e31113006f9dd2ef9c584c1c5f8bd26beff4f5c0fded7b3017e34f9",
+    "logs/filesystem/gold-073.stdout": "fef9f732763798bec6a4c976bcba04cfd48146be7a866a728d3f705a3ff0cdcc",
+    "logs/filesystem/gold-073.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-073.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-073.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-074.json": "e6e9681231c61c50b0941f8d509c65002d39020c0eed311cabbe90159d74e72d",
+    "logs/filesystem/gold-074.stdout": "3a03052dc17ce617e5f7469af937226099a9ac5f90cc75e539970306377128c1",
+    "logs/filesystem/gold-074.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-074.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-074.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-075.json": "5dea7fbfcf44845f8d20d0e3aecc0c797f1d280156fab2c436d44aa5670fcddb",
+    "logs/filesystem/gold-075.stdout": "79ea718f87048627855aa4fedcb758d9e91c56722b1d66ff9553d55210650405",
+    "logs/filesystem/gold-075.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-075.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-075.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-076.json": "4e5d4ac4ea96ccdf2163763bf955628bab4776e3d2b7c5786aab131e27e2ab19",
+    "logs/filesystem/gold-076.stdout": "c5147ab01b1269596b88090ca512bfc8eab0a921fd372fac3ad95fb96b22d119",
+    "logs/filesystem/gold-076.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-076.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-076.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-077.json": "c8a53ea280bffb330ad7aeefed13695cca2b043c779016f5db1ab887562be561",
+    "logs/filesystem/gold-077.stdout": "17eda06440cd3694a25d2d35d7847cbf5cd3d7d9b893cc173d22e06c6be172e7",
+    "logs/filesystem/gold-077.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-077.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-077.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-078.json": "ea2c84a4059584a0f1251ba0067fe26d628021441e1ec88db833b1b7e8b74f75",
+    "logs/filesystem/gold-078.stdout": "bdb8f64e2316224ea6013567ce9b588adf51baea0dadc9166e829adfdcd47281",
+    "logs/filesystem/gold-078.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-078.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-078.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-079.json": "6852e0710e2768630598cde956d7ba30ad8247de25c5d6331d18bda55a84cbcf",
+    "logs/filesystem/gold-079.stdout": "7e4bfc09f848c910e9162f9253162f3f95b02331f33bbbd1690ab509ccf70444",
+    "logs/filesystem/gold-079.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-079.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-079.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-080.json": "eec4f974fe6600d7a39c41a23b3b5c641ac4c3ca1b4d88e6a7f6d31c2c7e365a",
+    "logs/filesystem/gold-080.stdout": "cf761b952b1c2bdab1541309e44c7c5c7d293a2d827db0d5db064fcaabbb3034",
+    "logs/filesystem/gold-080.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-080.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-080.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-081.json": "02c85031294b996a19c0f67450731ff71f962c495f62c6ca1b1de21857ec1c40",
+    "logs/filesystem/gold-081.stdout": "30f34c8abda2f3d998ea52b9e76a03271f0a9d7e342c6b94e6e92df36ba77a35",
+    "logs/filesystem/gold-081.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-081.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-081.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-082.json": "229fd0c6c191c418daaa93c36c53a91f088b4a69320ee8a1d18004ab4ae90834",
+    "logs/filesystem/gold-082.stdout": "0adae954f0fe4ed158e23d62f6b2a93de4cc33504652ea331dae466e7b18e91d",
+    "logs/filesystem/gold-082.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-082.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-082.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-083.json": "00d8975473e2e0769927c6e45143c83726e55a73c899ad58f82ed81a035d0352",
+    "logs/filesystem/gold-083.stdout": "b8aa26bf95d5520e33cb0d8d27fa2466481f4f4d4fc2da767df9a20ef974a311",
+    "logs/filesystem/gold-083.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-083.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-083.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-084.json": "7febdb739863235a169de725a0dd53e0f2baf95d84201d9d84823b6a3c606114",
+    "logs/filesystem/gold-084.stdout": "d67daf51da774b672b2b2c57c8c9eb72d6f5847fe1df74d387c9ebce24c940fc",
+    "logs/filesystem/gold-084.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-084.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-084.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-085.json": "8c3715f99050f2cba70c8178ee23bf12522b47c21db85039d514e8ad7240924b",
+    "logs/filesystem/gold-085.stdout": "b8b7a04d53786e0ea00e21a67628b107dde24117413175d38ffbfb37caab3395",
+    "logs/filesystem/gold-085.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-085.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-085.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-086.json": "05321630f4f2c5dc087ff29d6d93e72abdb78f8519efdf7a54dff718b0ae653f",
+    "logs/filesystem/gold-086.stdout": "2a65007a42403665e9bd4f5e66eb3a6332aed86ccf05de366bcd08a6152e699b",
+    "logs/filesystem/gold-086.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-086.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-086.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-087.json": "5081f8fd13ad0ce398c3cefe43ed1a576d5b58612ed31d3302bc12cba26bad92",
+    "logs/filesystem/gold-087.stdout": "20b84da80d14e6dd12b35eb40c12a6f6f9f34758f8c07bdbf455c24077c25ead",
+    "logs/filesystem/gold-087.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-087.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-087.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-088.json": "4ae1f43bf53d5f958afb087bc92b3cf09c3b11b5f7bb1d26e9fa7306e925add4",
+    "logs/filesystem/gold-088.stdout": "d4b4bb8a7f1054b9023087d652272c3bef77139c5c4cacfe4e938d3ce5affe28",
+    "logs/filesystem/gold-088.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-088.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-088.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-089.json": "247ecfea9f9bcefecd7073b9529ba5f2a7eac80b353ab87d0c5f8dab18453cdd",
+    "logs/filesystem/gold-089.stdout": "8211ccc41921ee2d66cbb0c48b174fa4f3e589213d8b95236eab6bd7c464f3df",
+    "logs/filesystem/gold-089.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-089.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-089.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-090.json": "41ac55aee4c59ec61703ebfd66af4aa5e69b9e17d606e649edc714c5b15704e4",
+    "logs/filesystem/gold-090.stdout": "9d0fa81b66c170576a7ef23696a9044cba409a2d959a954ac531ac882dbde1cf",
+    "logs/filesystem/gold-090.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-090.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-090.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-091.json": "d5d64939a5239cf7267614bb470e2eb19d4199c3cd1793678ebcbe993cadd90e",
+    "logs/filesystem/gold-091.stdout": "ff6cb21b8313e61cc4c124f7cc70f04e08c6862a333650233bc39ebeb479ae05",
+    "logs/filesystem/gold-091.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-091.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-091.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-092.json": "9a9599984fae1d8485d97e64e87ee7b82bf91de6096c127ed1ff0769eb34c4c7",
+    "logs/filesystem/gold-092.stdout": "bd665577b5706bdb5eca060d0d776ba1ba2eb1c4746d076c79790d8ad576f076",
+    "logs/filesystem/gold-092.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-092.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-092.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-093.json": "33f85295b0db2862821d5c55399a604a4f1e5e93b7ef2db4fe9fb74173c6b766",
+    "logs/filesystem/gold-093.stdout": "2603f5cc7719ddaedb21b4d8d2d06ba9e820d69ac0d2ddd12cd5e560d38a2d8b",
+    "logs/filesystem/gold-093.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-093.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-093.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-094.json": "ce45accec344f017fb4792d2a29906a34fc7c6208653ff060c07969b8cb3e9d8",
+    "logs/filesystem/gold-094.stdout": "f3731013f11f7068d8de8b4ec7f2b82f8a3757f6444071d6a90a11cc84fec2c0",
+    "logs/filesystem/gold-094.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-094.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-094.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-095.json": "a605b1180a4825ee23cdf52259d06245d5f545950c7cfc663f9ca5a5521e9054",
+    "logs/filesystem/gold-095.stdout": "b7a453bd682e58bd096ed9c69e59aa57821277647143f4d6feb779e5795fc6b6",
+    "logs/filesystem/gold-095.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-095.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-095.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-096.json": "98cdc988b8b576919c826b645d394308df5a7d0f1b5f854ea097a302d02cfbf3",
+    "logs/filesystem/gold-096.stdout": "6ab55244750f2c7c976a16895b769a84858b31b1759c7903e1bf7f2b4004b298",
+    "logs/filesystem/gold-096.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-096.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-096.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-097.json": "5f9c26c5333faa34174f2fb86227bd08586243ca86b679d79d0110aa5f58a70d",
+    "logs/filesystem/gold-097.stdout": "777a3869556f1c105f734067f36b965d083513f46296e419e53a59bab359fc88",
+    "logs/filesystem/gold-097.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-097.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-097.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-098.json": "f311cf8c65f3712ac99b2b29b541a4b32e9c04d4e5d52233e5007a1e116d5495",
+    "logs/filesystem/gold-098.stdout": "7c2fb0a0949763df40bab04c76aa449ed79a5ef94793727b19ac9cbc867d08d3",
+    "logs/filesystem/gold-098.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-098.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-098.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-099.json": "21ee29381a7160a9d3343fe9f805bf7bc0b8cb5b66073c7f88630b98a7ed122f",
+    "logs/filesystem/gold-099.stdout": "2f4a58efe4e061e3e9ebf645a89f7389cafcee59293a58d42e4464c776b5ce33",
+    "logs/filesystem/gold-099.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-099.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-099.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-100.json": "f61e9fbe66db32c59e9a0e21ce4e7ecfa309cb87570a275004d6ab3aa6fbb7e8",
+    "logs/filesystem/gold-100.stdout": "bc8848ad10cc5df40ca90cf14080dc9b4ef141ce7c9c68c92c8378ed4bd48c77",
+    "logs/filesystem/gold-100.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-100.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-100.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-101.json": "0c978f01192ff26d9248ba32e585f2ad0b2990356ce64be8bc955e190b712ee6",
+    "logs/filesystem/gold-101.stdout": "a5c93063ed500b061f360657d3851883ca38aab56fdd020c7ff0c62f378f8eec",
+    "logs/filesystem/gold-101.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-101.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-101.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-102.json": "2c0f11f69ac0c97699d6737399b1b9864c8c871347f1e7ee36dfd149af773ebf",
+    "logs/filesystem/gold-102.stdout": "ddde268f2e4c55d0ef49d52c82dcac2e0543775ba96749d0789996698ba81d72",
+    "logs/filesystem/gold-102.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-102.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-102.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-103.json": "f5e370e8e81ca5bda1c44d9944abdacddf978cdeabd377e052ea787eff030894",
+    "logs/filesystem/gold-103.stdout": "a4536956b3fb07d4036f0412ae614bcb2b7297874eedd8774e2fabdd303fe8db",
+    "logs/filesystem/gold-103.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-103.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-103.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-104.json": "556719b1ebc25ee474832dbc7d7e474c6dbf54d2300d3292ed54747d02ae82b0",
+    "logs/filesystem/gold-104.stdout": "a42d7cc47af7c991de4ceb46e78a0d7356a9caa2789e71177c089fe1068dd714",
+    "logs/filesystem/gold-104.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-104.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-104.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-105.json": "63f5d3f83914de6077ddf85fba973ca6cd3b2ac2d259140a95f063d20a78ee24",
+    "logs/filesystem/gold-105.stdout": "7719621ce25dc1b997d6232e32deb39821805b1ef3c4ab5445c1f1674a945b04",
+    "logs/filesystem/gold-105.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-105.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-105.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-106.json": "db73d82d266ce3b06b2c38cd552a377e76dd8c5c143b34378353fc83ada78bd2",
+    "logs/filesystem/gold-106.stdout": "78b282691d3f7ba3b5447929ed76a8d67e58cfbbf068effaceabee04e63f9c5b",
+    "logs/filesystem/gold-106.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-106.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-106.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-107.json": "7f40ea8aff3a296bc87450679248648775de716d1b0df31dfcf9adc78632ef09",
+    "logs/filesystem/gold-107.stdout": "fb540e8a9c8a6e9cfc7eb2c2b6dcea043f6f5fea8c9027ee308565d55209edc6",
+    "logs/filesystem/gold-107.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-107.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-107.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-108.json": "8d162296ef29bc00c81c81bcde0babc2a63f0b4504eee42c5bd2a7f36919d5c3",
+    "logs/filesystem/gold-108.stdout": "577aa30a0c963d2b2b759bf2be4a20392468145d4ccdded46d69544bb8d27be4",
+    "logs/filesystem/gold-108.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-108.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-108.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-109.json": "0a11680a70ae160e024de1559ec159aff3e78db0d29c094d9b0dc3e74c878bbf",
+    "logs/filesystem/gold-109.stdout": "8c90e2afdeaac7d83769a8128159fa961dd31d4ae243bc9c20c1f14143d8a58f",
+    "logs/filesystem/gold-109.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-109.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-109.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-110.json": "f908436e71fa095c8a7422e0a93d7bb87c9dc53416be219f15afdd4fcde0f586",
+    "logs/filesystem/gold-110.stdout": "27e6a8718727a281045ff73de59019b69ed59fce0b1853dc488edae299dd7cd0",
+    "logs/filesystem/gold-110.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-110.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-110.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-111.json": "db50a21461e974c114d45f14341b11739f2dc1ffbfa979942f19f1970a31e37f",
+    "logs/filesystem/gold-111.stdout": "8a001f3b9283e6800beb2074f51eb06b552a36f0936008686ecbb19cdefa27c6",
+    "logs/filesystem/gold-111.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-111.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-111.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-112.json": "43adcf2d67d69bdf1cd67568391d3fc44afc27c861c5854b0448cbc5b205e1c3",
+    "logs/filesystem/gold-112.stdout": "42c71d8e99cb1879f8a8e584bd6d760cffdfff9554811a879084415c9cc8524f",
+    "logs/filesystem/gold-112.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-112.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-112.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-113.json": "d156a1a781697cb36c86a561086f46960e89669d2cd9566ded3ea56a9d725bca",
+    "logs/filesystem/gold-113.stdout": "7a67105827c80f9d21d2e592e8c936c21b99cb6aa5c474909b870204b243d444",
+    "logs/filesystem/gold-113.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-113.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-113.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-114.json": "d0ba38840ed63f59eb924a2cedb9dff06a15b298e0777ce68940c066062caf1f",
+    "logs/filesystem/gold-114.stdout": "a225b6cf7ac777b4996de41247fa9962dbafc26a7a4e65eb7aab49796b7c6eac",
+    "logs/filesystem/gold-114.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-114.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-114.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-115.json": "fca9da3113f9104f5468ebeb2093bbcdc06d6d3bc3be3d5cca3407ea8a3b2705",
+    "logs/filesystem/gold-115.stdout": "c11466a9050f7bfabc0daff3c6271551046433998b78a3a3ef45601ff0017b24",
+    "logs/filesystem/gold-115.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-115.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-115.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-116.json": "d9f421c3982fa1f8be7b185f98e1b3b7c46352815f2193add00f04d94569d3be",
+    "logs/filesystem/gold-116.stdout": "6aaf6cacb4128ddd650db6cfb3b5e64f3e508a9b212bfff53f65002dacc89dfc",
+    "logs/filesystem/gold-116.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-116.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-116.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-117.json": "5a4e956f162a616f7ebea4ead5c22797043d433f1d207c663d03b6bbe9dbc6be",
+    "logs/filesystem/gold-117.stdout": "c312e9826d5ba3f93beeca091120320d678d1322c0956958eeab6cd54b1b00c4",
+    "logs/filesystem/gold-117.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-117.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-117.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-118.json": "61ce3511993777c42d0bf4389eb2a469d123a0ffd4111c6c774cb1a9c85ecc3f",
+    "logs/filesystem/gold-118.stdout": "fad40d3d27c87c9fdee2699073f4c0136e5658b440e4421e8f942d25bef1383b",
+    "logs/filesystem/gold-118.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-118.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-118.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-119.json": "e374feb2edc74cf7df272870fca38eb29f71ecf461817b730faa396e19843355",
+    "logs/filesystem/gold-119.stdout": "57c4dcee8d10ad8d49d6f3941222cc7a31bd85207d7f0cfc889517016ba73011",
+    "logs/filesystem/gold-119.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-119.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-119.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-120.json": "84e6d9adadd87ca93166866024cdd344658d50483332a0fc277fdda6a0c3d5c7",
+    "logs/filesystem/gold-120.stdout": "7dd782d9afa5cb72ec71f7d917f052c0518627805df9125bea32c2241987aa0f",
+    "logs/filesystem/gold-120.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-120.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-120.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-121.json": "d5c15f51f33641f067fecf21e7568f802fa893a72da89df13c1be3865210c4c7",
+    "logs/filesystem/gold-121.stdout": "f83e5c553a756cdbb6c9c1bcd9db84bd6ad2e9cf640d45b098eb8dc6cc876aa1",
+    "logs/filesystem/gold-121.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-121.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-121.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-122.json": "0bc835bf3ef3c4d2dda8c7893856feb9485b09ae58741ba8308b97b6da820b6a",
+    "logs/filesystem/gold-122.stdout": "12e067818ed4fb82a14d8131bd15cac15600e64879bf69a380eeb137898158b7",
+    "logs/filesystem/gold-122.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-122.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-122.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-123.json": "e992515c941646a3a9825b68a92ba630d0c946298dd35a3518adcc68e9341ef6",
+    "logs/filesystem/gold-123.stdout": "399d57620456630ea81fbfb1945b9a96c86a51d65e63dc01493e65b2b167faff",
+    "logs/filesystem/gold-123.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-123.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-123.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-124.json": "c5c96783646ad15ef43115245ee955b56b521c6532fd806fe8fda4d8ebf55d15",
+    "logs/filesystem/gold-124.stdout": "6f6023180c24d6016d75e1efd681e8247714f67b763fa8905ed43793b31c4bca",
+    "logs/filesystem/gold-124.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-124.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-124.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/gold-125.json": "b48ccbffae210338d17bca7f46d6400c24fe1d46ce10de4ca81245480cfb29d8",
+    "logs/filesystem/gold-125.stdout": "9521b44e9aaf2b9aaa7267b7ab59e8127f04011c25525e899c5d56bf3e4a75ec",
+    "logs/filesystem/gold-125.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-125.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-125.stderr": "8572084b1fd0f5fbfed4df5ba9741d8e4af5e1c8951a3254804b1db271213c69",
+    "logs/filesystem/gold-126.json": "3a6788c6527b1e91aacec2cdf9e70f4c96c4608ddbe85973200fde2cb9752899",
+    "logs/filesystem/gold-126.stdout": "b761e7c1d67d32c18d34e2ba934f51ca527d94d9fc8c4e6295b574bf8de4b2ab",
+    "logs/filesystem/gold-126.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-126.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/copy-126.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/after-reset.sha256": "41105628e09d1ebdd9b3ea8227a4b67f92b8018f31efa45c7d13539dfe9927de",
+    "logs/filesystem/after-reset-sha256.stdout": "29da6826ddca78d9266e3b3f8da58adf1cc63940610a7dfbc7b5b2257cf6d2bd",
+    "logs/filesystem/after-reset-sha256.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/after-rebind.sha256": "41105628e09d1ebdd9b3ea8227a4b67f92b8018f31efa45c7d13539dfe9927de",
+    "logs/filesystem/after-rebind-sha256.stdout": "29da6826ddca78d9266e3b3f8da58adf1cc63940610a7dfbc7b5b2257cf6d2bd",
+    "logs/filesystem/after-rebind-sha256.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/final-remount.sha256": "e90b18456a71d01b05ff375bde5b766c95af5e8515d87a71fb4d8058243c8285",
+    "logs/filesystem/final-remount-sha256.stdout": "8584921a6e97fa0432f4297c69a0d5752dcd690b026151c756df6c8683ee33f8",
+    "logs/filesystem/final-remount-sha256.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/filesystem/e2fsck.stdout": "7bcf39575d4bab15dfb3a76d783c14f4d52ddccb179818946e8c80afd499a3e7",
+    "logs/filesystem/dumpe2fs-final.stdout": "cb5381d7207b90478a38116915ba08e5c0f36bc969573cbbf6140dc11a219c2b",
+    "logs/filesystem/dmesg-before.stdout": "3cb9d0568e0b6ababf5f0547682ee4593a6077b24eb628c3ded948b2a19750a9",
+    "logs/filesystem/dmesg-final.stdout": "5d69602281cd9df592cdb02707e521220f025ca0dcccd7becfef8698f08cc700"
+  }
+}

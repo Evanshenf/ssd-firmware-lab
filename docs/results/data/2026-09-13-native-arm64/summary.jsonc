@@ -1,0 +1,4058 @@
+// SPDX-FileCopyrightText: 2026 Evanshenf
+// SPDX-License-Identifier: BSD-3-Clause
+{
+  "schema_version": 1,
+  "analysis": "single_offline_perf12_evidence_reduction",
+  "archive_sha256": "6eb6daa0eb319acb958c853a83fb9cca657c06b3c0d65aeebfb574035e80e0e0",
+  "runner_sha256": "ee449a8a9a9c053484d483f95e0884d8de7c7921a4a78c68bccadd2cb5f84605",
+  "source_identity": {
+    "kernel_candidate": "823f04cc5fefd4611a37f1906ec090354d30fdb3",
+    "worker_elf_sha256": "e7cdb1ebbc65dd980839d907ce9eea2361a7f69483edcdb6d2a4d1a61d2c593f",
+    "fio_elf_sha256": "5699289d11cbe25be813f05584b20ccad8a0223f2b773a5861e35f92bcedf642",
+    "basis": "runner identity checks plus parent-reported selected kernel candidate"
+  },
+  "validation": {
+    "status": "PASS",
+    "timed_samples": 12,
+    "executed_fio_phases": 26,
+    "phase_exits_zero": 26,
+    "fio_stderr_empty": 26,
+    "writer_samples_postverified": 6,
+    "each_writer_postcheck_bytes": 1073741824,
+    "distinct_writer_generations": [
+      "0xb1",
+      "0xb2",
+      "0xb3",
+      "0xb4",
+      "0xb5",
+      "0xb6"
+    ],
+    "prefill_generation": "0x3c",
+    "prefill_count": 7,
+    "online_verified_read_samples": 6,
+    "timed_job_minimum_ms": 14999,
+    "short_or_dropped_ios": 0,
+    "kernel_warning_scan_matches": [],
+    "kernel_taint": 12288
+  },
+  "scope": {
+    "extent_base_bytes": 8589934592,
+    "extent_bytes": 1073741824,
+    "namespace_bytes": 68719476736,
+    "application_request_bytes": 1048576,
+    "native_max_request_bytes": 131072,
+    "native_commands_per_application_request": 8,
+    "fio_cpu": 6,
+    "worker_cpu": 7,
+    "worker_pid": 3236,
+    "worker_start_ticks": 177707,
+    "clk_tck": 100,
+    "native_backing": "tmpfs physical-v2 NAND model"
+  },
+  "methods": {
+    "rate": "direction = io_bytes*1000/direction_runtime_ms; wholejob = io_bytes*1000/job_runtime_ms",
+    "latency": "sample CLAT mean and histogram p99; group values are median/min/max across three samples, not a pooled percentile",
+    "worker_cpu": "delta(utime+stime)/CLK_TCK; percent denominator estimated from aggregate /proc/stat first8-column delta divided by8 CPUs andCLK_TCK; brackets include fio launch and runner completion observation",
+    "irq_and_counters": "after-before snapshots outside timing and outside prefill/postverify; only timed brackets are summed",
+    "attained_qd": "fio depth histogram; with maxQD32, bucket32 is attained32; not evidence of parallel firmware execution"
+  },
+  "limits": [
+    "1GiB extent in64GiB namespace; not full-device sustained write",
+    "1MiB application I/O splits into8 native128KiB commands",
+    "fio buffer/header verification, kernel, transport and unchangedDUTsync/log overhead included",
+    "timed samples hadGCdelta0; one timed sample had checkpointdelta1",
+    "single job/oneDUTdatapath core with separateproducerCPU; no multi-queue-parallel or single-whole-system-core claim",
+    "not physicalNAND,10GB/s, or directly comparable toD204 BLOCK-only64MiB service measurements",
+    "fixed sample order, no randomization; the lowerQD32write sample and its checkpoint are retained"
+  ],
+  "groups": [
+    {
+      "direction": "read",
+      "requested_qd": 1,
+      "n": 3,
+      "statistics": {
+        "direction_bytes_per_s": {
+          "median": 122930230.87176754,
+          "min": 122827599.14712153,
+          "max": 123316673.7739872
+        },
+        "wholejob_bytes_per_s": {
+          "median": 122938424.58175032,
+          "min": 122835783.83421071,
+          "max": 123324891.05084294
+        },
+        "clat_mean_ms": {
+          "median": 6.837626457338,
+          "min": 6.836983907902,
+          "max": 6.884151639093001
+        },
+        "clat_p99_ms": {
+          "median": 7.241728,
+          "min": 7.176192,
+          "max": 7.241728
+        },
+        "total_lat_mean_ms": {
+          "median": 8.486326222854,
+          "min": 8.459624705382002,
+          "max": 8.493320018201999
+        },
+        "slat_mean_ms": {
+          "median": 1.6493423149520001,
+          "min": 1.575473066289,
+          "max": 1.6556935608649999
+        },
+        "fio_usr_cpu_pct": {
+          "median": 0.553075,
+          "min": 0.513231,
+          "max": 0.633038
+        },
+        "fio_sys_cpu_pct": {
+          "median": 19.337642,
+          "min": 18.544679,
+          "max": 19.396121
+        },
+        "fio_total_cpu_pct": {
+          "median": 19.909352000000002,
+          "min": 19.097754,
+          "max": 19.970679999999998
+        },
+        "worker_cpu_pct_snapshot_estimated": {
+          "median": 91.0288582183187,
+          "min": 91.02473498233215,
+          "max": 91.05027845321202
+        },
+        "worker_cpu_s_snapshot": {
+          "median": 14.51,
+          "min": 14.489999999999998,
+          "max": 14.51
+        },
+        "target_depth_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "job_runtime_ms": {
+          "median": 15007,
+          "min": 15003,
+          "max": 15007
+        },
+        "direction_runtime_ms": {
+          "median": 15008,
+          "min": 15004,
+          "max": 15008
+        }
+      },
+      "irq_delta_sum": {
+        "nvme0q0": 0,
+        "nvme0q1": 0,
+        "nvme0q2": 42256
+      },
+      "gc_delta_sum": 0,
+      "checkpoint_delta_sum": 0
+    },
+    {
+      "direction": "read",
+      "requested_qd": 32,
+      "n": 3,
+      "statistics": {
+        "direction_bytes_per_s": {
+          "median": 128169361.44177695,
+          "min": 127087439.10064524,
+          "max": 128283234.04255319
+        },
+        "wholejob_bytes_per_s": {
+          "median": 128169361.44177695,
+          "min": 127095893.56040446,
+          "max": 128291764.08005852
+        },
+        "clat_mean_ms": {
+          "median": 250.096778588139,
+          "min": 249.885806365761,
+          "max": 252.265782536773
+        },
+        "clat_p99_ms": {
+          "median": 256.90112,
+          "min": 254.803968,
+          "max": 270.532608
+        },
+        "total_lat_mean_ms": {
+          "median": 258.18296934222,
+          "min": 257.968282942934,
+          "max": 260.412000594402
+        },
+        "slat_mean_ms": {
+          "median": 8.086190754081,
+          "min": 8.082476577174,
+          "max": 8.146218057629
+        },
+        "fio_usr_cpu_pct": {
+          "median": 0.831283,
+          "min": 0.764679,
+          "max": 0.871474
+        },
+        "fio_sys_cpu_pct": {
+          "median": 2.606556,
+          "min": 1.969133,
+          "max": 2.79311
+        },
+        "fio_total_cpu_pct": {
+          "median": 3.371235,
+          "min": 2.840607,
+          "max": 3.624393
+        },
+        "worker_cpu_pct_snapshot_estimated": {
+          "median": 94.22416484545738,
+          "min": 94.16536661466459,
+          "max": 94.25341130604288
+        },
+        "worker_cpu_s_snapshot": {
+          "median": 15.09,
+          "min": 15.09,
+          "max": 15.11
+        },
+        "target_depth_pct": {
+          "median": 96.626768,
+          "min": 96.597146,
+          "max": 96.630435
+        },
+        "job_runtime_ms": {
+          "median": 15037,
+          "min": 15032,
+          "max": 15039
+        },
+        "direction_runtime_ms": {
+          "median": 15037,
+          "min": 15033,
+          "max": 15040
+        }
+      },
+      "irq_delta_sum": {
+        "nvme0q0": 0,
+        "nvme0q1": 0,
+        "nvme0q2": 44000
+      },
+      "gc_delta_sum": 0,
+      "checkpoint_delta_sum": 0
+    },
+    {
+      "direction": "write",
+      "requested_qd": 1,
+      "n": 3,
+      "statistics": {
+        "direction_bytes_per_s": {
+          "median": 76505245.20255864,
+          "min": 75681959.88003999,
+          "max": 76535843.22090387
+        },
+        "wholejob_bytes_per_s": {
+          "median": 76510343.17318584,
+          "min": 75687003.99893361,
+          "max": 76540945.27031532
+        },
+        "clat_mean_ms": {
+          "median": 13.278668807306,
+          "min": 12.209187809788,
+          "max": 13.491475090411
+        },
+        "clat_p99_ms": {
+          "median": 13.697024,
+          "min": 12.77952,
+          "max": 14.352384
+        },
+        "total_lat_mean_ms": {
+          "median": 13.703988375342,
+          "min": 13.697954371688999,
+          "max": 13.852701206833
+        },
+        "slat_mean_ms": {
+          "median": 0.425319568037,
+          "min": 0.20647928127899998,
+          "max": 1.643513397045
+        },
+        "fio_usr_cpu_pct": {
+          "median": 0.066649,
+          "min": 0.059972,
+          "max": 0.073328
+        },
+        "fio_sys_cpu_pct": {
+          "median": 3.118545,
+          "min": 1.506566,
+          "max": 11.870168
+        },
+        "fio_total_cpu_pct": {
+          "median": 3.1785170000000003,
+          "min": 1.5798940000000001,
+          "max": 11.936817
+        },
+        "worker_cpu_pct_snapshot_estimated": {
+          "median": 92.95357003511509,
+          "min": 92.32212666145425,
+          "max": 93.07116104868915
+        },
+        "worker_cpu_s_snapshot": {
+          "median": 14.889999999999999,
+          "min": 14.76,
+          "max": 14.91
+        },
+        "target_depth_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "job_runtime_ms": {
+          "median": 15004,
+          "min": 15001,
+          "max": 15007
+        },
+        "direction_runtime_ms": {
+          "median": 15005,
+          "min": 15002,
+          "max": 15008
+        }
+      },
+      "irq_delta_sum": {
+        "nvme0q0": 22,
+        "nvme0q1": 519,
+        "nvme0q2": 26457
+      },
+      "gc_delta_sum": 0,
+      "checkpoint_delta_sum": 0
+    },
+    {
+      "direction": "write",
+      "requested_qd": 32,
+      "n": 3,
+      "statistics": {
+        "direction_bytes_per_s": {
+          "median": 77837326.07396588,
+          "min": 59415127.40799788,
+          "max": 79673946.86503719
+        },
+        "wholejob_bytes_per_s": {
+          "median": 77842494.55511288,
+          "min": 59419074.47020528,
+          "max": 79679239.05679177
+        },
+        "clat_mean_ms": {
+          "median": 408.069548206619,
+          "min": 398.900858239511,
+          "max": 540.851682092615
+        },
+        "clat_p99_ms": {
+          "median": 425.721856,
+          "min": 413.138944,
+          "max": 4143.972352
+        },
+        "total_lat_mean_ms": {
+          "median": 421.449119679785,
+          "min": 411.97319634965004,
+          "max": 558.439626386869
+        },
+        "slat_mean_ms": {
+          "median": 13.379571473166001,
+          "min": 13.072338110139999,
+          "max": 17.587944294256
+        },
+        "fio_usr_cpu_pct": {
+          "median": 0.106277,
+          "min": 0.079718,
+          "max": 0.132802
+        },
+        "fio_sys_cpu_pct": {
+          "median": 1.348389,
+          "min": 1.281541,
+          "max": 1.368498
+        },
+        "fio_total_cpu_pct": {
+          "median": 1.448216,
+          "min": 1.4143430000000001,
+          "max": 1.454666
+        },
+        "worker_cpu_pct_snapshot_estimated": {
+          "median": 94.51081439837589,
+          "min": 94.40024957104977,
+          "max": 94.5732802373702
+        },
+        "worker_cpu_s_snapshot": {
+          "median": 15.13,
+          "min": 15.129999999999999,
+          "max": 15.14
+        },
+        "target_depth_pct": {
+          "median": 94.58042,
+          "min": 94.454383,
+          "max": 96.365768
+        },
+        "job_runtime_ms": {
+          "median": 15055,
+          "min": 15053,
+          "max": 15060
+        },
+        "direction_runtime_ms": {
+          "median": 15056,
+          "min": 15054,
+          "max": 15061
+        }
+      },
+      "irq_delta_sum": {
+        "nvme0q0": 19,
+        "nvme0q1": 525,
+        "nvme0q2": 25101
+      },
+      "gc_delta_sum": 0,
+      "checkpoint_delta_sum": 1
+    }
+  ],
+  "samples": [
+    {
+      "name": "read-qd1-s1",
+      "direction": "read",
+      "requested_qd": 1,
+      "sample": 1,
+      "options": {
+        "name": "read-qd1-s1",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "read",
+        "iodepth": "1",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0x3c"
+      },
+      "validated": true,
+      "io_bytes": 1844445184,
+      "application_ios": 1759,
+      "native_block_ios": 14072,
+      "job_runtime_ms": 15003,
+      "direction_runtime_ms": 15004,
+      "runner_wall_s_coarse": 17,
+      "direction_bytes_per_s": 122930230.87176754,
+      "fio_bw_bytes_per_s_integer": 122930230,
+      "wholejob_bytes_per_s": 122938424.58175032,
+      "clat_mean_ms": 6.836983907902,
+      "clat_p99_ms": 7.241728,
+      "total_lat_mean_ms": 8.486326222854,
+      "slat_mean_ms": 1.6493423149520001,
+      "fio_usr_cpu_pct": 0.513231,
+      "fio_sys_cpu_pct": 19.396121,
+      "fio_total_cpu_pct": 19.909352000000002,
+      "fio_context_switches": 1791,
+      "attained_depth_distribution_pct": {
+        "1": 100.0,
+        "2": 0.0,
+        "4": 0.0,
+        "8": 0.0,
+        "16": 0.0,
+        "32": 0.0,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 100.0,
+      "worker_user_cpu_s_snapshot": 12.09,
+      "worker_system_cpu_s_snapshot": 2.42,
+      "worker_cpu_s_snapshot": 14.51,
+      "snapshot_interval_s_estimated": 15.93625,
+      "worker_cpu_pct_snapshot_estimated": 91.05027845321202,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 2307,
+        "stime_ticks": 3583,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 3516,
+        "stime_ticks": 3825,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1760,
+          0,
+          920,
+          9987,
+          73,
+          0,
+          7,
+          2,
+          0,
+          0
+        ],
+        "cpu0": [
+          72,
+          0,
+          107,
+          1382,
+          24,
+          0,
+          4,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          232,
+          0,
+          157,
+          1205,
+          5,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          54,
+          0,
+          58,
+          1472,
+          6,
+          0,
+          2,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          69,
+          0,
+          109,
+          1395,
+          16,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          19,
+          0,
+          19,
+          1543,
+          13,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          1,
+          0,
+          37,
+          1539,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          8,
+          0,
+          297,
+          1298,
+          8,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1305,
+          0,
+          136,
+          153,
+          1,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q1": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q2": {
+          "total": 14072,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            14072
+          ]
+        }
+      },
+      "block_stat_delta": [
+        14072,
+        0,
+        3602432,
+        58496,
+        0,
+        0,
+        0,
+        0,
+        0,
+        14843,
+        58496,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 300722,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 314794,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 14072,
+        "map_sequence": 0,
+        "durable_frontier": 0,
+        "free_blocks": 0,
+        "victim_blocks": 0
+      },
+      "writer_postchecks": null
+    },
+    {
+      "name": "read-qd1-s2",
+      "direction": "read",
+      "requested_qd": 1,
+      "sample": 2,
+      "options": {
+        "name": "read-qd1-s2",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "read",
+        "iodepth": "1",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0x3c"
+      },
+      "validated": true,
+      "io_bytes": 1843396608,
+      "application_ios": 1758,
+      "native_block_ios": 14064,
+      "job_runtime_ms": 15007,
+      "direction_runtime_ms": 15008,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 122827599.14712153,
+      "fio_bw_bytes_per_s_integer": 122827599,
+      "wholejob_bytes_per_s": 122835783.83421071,
+      "clat_mean_ms": 6.837626457338,
+      "clat_p99_ms": 7.176192,
+      "total_lat_mean_ms": 8.493320018201999,
+      "slat_mean_ms": 1.6556935608649999,
+      "fio_usr_cpu_pct": 0.633038,
+      "fio_sys_cpu_pct": 19.337642,
+      "fio_total_cpu_pct": 19.970679999999998,
+      "fio_context_switches": 1770,
+      "attained_depth_distribution_pct": {
+        "1": 100.0,
+        "2": 0.0,
+        "4": 0.0,
+        "8": 0.0,
+        "16": 0.0,
+        "32": 0.0,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 100.0,
+      "worker_user_cpu_s_snapshot": 12.45,
+      "worker_system_cpu_s_snapshot": 2.04,
+      "worker_cpu_s_snapshot": 14.489999999999998,
+      "snapshot_interval_s_estimated": 15.91875,
+      "worker_cpu_pct_snapshot_estimated": 91.02473498233215,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 3517,
+        "stime_ticks": 3826,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 4762,
+        "stime_ticks": 4030,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1785,
+          0,
+          913,
+          9966,
+          64,
+          0,
+          6,
+          1,
+          0,
+          0
+        ],
+        "cpu0": [
+          87,
+          0,
+          92,
+          1398,
+          17,
+          0,
+          3,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          136,
+          0,
+          128,
+          1299,
+          28,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          116,
+          0,
+          108,
+          1353,
+          9,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          106,
+          0,
+          114,
+          1363,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          16,
+          0,
+          27,
+          1537,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          3,
+          0,
+          21,
+          1561,
+          3,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          10,
+          0,
+          295,
+          1300,
+          5,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1312,
+          0,
+          128,
+          156,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q1": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q2": {
+          "total": 14064,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            14064
+          ]
+        }
+      },
+      "block_stat_delta": [
+        14064,
+        0,
+        3600384,
+        58388,
+        0,
+        0,
+        0,
+        0,
+        0,
+        14856,
+        58388,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 314794,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 328858,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 14064,
+        "map_sequence": 0,
+        "durable_frontier": 0,
+        "free_blocks": 0,
+        "victim_blocks": 0
+      },
+      "writer_postchecks": null
+    },
+    {
+      "name": "read-qd1-s3",
+      "direction": "read",
+      "requested_qd": 1,
+      "sample": 3,
+      "options": {
+        "name": "read-qd1-s3",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "read",
+        "iodepth": "1",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0x3c"
+      },
+      "validated": true,
+      "io_bytes": 1850736640,
+      "application_ios": 1765,
+      "native_block_ios": 14120,
+      "job_runtime_ms": 15007,
+      "direction_runtime_ms": 15008,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 123316673.7739872,
+      "fio_bw_bytes_per_s_integer": 123316673,
+      "wholejob_bytes_per_s": 123324891.05084294,
+      "clat_mean_ms": 6.884151639093001,
+      "clat_p99_ms": 7.241728,
+      "total_lat_mean_ms": 8.459624705382002,
+      "slat_mean_ms": 1.575473066289,
+      "fio_usr_cpu_pct": 0.553075,
+      "fio_sys_cpu_pct": 18.544679,
+      "fio_total_cpu_pct": 19.097754,
+      "fio_context_switches": 1779,
+      "attained_depth_distribution_pct": {
+        "1": 100.0,
+        "2": 0.0,
+        "4": 0.0,
+        "8": 0.0,
+        "16": 0.0,
+        "32": 0.0,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 100.0,
+      "worker_user_cpu_s_snapshot": 12.43,
+      "worker_system_cpu_s_snapshot": 2.08,
+      "worker_cpu_s_snapshot": 14.51,
+      "snapshot_interval_s_estimated": 15.94,
+      "worker_cpu_pct_snapshot_estimated": 91.0288582183187,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 4763,
+        "stime_ticks": 4031,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 6006,
+        "stime_ticks": 4239,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1731,
+          0,
+          911,
+          10002,
+          96,
+          0,
+          10,
+          2,
+          0,
+          0
+        ],
+        "cpu0": [
+          78,
+          0,
+          115,
+          1331,
+          59,
+          0,
+          4,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          105,
+          0,
+          95,
+          1385,
+          5,
+          0,
+          3,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          193,
+          0,
+          142,
+          1247,
+          21,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          53,
+          0,
+          80,
+          1443,
+          11,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          1,
+          0,
+          10,
+          1589,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          1,
+          0,
+          37,
+          1533,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          9,
+          0,
+          275,
+          1318,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1290,
+          0,
+          157,
+          155,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q1": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q2": {
+          "total": 14120,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            14120
+          ]
+        }
+      },
+      "block_stat_delta": [
+        14120,
+        0,
+        3614720,
+        58429,
+        0,
+        0,
+        0,
+        0,
+        0,
+        14865,
+        58429,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 328858,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 342978,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 14120,
+        "map_sequence": 0,
+        "durable_frontier": 0,
+        "free_blocks": 0,
+        "victim_blocks": 0
+      },
+      "writer_postchecks": null
+    },
+    {
+      "name": "read-qd32-s1",
+      "direction": "read",
+      "requested_qd": 32,
+      "sample": 1,
+      "options": {
+        "name": "read-qd32-s1",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "read",
+        "iodepth": "32",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0x3c"
+      },
+      "validated": true,
+      "io_bytes": 1927282688,
+      "application_ios": 1838,
+      "native_block_ios": 14704,
+      "job_runtime_ms": 15037,
+      "direction_runtime_ms": 15037,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 128169361.44177695,
+      "fio_bw_bytes_per_s_integer": 128169361,
+      "wholejob_bytes_per_s": 128169361.44177695,
+      "clat_mean_ms": 250.096778588139,
+      "clat_p99_ms": 256.90112,
+      "total_lat_mean_ms": 258.18296934222,
+      "slat_mean_ms": 8.086190754081,
+      "fio_usr_cpu_pct": 0.831283,
+      "fio_sys_cpu_pct": 2.79311,
+      "fio_total_cpu_pct": 3.624393,
+      "fio_context_switches": 4882,
+      "attained_depth_distribution_pct": {
+        "1": 0.108814,
+        "2": 0.217628,
+        "4": 0.435256,
+        "8": 0.870511,
+        "16": 1.741023,
+        "32": 96.626768,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 96.626768,
+      "worker_user_cpu_s_snapshot": 13.32,
+      "worker_system_cpu_s_snapshot": 1.79,
+      "worker_cpu_s_snapshot": 15.11,
+      "snapshot_interval_s_estimated": 16.03125,
+      "worker_cpu_pct_snapshot_estimated": 94.25341130604288,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 6006,
+        "stime_ticks": 4240,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 7338,
+        "stime_ticks": 4419,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1478,
+          0,
+          284,
+          9610,
+          1443,
+          0,
+          8,
+          2,
+          0,
+          0
+        ],
+        "cpu0": [
+          9,
+          0,
+          15,
+          1577,
+          1,
+          0,
+          5,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          14,
+          0,
+          17,
+          1570,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          31,
+          0,
+          27,
+          1542,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          11,
+          0,
+          21,
+          1564,
+          7,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          17,
+          0,
+          17,
+          1570,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          14,
+          0,
+          7,
+          1577,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          14,
+          0,
+          45,
+          113,
+          1434,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1369,
+          0,
+          133,
+          98,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q1": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q2": {
+          "total": 14704,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            14704
+          ]
+        }
+      },
+      "block_stat_delta": [
+        14704,
+        0,
+        3764224,
+        449309,
+        0,
+        0,
+        0,
+        0,
+        0,
+        15031,
+        449310,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 342978,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 357682,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 14704,
+        "map_sequence": 0,
+        "durable_frontier": 0,
+        "free_blocks": 0,
+        "victim_blocks": 0
+      },
+      "writer_postchecks": null
+    },
+    {
+      "name": "read-qd32-s2",
+      "direction": "read",
+      "requested_qd": 32,
+      "sample": 2,
+      "options": {
+        "name": "read-qd32-s2",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "read",
+        "iodepth": "32",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0x3c"
+      },
+      "validated": true,
+      "io_bytes": 1910505472,
+      "application_ios": 1822,
+      "native_block_ios": 14576,
+      "job_runtime_ms": 15032,
+      "direction_runtime_ms": 15033,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 127087439.10064524,
+      "fio_bw_bytes_per_s_integer": 127087439,
+      "wholejob_bytes_per_s": 127095893.56040446,
+      "clat_mean_ms": 252.265782536773,
+      "clat_p99_ms": 270.532608,
+      "total_lat_mean_ms": 260.412000594402,
+      "slat_mean_ms": 8.146218057629,
+      "fio_usr_cpu_pct": 0.871474,
+      "fio_sys_cpu_pct": 1.969133,
+      "fio_total_cpu_pct": 2.840607,
+      "fio_context_switches": 4841,
+      "attained_depth_distribution_pct": {
+        "1": 0.109769,
+        "2": 0.219539,
+        "4": 0.439078,
+        "8": 0.878156,
+        "16": 1.756312,
+        "32": 96.597146,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 96.597146,
+      "worker_user_cpu_s_snapshot": 13.31,
+      "worker_system_cpu_s_snapshot": 1.78,
+      "worker_cpu_s_snapshot": 15.09,
+      "snapshot_interval_s_estimated": 16.025,
+      "worker_cpu_pct_snapshot_estimated": 94.16536661466459,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 7339,
+        "stime_ticks": 4419,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 8670,
+        "stime_ticks": 4597,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1443,
+          0,
+          246,
+          9665,
+          1456,
+          0,
+          7,
+          3,
+          0,
+          0
+        ],
+        "cpu0": [
+          8,
+          0,
+          11,
+          1575,
+          8,
+          0,
+          3,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          10,
+          0,
+          17,
+          1575,
+          0,
+          0,
+          1,
+          1,
+          0,
+          0
+        ],
+        "cpu2": [
+          6,
+          0,
+          12,
+          1585,
+          0,
+          0,
+          3,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          9,
+          0,
+          18,
+          1568,
+          4,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          38,
+          0,
+          13,
+          1555,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          0,
+          0,
+          4,
+          1597,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          14,
+          0,
+          29,
+          113,
+          1445,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1359,
+          0,
+          143,
+          98,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q1": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q2": {
+          "total": 14576,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            14576
+          ]
+        }
+      },
+      "block_stat_delta": [
+        14576,
+        0,
+        3731456,
+        449424,
+        0,
+        0,
+        0,
+        0,
+        0,
+        15029,
+        449423,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 357682,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 372258,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 14576,
+        "map_sequence": 0,
+        "durable_frontier": 0,
+        "free_blocks": 0,
+        "victim_blocks": 0
+      },
+      "writer_postchecks": null
+    },
+    {
+      "name": "read-qd32-s3",
+      "direction": "read",
+      "requested_qd": 32,
+      "sample": 3,
+      "options": {
+        "name": "read-qd32-s3",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "read",
+        "iodepth": "32",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0x3c"
+      },
+      "validated": true,
+      "io_bytes": 1929379840,
+      "application_ios": 1840,
+      "native_block_ios": 14720,
+      "job_runtime_ms": 15039,
+      "direction_runtime_ms": 15040,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 128283234.04255319,
+      "fio_bw_bytes_per_s_integer": 128283234,
+      "wholejob_bytes_per_s": 128291764.08005852,
+      "clat_mean_ms": 249.885806365761,
+      "clat_p99_ms": 254.803968,
+      "total_lat_mean_ms": 257.968282942934,
+      "slat_mean_ms": 8.082476577174,
+      "fio_usr_cpu_pct": 0.764679,
+      "fio_sys_cpu_pct": 2.606556,
+      "fio_total_cpu_pct": 3.371235,
+      "fio_context_switches": 4891,
+      "attained_depth_distribution_pct": {
+        "1": 0.108696,
+        "2": 0.217391,
+        "4": 0.434783,
+        "8": 0.869565,
+        "16": 1.73913,
+        "32": 96.630435,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 96.630435,
+      "worker_user_cpu_s_snapshot": 13.46,
+      "worker_system_cpu_s_snapshot": 1.63,
+      "worker_cpu_s_snapshot": 15.09,
+      "snapshot_interval_s_estimated": 16.015,
+      "worker_cpu_pct_snapshot_estimated": 94.22416484545738,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 8671,
+        "stime_ticks": 4598,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 10017,
+        "stime_ticks": 4761,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1463,
+          0,
+          273,
+          9621,
+          1448,
+          0,
+          5,
+          2,
+          0,
+          0
+        ],
+        "cpu0": [
+          16,
+          0,
+          17,
+          1567,
+          0,
+          0,
+          2,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          16,
+          0,
+          15,
+          1565,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          8,
+          0,
+          15,
+          1577,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          21,
+          0,
+          26,
+          1548,
+          5,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          13,
+          0,
+          10,
+          1578,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          9,
+          0,
+          13,
+          1578,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          12,
+          0,
+          41,
+          111,
+          1439,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1368,
+          0,
+          135,
+          97,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q1": {
+          "total": 0,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "nvme0q2": {
+          "total": 14720,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            14720
+          ]
+        }
+      },
+      "block_stat_delta": [
+        14720,
+        0,
+        3768320,
+        449505,
+        0,
+        0,
+        0,
+        0,
+        0,
+        15035,
+        449506,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 372258,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 386978,
+        "map_sequence": 8225,
+        "durable_frontier": 8214,
+        "free_blocks": 317388,
+        "victim_blocks": 3
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 14720,
+        "map_sequence": 0,
+        "durable_frontier": 0,
+        "free_blocks": 0,
+        "victim_blocks": 0
+      },
+      "writer_postchecks": null
+    },
+    {
+      "name": "write-qd1-s1",
+      "direction": "write",
+      "requested_qd": 1,
+      "sample": 1,
+      "options": {
+        "name": "write-qd1-s1",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "write",
+        "iodepth": "1",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0xb1",
+        "do_verify": "0"
+      },
+      "validated": true,
+      "io_bytes": 1148190720,
+      "application_ios": 1095,
+      "native_block_ios": 8760,
+      "job_runtime_ms": 15007,
+      "direction_runtime_ms": 15008,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 76505245.20255864,
+      "fio_bw_bytes_per_s_integer": 76505245,
+      "wholejob_bytes_per_s": 76510343.17318584,
+      "clat_mean_ms": 13.278668807306,
+      "clat_p99_ms": 13.697024,
+      "total_lat_mean_ms": 13.703988375342,
+      "slat_mean_ms": 0.425319568037,
+      "fio_usr_cpu_pct": 0.059972,
+      "fio_sys_cpu_pct": 3.118545,
+      "fio_total_cpu_pct": 3.1785170000000003,
+      "fio_context_switches": 1095,
+      "attained_depth_distribution_pct": {
+        "1": 100.0,
+        "2": 0.0,
+        "4": 0.0,
+        "8": 0.0,
+        "16": 0.0,
+        "32": 0.0,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 100.0,
+      "worker_user_cpu_s_snapshot": 13.57,
+      "worker_system_cpu_s_snapshot": 1.34,
+      "worker_cpu_s_snapshot": 14.91,
+      "snapshot_interval_s_estimated": 16.02,
+      "worker_cpu_pct_snapshot_estimated": 93.07116104868915,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 11278,
+        "stime_ticks": 4896,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 12635,
+        "stime_ticks": 5030,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1460,
+          0,
+          267,
+          11054,
+          24,
+          0,
+          9,
+          2,
+          0,
+          0
+        ],
+        "cpu0": [
+          4,
+          0,
+          9,
+          1579,
+          7,
+          0,
+          6,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          2,
+          0,
+          24,
+          1570,
+          5,
+          0,
+          2,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          39,
+          0,
+          29,
+          1528,
+          4,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          4,
+          0,
+          5,
+          1591,
+          7,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          28,
+          0,
+          21,
+          1550,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          12,
+          0,
+          17,
+          1567,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          1,
+          0,
+          50,
+          1556,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1372,
+          0,
+          113,
+          114,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 7,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            7
+          ]
+        },
+        "nvme0q1": {
+          "total": 218,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            218
+          ]
+        },
+        "nvme0q2": {
+          "total": 8806,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            8806
+          ]
+        }
+      },
+      "block_stat_delta": [
+        264,
+        0,
+        7872,
+        222,
+        8760,
+        0,
+        2242560,
+        67186,
+        0,
+        14969,
+        67408,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 419766,
+        "map_sequence": 16417,
+        "durable_frontier": 16406,
+        "free_blocks": 313292,
+        "victim_blocks": 4099
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 454836,
+        "map_sequence": 25177,
+        "durable_frontier": 25166,
+        "free_blocks": 308912,
+        "victim_blocks": 8479
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 35070,
+        "map_sequence": 8760,
+        "durable_frontier": 8760,
+        "free_blocks": -4380,
+        "victim_blocks": 4380
+      },
+      "writer_postchecks": [
+        {
+          "generation": "B",
+          "offset": 8589934592,
+          "bytes": 1073741824,
+          "pattern": "0xb1",
+          "json": "logs/perf12/write-qd1-s1-check-B.json"
+        }
+      ]
+    },
+    {
+      "name": "write-qd1-s2",
+      "direction": "write",
+      "requested_qd": 1,
+      "sample": 2,
+      "options": {
+        "name": "write-qd1-s2",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "write",
+        "iodepth": "1",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0xb2",
+        "do_verify": "0"
+      },
+      "validated": true,
+      "io_bytes": 1148190720,
+      "application_ios": 1095,
+      "native_block_ios": 8760,
+      "job_runtime_ms": 15001,
+      "direction_runtime_ms": 15002,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 76535843.22090387,
+      "fio_bw_bytes_per_s_integer": 76535843,
+      "wholejob_bytes_per_s": 76540945.27031532,
+      "clat_mean_ms": 13.491475090411,
+      "clat_p99_ms": 14.352384,
+      "total_lat_mean_ms": 13.697954371688999,
+      "slat_mean_ms": 0.20647928127899998,
+      "fio_usr_cpu_pct": 0.073328,
+      "fio_sys_cpu_pct": 1.506566,
+      "fio_total_cpu_pct": 1.5798940000000001,
+      "fio_context_switches": 1095,
+      "attained_depth_distribution_pct": {
+        "1": 100.0,
+        "2": 0.0,
+        "4": 0.0,
+        "8": 0.0,
+        "16": 0.0,
+        "32": 0.0,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 100.0,
+      "worker_user_cpu_s_snapshot": 13.61,
+      "worker_system_cpu_s_snapshot": 1.28,
+      "worker_cpu_s_snapshot": 14.889999999999999,
+      "snapshot_interval_s_estimated": 16.01875,
+      "worker_cpu_pct_snapshot_estimated": 92.95357003511509,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 14657,
+        "stime_ticks": 5244,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 16018,
+        "stime_ticks": 5372,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1464,
+          0,
+          270,
+          11004,
+          72,
+          0,
+          3,
+          2,
+          0,
+          0
+        ],
+        "cpu0": [
+          31,
+          0,
+          21,
+          1535,
+          12,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          8,
+          0,
+          29,
+          1556,
+          9,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          7,
+          0,
+          21,
+          1571,
+          4,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          22,
+          0,
+          23,
+          1541,
+          15,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          4,
+          0,
+          18,
+          1566,
+          13,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          7,
+          0,
+          13,
+          1569,
+          12,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          3,
+          0,
+          32,
+          1564,
+          8,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1382,
+          0,
+          115,
+          102,
+          1,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 8,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            8
+          ]
+        },
+        "nvme0q1": {
+          "total": 175,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            175
+          ]
+        },
+        "nvme0q2": {
+          "total": 8849,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            8849
+          ]
+        }
+      },
+      "block_stat_delta": [
+        264,
+        0,
+        7872,
+        242,
+        8760,
+        0,
+        2242560,
+        68187,
+        0,
+        14968,
+        68428,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 495816,
+        "map_sequence": 33369,
+        "durable_frontier": 33358,
+        "free_blocks": 304816,
+        "victim_blocks": 12575
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 530886,
+        "map_sequence": 42129,
+        "durable_frontier": 42118,
+        "free_blocks": 300436,
+        "victim_blocks": 16955
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 35070,
+        "map_sequence": 8760,
+        "durable_frontier": 8760,
+        "free_blocks": -4380,
+        "victim_blocks": 4380
+      },
+      "writer_postchecks": [
+        {
+          "generation": "B",
+          "offset": 8589934592,
+          "bytes": 1073741824,
+          "pattern": "0xb2",
+          "json": "logs/perf12/write-qd1-s2-check-B.json"
+        }
+      ]
+    },
+    {
+      "name": "write-qd1-s3",
+      "direction": "write",
+      "requested_qd": 1,
+      "sample": 3,
+      "options": {
+        "name": "write-qd1-s3",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "write",
+        "iodepth": "1",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0xb3",
+        "do_verify": "0"
+      },
+      "validated": true,
+      "io_bytes": 1135607808,
+      "application_ios": 1083,
+      "native_block_ios": 8664,
+      "job_runtime_ms": 15004,
+      "direction_runtime_ms": 15005,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 75681959.88003999,
+      "fio_bw_bytes_per_s_integer": 75681959,
+      "wholejob_bytes_per_s": 75687003.99893361,
+      "clat_mean_ms": 12.209187809788,
+      "clat_p99_ms": 12.77952,
+      "total_lat_mean_ms": 13.852701206833,
+      "slat_mean_ms": 1.643513397045,
+      "fio_usr_cpu_pct": 0.066649,
+      "fio_sys_cpu_pct": 11.870168,
+      "fio_total_cpu_pct": 11.936817,
+      "fio_context_switches": 1092,
+      "attained_depth_distribution_pct": {
+        "1": 100.0,
+        "2": 0.0,
+        "4": 0.0,
+        "8": 0.0,
+        "16": 0.0,
+        "32": 0.0,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 100.0,
+      "worker_user_cpu_s_snapshot": 13.35,
+      "worker_system_cpu_s_snapshot": 1.41,
+      "worker_cpu_s_snapshot": 14.76,
+      "snapshot_interval_s_estimated": 15.9875,
+      "worker_cpu_pct_snapshot_estimated": 92.32212666145425,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 18489,
+        "stime_ticks": 5637,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 19824,
+        "stime_ticks": 5778,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1628,
+          0,
+          624,
+          10455,
+          63,
+          0,
+          18,
+          2,
+          0,
+          0
+        ],
+        "cpu0": [
+          44,
+          0,
+          86,
+          1431,
+          24,
+          0,
+          5,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          22,
+          0,
+          52,
+          1508,
+          9,
+          0,
+          8,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          62,
+          0,
+          55,
+          1468,
+          0,
+          0,
+          2,
+          1,
+          0,
+          0
+        ],
+        "cpu3": [
+          66,
+          0,
+          54,
+          1463,
+          8,
+          0,
+          2,
+          1,
+          0,
+          0
+        ],
+        "cpu4": [
+          13,
+          0,
+          15,
+          1571,
+          2,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          73,
+          0,
+          48,
+          1459,
+          19,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          2,
+          0,
+          179,
+          1426,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1346,
+          0,
+          135,
+          128,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 7,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            7
+          ]
+        },
+        "nvme0q1": {
+          "total": 126,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            126
+          ]
+        },
+        "nvme0q2": {
+          "total": 8802,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            8802
+          ]
+        }
+      },
+      "block_stat_delta": [
+        264,
+        0,
+        7872,
+        390,
+        8664,
+        0,
+        2217984,
+        63283,
+        0,
+        14982,
+        63672,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 2,
+        "nfc_children": 641779,
+        "map_sequence": 50321,
+        "durable_frontier": 50310,
+        "free_blocks": 296340,
+        "victim_blocks": 21051
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 2,
+        "nfc_children": 676465,
+        "map_sequence": 58985,
+        "durable_frontier": 58974,
+        "free_blocks": 292008,
+        "victim_blocks": 25383
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 34686,
+        "map_sequence": 8664,
+        "durable_frontier": 8664,
+        "free_blocks": -4332,
+        "victim_blocks": 4332
+      },
+      "writer_postchecks": [
+        {
+          "generation": "B",
+          "offset": 8589934592,
+          "bytes": 1073741824,
+          "pattern": "0xb3",
+          "json": "logs/perf12/write-qd1-s3-check-B.json"
+        }
+      ]
+    },
+    {
+      "name": "write-qd32-s1",
+      "direction": "write",
+      "requested_qd": 32,
+      "sample": 1,
+      "options": {
+        "name": "write-qd32-s1",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "write",
+        "iodepth": "32",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0xb4",
+        "do_verify": "0"
+      },
+      "validated": true,
+      "io_bytes": 1172307968,
+      "application_ios": 1118,
+      "native_block_ios": 8944,
+      "job_runtime_ms": 15060,
+      "direction_runtime_ms": 15061,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 77837326.07396588,
+      "fio_bw_bytes_per_s_integer": 77837326,
+      "wholejob_bytes_per_s": 77842494.55511288,
+      "clat_mean_ms": 408.069548206619,
+      "clat_p99_ms": 425.721856,
+      "total_lat_mean_ms": 421.449119679785,
+      "slat_mean_ms": 13.379571473166001,
+      "fio_usr_cpu_pct": 0.132802,
+      "fio_sys_cpu_pct": 1.281541,
+      "fio_total_cpu_pct": 1.4143430000000001,
+      "fio_context_switches": 2967,
+      "attained_depth_distribution_pct": {
+        "1": 0.178891,
+        "2": 0.357782,
+        "4": 0.715564,
+        "8": 1.431127,
+        "16": 2.862254,
+        "32": 94.454383,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 94.454383,
+      "worker_user_cpu_s_snapshot": 13.88,
+      "worker_system_cpu_s_snapshot": 1.26,
+      "worker_cpu_s_snapshot": 15.14,
+      "snapshot_interval_s_estimated": 16.00875,
+      "worker_cpu_pct_snapshot_estimated": 94.5732802373702,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 21847,
+        "stime_ticks": 5993,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 23235,
+        "stime_ticks": 6119,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1449,
+          0,
+          214,
+          9633,
+          1502,
+          0,
+          6,
+          3,
+          0,
+          0
+        ],
+        "cpu0": [
+          8,
+          0,
+          16,
+          1562,
+          10,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          11,
+          0,
+          11,
+          1567,
+          11,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          9,
+          0,
+          19,
+          1567,
+          5,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          4,
+          0,
+          5,
+          1593,
+          2,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          22,
+          0,
+          16,
+          1557,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          1,
+          0,
+          5,
+          1584,
+          9,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          4,
+          0,
+          22,
+          111,
+          1463,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1390,
+          0,
+          118,
+          92,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 7,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            7
+          ]
+        },
+        "nvme0q1": {
+          "total": 218,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            218
+          ]
+        },
+        "nvme0q2": {
+          "total": 8990,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            8990
+          ]
+        }
+      },
+      "block_stat_delta": [
+        264,
+        0,
+        7872,
+        240,
+        8944,
+        0,
+        2289664,
+        450024,
+        0,
+        15092,
+        450264,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 2,
+        "nfc_children": 717445,
+        "map_sequence": 67177,
+        "durable_frontier": 67166,
+        "free_blocks": 287912,
+        "victim_blocks": 29479
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 2,
+        "nfc_children": 753251,
+        "map_sequence": 76121,
+        "durable_frontier": 76110,
+        "free_blocks": 283440,
+        "victim_blocks": 33951
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 35806,
+        "map_sequence": 8944,
+        "durable_frontier": 8944,
+        "free_blocks": -4472,
+        "victim_blocks": 4472
+      },
+      "writer_postchecks": [
+        {
+          "generation": "B",
+          "offset": 8589934592,
+          "bytes": 1073741824,
+          "pattern": "0xb4",
+          "json": "logs/perf12/write-qd32-s1-check-B.json"
+        }
+      ]
+    },
+    {
+      "name": "write-qd32-s2",
+      "direction": "write",
+      "requested_qd": 32,
+      "sample": 2,
+      "options": {
+        "name": "write-qd32-s2",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "write",
+        "iodepth": "32",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0xb5",
+        "do_verify": "0"
+      },
+      "validated": true,
+      "io_bytes": 894435328,
+      "application_ios": 853,
+      "native_block_ios": 6824,
+      "job_runtime_ms": 15053,
+      "direction_runtime_ms": 15054,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 59415127.40799788,
+      "fio_bw_bytes_per_s_integer": 59415127,
+      "wholejob_bytes_per_s": 59419074.47020528,
+      "clat_mean_ms": 540.851682092615,
+      "clat_p99_ms": 4143.972352,
+      "total_lat_mean_ms": 558.439626386869,
+      "slat_mean_ms": 17.587944294256,
+      "fio_usr_cpu_pct": 0.079718,
+      "fio_sys_cpu_pct": 1.368498,
+      "fio_total_cpu_pct": 1.448216,
+      "fio_context_switches": 2268,
+      "attained_depth_distribution_pct": {
+        "1": 0.117233,
+        "2": 0.234467,
+        "4": 0.468933,
+        "8": 0.937866,
+        "16": 1.875733,
+        "32": 96.365768,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 96.365768,
+      "worker_user_cpu_s_snapshot": 13.97,
+      "worker_system_cpu_s_snapshot": 1.16,
+      "worker_cpu_s_snapshot": 15.13,
+      "snapshot_interval_s_estimated": 16.0275,
+      "worker_cpu_pct_snapshot_estimated": 94.40024957104977,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 25272,
+        "stime_ticks": 6307,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 26669,
+        "stime_ticks": 6423,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1460,
+          0,
+          196,
+          9687,
+          1476,
+          0,
+          1,
+          2,
+          0,
+          0
+        ],
+        "cpu0": [
+          9,
+          0,
+          14,
+          1574,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          22,
+          0,
+          16,
+          1559,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          1,
+          0,
+          4,
+          1600,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          1,
+          0,
+          4,
+          1604,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          5,
+          0,
+          13,
+          1582,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          17,
+          0,
+          11,
+          1568,
+          4,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          3,
+          0,
+          24,
+          106,
+          1469,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        "cpu7": [
+          1402,
+          0,
+          111,
+          92,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 5,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            5
+          ]
+        },
+        "nvme0q1": {
+          "total": 89,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            89
+          ]
+        },
+        "nvme0q2": {
+          "total": 6913,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            6913
+          ]
+        }
+      },
+      "block_stat_delta": [
+        178,
+        0,
+        5264,
+        37,
+        6824,
+        0,
+        1746944,
+        454287,
+        0,
+        15087,
+        454324,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 2,
+        "nfc_children": 794231,
+        "map_sequence": 84313,
+        "durable_frontier": 84302,
+        "free_blocks": 279344,
+        "victim_blocks": 38047
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 3,
+        "nfc_children": 891460,
+        "map_sequence": 91137,
+        "durable_frontier": 91126,
+        "free_blocks": 275932,
+        "victim_blocks": 41459
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 1,
+        "nfc_children": 97229,
+        "map_sequence": 6824,
+        "durable_frontier": 6824,
+        "free_blocks": -3412,
+        "victim_blocks": 3412
+      },
+      "writer_postchecks": [
+        {
+          "generation": "B",
+          "offset": 8589934592,
+          "bytes": 894435328,
+          "pattern": "0xb5",
+          "json": "logs/perf12/write-qd32-s2-check-B.json"
+        },
+        {
+          "generation": "A",
+          "offset": 9484369920,
+          "bytes": 179306496,
+          "pattern": "0x3c",
+          "json": "logs/perf12/write-qd32-s2-check-A.json"
+        }
+      ]
+    },
+    {
+      "name": "write-qd32-s3",
+      "direction": "write",
+      "requested_qd": 32,
+      "sample": 3,
+      "options": {
+        "name": "write-qd32-s3",
+        "filename": "/dev/nvme0n1",
+        "ioengine": "libaio",
+        "direct": "1",
+        "numjobs": "1",
+        "bs": "1048576",
+        "verify": "pattern_hdr",
+        "verify_interval": "4096",
+        "verify_fatal": "1",
+        "verify_dump": "0",
+        "cpus_allowed": "6",
+        "allow_file_create": "0",
+        "rw": "write",
+        "iodepth": "32",
+        "offset": "8589934592",
+        "size": "1073741824",
+        "time_based": "1",
+        "runtime": "15s",
+        "ramp_time": "0",
+        "verify_pattern": "0xb6",
+        "do_verify": "0"
+      },
+      "validated": true,
+      "io_bytes": 1199570944,
+      "application_ios": 1144,
+      "native_block_ios": 9152,
+      "job_runtime_ms": 15055,
+      "direction_runtime_ms": 15056,
+      "runner_wall_s_coarse": 16,
+      "direction_bytes_per_s": 79673946.86503719,
+      "fio_bw_bytes_per_s_integer": 79673946,
+      "wholejob_bytes_per_s": 79679239.05679177,
+      "clat_mean_ms": 398.900858239511,
+      "clat_p99_ms": 413.138944,
+      "total_lat_mean_ms": 411.97319634965004,
+      "slat_mean_ms": 13.072338110139999,
+      "fio_usr_cpu_pct": 0.106277,
+      "fio_sys_cpu_pct": 1.348389,
+      "fio_total_cpu_pct": 1.454666,
+      "fio_context_switches": 3033,
+      "attained_depth_distribution_pct": {
+        "1": 0.174825,
+        "2": 0.34965,
+        "4": 0.699301,
+        "8": 1.398601,
+        "16": 2.797203,
+        "32": 94.58042,
+        ">=64": 0.0
+      },
+      "target_depth_pct": 94.58042,
+      "worker_user_cpu_s_snapshot": 13.92,
+      "worker_system_cpu_s_snapshot": 1.21,
+      "worker_cpu_s_snapshot": 15.129999999999999,
+      "snapshot_interval_s_estimated": 16.00875,
+      "worker_cpu_pct_snapshot_estimated": 94.51081439837589,
+      "worker_before": {
+        "pid": 3236,
+        "utime_ticks": 28683,
+        "stime_ticks": 6606,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "worker_after": {
+        "pid": 3236,
+        "utime_ticks": 30075,
+        "stime_ticks": 6727,
+        "threads": 1,
+        "starttime_ticks": 177707,
+        "last_cpu": 7
+      },
+      "cpu_snapshot_delta_ticks": {
+        "cpu": [
+          1450,
+          0,
+          200,
+          9672,
+          1482,
+          0,
+          1,
+          2,
+          0,
+          0
+        ],
+        "cpu0": [
+          13,
+          0,
+          12,
+          1572,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          5,
+          0,
+          12,
+          1571,
+          14,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          9,
+          0,
+          10,
+          1581,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          3,
+          0,
+          7,
+          1591,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu4": [
+          18,
+          0,
+          10,
+          1568,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu5": [
+          7,
+          0,
+          9,
+          1584,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu6": [
+          3,
+          0,
+          22,
+          112,
+          1466,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu7": [
+          1392,
+          0,
+          116,
+          93,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0
+        ]
+      },
+      "irq_delta": {
+        "nvme0q0": {
+          "total": 7,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            7
+          ]
+        },
+        "nvme0q1": {
+          "total": 218,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            218
+          ]
+        },
+        "nvme0q2": {
+          "total": 9198,
+          "per_cpu": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            9198
+          ]
+        }
+      },
+      "block_stat_delta": [
+        264,
+        0,
+        7872,
+        235,
+        9152,
+        0,
+        2342912,
+        449925,
+        0,
+        15093,
+        450159,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "counters_before": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 3,
+        "nfc_children": 932440,
+        "map_sequence": 99329,
+        "durable_frontier": 99318,
+        "free_blocks": 271836,
+        "victim_blocks": 45555
+      },
+      "counters_after": {
+        "epoch": 1,
+        "ready": 1,
+        "quarantined": 0,
+        "fault": 0,
+        "gc": 0,
+        "checkpoints": 3,
+        "nfc_children": 969078,
+        "map_sequence": 108481,
+        "durable_frontier": 108470,
+        "free_blocks": 267260,
+        "victim_blocks": 50131
+      },
+      "counter_delta": {
+        "gc": 0,
+        "checkpoints": 0,
+        "nfc_children": 36638,
+        "map_sequence": 9152,
+        "durable_frontier": 9152,
+        "free_blocks": -4576,
+        "victim_blocks": 4576
+      },
+      "writer_postchecks": [
+        {
+          "generation": "B",
+          "offset": 8589934592,
+          "bytes": 1073741824,
+          "pattern": "0xb6",
+          "json": "logs/perf12/write-qd32-s3-check-B.json"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "timed_read_bytes": 11305746432,
+    "timed_write_bytes": 6698303488,
+    "timed_gc_delta": 0,
+    "timed_checkpoint_delta": 1,
+    "timed_irq_delta": {
+      "nvme0q0": 41,
+      "nvme0q1": 1044,
+      "nvme0q2": 137814
+    }
+  },
+  "input_sha256": {
+    "perf12-evidence/native64-perf12.sh": "ee449a8a9a9c053484d483f95e0884d8de7c7921a4a78c68bccadd2cb5f84605",
+    "native64-perf12.sh": "ee449a8a9a9c053484d483f95e0884d8de7c7921a4a78c68bccadd2cb5f84605",
+    "perf12-evidence/logs/perf12.log": "d767229c98c62202471aefca0b9f39845350e268cd88a7339ba2f5e44a1e7aa8",
+    "perf12-evidence/logs/perf12/clk-tck.txt": "eea8254c7500ba3de996aa8ad6af399183f04e17d4a8102fde539dbc93a90012",
+    "perf12-evidence/logs/perf12/wire-limit-kib.txt": "56292515f7d3a7110811eb8de26b3f75f82a0766aa5a1fd66ebcfcb84fe6d5ff",
+    "perf12-evidence/logs/perf12/id-ns.json": "7567db605a302767a0f03a6bcef8e710d370dacc3074826cad3e921965a455fa",
+    "perf12-evidence/logs/perf12/taint-final.txt": "7687dd6c1e73ead056867ef14ec245f94b529bd40b6ced56bf6da43d89585518",
+    "perf12-evidence/logs/perf12/dmesg-final.log": "8c6cf9835db80d4bc0d32d02c277e5cacdbec68db2bae48893c8055da4a8a1c6",
+    "perf12-evidence/logs/perf12/initial-A.json": "48ee905cd1766b83b1d0a69162beda29bac3b14d16b05696e93e42cf758a83fd",
+    "perf12-evidence/logs/perf12/initial-A.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/read-qd1-s1.json": "4dbd0207bbb6ef1f83c692c3a1da56b18abe19cb92d7e319d74d257ba5993f1d",
+    "perf12-evidence/logs/perf12/read-qd1-s1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/read-qd1-s1-before-counters.log": "2afab261dde407d0eb4e7ad39e12a014c4a83b32d08c8454dbee73adada5a49b",
+    "perf12-evidence/logs/perf12/read-qd1-s1-after-counters.log": "2f802dacec9afc60fbbb91713e17853762d84a3c1245b4cd7327dcf31a6611ee",
+    "perf12-evidence/logs/perf12/read-qd1-s1-before-worker-stat.txt": "3331f4d0eeb12d7404e4934719803cc46fa0f4dd729bb9a7951cb578ab05436d",
+    "perf12-evidence/logs/perf12/read-qd1-s1-after-worker-stat.txt": "4ba216aba96675c8c4a47751bd0443376cc3bda4ec82dc2ff189e641f505b39f",
+    "perf12-evidence/logs/perf12/read-qd1-s1-before-cpu.txt": "03507624b8c09da7e5e6606ba27c3d903c6e645971701b6bff3f38356dfbf91a",
+    "perf12-evidence/logs/perf12/read-qd1-s1-after-cpu.txt": "b0d24091db4d4cba85b31a0969b9a048d4efba0f61d7a912329bb779504f0567",
+    "perf12-evidence/logs/perf12/read-qd1-s1-before-irq.txt": "9d3c7e894047edc179b88086d362e5ecf42905ede093dce0c4c4b18ee29310d0",
+    "perf12-evidence/logs/perf12/read-qd1-s1-after-irq.txt": "5cd3c8fa873686db110341cde03a5fe5c90ac5f0c49c7fc8c6522726f91f64e6",
+    "perf12-evidence/logs/perf12/read-qd1-s1-before-block-stat.txt": "b7682e3adf714b9f67c21bb384023d49dff97ee0b35391aedf06847f7be98c57",
+    "perf12-evidence/logs/perf12/read-qd1-s1-after-block-stat.txt": "b9475b37ac837c3804500e12cf70123f3505aa162594a35039e41417b74f7a49",
+    "perf12-evidence/logs/perf12/read-qd1-s2.json": "07493f6ca64d37a37f4d3f890833bee95cf951fdf0308073812b948b8c8e7d29",
+    "perf12-evidence/logs/perf12/read-qd1-s2.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/read-qd1-s2-before-counters.log": "2f802dacec9afc60fbbb91713e17853762d84a3c1245b4cd7327dcf31a6611ee",
+    "perf12-evidence/logs/perf12/read-qd1-s2-after-counters.log": "134f9e19e57143ce73bb4a8a5de3497f91c193a5ba1f198f09c20d956fc54458",
+    "perf12-evidence/logs/perf12/read-qd1-s2-before-worker-stat.txt": "701ebfb8995a6c3015a927d3ef4bc36a1851b57531bfb2115b80a008f0d0bb02",
+    "perf12-evidence/logs/perf12/read-qd1-s2-after-worker-stat.txt": "c94d54316d8b898a6dc1e8f6db39ce3166ed996c560036082eb1ebe6f66abf17",
+    "perf12-evidence/logs/perf12/read-qd1-s2-before-cpu.txt": "04976aed422f38bf78c5d2682167bd2aab009180b960e93d5d9fe3697090bde7",
+    "perf12-evidence/logs/perf12/read-qd1-s2-after-cpu.txt": "3bd3912a91a349bc19c469e841a1c0684dca18c501a9cd03dd40141f4e1e9b10",
+    "perf12-evidence/logs/perf12/read-qd1-s2-before-irq.txt": "86a7284bfe94a49556c60ca977155139e80486981aa43bc7853b5bff334cb5c1",
+    "perf12-evidence/logs/perf12/read-qd1-s2-after-irq.txt": "b22b20167174a2c26b412950093ec210111831f1d723c68f55c56b62856fda6d",
+    "perf12-evidence/logs/perf12/read-qd1-s2-before-block-stat.txt": "b9475b37ac837c3804500e12cf70123f3505aa162594a35039e41417b74f7a49",
+    "perf12-evidence/logs/perf12/read-qd1-s2-after-block-stat.txt": "4e42505d93c5dd38a5c9b481ceab48ba6ee5eb11d26a6b5688f255d0b56dbed9",
+    "perf12-evidence/logs/perf12/read-qd1-s3.json": "7dfb1ccdc8f4455d797b62d4bfcb49f299d8112e44b361600d0d0ee8a8d136e6",
+    "perf12-evidence/logs/perf12/read-qd1-s3.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/read-qd1-s3-before-counters.log": "134f9e19e57143ce73bb4a8a5de3497f91c193a5ba1f198f09c20d956fc54458",
+    "perf12-evidence/logs/perf12/read-qd1-s3-after-counters.log": "b4c28d11ed8ac948af8a780874b8501490a6f0314463cc209a8fe8a42cf3df8d",
+    "perf12-evidence/logs/perf12/read-qd1-s3-before-worker-stat.txt": "f4826c1de3a2ed526726fe386c30a308217e41920f31f3168b3ae9e7878f63c9",
+    "perf12-evidence/logs/perf12/read-qd1-s3-after-worker-stat.txt": "8488edf4659a5929e789c50199bb8644ea33cc0769384e08209cbb407faa91f1",
+    "perf12-evidence/logs/perf12/read-qd1-s3-before-cpu.txt": "273700b71eae9dd3dba52b80251163e4f9592db48c0c6064df75115f7adfb045",
+    "perf12-evidence/logs/perf12/read-qd1-s3-after-cpu.txt": "e473ab50531ba21b73c5db3bced57494ff22d1640f7076da75a87b9df8764017",
+    "perf12-evidence/logs/perf12/read-qd1-s3-before-irq.txt": "fcbc95d68088811ea09e2be4f08aaecfe0a1e6a8a2dd6f5412601f94e2f17cba",
+    "perf12-evidence/logs/perf12/read-qd1-s3-after-irq.txt": "8c7a5bab9d4cf3edafd5db06527a241a53eaf6df23f78026c8edd81aebbda8c0",
+    "perf12-evidence/logs/perf12/read-qd1-s3-before-block-stat.txt": "4e42505d93c5dd38a5c9b481ceab48ba6ee5eb11d26a6b5688f255d0b56dbed9",
+    "perf12-evidence/logs/perf12/read-qd1-s3-after-block-stat.txt": "837cbfd786f37992b92f402f851ffdd388dad32cbd3071b925cfe7d0dddc753a",
+    "perf12-evidence/logs/perf12/read-qd32-s1.json": "3e9c17a6b8eeed8a7295e2a5a4ff0afb5baebbb70a28c75c4139e963dd2ad302",
+    "perf12-evidence/logs/perf12/read-qd32-s1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/read-qd32-s1-before-counters.log": "0340210d0f16aa12c908ed1d718053c1aef918b43777645308fcf42074ee0bab",
+    "perf12-evidence/logs/perf12/read-qd32-s1-after-counters.log": "c0319b6e4af53aafa5848b82c1deafe0a977227b9b3f90f8bbd541218c71ef30",
+    "perf12-evidence/logs/perf12/read-qd32-s1-before-worker-stat.txt": "b38fefec0a1017170be42c9b818a2fe3f0927755d7396d6e8180f489c8db575d",
+    "perf12-evidence/logs/perf12/read-qd32-s1-after-worker-stat.txt": "f65c70137cea676114936da441c5d0dbf7b3bdb3e9bb8d89fa6bc8959de1ac9b",
+    "perf12-evidence/logs/perf12/read-qd32-s1-before-cpu.txt": "0b85bb59f204ff6b0fa67455df265daf0e5f36c76c852d55ee48f303b7eb3432",
+    "perf12-evidence/logs/perf12/read-qd32-s1-after-cpu.txt": "5be3c6ccc080ae5e40207b9e11738934a6e085f30694c43c20d4a7a96be072dc",
+    "perf12-evidence/logs/perf12/read-qd32-s1-before-irq.txt": "f523e86edba6e3fc68722da5654bb1d7168fcfd0941671de0eb1e6552aec2ff4",
+    "perf12-evidence/logs/perf12/read-qd32-s1-after-irq.txt": "a9d23e9366efdf40fec7c90ad68c3256887290fa73df467e2d0bedae0aae4e0c",
+    "perf12-evidence/logs/perf12/read-qd32-s1-before-block-stat.txt": "837cbfd786f37992b92f402f851ffdd388dad32cbd3071b925cfe7d0dddc753a",
+    "perf12-evidence/logs/perf12/read-qd32-s1-after-block-stat.txt": "a0ac0f5821df7b4cddb1daffe208bb0c3f8d37f02edecc97821a47bd8e28cbb7",
+    "perf12-evidence/logs/perf12/read-qd32-s2.json": "db8df71da3a1994801f3a08cdd214c88ac661aa74337276f4264bab776b4c37c",
+    "perf12-evidence/logs/perf12/read-qd32-s2.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/read-qd32-s2-before-counters.log": "52bf63d3e53821ec5d858489a73b4462c6f4ad0edc24ee29cb47176b0989fdbc",
+    "perf12-evidence/logs/perf12/read-qd32-s2-after-counters.log": "db2de3a52e8b66ad54f00028650fe7a9b95b8635f8e44b0dbba81c1e63bc58b9",
+    "perf12-evidence/logs/perf12/read-qd32-s2-before-worker-stat.txt": "82e64a53168d4f2df7ebd4758b868151de332b2f77c382b82f8441624bb5bd76",
+    "perf12-evidence/logs/perf12/read-qd32-s2-after-worker-stat.txt": "0059097435c8369378beed4126fe26fdf8f12a2d49f5ab16786b4cd414887eb2",
+    "perf12-evidence/logs/perf12/read-qd32-s2-before-cpu.txt": "5f9e8a5f31d054b3198b20c229a9371abcd92d59afc5389a9b5258d28f033162",
+    "perf12-evidence/logs/perf12/read-qd32-s2-after-cpu.txt": "cd9a7bff842d9ff57b5f4cd475ffe07e7bb065d02cc198160d0d1c3880ebc690",
+    "perf12-evidence/logs/perf12/read-qd32-s2-before-irq.txt": "d2af7c5998c493b37bee994554ffb398b89aa99f0568e55f7dbc97b1a2dd8431",
+    "perf12-evidence/logs/perf12/read-qd32-s2-after-irq.txt": "61b97c041de370c30e68d731c0dc089acbacc59788241c0a950d524a7f125e58",
+    "perf12-evidence/logs/perf12/read-qd32-s2-before-block-stat.txt": "a0ac0f5821df7b4cddb1daffe208bb0c3f8d37f02edecc97821a47bd8e28cbb7",
+    "perf12-evidence/logs/perf12/read-qd32-s2-after-block-stat.txt": "c4ffd327146ad6a6b3c4c37e818ef7891ea19ad2639e363569e07483db8236e6",
+    "perf12-evidence/logs/perf12/read-qd32-s3.json": "3520ae28c9686b48fca5bf677ee4f5798ebf7a1054c5f0b64dcd925095ff3f8e",
+    "perf12-evidence/logs/perf12/read-qd32-s3.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/read-qd32-s3-before-counters.log": "db7822f651ffa040f569ed87bcc30d21ef701a1c481ebf9eb124ce4136476418",
+    "perf12-evidence/logs/perf12/read-qd32-s3-after-counters.log": "42cbce5415cc9a4410a58da4e114aec8e687b74b9ce41b6a3a8283b9d729b034",
+    "perf12-evidence/logs/perf12/read-qd32-s3-before-worker-stat.txt": "31deae8915dee943a299a9c63dc3914bbdf4a340ed0ce4516736dda8ec93b66f",
+    "perf12-evidence/logs/perf12/read-qd32-s3-after-worker-stat.txt": "8e63f2405e63480e5d8254fa8678738a4906ef0778c7ae163c310716d299d6df",
+    "perf12-evidence/logs/perf12/read-qd32-s3-before-cpu.txt": "bddfd4614700f9c4636d49ba03fda45703fbf883d819d998ac9266c3aab8f63b",
+    "perf12-evidence/logs/perf12/read-qd32-s3-after-cpu.txt": "1622f953fd69f35015189b166116a6bcbef765fd7b5e7e4ee44df9a22f46daac",
+    "perf12-evidence/logs/perf12/read-qd32-s3-before-irq.txt": "70b2239a837e2bcecb53377a85991d8e67a77a75f17b1a86c60016c643e93b76",
+    "perf12-evidence/logs/perf12/read-qd32-s3-after-irq.txt": "ddb050ac9675d6f0ba876bef9e0b583c8b4dc0ee38334873e4a8344ca06f4767",
+    "perf12-evidence/logs/perf12/read-qd32-s3-before-block-stat.txt": "c4ffd327146ad6a6b3c4c37e818ef7891ea19ad2639e363569e07483db8236e6",
+    "perf12-evidence/logs/perf12/read-qd32-s3-after-block-stat.txt": "e4e8678884a69c99f41f996be6111ece52716aece800891e9ad4cfa694ae732d",
+    "perf12-evidence/logs/perf12/write-qd1-s1.json": "faaf519398308804bc5309115360d9304057268e20e56d4661080022979a874f",
+    "perf12-evidence/logs/perf12/write-qd1-s1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd1-s1-prefill-A.json": "bec7a82fdc9e35b84fa053985f0a42079bbb833858f1427899022e16a8843505",
+    "perf12-evidence/logs/perf12/write-qd1-s1-prefill-A.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd1-s1-before-counters.log": "826336b45cb3ef89e02264a9605e850123a1beef0d641b99dbe833fce007a759",
+    "perf12-evidence/logs/perf12/write-qd1-s1-after-counters.log": "7785c996f0d44855b572da43124ee8d2276009222b4ba86621f2f81a796f9e43",
+    "perf12-evidence/logs/perf12/write-qd1-s1-before-worker-stat.txt": "5700fd19a91f458ee6d8125db383dfd4450025d6029294b2475453e0a952585d",
+    "perf12-evidence/logs/perf12/write-qd1-s1-after-worker-stat.txt": "f6eb1c1dc2e04c0ed9a5d0d57af154e92b8b45a36e92acb390c7befc53743381",
+    "perf12-evidence/logs/perf12/write-qd1-s1-before-cpu.txt": "ff22ee3b770f3c1d920ec61fdad5dd1e8d9cda8c1d3ad015e32134620f6d115e",
+    "perf12-evidence/logs/perf12/write-qd1-s1-after-cpu.txt": "1ea78425149ec9a5bbecb48e2cc8cc9f4952f45af1873f517a302316abdd02d0",
+    "perf12-evidence/logs/perf12/write-qd1-s1-before-irq.txt": "60a329abba43bfabafd7a24f2b5e09e6a8ac1b42d9263c4c24bd98e14bad2557",
+    "perf12-evidence/logs/perf12/write-qd1-s1-after-irq.txt": "6fd6ad6ad369a9c704547008ac8b793a2e9eb6db9d9f305334d220b5c20a0f24",
+    "perf12-evidence/logs/perf12/write-qd1-s1-before-block-stat.txt": "6300771a35b80d16c1f9f55f7456ad24b821a894f4ae28bb2e1426eb6462f0d2",
+    "perf12-evidence/logs/perf12/write-qd1-s1-after-block-stat.txt": "e184eeb79d033e9bcddc055044c801ed3864f5b09bb425353df661fad3f74254",
+    "perf12-evidence/logs/perf12/write-qd1-s1-check-B.json": "cac59b55fc161d4b04289c666effd09cc8d4c37dccc92d2adee13f43a479f675",
+    "perf12-evidence/logs/perf12/write-qd1-s1-check-B.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd1-s2.json": "8df6e4bdbbb0a744ad17da9427be7982912a9baa7f6402a78e7ca354ab09bc2a",
+    "perf12-evidence/logs/perf12/write-qd1-s2.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd1-s2-prefill-A.json": "00f0f01b52fe438a06e743efec893b81bc391a9f1ebfe96c7a223d605762689a",
+    "perf12-evidence/logs/perf12/write-qd1-s2-prefill-A.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd1-s2-before-counters.log": "26b18bd0e7f0254c7af73dbdcdac29921841d3a01e14cb36b85fe8cc7dfe310b",
+    "perf12-evidence/logs/perf12/write-qd1-s2-after-counters.log": "a4fb82e525909bb2fe95412225b39cd9afd8399f1d5d0d9127be2173d7c51471",
+    "perf12-evidence/logs/perf12/write-qd1-s2-before-worker-stat.txt": "956d5fd98a09c46690a63f521378fbd077f6d51ee395b5b50a4905bdb4d5eb43",
+    "perf12-evidence/logs/perf12/write-qd1-s2-after-worker-stat.txt": "a9f6b152e45776561186b1ca75e78fc8c2e63b0c2815534f15016b07598a547f",
+    "perf12-evidence/logs/perf12/write-qd1-s2-before-cpu.txt": "da0da4f8bcf4f186269a2de93f3d3e1ae3eaee75db3bc5eb1f3b52859a931fbb",
+    "perf12-evidence/logs/perf12/write-qd1-s2-after-cpu.txt": "c2f6a36d83e0df559d23a8e90970d7f3037770ca52a8bf4010e55716410961cc",
+    "perf12-evidence/logs/perf12/write-qd1-s2-before-irq.txt": "573675e8f49cecec6c2737ba8f605cf44288aa06bb4bbe7f29a3c1b94fef1ce9",
+    "perf12-evidence/logs/perf12/write-qd1-s2-after-irq.txt": "685cd0ccea4822340b177f241d8902a2a15b39dc5ace919294c5dc265075e837",
+    "perf12-evidence/logs/perf12/write-qd1-s2-before-block-stat.txt": "9f8d88e69bb2d28ac789a0ff5d20be42a1c586c7610dcbf8c5dbf7751372e651",
+    "perf12-evidence/logs/perf12/write-qd1-s2-after-block-stat.txt": "85fd4fca2696c04505547c96789ceb283758fb7f5e47ab190f76c3618ca1e624",
+    "perf12-evidence/logs/perf12/write-qd1-s2-check-B.json": "55892c7afca510664d33a6e94d5857248c98f095dfb6c87433f071331236cbc5",
+    "perf12-evidence/logs/perf12/write-qd1-s2-check-B.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd1-s3.json": "54641d188cc8c2e9a3ac65f4c57f1a117c8d3ab732450591d7cef3d4ed0d3d44",
+    "perf12-evidence/logs/perf12/write-qd1-s3.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd1-s3-prefill-A.json": "78b9438645831ad61e620010ab9298edef94d455efa27a708656d873466a8f92",
+    "perf12-evidence/logs/perf12/write-qd1-s3-prefill-A.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd1-s3-before-counters.log": "31276b9b11dd01143722e19b95548163a7fd41df034e0afe6a2c88959b224711",
+    "perf12-evidence/logs/perf12/write-qd1-s3-after-counters.log": "498c26848cc319f916206a3024713660f0c7aaf9749f98dbe679948fcd3b488a",
+    "perf12-evidence/logs/perf12/write-qd1-s3-before-worker-stat.txt": "aeaf0da55abb305a57d69dc9044ab10fc9338d2ef023a9ff493decde57077127",
+    "perf12-evidence/logs/perf12/write-qd1-s3-after-worker-stat.txt": "bf622f307848cbcb8c1c2717d03b877f84230e52ecae2b0f9ce5699b574e2bf2",
+    "perf12-evidence/logs/perf12/write-qd1-s3-before-cpu.txt": "c9b64602d62cbf4a40302ef3e44a2141c42d35a0d90da38920cdd5dd62504478",
+    "perf12-evidence/logs/perf12/write-qd1-s3-after-cpu.txt": "62d40e3d5825f5913020bc43c67c5d415431311ce7ab8b9b528a176f97506692",
+    "perf12-evidence/logs/perf12/write-qd1-s3-before-irq.txt": "34be5a2e75d0a813c7bbf8c3486cd8d174877a8f440b528ff9425ad4e267726b",
+    "perf12-evidence/logs/perf12/write-qd1-s3-after-irq.txt": "3f569d6b56698a1a75a70333dfaa9abb00560efc81ed0fa7b7963030f4733d7b",
+    "perf12-evidence/logs/perf12/write-qd1-s3-before-block-stat.txt": "bd80fd2db5b2fcb0f7e24881b7cad147133e126c352829cb4d1a43b94524bac8",
+    "perf12-evidence/logs/perf12/write-qd1-s3-after-block-stat.txt": "5b8ef511d6cfb49c12add8069903f585ae5e97075c7e92070bd37ba58ad01a96",
+    "perf12-evidence/logs/perf12/write-qd1-s3-check-B.json": "6550bd761fd390296ab821d06502c6f03b0d84cf2c71e7aa23d2810286787fc7",
+    "perf12-evidence/logs/perf12/write-qd1-s3-check-B.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s1.json": "0db6107a2c7962c9d926db2880b4eb7ccdb39089cbc442ad8912659bb09126c7",
+    "perf12-evidence/logs/perf12/write-qd32-s1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s1-prefill-A.json": "1c1abe44b8962961ce49dfe8187cad22daed87267174e748562936dddf90a4cf",
+    "perf12-evidence/logs/perf12/write-qd32-s1-prefill-A.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s1-before-counters.log": "2205ccb6cc9f08d3194349358ff7d5045a87905ec7e2a1a90e1211713208efcc",
+    "perf12-evidence/logs/perf12/write-qd32-s1-after-counters.log": "aa4ffb7c8e6918bcd9afa95f133dcf57d09f577b21e33fe83b7b292cbb4b1d1a",
+    "perf12-evidence/logs/perf12/write-qd32-s1-before-worker-stat.txt": "6f9696a3f7b70eafa7976cccb473ba3b3915b9d2e33d2b104d13b232db89c554",
+    "perf12-evidence/logs/perf12/write-qd32-s1-after-worker-stat.txt": "19c8bbe798e88cacbd768fb34d855bf29249d6a8e0f7758a1148afce13e0dddf",
+    "perf12-evidence/logs/perf12/write-qd32-s1-before-cpu.txt": "a2ef50b9279cef77b60e65a2692af4d72e9dfcc22b7f75b6db913d76052f0c15",
+    "perf12-evidence/logs/perf12/write-qd32-s1-after-cpu.txt": "38a0b9813fa6cd01914826b4e9e5dd388e5f7f7940bcc952a41e4ecc20ee4bde",
+    "perf12-evidence/logs/perf12/write-qd32-s1-before-irq.txt": "e2c48571417b292a979e0532069a216899ac6ce3013660091b5a2983c4848e3a",
+    "perf12-evidence/logs/perf12/write-qd32-s1-after-irq.txt": "af93a21ebb08726a2b9e37967fab4f2d0e87203d6a5a30c7da39f6c1f63166eb",
+    "perf12-evidence/logs/perf12/write-qd32-s1-before-block-stat.txt": "24ef43f08ef6bfc32af7351b642c387ee36c6a43002ea97946774df1f065009d",
+    "perf12-evidence/logs/perf12/write-qd32-s1-after-block-stat.txt": "62582576010f5d0a814405e833f266c6a9ed14297f7015a5d55ca1b4a6c5c787",
+    "perf12-evidence/logs/perf12/write-qd32-s1-check-B.json": "9667b5787cd6bb79aa9badf8754819dec2801d71b21673e6a83b122e81fec0ca",
+    "perf12-evidence/logs/perf12/write-qd32-s1-check-B.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s2.json": "0ee03ede60a1063605fc05ece389559b2d73dd821bed364b7826c13b49bd7f89",
+    "perf12-evidence/logs/perf12/write-qd32-s2.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s2-prefill-A.json": "4224bacf5ae5ebcad6ae0bed9d38687aa9c0ba9f55a10de8a169adc68a20d51f",
+    "perf12-evidence/logs/perf12/write-qd32-s2-prefill-A.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s2-before-counters.log": "7ed5036e7eb3e1d6a44bd3823731bf2f503e591d5119d69549dec24ef560e20c",
+    "perf12-evidence/logs/perf12/write-qd32-s2-after-counters.log": "377f3d2cfe9f8e0e1d479ddb15b90133944b4f08d3d523bc5b033745e48b4d09",
+    "perf12-evidence/logs/perf12/write-qd32-s2-before-worker-stat.txt": "96c27a74e5bf571c845da7c29b152aafb482c0e9b669c53e49a472f73e73ea82",
+    "perf12-evidence/logs/perf12/write-qd32-s2-after-worker-stat.txt": "bfd5b251e0be75973924982cd462257f0b77c8bb0671ef8f31392e4fcbf4aab7",
+    "perf12-evidence/logs/perf12/write-qd32-s2-before-cpu.txt": "9852260a1135f72a61c80f288d6ce339f18ee8a8ee823551c9f3fa0881ce84c8",
+    "perf12-evidence/logs/perf12/write-qd32-s2-after-cpu.txt": "b37316913935b4c92bd7c13cdb81ae2acbce4bab17efa2fb7dffc66df264140c",
+    "perf12-evidence/logs/perf12/write-qd32-s2-before-irq.txt": "4dc0f5fdbadba448d34c61f99e54535277d281ee7879af65267356a73e339815",
+    "perf12-evidence/logs/perf12/write-qd32-s2-after-irq.txt": "3843326a95c433b1cca8eb9c449d075a3195e266e09b70268aef875e5fc7848b",
+    "perf12-evidence/logs/perf12/write-qd32-s2-before-block-stat.txt": "2976d03aed9f9ca2cf7440e0fe1ffb17f1b6f12865db099daed90e7f02cca913",
+    "perf12-evidence/logs/perf12/write-qd32-s2-after-block-stat.txt": "b70e569261acf63b3c0c47e30cd00c73b3a13fac1c363b7acba16ce6a7c73ee2",
+    "perf12-evidence/logs/perf12/write-qd32-s2-check-B.json": "80b5e55679278d235fc26c79ba89e2860d952fbbf8062c675f6c950900ef6ac0",
+    "perf12-evidence/logs/perf12/write-qd32-s2-check-B.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s2-check-A.json": "8d4f3379844cb007907b1b209f69888124b2c7ad6e6280fe0b1c48756a90bf80",
+    "perf12-evidence/logs/perf12/write-qd32-s2-check-A.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s3.json": "56d885d85f6277abdeb5ea9337b414b98966c85614270c2045b9667593f0e6c4",
+    "perf12-evidence/logs/perf12/write-qd32-s3.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s3-prefill-A.json": "f3cf2f6ab5818735b1c8cec6532029880c061d3025bff35ee94349441c9d6ae8",
+    "perf12-evidence/logs/perf12/write-qd32-s3-prefill-A.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "perf12-evidence/logs/perf12/write-qd32-s3-before-counters.log": "345e9e7399f0f96b5e28bfc5ad71054296e82487c15026e0969d316b81cbc0bf",
+    "perf12-evidence/logs/perf12/write-qd32-s3-after-counters.log": "920d4731a77adffe5c00c8f168fc38eface7a0172c74a9e1baf99d70c0a06b30",
+    "perf12-evidence/logs/perf12/write-qd32-s3-before-worker-stat.txt": "7a614dbb21ce5039d7ee4cc692bdc4c218c9cc4ddf2166109173ab934ff20f5d",
+    "perf12-evidence/logs/perf12/write-qd32-s3-after-worker-stat.txt": "cd32793735eb9755cdc98d56de0e0217b9774f4c4a59859435e35ddf3afb7c90",
+    "perf12-evidence/logs/perf12/write-qd32-s3-before-cpu.txt": "92168c0394bfacafe1b481b623c31f3dd4b8125b75037d323d72ce698cbe5334",
+    "perf12-evidence/logs/perf12/write-qd32-s3-after-cpu.txt": "b065c813e6cd5f37473f192e14f64e262d3606a97dbda1649b99dec378674790",
+    "perf12-evidence/logs/perf12/write-qd32-s3-before-irq.txt": "3ffe412119d3c750e922ee1011fd1618b86a4c10de5c9ae79721ecb63e4b1cf7",
+    "perf12-evidence/logs/perf12/write-qd32-s3-after-irq.txt": "e0559375f0353349691482566923eea03bd5b2ef5dc958de422d2575ac577241",
+    "perf12-evidence/logs/perf12/write-qd32-s3-before-block-stat.txt": "f51258d242fe503eec4380a5712691a7a552f709175e023c555326f53d43d1c3",
+    "perf12-evidence/logs/perf12/write-qd32-s3-after-block-stat.txt": "3d25be979c3aa6eb197c312cac068941e5b1eca3dfc927eabb85f75cf21cfaab",
+    "perf12-evidence/logs/perf12/write-qd32-s3-check-B.json": "037ca35fbce982b7882cdff2be5c1a582d774bdd1ae37995a5c5cf679850b2ee",
+    "perf12-evidence/logs/perf12/write-qd32-s3-check-B.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

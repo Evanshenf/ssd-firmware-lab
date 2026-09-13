@@ -1,0 +1,47 @@
+// SPDX-FileCopyrightText: 2026 Evanshenf
+// SPDX-License-Identifier: BSD-3-Clause
+{
+  "nsze":134217728,
+  "ncap":134217728,
+  "nuse":134217728,
+  "nsfeat":0,
+  "nlbaf":0,
+  "flbas":0,
+  "mc":0,
+  "dpc":0,
+  "dps":0,
+  "nmic":0,
+  "rescap":0,
+  "fpi":0,
+  "dlfeat":0,
+  "nawun":0,
+  "nawupf":0,
+  "nacwu":0,
+  "nabsn":0,
+  "nabo":0,
+  "nabspf":0,
+  "noiob":0,
+  "nvmcap":0,
+  "mssrl":0,
+  "mcl":0,
+  "msrc":0,
+  "kpios":0,
+  "nulbaf":0,
+  "kpiodaag":0,
+  "anagrpid":0,
+  "nsattr":0,
+  "nvmsetid":0,
+  "endgid":0,
+  "nguid":"00000000000000000000000000000000",
+  "eui64":"0000000000000000",
+  "lbafs":[
+    {
+      "lbaf":0,
+      "ms":0,
+      "ds":9,
+      "rp":0,
+      "in_use":1
+    }
+  ],
+  "vs":[]
+}
