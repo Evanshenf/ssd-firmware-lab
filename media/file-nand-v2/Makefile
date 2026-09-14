@@ -28,6 +28,7 @@ TEST := $(BUILD_DIR)/physical_nand_test
 OPERATION_TEST := $(BUILD_DIR)/posix_operation_test
 NFC_LAB_TEST := $(BUILD_DIR)/nfc_lab_media_test
 NFC_MUTATION_TEST := $(BUILD_DIR)/nfc_lab_mutation_media_test
+CHANNEL_VOLUME_TEST := $(BUILD_DIR)/channel_volume_test
 FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
 export FWLAB_TEST_MEDIA_DIR
 SOURCES := physical_nand.c physical_nand_codec.c physical_nand_batch.c tests/test_physical_nand.c
@@ -38,6 +39,8 @@ NFC_LAB_SOURCES := physical_nand.c physical_nand_codec.c physical_nand_batch.c \
 	../../core/nfc-page-v2/nfc_page_v2_lab.c ../../frontends/headless-scale/test_nfc_lab_media.c
 NFC_MUTATION_SOURCES := $(filter-out ../../frontends/headless-scale/test_nfc_lab_media.c,$(NFC_LAB_SOURCES)) \
 	../../frontends/headless-scale/test_nfc_lab_mutation_media.c
+CHANNEL_VOLUME_SOURCES := physical_nand.c physical_nand_codec.c physical_nand_batch.c \
+	physical_nand_posix.c channel_volume.c ../../frontends/headless-scale/test_channel_volume.c
 HEADERS := physical_nand.h physical_nand_internal.h physical_nand_codec.h physical_nand_batch.h \
 	../../include/fwlab/private/nand_batch_v2.h \
 	../../include/fwlab/contracts/nand_media.h \
@@ -46,6 +49,7 @@ HEADERS := physical_nand.h physical_nand_internal.h physical_nand_codec.h physic
 
 .PHONY: all check check-operation check-mapped check-nfc-lab FORCE_MEDIA_CONFIG
 .PHONY: check-nfc-mutation
+.PHONY: check-channel-volume
 all: $(TEST)
 
 FORCE_MEDIA_CONFIG:
@@ -104,3 +108,12 @@ $(NFC_MUTATION_TEST): $(NFC_MUTATION_SOURCES) $(HEADERS) Makefile $(MEDIA_CONFIG
 
 check-nfc-mutation: $(NFC_MUTATION_TEST)
 	"$(NFC_MUTATION_TEST)"
+
+$(CHANNEL_VOLUME_TEST): $(CHANNEL_VOLUME_SOURCES) $(HEADERS) Makefile $(MEDIA_CONFIG) \
+	channel_volume.h ../../include/fwlab/private/nand_channel_v2.h
+	mkdir -p "$(BUILD_DIR)"
+	$(CC) -I../../include -I. $(CPPFLAGS) $(CFLAGS) $(CHANNEL_VOLUME_SOURCES) \
+		-Wl,--wrap=linkat $(LDFLAGS) $(LDLIBS) -o "$@"
+
+check-channel-volume: $(CHANNEL_VOLUME_TEST)
+	"$(CHANNEL_VOLUME_TEST)"
