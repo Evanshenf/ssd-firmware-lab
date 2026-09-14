@@ -14,6 +14,24 @@
 #ifndef MH_MEDIA_PREFIX
 #define MH_MEDIA_PREFIX "fwlab-d213-parent"
 #endif
+#ifndef MH_LUNS
+#define MH_LUNS 2u
+#endif
+#ifndef MH_PLANES
+#define MH_PLANES 1u
+#endif
+#ifndef MH_BLOCKS
+#define MH_BLOCKS 8u
+#endif
+#ifndef MH_FTL_ARENA_SIZE
+#define MH_FTL_ARENA_SIZE fwlab_ftl_scale_multihead_v3_arena_size
+#endif
+#ifndef MH_FTL_INIT
+#define MH_FTL_INIT fwlab_ftl_scale_init_multihead_v3
+#endif
+#ifndef MH_HUB_INIT
+#define MH_HUB_INIT fwlab_nfc_channel_v2_init
+#endif
 
 struct mh_run {
     struct fwlab_nfc_operation_token token;
@@ -217,8 +235,8 @@ static struct mh_fixture *mh_create(unsigned credits)
     m->config.version = FWLAB_NAND_CHANNEL_VOLUME_VERSION; m->config.size = sizeof(m->config);
     m->config.geometry = (struct fwlab_nfc_geometry){
         .version = FWLAB_NFC_CONTRACT_VERSION, .size = sizeof(struct fwlab_nfc_geometry),
-        .channels = 4, .luns_per_channel = 2, .planes_per_lun = 1, .blocks_per_plane = 8,
-        .pages_per_block = 64, .plane_parallelism_per_lun = 1, .main_bytes_per_page = 4096,
+        .channels = 4, .luns_per_channel = MH_LUNS, .planes_per_lun = MH_PLANES, .blocks_per_plane = MH_BLOCKS,
+        .pages_per_block = 64, .plane_parallelism_per_lun = MH_PLANES, .main_bytes_per_page = 4096,
         .oob_bytes_per_page = 128, .max_programs_per_erase = 1, .program_order = FWLAB_NFC_PROGRAM_ASCENDING
     };
     memcpy(m->config.media_uuid, "D213-PARENT-001", 16);
@@ -243,7 +261,8 @@ static struct mh_fixture *mh_create(unsigned credits)
     f->buffer.bytes = f->buffer.allocation + GUARD_BYTES;
     memset(f->buffer.allocation, 0xa5, GUARD_BYTES); memset(f->buffer.bytes + BUFFER_BYTES, 0x5a, GUARD_BYTES);
     f->use_media_v2 = f->window_v2 = 1; m->credit.limit = credits;
-    printf("MULTIHEAD_PARENT_BEGIN|namespace_bytes=1048576|main_bytes=16777216|physical_image_bytes=%llu|DATA_credits=%u|directory=%s|no_disk_fallback=1\n",
+    printf("MULTIHEAD_PARENT_BEGIN|namespace_bytes=1048576|main_bytes=%llu|physical_image_bytes=%llu|DATA_credits=%u|directory=%s|no_disk_fallback=1\n",
+        (unsigned long long)((uint64_t)4 * MH_LUNS * MH_PLANES * MH_BLOCKS * 64 * 4096),
         (unsigned long long)bytes, credits, f->directory);
     fflush(stdout); return m;
 }
@@ -283,21 +302,21 @@ static void mh_open(struct mh_fixture *m, bool format)
     read->base.controller_epoch = read->base.generation = 1;
     read->command_ns = 1000; read->array_read_ns = 10000; read->channel_bytes_per_second = UINT64_C(1000000000);
     read->virtual_ns_limit = UINT64_C(10000000000);
-    for (i = 0; i < 8; ++i) {
-        read->lun[i].target = read->lun[i].ce = (uint16_t)(i % 2);
-        read->lun[i].package = (uint16_t)(i / 2); read->lun[i].die = (uint16_t)i;
+    for (i = 0; i < 4 * MH_LUNS; ++i) {
+        read->lun[i].target = read->lun[i].ce = (uint16_t)(i % MH_LUNS);
+        read->lun[i].package = (uint16_t)(i / MH_LUNS); read->lun[i].die = (uint16_t)i;
     }
     timing.program_confirm_ns = timing.erase_command_ns = timing.status_command_ns = 1000;
     timing.array_program_ns = 100000; timing.array_erase_ns = 1000000; timing.status_response_bytes = 1;
-    fb = fwlab_ftl_scale_multihead_v3_arena_size(&config);
+    fb = MH_FTL_ARENA_SIZE(&config);
     CHECK(fb + hb + vb + BUFFER_BYTES < 16u * 1024u * 1024u);
     f->ftl_arena = mh_arena(fwlab_ftl_scale_arena_alignment(), fb);
     f->nfc_arena = mh_arena(fwlab_nfc_channel_v2_arena_alignment(), hb);
-    CHECK(fwlab_nfc_channel_v2_init(f->nfc_arena, hb, &timing, &m->assembly, &m->hub) == FWLAB_NFC_API_OK);
+    CHECK(MH_HUB_INIT(f->nfc_arena, hb, &timing, &m->assembly, &m->hub) == FWLAB_NFC_API_OK);
     memset(&m->credit, 0, sizeof(m->credit)); m->credit.limit = credit_limit;
     m->credit.actual = fwlab_nfc_channel_v2_provider(m->hub); m->credit.hub = m->hub;
     m->credit.observation = &m->observation; m->credit.geometry = m->config.geometry;
-    CHECK(fwlab_ftl_scale_init_multihead_v3(f->ftl_arena, fb, &config, &buffer, &provider, &f->ftl) == FWLAB_SPINE_V0_OK);
+    CHECK(MH_FTL_INIT(f->ftl_arena, fb, &config, &buffer, &provider, &f->ftl) == FWLAB_SPINE_V0_OK);
     CHECK(f->ftl->disk_format == 3 && f->ftl->writes && f->ftl->heads.count == 4);
     f->block = fwlab_ftl_scale_block_service(f->ftl); mh_current = m;
     CHECK((format ? fwlab_ftl_scale_format_start(f->ftl, MH_LBAS) :
