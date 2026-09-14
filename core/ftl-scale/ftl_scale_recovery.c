@@ -40,6 +40,7 @@ static void reset_resident(struct fwlab_ftl_scale *f)
         f->blocks[i].victim_heap_pos = SF_HEAP_NONE;
     }
     f->free_count = 0; f->victim_count = 0; f->host_head = SF_NONE;
+    (void)sf_heads_init(f); /* Geometry/physical counts were validated at construction. */
     f->erase_intent_sequence = 0; f->erase_intent_block = SF_NONE;
 }
 
@@ -185,7 +186,7 @@ enum fwlab_spine_result_v0 sf_journal_start(struct fwlab_ftl_scale *f, const str
     /* Closing Host admission does not revoke an already owned internal
      * transaction's ability to commit/drain before the NFC close starts. */
     if (!f || f->magic != SF_MAGIC || !f->initialized || f->quarantined ||
-        !f->ready || sf_meta_busy(f) || !sf_io_idle(f) || f->nfc_close_started ||
+        !f->ready || sf_meta_busy(f) || !sf_control_io_available(f) || f->nfc_close_started ||
         (f->admission_closed && !sf_work_busy(f))) return FWLAB_SPINE_V0_WRONG_STATE;
     return begin_journal(f, record, SF_M_IDLE);
 }

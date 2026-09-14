@@ -56,7 +56,7 @@ enum fwlab_spine_result_v0 sf_page_start_io(struct fwlab_ftl_scale *f,
 static enum fwlab_spine_result_v0 page_start(struct fwlab_ftl_scale *f,
     uint32_t ppa, uint8_t frame, uint8_t kind, uint32_t count, bool window)
 {
-    if (!f || frame >= SF_FRAMES || !sf_io_idle(f) ||
+    if (!f || frame >= SF_FRAMES || !sf_control_io_available(f) ||
         (window && (!f->window.main || !f->window.oob))) return FWLAB_SPINE_V0_INVALID;
     return sf_page_start_io(f, &f->io, ppa, frame, kind, count, window,
         window ? &f->window.main[0][0] : f->io.main[frame],

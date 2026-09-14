@@ -36,6 +36,8 @@ SCALED_SOURCES := \
 	../../core/ftl-scale/ftl_scale_codec.c \
 	../../core/ftl-scale/ftl_scale_recovery.c \
 	../../core/ftl-scale/ftl_scale_mapping.c \
+	../../core/ftl-scale/ftl_scale_heads.c \
+	../../core/ftl-scale/ftl_scale_write.c \
 	../../core/ftl-scale/ftl_scale_gc.c \
 	../../core/ftl-scale/ftl_scale_runtime.c \
 	../../core/ftl-scale/ftl_scale_parent.c \

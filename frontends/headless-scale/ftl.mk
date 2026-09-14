@@ -44,6 +44,7 @@ SOURCES := \
 	core/m3p/m3p_gc.c core/m3p/m3p_recovery.c core/m3p/m3p_runtime.c \
 	core/ftl-scale/ftl_scale_codec.c core/ftl-scale/ftl_scale_recovery.c \
 	core/ftl-scale/ftl_scale_mapping.c core/ftl-scale/ftl_scale_gc.c \
+	core/ftl-scale/ftl_scale_heads.c core/ftl-scale/ftl_scale_write.c \
 	core/ftl-scale/ftl_scale_runtime.c core/ftl-scale/ftl_scale_parent.c \
 	core/ftl-scale/ftl_scale_nfc.c core/ftl-scale/ftl_scale_nfc_v2.c \
 	core/ftl-scale/ftl_scale_window.c core/ftl-scale/ftl_scale_read.c \
@@ -75,6 +76,12 @@ MUTATION_J0_PROGRAM := $(BUILD)/test_mutation_j0
 CHANNEL_J0_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_ftl.o,$(OBJECTS)) \
 	$(BUILD)/frontends/headless-scale/test_channel_j0.o
 CHANNEL_J0_PROGRAM := $(BUILD)/test_channel_j0
+MULTIHEAD_J0_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_ftl.o,$(OBJECTS)) \
+	$(BUILD)/frontends/headless-scale/test_multihead_j0.o
+MULTIHEAD_J0_PROGRAM := $(BUILD)/test_multihead_j0
+MULTIHEAD_PARENT_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_parent.o,$(PARENT_OBJECTS)) \
+	$(BUILD)/frontends/headless-scale/test_multihead_parent.o
+MULTIHEAD_PARENT_PROGRAM := $(BUILD)/test_multihead_parent
 CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 	$(BUILD)/frontends/headless-scale/test_crc.o
 CRC_PROGRAM := $(BUILD)/test_crc
@@ -84,6 +91,8 @@ FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
 .PHONY: check-full-window-v2-mapped plan-64g-reference-v1 check-64g-reference-v1 check-parallel-read-j0
 .PHONY: check-mutation-j0
 .PHONY: check-channel-j0
+.PHONY: check-multihead-j0
+.PHONY: check-multihead-parent
 all: $(PROGRAM)
 .PHONY: FORCE_MEDIA_CONFIG
 FORCE_MEDIA_CONFIG:
@@ -111,6 +120,21 @@ check-mutation-j0: $(MUTATION_J0_PROGRAM)
 	$(MUTATION_J0_PROGRAM)
 check-channel-j0: $(CHANNEL_J0_PROGRAM)
 	$(CHANNEL_J0_PROGRAM)
+check-multihead-j0: $(MULTIHEAD_J0_PROGRAM)
+	$(MULTIHEAD_J0_PROGRAM)
+check-multihead-parent: $(MULTIHEAD_PARENT_PROGRAM)
+	$(MULTIHEAD_PARENT_PROGRAM)
+
+$(MULTIHEAD_PARENT_PROGRAM): $(MULTIHEAD_PARENT_OBJECTS)
+	$(CC) $(CFLAGS) $(MULTIHEAD_PARENT_OBJECTS) $(LDFLAGS) $(LDLIBS) \
+		-Wl,--wrap=fwlab_file_nand_v2_program_pages -o $@
+
+$(BUILD)/frontends/headless-scale/test_multihead_parent.o: \
+	../../frontends/headless-scale/test_parent.c ../../frontends/headless-scale/parent_window.inc
+
+$(MULTIHEAD_J0_PROGRAM): $(MULTIHEAD_J0_OBJECTS)
+	$(CC) $(CFLAGS) $(MULTIHEAD_J0_OBJECTS) $(LDFLAGS) $(LDLIBS) \
+		-Wl,--wrap=fwlab_nfc_channel_v2_provider -Wl,--wrap=fwlab_file_nand_v2_program_pages -o $@
 
 $(CHANNEL_J0_PROGRAM): $(CHANNEL_J0_OBJECTS)
 	$(CC) $(CFLAGS) $(CHANNEL_J0_OBJECTS) $(LDFLAGS) $(LDLIBS) -o $@

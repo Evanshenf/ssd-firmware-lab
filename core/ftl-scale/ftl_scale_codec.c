@@ -103,7 +103,7 @@ uint32_t sf_journal_ppa(const struct sf_root *r, uint32_t rail, uint32_t ordinal
 
 static bool disk_format_valid(uint16_t version)
 {
-    return version == SF_FORMAT_VERSION || version == SF_WINDOW_FORMAT_VERSION;
+    return version == SF_FORMAT_VERSION || sf_format_windowed(version);
 }
 
 static void page_oob(const uint8_t uuid[16], uint16_t disk_format,
@@ -291,7 +291,7 @@ static bool record_shape_valid(const struct sf_root *r, const struct sf_record *
         j->kind < SF_OPEN_HOST || j->kind > SF_MAP_WINDOW) return false;
     if (j->kind == SF_MAP_GROUP && (!j->count || j->count > SF_MAX_HOST_DELTAS)) return false;
     if (j->kind != SF_MAP_WINDOW) return true;
-    if (r->disk_format != SF_WINDOW_FORMAT_VERSION || !j->count || !ppb ||
+    if (!sf_format_windowed(r->disk_format) || !j->count || !ppb ||
         j->delta[0].after.ppa >= r->layout.physical_pages ||
         j->count > ppb - j->delta[0].after.ppa % ppb) return false;
     for (i = 0; i < j->count; ++i)

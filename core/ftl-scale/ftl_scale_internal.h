@@ -163,11 +163,13 @@ struct sf_io {
 
 /* Private state layouts are owned by their implementation files. They are
  * embedded, never dynamically registered and never shared across FTL engines. */
+#include "ftl_scale_heads.h"
 #include "ftl_scale_meta.h"
 #include "ftl_scale_work.h"
 #include "ftl_scale_parent.h"
 #include "ftl_scale_window.h"
 #include "ftl_scale_read.h"
+#include "ftl_scale_write.h"
 
 struct sf_nfc_adapter {
     enum fwlab_spine_result_v0 (*start)(struct fwlab_ftl_scale *, uint32_t,
@@ -197,6 +199,8 @@ struct fwlab_ftl_scale {
     uint32_t free_count;
     uint32_t victim_count;
     uint32_t host_head;
+    struct sf_heads heads;
+    struct sf_write_pool *writes;
     uint32_t physical_blocks;
     uint32_t physical_pages;
     uint32_t journal_next;
@@ -240,6 +244,8 @@ enum fwlab_spine_result_v0 sf_io_program_start(
 enum fwlab_spine_result_v0 sf_io_erase_start(
     struct fwlab_ftl_scale *ftl, uint32_t block);
 bool sf_io_idle(const struct fwlab_ftl_scale *ftl);
+/* Scalar metadata/RMW availability is not whole-pool or whole-NFC idle. */
+bool sf_control_io_available(const struct fwlab_ftl_scale *ftl);
 bool sf_io_take(struct fwlab_ftl_scale *ftl, struct sf_io_result *result);
 bool sf_io_step(struct fwlab_ftl_scale *ftl);
 enum fwlab_spine_result_v0 sf_page_start_io(struct fwlab_ftl_scale *,

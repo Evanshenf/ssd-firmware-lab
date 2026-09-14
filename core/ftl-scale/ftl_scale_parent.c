@@ -12,7 +12,7 @@ bool sf_parent_clean_boundary(const struct fwlab_ftl_scale *f)
 {
     return f->work.kind == SF_WORK_NONE && !f->work.effect_seen &&
         !sf_meta_busy(f) && sf_io_idle(f) &&
-        (f->host_head == SF_NONE || !f->blocks[f->host_head].reserved_pages);
+        sf_heads_unreserved(f);
 }
 
 bool sf_maintenance_allowed(const struct fwlab_ftl_scale *f)
@@ -68,7 +68,9 @@ static enum fwlab_spine_result_v0 prepare_group(struct fwlab_ftl_scale *f,
     uint32_t pages = 0;
     enum fwlab_spine_result_v0 result;
     if (f->read_only) return sf_read_parent_prepare(f, p);
-    if (f->disk_format == SF_WINDOW_FORMAT_VERSION) return sf_window_prepare(f, p);
+    if (f->writes && p->request.operation == FWLAB_BLOCK_V0_WRITE)
+        return sf_write_parent_prepare(f, p);
+    if (sf_format_windowed(f->disk_format)) return sf_window_prepare(f, p);
     if (!subgroup_request(p, &group)) return FWLAB_SPINE_V0_INVALID;
     if (group.operation != FWLAB_BLOCK_V0_FLUSH)
         pages = (uint32_t)((group.lba % SF_SECTORS_PER_PAGE + group.lba_count +
@@ -148,7 +150,18 @@ void sf_parent_fail(struct fwlab_ftl_scale *f, uint32_t fault)
     struct sf_parent *p = &f->parent;
     struct sf_work *w = &f->work;
     if (!p->owned || p->status.state != FWLAB_BLOCK_V0_STATE_ACCEPTED) return;
-    if (p->request.operation == FWLAB_BLOCK_V0_WRITE && f->host_head != SF_NONE)
+    /* The multi-head coordinator publishes success once per resolved wave.
+     * A later MAP failure may still have a known committed logical prefix. */
+    uint32_t known = sf_write_known_prefix(f);
+    if (p->completed_lbas > p->request.lba_count ||
+        known > p->request.lba_count - p->completed_lbas) {
+        f->quarantined = 1; f->ready = 0; f->fault_code = fault = SF_FAULT_STATE;
+        known = 0;
+    }
+    p->completed_lbas += known;
+    /* Multi-head reservations are retired by their run owner; do not erase
+     * accepted sibling ownership merely because the parent becomes terminal. */
+    if (!f->writes && p->request.operation == FWLAB_BLOCK_V0_WRITE && f->host_head != SF_NONE)
         f->blocks[f->host_head].reserved_pages = 0;
     p->status.state = FWLAB_BLOCK_V0_STATE_TERMINAL;
     p->status.outcome = p->cancelled ? FWLAB_BLOCK_V0_CANCELLED : FWLAB_BLOCK_V0_FAILED;

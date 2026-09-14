@@ -38,28 +38,65 @@ static void record_block(struct fwlab_ftl_scale *f, uint8_t kind, uint32_t b)
     f->work.record.durable_frontier = f->durable_frontier;
 }
 
+enum fwlab_spine_result_v0 sf_head_open_start(struct fwlab_ftl_scale *f, uint32_t domain)
+{
+    struct sf_head_domain_index *index;
+    enum fwlab_spine_result_v0 result;
+    uint32_t block, ppb;
+    if (!f || f->disk_format != SF_MULTIHEAD_FORMAT_VERSION || !f->ready ||
+        f->quarantined || f->admission_closed || domain >= f->heads.count ||
+        !sf_maintenance_allowed(f) || sf_meta_busy(f) || !sf_io_idle(f) ||
+        f->heads.gc_destination != SF_NONE) return FWLAB_SPINE_V0_WRONG_STATE;
+    if (sf_head_tail(f, domain)) return FWLAB_SPINE_V0_OK;
+    index = &f->heads.domain[domain]; ppb = f->config.geometry.pages_per_block;
+    if (index->head != SF_NONE) return FWLAB_SPINE_V0_WRONG_STATE;
+    if (!index->free_count || f->free_count <= 1 || !f->next_block_uid ||
+        f->next_block_uid >= UINT64_MAX / ppb || !sf_child_credit(f, 2))
+        return FWLAB_SPINE_V0_NO_CAPACITY;
+    if (!sf_record_space(f, 1)) {
+        result = sf_checkpoint_start(f);
+        return result == FWLAB_SPINE_V0_OK ? FWLAB_SPINE_V0_IN_PROGRESS : result;
+    }
+    block = f->free_heap[index->heap_offset];
+    record_block(f, SF_OPEN_HOST, block);
+    f->work.record.block_uid = f->next_block_uid;
+    result = sf_journal_start(f, &f->work.record);
+    if (result != FWLAB_SPINE_V0_OK) return result;
+    f->work.destination_block = block;
+    f->work.kind = SF_WORK_SPACE; f->work.phase = SF_W_OPEN_WAIT;
+    return FWLAB_SPINE_V0_IN_PROGRESS;
+}
+
 enum fwlab_spine_result_v0 sf_space_start(struct fwlab_ftl_scale *f,
                                          uint32_t needed, bool force_gc)
 {
     enum fwlab_spine_result_v0 result;
     uint32_t phase = SF_W_SPACE;
-    uint32_t smallest, ppb;
+    uint32_t smallest, ppb, head_count;
     if (!f || !f->ready || f->quarantined || f->admission_closed ||
         !sf_maintenance_allowed(f) || sf_meta_busy(f) || !sf_io_idle(f) ||
         !needed || needed > SF_MAX_HOST_DELTAS)
         return FWLAB_SPINE_V0_WRONG_STATE;
     ppb = f->config.geometry.pages_per_block;
+    head_count = f->disk_format == SF_MULTIHEAD_FORMAT_VERSION ? f->heads.count : 1u;
     if (!f->next_block_uid || f->next_block_uid >= UINT64_MAX / ppb)
         return FWLAB_SPINE_V0_NO_CAPACITY;
     if (force_gc) {
         smallest = f->victim_count ? f->blocks[f->victim_heap[0]].live_pages : ppb;
-        if (f->host_head != SF_NONE && f->blocks[f->host_head].live_pages < smallest)
-            smallest = f->blocks[f->host_head].live_pages;
+        for (uint32_t d = 0; d < head_count; ++d) {
+            uint32_t head = f->disk_format == SF_MULTIHEAD_FORMAT_VERSION ?
+                f->heads.domain[d].head : f->host_head;
+            if (head != SF_NONE && f->blocks[head].live_pages < smallest)
+                smallest = f->blocks[head].live_pages;
+        }
         if (smallest > 61 || smallest > ppb - needed)
             return FWLAB_SPINE_V0_NO_CAPACITY;
     }
-    if (!sf_child_credit(f, 4u * 61u + 21u)) return FWLAB_SPINE_V0_NO_CAPACITY;
-    if (!sf_record_space(f, 5)) {
+    /* Keep the old conservative scalar budget, plus both rails for each
+     * additional head CLOSE. No per-domain NAND-space reserve is consumed. */
+    if (!sf_child_credit(f, 4u * 61u + 21u + 2u * (head_count - 1u)))
+        return FWLAB_SPINE_V0_NO_CAPACITY;
+    if (!sf_record_space(f, head_count + 4u)) {
         result = sf_checkpoint_start(f);
         if (result != FWLAB_SPINE_V0_OK) return result;
         phase = SF_W_WAIT_CP;
@@ -87,19 +124,30 @@ static bool prepare_space(struct fwlab_ftl_scale *f)
 {
     struct sf_work *w = &f->work;
     uint32_t b, ppb = f->config.geometry.pages_per_block;
-    if (f->host_head != SF_NONE) {
-        if (!w->force_gc &&
-            ppb - f->blocks[f->host_head].disk.allocation_end >= w->needed_pages) {
+    uint32_t head = sf_head_first(f);
+    if (!w->force_gc && f->disk_format == SF_MULTIHEAD_FORMAT_VERSION) {
+        for (uint32_t d = 0; d < f->heads.count; ++d) {
+            if (sf_head_tail(f, d) < w->needed_pages) continue;
             w->kind = SF_WORK_NONE;
             w->phase = SF_W_IDLE;
             return true;
         }
-        record_block(f, SF_CLOSE, f->host_head);
+    }
+    if (head != SF_NONE) {
+        if (!w->force_gc && f->disk_format != SF_MULTIHEAD_FORMAT_VERSION &&
+            ppb - f->blocks[head].disk.allocation_end >= w->needed_pages) {
+            w->kind = SF_WORK_NONE;
+            w->phase = SF_W_IDLE;
+            return true;
+        }
+        /* All heads become eligible before global victim selection. The
+         * caller reaches space maintenance only between unreserved waves. */
+        record_block(f, SF_CLOSE, head);
         return journal(f, SF_W_CLOSE_WAIT);
     }
     if (sf_next_reclaim_pending(f, &b)) return start_erase(f, b);
     if (!w->force_gc && f->free_count > 1) {
-        b = f->free_heap[0];
+        b = sf_free_best(f);
         record_block(f, SF_OPEN_HOST, b);
         w->record.block_uid = f->next_block_uid;
         w->destination_block = b;
@@ -118,7 +166,7 @@ static bool prepare_space(struct fwlab_ftl_scale *f)
         return true;
     }
     w->source_block = b;
-    w->destination_block = f->free_heap[0];
+    w->destination_block = sf_free_best(f);
     w->source_page = w->moved = 0;
     w->live_count = f->blocks[b].live_pages;
     w->kind = SF_WORK_GC;

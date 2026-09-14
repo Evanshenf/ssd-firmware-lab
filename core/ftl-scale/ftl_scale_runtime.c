@@ -81,6 +81,12 @@ size_t fwlab_ftl_scale_parallel_read_arena_size(const struct fwlab_ftl_scale_ext
     return base && base <= SIZE_MAX - sizeof(struct sf_read_pool) ? base + sizeof(struct sf_read_pool) : 0;
 }
 
+size_t fwlab_ftl_scale_multihead_v3_arena_size(const struct fwlab_ftl_scale_extended_config *c)
+{
+    size_t base = fwlab_ftl_scale_window_v2_arena_size(c), extra = sf_write_pool_bytes();
+    return base && extra && base <= SIZE_MAX - extra ? base + extra : 0;
+}
+
 static void submit_result(struct fwlab_block_submit_result_v0 *out,
                           const struct fwlab_block_request_v0 *r,
                           uint32_t disposition, uint32_t fault)
@@ -324,6 +330,7 @@ static enum fwlab_spine_result_v0 initialize(void *arena, size_t size,
     f->validity = cursor;
     for (i = 0; i < c->mapping_slots; ++i) f->map[i].ppa = SF_NONE;
     f->host_head = f->erase_intent_block = SF_NONE;
+    if (!sf_heads_init(f)) return FWLAB_SPINE_V0_INVALID;
     f->next_block_uid = f->io.next_uid = 1;
     f->service.ops = &block_ops;
     f->service.context = f;
@@ -382,6 +389,27 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init_parallel_read(void *arena, size_
     if (result != FWLAB_SPINE_V0_OK) return result;
     f->reads = (struct sf_read_pool *)((uint8_t *)arena + base);
     memset(f->reads, 0, sizeof(*f->reads));
+    f->arena_bytes = total;
+    *out = f;
+    return FWLAB_SPINE_V0_OK;
+}
+
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_multihead_v3(void *arena, size_t size,
+    const struct fwlab_ftl_scale_extended_config *c,
+    const struct fwlab_controller_buffer_port_v0 *buffer,
+    const struct fwlab_nfc_page_v2_provider *nfc, struct fwlab_ftl_scale **out)
+{
+    size_t total = fwlab_ftl_scale_multihead_v3_arena_size(c);
+    size_t base = fwlab_ftl_scale_window_v2_arena_size(c);
+    struct fwlab_ftl_scale *f;
+    enum fwlab_spine_result_v0 result;
+    if (!total || size < total || !out) return FWLAB_SPINE_V0_INVALID;
+    *out = NULL;
+    result = fwlab_ftl_scale_init_window_v2(arena, size, c, buffer, nfc, &f);
+    if (result != FWLAB_SPINE_V0_OK) return result;
+    f->disk_format = SF_MULTIHEAD_FORMAT_VERSION;
+    if (!sf_heads_init(f) || !sf_write_pool_init(f, (uint8_t *)arena + base, total - base))
+        return FWLAB_SPINE_V0_INVALID;
     f->arena_bytes = total;
     *out = f;
     return FWLAB_SPINE_V0_OK;
@@ -466,9 +494,10 @@ bool sf_work_step(struct fwlab_ftl_scale *f)
     struct sf_io_result io;
     uint32_t lpn = w->first_lpn + w->page_index;
     if (f->quarantined) return false;
+    if (sf_write_pool_busy(f)) return sf_write_pool_step(f);
     if (w->kind == SF_WORK_NONE) return sf_parent_step(f);
     if (w->kind != SF_WORK_HOST) return sf_gc_step(f);
-    if (f->disk_format == SF_WINDOW_FORMAT_VERSION) return sf_window_step(f);
+    if (sf_format_windowed(f->disk_format)) return sf_window_step(f);
     if (sf_meta_busy(f)) return false;
     if (f->parent.cancelled && !w->effect_seen && sf_io_idle(f)) {
         sf_host_fail(f, FWLAB_NFC_REASON_CANCELLED);
@@ -610,6 +639,7 @@ static enum fwlab_spine_result_v0 step_internal(struct fwlab_ftl_scale *f,
         (sf_work_busy(f) || sf_meta_busy(f)))
         progress->runnable = 1;
     if (progress && !f->quarantined && sf_read_pool_runnable(f)) progress->runnable = 1;
+    if (progress && !f->quarantined && sf_write_pool_runnable(f)) progress->runnable = 1;
     *used = count;
     return f->quarantined ? FWLAB_SPINE_V0_QUARANTINED : FWLAB_SPINE_V0_OK;
 }

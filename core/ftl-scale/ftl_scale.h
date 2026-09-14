@@ -99,6 +99,16 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init_parallel_read(
     const struct fwlab_ftl_scale_extended_config *config,
     const struct fwlab_controller_buffer_port_v0 *controller_buffer,
     const struct fwlab_nfc_page_v2_provider *nfc, struct fwlab_ftl_scale **ftl);
+/* Explicit format3: derived physical domains and up to four DATA runs per
+ * wave with one ordered MAP issuer. Serial READ/Flush stay on the same FTL.
+ * No format1/2 fallback, migration, thread or modern-page geometry claim. */
+size_t fwlab_ftl_scale_multihead_v3_arena_size(
+    const struct fwlab_ftl_scale_extended_config *config);
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_multihead_v3(
+    void *arena, size_t arena_size,
+    const struct fwlab_ftl_scale_extended_config *config,
+    const struct fwlab_controller_buffer_port_v0 *controller_buffer,
+    const struct fwlab_nfc_page_v2_provider *nfc, struct fwlab_ftl_scale **ftl);
 enum fwlab_spine_result_v0 fwlab_ftl_scale_can_enter_read_only(
     const struct fwlab_ftl_scale *ftl);
 enum fwlab_spine_result_v0 fwlab_ftl_scale_enter_read_only(
