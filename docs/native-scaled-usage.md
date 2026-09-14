@@ -8,6 +8,12 @@ for arbitrary hosts. Start with [software checks](getting-started.md) and the
 [current support matrix](current-status.md). Do not load these modules on a
 production machine or point them at a physical SSD.
 
+The sequence below describes the default mapped R0 construction. The separate
+`--nand-profile channel-lab4k` source option in the same MQ2 executable uses
+mutable format3, synthetic IPR and strict POSIX channel shards instead. Its
+construction boundary is in [ADR-0025](adr/0025-native-channel-construction.md);
+it is not covered by the older native deployment/performance results below.
+
 ## 1. Choose matching builds
 
 The named native environments use x86-64 or ARM64, Ubuntu kernel `7.0.0-30-generic`
@@ -123,6 +129,34 @@ startup. No service manager, automatic retry/autoformat or broad device-cleanup
 script is supplied by this guide.
 
 ## Evidence and unresolved deployment work
+
+For the channel option, first run the existing offline native-loop fixture:
+
+```sh
+make -C frontends/linux-m4 progress-runtime
+FWLAB_TEST_MEDIA_DIR=/run/fwlab-test-media \
+  frontends/linux-m4/build/scaled-offline/native_progress_offline \
+  --nand-profile channel-lab4k
+```
+
+The same bounded tmpfs prerequisites apply; there is no disk fallback. This
+uses fake Host ioctls, not an online synthetic controller. The first channel
+preset accepts64MiB only, with four channels/one LUN/two planes/forty blocks
+and64pages per block. Its four physical images total89,214,976B, plus a
+1024B immutable manifest (80MiB physical main and64MiB logical capacity).
+The exact media directory contains only `volume.lock`, `volume.nand` and
+`channel-0.nand` through `channel-3.nand`. Keep all logs, source/ELF manifests,
+selected-profile records and owner sockets elsewhere. First format requires
+an empty private directory. Retain the global UUID; recovery reads child
+UUIDs and geometry from the manifest and never regenerates them.
+
+The source option does not enable OS workers or mapped shards. Its synthetic
+timing is unpaced, not a throughput limit, and prior R0 cost measurements do
+not apply. Include the NAND-profile choice and namespace in any later
+operator binding manifest along with exact ELF hashes; do not reuse an R0
+run's identity or treat the M4 media-family number as FTL format3. Online
+qualification, per-runtime worker reconstruction and performance are separate
+tasks; this section does not authorize changing an existing media directory.
 
 The [development results](results/2026-09-10-scaled-storage-mq2.md) identify the
 executed native and ownership cases. Later

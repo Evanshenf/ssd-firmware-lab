@@ -21,10 +21,11 @@ code without treating historical directory names as dependency boundaries.
 | Current ARM64 PAGE2/v2 headless at `11cb8a8` | 64 GiB namespace | Full fill, half overwrite, GC/checkpoint, close/reopen recovery and full readback passed; not native PCI or a throughput benchmark |
 | `scaled-worker` / `scaled-pump-worker` | 64 MiB / 8 KiB | Scalable FTL format 2 + PAGE2-R0 + mapped physical-v2 on bounded tmpfs |
 | `large-worker`, Host profile 2 | 64 MiB / 1 MiB, one I/O pair | Same storage stack, explicit PUMP construction, bounded PRP graph |
-| `mq2-worker`, Host profile 3 | 64 MiB / 1 MiB, two depth-32 I/O pairs, three MSI-X vectors | Same storage stack, **one global I/O frame plus one Admin reserve**; serialized FTL execution, not parallel storage throughput |
+| `mq2-worker` default, Host profile 3 | 64 MiB / 1 MiB, two depth-32 I/O pairs, three MSI-X vectors | Same storage stack, **one global I/O frame plus one Admin reserve**; serialized FTL execution, not parallel storage throughput |
+| Same `mq2-worker`, opt-in `channel-lab4k` | 64 MiB only / 1 MiB; unchanged Host limits | Mutable format3 + IPR cooperative channel hub + four strict POSIX physical-v2 shards; [actual native-constructor/loop, fake Host evidence](results/2026-09-14-native-channel-construction.md), not online kernel or M5 qualification |
 
-The table's native capacities are the default 64-MiB configurations. Scaled native
-workers now accept `--namespace-mib 64|256|65536` using the same construction
+The R0 rows' native capacities are the default 64-MiB configurations. Scaled native
+workers without the channel opt-in accept `--namespace-mib 64|256|65536` using the same construction
 presets as headless. Native Linux 256 MiB has passed Identify, tail I/O, reset,
 rebind, cold recovery and an ext4 mount/fsync/reset/remount check. Later ARM64
 native 64-GiB data/control/performance groups have their own
@@ -39,6 +40,8 @@ See [ADR-0013](adr/0013-scalable-ftl-and-page-windows.md) and
 [ADR-0014](adr/0014-native-profile-and-serial-mq2.md).
 
 ## Which real path executes?
+
+The qualified default native R0 path is:
 
 ```text
 Linux nvme / alternate QEMU guest
@@ -92,8 +95,12 @@ original B/C format3 choice retains serial READ. A later explicit
 [combined format3 option](adr/0024-mutable-format3-read-write.md) now has
 [same-instance mutable Block/J0 evidence](results/2026-09-14-mutable-read-write.md)
 with both existing schedules, actual GC/IPR and close/recovery. None of these
-LAB options selects native threads/IPR or establishes vendor timing, NUMA
-locality, concurrent Host parents or a measured throughput gain.
+headless results alone proves native execution. The subsequent
+[native channel option](adr/0025-native-channel-construction.md) selects that
+combined path in the existing MQ2 constructor with cooperative execution;
+its [offline native-loop checks](results/2026-09-14-native-channel-construction.md)
+do not qualify the actual kernel/driver or M5. Native threads, vendor timing,
+NUMA locality, concurrent Host parents and a throughput gain remain unproved.
 
 | Environment | What has evidence | What is not established |
 |---|---|---|

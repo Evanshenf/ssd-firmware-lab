@@ -37,6 +37,11 @@ The [combined mutable format3 option](results/2026-09-14-mutable-read-write.md)
 then connects existing parallel reads and write waves in one writable instance,
 with real GC/IPR and unchanged lower execution semantics. This is composition
 and correctness evidence, not a new bandwidth measurement or native mode.
+The later [native-constructor opt-in](results/2026-09-14-native-channel-construction.md)
+uses that combined path in the existing worker, with fake Host ioctls for its
+bounded checks. It selects strict POSIX channel shards and cooperative jobs,
+not mapped media or OS workers. Its subsecond test budgets are not native
+throughput and cannot be compared as an optimization against earlier R0 rates.
 
 ## Objective and measurement boundary
 

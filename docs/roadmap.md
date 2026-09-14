@@ -111,7 +111,10 @@ resources on one/four actual data workers; D actual independent-plane READ.
 [D](results/2026-09-14-independent-plane-read.md) now have bounded implementation
 evidence; each result records its exact-source disposition. The subsequent
 [combined mutable format3 construction](results/2026-09-14-mutable-read-write.md)
-now connects both schedules in one real writable Block/J0 instance. Native
-selection and vendor geometry remain separate finite work, not reasons to
+now connects both schedules in one real writable Block/J0 instance. The
+[native constructor opt-in](results/2026-09-14-native-channel-construction.md)
+also executes the same path through the actual worker loop with fake Host
+ioctls. Online native/M5 qualification, per-runtime worker reconstruction and
+vendor geometry remain separate finite work, not reasons to
 repeat or broaden the completed A–D tests.
 Threads/NUMA do not define NAND topology or guarantee a throughput multiplier.

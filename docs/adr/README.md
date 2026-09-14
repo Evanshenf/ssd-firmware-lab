@@ -27,6 +27,7 @@
 - [ADR-0022: Channel-owned actors with a separate Linux execution transport](0022-channel-worker-execution.md)
 - [ADR-0023: Explicit independent-plane READ on the existing NAND engine](0023-independent-plane-read.md)
 - [ADR-0024: One mutable format3 instance with the existing read/write schedules](0024-mutable-format3-read-write.md)
+- [ADR-0025: Opt-in channel NAND in the existing native entry](0025-native-channel-construction.md)
 
 Accepted ADRs define the design baseline, not an assertion that the component is already implemented or validated. A superseding decision must link the prior ADR and describe migration and compatibility impact.
 
