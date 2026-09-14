@@ -89,6 +89,9 @@ CHANNEL_WORKER_PROGRAM := $(BUILD)/test_channel_workers
 CHANNEL_WORKER_J0_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_channel_workers.o,$(CHANNEL_WORKER_OBJECTS)) \
 	$(BUILD)/frontends/headless-scale/test_channel_workers_j0.o
 CHANNEL_WORKER_J0_PROGRAM := $(BUILD)/test_channel_workers_j0
+PLANE_J0_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_ftl.o,$(OBJECTS)) \
+	$(BUILD)/frontends/headless-scale/test_plane_read_j0.o
+PLANE_J0_PROGRAM := $(BUILD)/test_plane_read_j0
 CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 	$(BUILD)/frontends/headless-scale/test_crc.o
 CRC_PROGRAM := $(BUILD)/test_crc
@@ -102,6 +105,7 @@ FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
 .PHONY: check-multihead-parent
 .PHONY: check-channel-workers
 .PHONY: check-channel-workers-j0
+.PHONY: check-plane-read-j0
 all: $(PROGRAM)
 .PHONY: FORCE_MEDIA_CONFIG
 FORCE_MEDIA_CONFIG:
@@ -137,6 +141,11 @@ check-channel-workers: $(CHANNEL_WORKER_PROGRAM)
 	$(CHANNEL_WORKER_PROGRAM)
 check-channel-workers-j0: $(CHANNEL_WORKER_J0_PROGRAM)
 	$(CHANNEL_WORKER_J0_PROGRAM)
+check-plane-read-j0: $(PLANE_J0_PROGRAM)
+	$(PLANE_J0_PROGRAM)
+
+$(PLANE_J0_PROGRAM): $(PLANE_J0_OBJECTS)
+	$(CC) $(CFLAGS) $(PLANE_J0_OBJECTS) $(LDFLAGS) $(LDLIBS) -o $@
 
 $(CHANNEL_WORKER_J0_PROGRAM): $(CHANNEL_WORKER_J0_OBJECTS)
 	$(CC) $(CFLAGS) $(CHANNEL_WORKER_J0_OBJECTS) $(LDFLAGS) $(LDLIBS) -pthread \
@@ -218,4 +227,4 @@ $(BUILD)/%.o: ../../%.c ftl.mk $(MEDIA_CONFIG)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 -include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d) $(PARENT_OBJECTS:.o=.d) $(FAST_CRC_OBJECT:.o=.d) \
 	$(PARALLEL_READ_OBJECTS:.o=.d) $(MUTATION_J0_OBJECTS:.o=.d) $(CHANNEL_WORKER_OBJECTS:.o=.d) \
-	$(CHANNEL_WORKER_J0_OBJECTS:.o=.d)
+	$(CHANNEL_WORKER_J0_OBJECTS:.o=.d) $(PLANE_J0_OBJECTS:.o=.d)

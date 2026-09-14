@@ -28,11 +28,15 @@ struct scale_storage_options {
      * the J0 media binding; actual channel children are independently owned.
      * This does not select the new construction in any existing native entry. */
     const struct fwlab_nand_channel_v2 *channel_media;
-    /* Optional construction-time executor for the explicit multihead factory.
+    /* Optional construction-time executor for explicit multihead or parallel
+     * channel-READ factories.
      * NULL keeps the cooperative actor implementation. Caller owns transport
      * context until runner release; successful close includes its shutdown and
      * actual joins. This does not select threads in existing native entries. */
     const struct fwlab_nfc_channel_executor *channel_executor;
+    /* Explicit parallel-channel factory only. Zero is LUN-exclusive control;
+     * IPR must be selected deliberately and is independent of OS placement. */
+    enum fwlab_nfc_page_v2_lab_read_policy read_policy;
 };
 
 /* Shared construction presets, not FTL capacity truth. Recovery still validates
@@ -53,6 +57,14 @@ void scale_storage_channel_lab_factory_init(struct j0_storage_factory *factory,
 /* Same actual channel assembly/hub, explicit format3 multi-head FTL. */
 void scale_storage_multihead_lab_factory_init(struct j0_storage_factory *factory,
                                               struct scale_storage_options *options);
+/* Always-timed policy-selected channel hub and the existing format2 READ pool.
+ * Preparation uses ordinary serial writes; this is not B3's write-pool FTL. */
+void scale_storage_parallel_channel_lab_factory_init(struct j0_storage_factory *factory,
+                                                     struct scale_storage_options *options);
+/* Upper/FTL-idle only: drain at most one hub retirement-control step per call.
+ * IN_PROGRESS requires retry. At actual lower live-idle, enter FTL read-only
+ * without changing provider, timing, UID issuer, media or durable frontier. */
+enum fwlab_spine_result_v0 scale_storage_begin_parallel_read(struct j0_runtime *runtime);
 /* Serialized coordinator: requires J0 admission, FTL and NFC live-idle before
  * the one-way lower timing/upper read-only transitions. No provider rebinding. */
 enum fwlab_spine_result_v0 scale_storage_begin_timed_read(struct j0_runtime *runtime);
