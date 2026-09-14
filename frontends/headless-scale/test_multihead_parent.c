@@ -11,6 +11,9 @@
 
 #define MH_LBAS 2048u
 #define MH_FILES 6u
+#ifndef MH_MEDIA_PREFIX
+#define MH_MEDIA_PREFIX "fwlab-d213-parent"
+#endif
 
 struct mh_run {
     struct fwlab_nfc_operation_token token;
@@ -232,7 +235,7 @@ static struct mh_fixture *mh_create(unsigned credits)
         bytes && bytes <= (UINT64_C(32) << 20) &&
         (uint64_t)fs.f_bavail * (uint64_t)fs.f_bsize >= bytes + (UINT64_C(64) << 20));
     CHECK(close(fd) == 0);
-    n = snprintf(f->directory, sizeof(f->directory), "%s/fwlab-d213-parent.XXXXXX", root);
+    n = snprintf(f->directory, sizeof(f->directory), "%s/" MH_MEDIA_PREFIX ".XXXXXX", root);
     CHECK(n > 0 && (size_t)n < sizeof(f->directory) && mkdtemp(f->directory));
     f->directory_fd = open(f->directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     CHECK(f->directory_fd >= 0 && fstat(f->directory_fd, &m->directory_identity) == 0);
@@ -436,7 +439,10 @@ static void mh_large_gc(void)
     printf("MULTIHEAD_PARENT_PRESSURE|bounded_overwrites=%u|reached_global_reserve=1|retained_parent_waves=%u|automatic_space_reclaim=1|full_reopen_read=exact\n", overwrites, waves);
     mh_close(m); mh_destroy(m);
 }
-int main(void)
+#ifndef MULTIHEAD_PARENT_ENTRY
+#define MULTIHEAD_PARENT_ENTRY main
+#endif
+int MULTIHEAD_PARENT_ENTRY(void)
 {
     struct rusage usage;
     mh_uneven(4); mh_uneven(2); mh_large_gc();

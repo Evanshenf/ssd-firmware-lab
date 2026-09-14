@@ -82,6 +82,13 @@ MULTIHEAD_J0_PROGRAM := $(BUILD)/test_multihead_j0
 MULTIHEAD_PARENT_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_parent.o,$(PARENT_OBJECTS)) \
 	$(BUILD)/frontends/headless-scale/test_multihead_parent.o
 MULTIHEAD_PARENT_PROGRAM := $(BUILD)/test_multihead_parent
+CHANNEL_WORKER_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_ftl.o,$(OBJECTS)) \
+	$(BUILD)/frontends/headless-scale/nfc_channel_workers.o \
+	$(BUILD)/frontends/headless-scale/test_channel_workers.o
+CHANNEL_WORKER_PROGRAM := $(BUILD)/test_channel_workers
+CHANNEL_WORKER_J0_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_channel_workers.o,$(CHANNEL_WORKER_OBJECTS)) \
+	$(BUILD)/frontends/headless-scale/test_channel_workers_j0.o
+CHANNEL_WORKER_J0_PROGRAM := $(BUILD)/test_channel_workers_j0
 CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 	$(BUILD)/frontends/headless-scale/test_crc.o
 CRC_PROGRAM := $(BUILD)/test_crc
@@ -93,6 +100,8 @@ FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
 .PHONY: check-channel-j0
 .PHONY: check-multihead-j0
 .PHONY: check-multihead-parent
+.PHONY: check-channel-workers
+.PHONY: check-channel-workers-j0
 all: $(PROGRAM)
 .PHONY: FORCE_MEDIA_CONFIG
 FORCE_MEDIA_CONFIG:
@@ -124,6 +133,28 @@ check-multihead-j0: $(MULTIHEAD_J0_PROGRAM)
 	$(MULTIHEAD_J0_PROGRAM)
 check-multihead-parent: $(MULTIHEAD_PARENT_PROGRAM)
 	$(MULTIHEAD_PARENT_PROGRAM)
+check-channel-workers: $(CHANNEL_WORKER_PROGRAM)
+	$(CHANNEL_WORKER_PROGRAM)
+check-channel-workers-j0: $(CHANNEL_WORKER_J0_PROGRAM)
+	$(CHANNEL_WORKER_J0_PROGRAM)
+
+$(CHANNEL_WORKER_J0_PROGRAM): $(CHANNEL_WORKER_J0_OBJECTS)
+	$(CC) $(CFLAGS) $(CHANNEL_WORKER_J0_OBJECTS) $(LDFLAGS) $(LDLIBS) -pthread \
+		-Wl,--wrap=fwlab_ftl_scale_step -o $@
+
+$(CHANNEL_WORKER_PROGRAM): $(CHANNEL_WORKER_OBJECTS)
+	$(CC) $(CFLAGS) $(CHANNEL_WORKER_OBJECTS) $(LDFLAGS) $(LDLIBS) -pthread \
+		-Wl,--wrap=fwlab_nfc_channel_v2_init -Wl,--wrap=fwlab_ftl_scale_step \
+		-Wl,--wrap=fwlab_file_nand_v2_program_pages -Wl,--wrap=pthread_create -Wl,--wrap=pthread_join -o $@
+
+$(BUILD)/frontends/headless-scale/nfc_channel_workers.o \
+$(BUILD)/frontends/headless-scale/test_channel_workers.o \
+$(BUILD)/frontends/headless-scale/test_channel_workers_j0.o: override CFLAGS += -pthread
+$(BUILD)/frontends/headless-scale/test_channel_workers_j0.o: \
+	../../frontends/headless-scale/test_channel_j0.c ../../frontends/headless-scale/test_ftl.c
+$(BUILD)/frontends/headless-scale/test_channel_workers.o: \
+	../../frontends/headless-scale/test_multihead_parent.c \
+	../../frontends/headless-scale/test_parent.c ../../frontends/headless-scale/parent_window.inc
 
 $(MULTIHEAD_PARENT_PROGRAM): $(MULTIHEAD_PARENT_OBJECTS)
 	$(CC) $(CFLAGS) $(MULTIHEAD_PARENT_OBJECTS) $(LDFLAGS) $(LDLIBS) \
@@ -186,4 +217,5 @@ $(BUILD)/%.o: ../../%.c ftl.mk $(MEDIA_CONFIG)
 	mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 -include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d) $(PARENT_OBJECTS:.o=.d) $(FAST_CRC_OBJECT:.o=.d) \
-	$(PARALLEL_READ_OBJECTS:.o=.d) $(MUTATION_J0_OBJECTS:.o=.d)
+	$(PARALLEL_READ_OBJECTS:.o=.d) $(MUTATION_J0_OBJECTS:.o=.d) $(CHANNEL_WORKER_OBJECTS:.o=.d) \
+	$(CHANNEL_WORKER_J0_OBJECTS:.o=.d)
