@@ -5,6 +5,7 @@
 
 #include "native_internal.h"
 #include "../headless-scale/scale_storage.h"
+#include "../headless-scale/nfc_channel_workers.h"
 #include "physical_nand.h"
 #include "channel_volume.h"
 
@@ -34,6 +35,11 @@ struct native_scaled_media {
     struct fwlab_nand_channel_volume *volume;
     struct fwlab_nand_channel_v2 channels;
     struct fwlab_nfc_page_v2_lab_mutation_config timing;
+    /* Configuration is process-lived. The transport and its descriptor belong
+     * to one retained native runtime association, including failed startup. */
+    struct fwlab_nfc_channel_workers_config worker_config;
+    struct fwlab_nfc_channel_workers *workers;
+    struct fwlab_nfc_channel_executor executor;
     uint8_t opened;
 };
 
@@ -52,7 +58,14 @@ int native_scaled_media_open_profile(struct native_scaled_media *media,
     struct native_context *owner, const char *directory,
     const uint8_t uuid[16], int format, uint32_t logical_mib,
     enum native_nand_profile profile);
-/* Refuses while the owner's runtime is live. On an unexpected lower close
+/* Opt in while no runtime/association is active. No thread starts here. Only
+ * opened channel LAB4K/64-MiB media accepts 1 or 4 workers; configuration cannot
+ * be replaced.
+ * Every runtime prepare gets fresh workers, without changing media or timing. */
+int native_scaled_media_enable_workers(struct native_scaled_media *media,
+                                      uint32_t workers);
+/* Refuses while the owner's runtime or resource association is live.
+ * On an unexpected lower close
  * failure retain the owner for diagnosis; never pretend it was released. */
 int native_scaled_media_close(struct native_scaled_media *media);
 

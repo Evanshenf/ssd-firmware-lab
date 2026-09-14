@@ -74,7 +74,8 @@ static int open_r0(struct native_scaled_media *media,
     struct stat status;
     enum fwlab_nfc_api_result result;
 
-    if (!media || media->opened || !owner || owner->runtime || !directory ||
+    if (!media || media->opened || !owner || owner->runtime ||
+        owner->runtime_media || !directory ||
         !uuid || j0_bytes_zero(uuid, 16) || (format != 0 && format != 1) ||
         !scale_storage_capacity_mib(logical_mib, &geometry, &lba_count))
         return 0;
@@ -234,7 +235,8 @@ static int open_channel_lab4k(struct native_scaled_media *media,
     enum fwlab_nfc_api_result result;
     size_t alignment, bytes;
 
-    if (!media || media->opened || !owner || owner->runtime || !directory ||
+    if (!media || media->opened || !owner || owner->runtime ||
+        owner->runtime_media || !directory ||
         !uuid || j0_bytes_zero(uuid, 16) || (format != 0 && format != 1) ||
         logical_mib != 64)
         return 0;
@@ -326,13 +328,159 @@ int native_scaled_media_open(struct native_scaled_media *media,
                                             format, logical_mib, NATIVE_NAND_R0);
 }
 
+static int worker_resources_owned(const struct native_scaled_media *media)
+{
+    return media && media->opened && media->owner &&
+        media->profile == NATIVE_NAND_CHANNEL_LAB4K &&
+        media->owner->runtime_media == &media->native &&
+        media->native.runtime_context == media &&
+        (media->worker_config.workers == 1 || media->worker_config.workers == 4);
+}
+
+static enum fwlab_spine_result_v0 worker_error(enum fwlab_nfc_api_result result)
+{
+    return result == FWLAB_NFC_API_NO_CAPACITY ? FWLAB_SPINE_V0_NO_CAPACITY :
+                                               FWLAB_SPINE_V0_POISONED;
+}
+
+static enum fwlab_spine_result_v0 worker_prepare_step(void *opaque, bool *advanced)
+{
+    struct native_scaled_media *media = opaque;
+    enum fwlab_nfc_api_result result;
+    bool complete = false, progress = false;
+
+    if (!advanced)
+        return FWLAB_SPINE_V0_INVALID;
+    *advanced = false;
+    if (!worker_resources_owned(media) || media->owner->runtime)
+        return FWLAB_SPINE_V0_WRONG_STATE;
+    if (!media->workers) {
+        result = fwlab_nfc_channel_workers_prepare(&media->worker_config,
+                                                   &media->workers);
+        if (result != FWLAB_NFC_API_OK)
+            return worker_error(result); /* Any partial handle stays owned. */
+        *advanced = true;
+    }
+    result = fwlab_nfc_channel_workers_start_step(media->workers, &progress, &complete);
+    *advanced = *advanced || progress;
+    if (result != FWLAB_NFC_API_OK)
+        return worker_error(result);
+    if (!complete)
+        return FWLAB_SPINE_V0_IN_PROGRESS;
+    /* All real startup ACKs precede J0 construction and executor publication. */
+    media->executor = fwlab_nfc_channel_workers_executor_polling(media->workers);
+    if (!media->executor.ops || !media->executor.context)
+        return FWLAB_SPINE_V0_POISONED;
+    media->options.channel_executor = &media->executor;
+    media->options.executor_pre_step_cleanup_by_caller = true;
+    return FWLAB_SPINE_V0_OK;
+}
+
+static enum fwlab_spine_result_v0 worker_release_step(void *opaque, bool *advanced)
+{
+    struct native_scaled_media *media = opaque;
+    struct fwlab_nfc_channel_executor executor;
+    enum fwlab_nfc_api_result result;
+    bool complete = false;
+
+    if (!advanced)
+        return FWLAB_SPINE_V0_INVALID;
+    *advanced = false;
+    if (!worker_resources_owned(media) ||
+        (media->owner->runtime && !media->owner->runtime_finalized))
+        return FWLAB_SPINE_V0_WRONG_STATE;
+    if (!media->workers)
+        return FWLAB_SPINE_V0_OK;
+    /* The polling view also owns a partially started, unpublished transport.
+     * After normal J0 fini the hub has already joined every worker; shutdown
+     * is idempotent and destruction alone returns the allocation here. */
+    executor = fwlab_nfc_channel_workers_executor_polling(media->workers);
+    if (!executor.ops || !executor.context)
+        return FWLAB_SPINE_V0_POISONED;
+    result = executor.ops->shutdown(executor.context, advanced, &complete);
+    if (result != FWLAB_NFC_API_OK)
+        return worker_error(result);
+    if (!complete)
+        return FWLAB_SPINE_V0_IN_PROGRESS;
+    result = fwlab_nfc_channel_workers_destroy(media->workers);
+    if (result != FWLAB_NFC_API_OK)
+        return worker_error(result);
+    media->workers = NULL;
+    memset(&media->executor, 0, sizeof(media->executor));
+    media->options.channel_executor = NULL;
+    media->options.executor_pre_step_cleanup_by_caller = false;
+    *advanced = true;
+    return FWLAB_SPINE_V0_OK;
+}
+
+static enum fwlab_spine_result_v0 worker_wait(void *opaque,
+    const struct j0_runtime *runtime, uint32_t timeout_ms,
+    bool *eligible, bool *notified)
+{
+    struct native_scaled_media *media = opaque;
+    const struct fwlab_nfc_channel_v2 *hub;
+    enum fwlab_nfc_api_result result;
+
+    if (!eligible || !notified || timeout_ms > 1)
+        return FWLAB_SPINE_V0_INVALID;
+    *eligible = *notified = false;
+    if (!worker_resources_owned(media) ||
+        (runtime && runtime != media->owner->runtime))
+        return FWLAB_SPINE_V0_WRONG_STATE;
+    if (!media->workers)
+        return FWLAB_SPINE_V0_OK;
+    result = fwlab_nfc_channel_workers_lifecycle_wait(media->workers, timeout_ms,
+                                                     eligible, notified);
+    if (result != FWLAB_NFC_API_OK)
+        return worker_error(result);
+    if (*eligible || !runtime || media->owner->runtime_finalized)
+        return FWLAB_SPINE_V0_OK;
+    hub = scale_storage_channel_hub(runtime);
+    if (!hub)
+        return FWLAB_SPINE_V0_WRONG_STATE;
+    result = fwlab_nfc_channel_v2_external_wait(hub, eligible);
+    if (result != FWLAB_NFC_API_OK)
+        return worker_error(result);
+    if (*eligible) {
+        result = fwlab_nfc_channel_workers_wait(media->workers, hub, timeout_ms, notified);
+        if (result != FWLAB_NFC_API_OK)
+            return worker_error(result);
+    }
+    return FWLAB_SPINE_V0_OK;
+}
+
+static const struct native_runtime_resource_ops worker_runtime_ops = {
+    .prepare_step = worker_prepare_step,
+    .release_step = worker_release_step,
+    .wait = worker_wait
+};
+
+int native_scaled_media_enable_workers(struct native_scaled_media *media,
+                                      uint32_t workers)
+{
+    if (!media || !media->opened || !media->owner ||
+        media->profile != NATIVE_NAND_CHANNEL_LAB4K || !media->volume ||
+        media->native.expected_lba_count != UINT64_C(64) * 2048u ||
+        (workers != 1 && workers != 4) || media->owner->runtime ||
+        media->owner->runtime_media ||
+        media->workers || media->native.runtime_ops)
+        return 0;
+    memset(&media->worker_config, 0, sizeof(media->worker_config));
+    media->worker_config.channels = media->channels.geometry.channels;
+    media->worker_config.workers = workers;
+    media->native.runtime_ops = &worker_runtime_ops;
+    media->native.runtime_context = media;
+    return 1;
+}
+
 int native_scaled_media_close(struct native_scaled_media *media)
 {
     if (!media)
         return 0;
     if (!media->opened)
         return 1;
-    if (!media->owner || media->owner->runtime)
+    if (!media->owner || media->owner->runtime || media->owner->runtime_media ||
+        media->workers)
         return 0;
     if (media->profile == NATIVE_NAND_CHANNEL_LAB4K) {
         if (fwlab_nand_channel_volume_close(media->volume) != FWLAB_NFC_API_OK)

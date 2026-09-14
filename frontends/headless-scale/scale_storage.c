@@ -57,6 +57,7 @@ struct scale_storage {
     struct fwlab_nfc_channel_v2 *channel_nfc;
     struct fwlab_nfc_channel_executor executor;
     bool stepped, finalized, parallel_channel;
+    bool executor_pre_step_cleanup_by_caller;
     uint64_t trace_windows;
 };
 
@@ -121,11 +122,13 @@ static void storage_release(void *opaque)
         /* release is valid only before first step or after successful fini.
          * A void release cannot return lost worker ownership to its caller. */
         if (storage->stepped && !storage->finalized) abort();
-        bool complete = false;
-        while (!complete) {
-            bool advanced = false;
-            if (storage->executor.ops->shutdown(storage->executor.context,
-                &advanced, &complete) != FWLAB_NFC_API_OK) abort();
+        if (!storage->executor_pre_step_cleanup_by_caller || storage->stepped) {
+            bool complete = false;
+            while (!complete) {
+                bool advanced = false;
+                if (storage->executor.ops->shutdown(storage->executor.context,
+                    &advanced, &complete) != FWLAB_NFC_API_OK) abort();
+            }
         }
     }
     free(storage->nfc_arena);
@@ -241,6 +244,8 @@ static enum fwlab_spine_result_v0 storage_bind_common(
         !options->channel_executor->ops || !options->channel_executor->context ||
         !options->channel_executor->ops->submit || !options->channel_executor->ops->poll ||
         !options->channel_executor->ops->shutdown)) return FWLAB_SPINE_V0_INVALID;
+    if (options && options->executor_pre_step_cleanup_by_caller &&
+        !options->channel_executor) return FWLAB_SPINE_V0_INVALID;
     if ((mutation || channel) && (!options || !options->mutation_lab_config)) return FWLAB_SPINE_V0_INVALID;
     if (channel && (!options->channel_media ||
         options->channel_media->aggregate.context != config->media_binding->media.context ||
@@ -293,7 +298,11 @@ static enum fwlab_spine_result_v0 storage_bind_common(
     storage = calloc(1, sizeof(*storage));
     if (!storage)
         return FWLAB_SPINE_V0_NO_CAPACITY;
-    if ((multihead || parallel_channel) && options->channel_executor) storage->executor = *options->channel_executor;
+    if ((multihead || parallel_channel) && options->channel_executor) {
+        storage->executor = *options->channel_executor;
+        storage->executor_pre_step_cleanup_by_caller =
+            options->executor_pre_step_cleanup_by_caller;
+    }
     storage->parallel_channel = parallel_channel;
     storage->ftl_arena = calloc(1, ftl_bytes);
     storage->nfc_arena = window_v2

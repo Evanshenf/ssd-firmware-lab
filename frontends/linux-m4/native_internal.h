@@ -13,6 +13,18 @@
 
 #define NATIVE_COMMANDS 32u
 
+/* Optional Linux composition lifetime, not a portable storage/Host interface.
+ * An association is retained before prepare and through actual release, even
+ * if J0 construction fails. IN_PROGRESS never relinquishes resource ownership.
+ * wait only observes/waits: no FTL step, Host admission or recursive owner RPC.
+ * It reports eligibility from concrete lifecycle/hub state, not spent budget. */
+struct native_runtime_resource_ops {
+    enum fwlab_spine_result_v0 (*prepare_step)(void *, bool *advanced);
+    enum fwlab_spine_result_v0 (*release_step)(void *, bool *advanced);
+    enum fwlab_spine_result_v0 (*wait)(void *, const struct j0_runtime *,
+        uint32_t timeout_ms, bool *eligible, bool *notified);
+};
+
 struct native_media {
     int directory_fd;
     void *arena;
@@ -25,6 +37,8 @@ struct native_media {
     const struct j0_storage_factory *storage_factory;
     uint64_t format_lba_count;
     uint64_t expected_lba_count;
+    const struct native_runtime_resource_ops *runtime_ops;
+    void *runtime_context;
 };
 
 struct native_slot {
@@ -71,6 +85,9 @@ struct native_slot {
 
 struct native_context {
     struct j0_runtime *runtime;
+    struct native_media *runtime_media;
+    struct j0_close_status pending_closed;
+    uint8_t runtime_finalized; /* No further J0/hub calls; resource release owed. */
     struct native_slot slot[NATIVE_COMMANDS];
     struct fwlab_controller_buffer_port_v0 buffer;
     uint64_t function_nonce;

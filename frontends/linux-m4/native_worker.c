@@ -134,6 +134,8 @@ static int media_open(struct native_media *media, const char *directory, int for
 static uint32_t runtime_iteration_limit(const struct native_context *context)
 {
     const struct j0_runtime *runtime = context->runtime;
+    if (!runtime || context->runtime_finalized)
+        return 800000u; /* Native startup/release can exist without a J0. */
     uint64_t lbas = runtime->ready ? runtime->volume.lba_count :
         runtime->config.media_mode == J0_MEDIA_FORMAT ? runtime->config.format_lba_count :
                                                       runtime->config.expected_lba_count;
@@ -141,6 +143,73 @@ static uint32_t runtime_iteration_limit(const struct native_context *context)
     /* Only startup/drain allowances grow. In-flight work, per-step budgets,
      * lifecycle limits and the ready firmware loop remain unchanged. */
     return lbas > UINT64_C(256) * 2048u ? UINT32_C(1000000000) : 800000u;
+}
+
+static int runtime_has_resources(const struct native_context *context)
+{
+    return context->runtime_media && context->runtime_media->runtime_ops;
+}
+
+static int runtime_service(struct native_context *context, int closing)
+{
+#if FWLAB_NATIVE_PUMP
+    if (runtime_has_resources(context)) {
+        int service_result = 0;
+        if (native_pump(context, &service_result))
+            return 0;
+        /* A reset service fault must not prevent already-revoked work from
+         * draining. Startup cannot publish READY after such a fault. */
+        if (service_result && !closing)
+            return 0;
+    }
+#else
+    (void)context;
+    (void)closing;
+#endif
+    return 1;
+}
+
+static int runtime_deadline(const struct native_context *context,
+    const struct timespec *started, const char *phase)
+{
+    struct timespec now;
+    if (!runtime_has_resources(context))
+        return 1;
+    if (clock_gettime(CLOCK_MONOTONIC, &now))
+        return 0;
+    if (now.tv_sec - started->tv_sec < 60 ||
+        (now.tv_sec - started->tv_sec == 60 && now.tv_nsec < started->tv_nsec))
+        return 1;
+    fprintf(stderr, "NATIVE_RESOURCE_DEADLINE|phase=%s|seconds=60|ownership_retained=1\n", phase);
+    return 0; /* Operational failure, never a join/zero/release certificate. */
+}
+
+static int runtime_wait(struct native_context *context, bool local_work,
+                        bool *eligible)
+{
+    const struct native_media *media = context->runtime_media;
+    bool notified = false;
+    *eligible = false;
+    if (!runtime_has_resources(context) || local_work)
+        return 1;
+    return media->runtime_ops->wait(media->runtime_context,
+        context->runtime_finalized ? NULL : context->runtime, 1,
+        eligible, &notified) == FWLAB_SPINE_V0_OK;
+}
+
+static enum fwlab_spine_result_v0 runtime_step(struct native_context *context,
+    uint32_t budget, uint32_t *units, bool *local_work)
+{
+    struct fwlab_execution_progress progress = {0};
+    enum fwlab_spine_result_v0 result;
+    if (!runtime_has_resources(context)) {
+        *local_work = true; /* Preserve the old cooperative iteration budget. */
+        return j0_runtime_step(context->runtime, budget, units);
+    }
+    result = j0_runtime_step_report(context->runtime, budget, units, &progress);
+    *local_work = progress.advanced || progress.runnable;
+    context->progressed |= progress.advanced;
+    return result;
 }
 
 static int runtime_progress(const struct native_context *context,
@@ -182,10 +251,37 @@ int native_runtime_create(struct native_context *context,
     uint64_t started, last;
     uint32_t iteration, limit;
 
-    if (context->runtime || context->next_runtime_seed >= UINT64_C(0xfffff))
+    if (!context || !media || context->runtime || context->runtime_media ||
+        context->next_runtime_seed >= UINT64_C(0xfffff))
+        return 0;
+    if ((media->runtime_ops == NULL) != (media->runtime_context == NULL) ||
+        (media->runtime_ops && (!media->runtime_ops->prepare_step ||
+            !media->runtime_ops->release_step || !media->runtime_ops->wait)))
         return 0;
     if (clock_gettime(CLOCK_MONOTONIC, &now))
         return 0;
+    if (media->runtime_ops) {
+        /* Establish ownership before the first allocation/start attempt. A
+         * failed prepare or J0 init leaves this association for close_step. */
+        context->runtime_media = media;
+        for (iteration = 0; iteration < 800000u;) {
+            bool advanced = false, eligible = false;
+            enum fwlab_spine_result_v0 result;
+            if (!runtime_deadline(context, &now, "worker-start") ||
+                !runtime_service(context, 0))
+                return 0;
+            result = media->runtime_ops->prepare_step(media->runtime_context, &advanced);
+            if (result == FWLAB_SPINE_V0_OK)
+                break;
+            if (result != FWLAB_SPINE_V0_IN_PROGRESS ||
+                !runtime_wait(context, advanced, &eligible))
+                return 0;
+            if (!eligible)
+                ++iteration;
+        }
+        if (iteration == 800000u)
+            return 0;
+    }
     context->runtime = calloc(1, sizeof(*context->runtime));
     if (!context->runtime)
         return 0;
@@ -221,24 +317,35 @@ int native_runtime_create(struct native_context *context,
     }
     started = last = (uint64_t)now.tv_sec;
     limit = runtime_iteration_limit(context);
-    for (iteration = 0; iteration < limit; ++iteration) {
+    if (!runtime_progress(context, format ? "format" : "recovery", 0, started, &last))
+        return 0;
+    uint64_t turns = 0;
+    for (iteration = 0; iteration < limit;) {
         uint32_t units;
+        bool local_work = false, eligible = false;
+        if (!runtime_deadline(context, &now, format ? "format" : "recovery") ||
+            !runtime_service(context, 0))
+            return 0;
 #if FWLAB_NATIVE_LARGE
-        if (context->recovery_pump && !(iteration & 1023u)) {
+        if (!runtime_has_resources(context) && context->recovery_pump && !(iteration & 1023u)) {
             int service_result = 0;
             if (native_pump(context, &service_result) || service_result)
                 return 0;
         }
 #endif
-        if (!(iteration & 1023u) && !runtime_progress(context,
-                format ? "format" : "recovery", iteration, started, &last))
+        if (!(++turns & 1023u) && !runtime_progress(context,
+                format ? "format" : "recovery", iteration + 1u, started, &last))
             return 0;
-        if (j0_runtime_step(context->runtime, 3, &units) != FWLAB_SPINE_V0_OK)
+        if (runtime_step(context, 3, &units, &local_work) != FWLAB_SPINE_V0_OK)
             return 0;
         if (context->runtime->ready) {
             runtime_complete(context, format ? "format" : "recovery", iteration + 1u, &now);
             return 1;
         }
+        if (!runtime_wait(context, local_work, &eligible))
+            return 0;
+        if (!eligible)
+            ++iteration;
     }
     return 0;
 }
@@ -493,20 +600,44 @@ enum fwlab_spine_result_v0 native_runtime_close_step(
 
     if (!context || !budget)
         return FWLAB_SPINE_V0_INVALID;
-    if (!context->runtime)
+    if (!context->runtime && !context->runtime_media)
         return FWLAB_SPINE_V0_OK;
-    result = j0_runtime_close_start(context->runtime);
-    if (result != FWLAB_SPINE_V0_OK)
-        return result;
-    if (!finish_commands(context, 1))
-        return FWLAB_SPINE_V0_POISONED;
-    result = j0_runtime_close_query(context->runtime, &closed);
-    if (result != FWLAB_SPINE_V0_OK)
-        return result;
-    result = j0_runtime_fini(context->runtime);
-    if (result == FWLAB_SPINE_V0_OK) {
-        if (!native_frames_quiescent(context))
+    if (context->runtime && !context->runtime_finalized) {
+        bool local_work = false;
+        result = j0_runtime_close_start(context->runtime);
+        if (result != FWLAB_SPINE_V0_OK)
+            return result;
+        if (!finish_commands(context, 1))
             return FWLAB_SPINE_V0_POISONED;
+        result = j0_runtime_close_query(context->runtime, &closed);
+        if (result != FWLAB_SPINE_V0_OK)
+            return result;
+        result = j0_runtime_fini(context->runtime);
+        if (result == FWLAB_SPINE_V0_IN_PROGRESS) {
+            result = runtime_step(context, budget, &units, &local_work);
+            /* Runnable local work also keeps the native drain iteration
+             * budget; only a later proven external wait may be exempted. */
+            context->progressed |= local_work;
+            return result == FWLAB_SPINE_V0_OK ? FWLAB_SPINE_V0_IN_PROGRESS : result;
+        }
+        if (result != FWLAB_SPINE_V0_OK)
+            return result;
+        context->pending_closed = closed;
+        context->runtime_finalized = 1;
+        context->progressed = 1;
+    }
+    if (runtime_has_resources(context)) {
+        const struct native_media *media = context->runtime_media;
+        bool advanced = false;
+        result = media->runtime_ops->release_step(media->runtime_context, &advanced);
+        context->progressed |= advanced;
+        if (result != FWLAB_SPINE_V0_OK)
+            return result; /* Also retains NULL-J0 partial-start ownership. */
+    }
+    if (!native_frames_quiescent(context))
+        return FWLAB_SPINE_V0_POISONED;
+    if (context->runtime) {
+        closed = context->pending_closed;
         context->last_closed = closed;
         context->last_closed.profiles_retired = context->runtime->profiles_retired;
         context->last_ftl_nonce = context->runtime->m3p_instance_nonce;
@@ -519,12 +650,10 @@ enum fwlab_spine_result_v0 native_runtime_close_step(
         free(context->runtime);
         context->runtime = NULL;
         memset(context->slot, 0, sizeof(context->slot));
-        return FWLAB_SPINE_V0_OK;
     }
-    if (result != FWLAB_SPINE_V0_IN_PROGRESS)
-        return result;
-    result = j0_runtime_step(context->runtime, budget, &units);
-    return result == FWLAB_SPINE_V0_OK ? FWLAB_SPINE_V0_IN_PROGRESS : result;
+    context->runtime_media = NULL;
+    context->runtime_finalized = 0;
+    return FWLAB_SPINE_V0_OK;
 }
 
 static int runtime_close(struct native_context *context)
@@ -533,15 +662,22 @@ static int runtime_close(struct native_context *context)
     uint64_t started, last;
     uint32_t iteration, limit;
 
-    if (!context->runtime)
+    if (!context->runtime && !context->runtime_media)
         return 1;
     if (clock_gettime(CLOCK_MONOTONIC, &now))
         return 0;
     started = last = (uint64_t)now.tv_sec;
     limit = runtime_iteration_limit(context);
-    for (iteration = 0; iteration < limit; ++iteration) {
-        if (!(iteration & 1023u) &&
-            !runtime_progress(context, "drain", iteration, started, &last))
+    if (!runtime_progress(context, "drain", 0, started, &last))
+        return 0;
+    uint64_t turns = 0;
+    for (iteration = 0; iteration < limit;) {
+        bool eligible = false;
+        context->progressed = 0;
+        if (!runtime_deadline(context, &now, "drain") || !runtime_service(context, 1))
+            return 0;
+        if (!(++turns & 1023u) &&
+            !runtime_progress(context, "drain", iteration + 1u, started, &last))
             return 0;
         enum fwlab_spine_result_v0 result = native_runtime_close_step(context, 48);
         if (result == FWLAB_SPINE_V0_OK) {
@@ -552,6 +688,10 @@ static int runtime_close(struct native_context *context)
             fprintf(stderr, "drain result=%u iteration=%u\n", (unsigned)result, iteration);
             return 0;
         }
+        if (!runtime_wait(context, context->progressed != 0, &eligible))
+            return 0;
+        if (!eligible)
+            ++iteration;
     }
     fprintf(stderr, "drain progress bound exhausted\n");
     return 0;
@@ -625,11 +765,17 @@ static int firmware_loop(struct native_context *context, struct native_media *me
         /* A new capture deserves its next progress turn without an artificial
          * wait. Mere occupied slots or budget consumption are not this signal. */
 #if FWLAB_NATIVE_MQ2
-        if (!context->progressed && !progress.advanced && !progress.runnable)
+        if (!context->progressed && !progress.advanced && !progress.runnable) {
+            bool eligible = false;
+            if (!runtime_wait(context, false, &eligible))
+                return 0;
+            if (!eligible)
+                nanosleep(&idle, NULL);
+        }
 #else
         if (!received)
-#endif
             nanosleep(&idle, NULL);
+#endif
     }
     return 1;
 }
@@ -657,6 +803,7 @@ int main(int argc, char **argv)
 #endif
 #if FWLAB_NATIVE_MQ2
     enum native_nand_profile nand_profile = NATIVE_NAND_R0;
+    uint32_t nand_workers = 0;
 #endif
 
     memset(&media_owner, 0, sizeof(media_owner));
@@ -683,11 +830,22 @@ int main(int argc, char **argv)
             if (strcmp(argv[++index], "channel-lab4k")) goto usage;
             nand_profile = NATIVE_NAND_CHANNEL_LAB4K;
         }
+        else if (!strcmp(argv[index], "--nand-workers")) {
+            const char *value = argv[++index];
+            if (!strcmp(value, "1")) nand_workers = 1;
+            else if (!strcmp(value, "4")) nand_workers = 4;
+            else goto usage;
+        }
 #endif
         else goto usage;
     }
 #if FWLAB_NATIVE_MQ2
     if (nand_profile == NATIVE_NAND_CHANNEL_LAB4K && logical_mib != 64)
+        goto usage;
+    /* This slice services kernel control, not asynchronous owner socket grants.
+     * Reject unsupported composition BEFORE open(device) or media side effects. */
+    if (nand_workers && (nand_profile != NATIVE_NAND_CHANNEL_LAB4K ||
+                         logical_mib != 64 || owner_directory))
         goto usage;
 #endif
     if (!device || strncmp(device, "/dev/fwlab-native-", 18) || !directory ||
@@ -710,8 +868,11 @@ int main(int argc, char **argv)
 #endif
         goto done;
 #if FWLAB_NATIVE_MQ2
+    if (nand_workers && !native_scaled_media_enable_workers(&media_owner, nand_workers))
+        goto done;
     if (nand_profile == NATIVE_NAND_CHANNEL_LAB4K)
-        puts("NATIVE_STORAGE_PROFILE|profile=channel-lab4k|namespace_mib=64|ftl_format=3|physical_format=2|channels=4|luns_per_channel=1|planes_per_lun=2|execution=cooperative|backend=strict_posix|timing=synthetic_unpaced|not_vendor_or_throughput_claim=1");
+        printf("NATIVE_STORAGE_PROFILE|profile=channel-lab4k|namespace_mib=64|ftl_format=3|physical_format=2|channels=4|luns_per_channel=1|planes_per_lun=2|execution=%s|workers=%u|backend=strict_posix|timing=synthetic_unpaced|not_vendor_or_throughput_claim=1\n",
+               nand_workers ? "linux_threads" : "cooperative", nand_workers);
 #endif
 #if FWLAB_NATIVE_LARGE
     if (native_attach_profile(context, FWLAB_NATIVE_MQ2
@@ -753,8 +914,9 @@ done:
         native_owner_server_close(server);
         free(server);
     }
-    if (context && context->runtime) {
-        if (context->runtime->magic != J0_RUNTIME_MAGIC)
+    if (context && (context->runtime || context->runtime_media)) {
+        if (context->runtime && !context->runtime_finalized &&
+            context->runtime->magic != J0_RUNTIME_MAGIC)
             goto unresolved_close;
         native_message_init(context, NULL, FWLAB_M4_NATIVE_REVOKE, &message);
         (void)native_exchange(context, &message);
@@ -798,6 +960,7 @@ usage:
 #endif
 #if FWLAB_NATIVE_MQ2
                     " [--nand-profile channel-lab4k (64 MiB only)]"
+                    " [--nand-workers 1|4 (channel-lab4k, L1 only, no --owner-dir)]"
 #endif
                     "\n", argv[0]);
     return 2;

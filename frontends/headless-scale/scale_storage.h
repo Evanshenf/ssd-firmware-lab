@@ -38,8 +38,15 @@ struct scale_storage_options {
      * channel-READ factories.
      * NULL keeps the cooperative actor implementation. Caller owns transport
      * context until runner release; successful close includes its shutdown and
-     * actual joins. This does not select threads in existing native entries. */
+     * actual joins. NULL preserves native defaults; explicit native runtime
+     * composition can supply this transport. */
     const struct fwlab_nfc_channel_executor *channel_executor;
+    /* Explicit external executor only. If true, release of a NEVER-STEPPED
+     * runner returns only its unused FTL/NFC arenas; the caller retains the
+     * executor and owes actual STOP/join/destroy. No job has been submitted.
+     * Once any runner step occurs, normal shutdown/fini remains mandatory.
+     * False preserves the existing synchronous pre-step cleanup contract. */
+    bool executor_pre_step_cleanup_by_caller;
     /* Explicit parallel-channel or combined multihead construction only.
      * Zero is LUN-exclusive control;
      * IPR must be selected deliberately and is independent of OS placement. */

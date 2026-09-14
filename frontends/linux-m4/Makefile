@@ -54,7 +54,7 @@ SCALED_SOURCES := \
 	../../media/file-nand-v2/physical_nand_posix.c \
 	../../media/file-nand-v2/physical_nand_batch.c \
 	../../media/file-nand-v2/channel_volume.c \
-	../headless-scale/scale_storage.c
+	../headless-scale/scale_storage.c ../headless-scale/nfc_channel_workers.c
 SCALED_RUNTIME_SOURCES := tests/test_scaled_runtime.c native_scaled_media.c \
 	native_attach.c native_pump.c native_host.c native_owner.c native_owner_socket.c \
 	$(FIRMWARE_SOURCES) $(SCALED_SOURCES)
@@ -76,35 +76,35 @@ scaled-worker:
 	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 \
 		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
 		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) \
-		-o $(SCALED_BUILD)/fwlab_native_scaled_worker
+		-pthread -o $(SCALED_BUILD)/fwlab_native_scaled_worker
 
 scaled-pump-worker:
 	mkdir -p $(SCALED_BUILD)
 	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 \
 		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
 		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) \
-		-o $(SCALED_BUILD)/fwlab_native_scaled_pump_worker
+		-pthread -o $(SCALED_BUILD)/fwlab_native_scaled_pump_worker
 
 large-worker:
 	mkdir -p $(SCALED_BUILD)
 	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 \
 		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
 		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) \
-		-o $(SCALED_BUILD)/fwlab_native_large_worker
+		-pthread -o $(SCALED_BUILD)/fwlab_native_large_worker
 
 mq2-worker:
 	mkdir -p $(SCALED_BUILD)
 	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 -DFWLAB_NATIVE_MQ2=1 \
 		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
 		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) \
-		-o $(SCALED_BUILD)/fwlab_native_mq2_worker
+		-pthread -o $(SCALED_BUILD)/fwlab_native_mq2_worker
 
 mq2-replyloss-worker:
 	mkdir -p $(SCALED_BUILD)
 	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 -DFWLAB_NATIVE_MQ2=1 \
 		-I../../core/ftl-scale -I../../media/file-nand-v2 $(CFLAGS) \
 		$(WORKER_SOURCES) native_scaled_media.c $(SCALED_SOURCES) tests/queue_reply_loss.c \
-		-Wl,--wrap=ioctl -o $(SCALED_BUILD)/fwlab_native_mq2_replyloss_worker
+		-pthread -Wl,--wrap=ioctl -o $(SCALED_BUILD)/fwlab_native_mq2_replyloss_worker
 
 attach-check:
 	mkdir -p $(SCALED_BUILD)
@@ -122,7 +122,7 @@ scaled-runtime:
 	mkdir -p $(SCALED_BUILD)
 	$(CC) $(CPPFLAGS) -I../../core/ftl-scale -I../../media/file-nand-v2 \
 		$(CFLAGS) $(SCALED_RUNTIME_SOURCES) -Wl,--wrap=ioctl \
-		-o $(SCALED_BUILD)/native_scaled_offline
+		-pthread -o $(SCALED_BUILD)/native_scaled_offline
 
 check-scaled-runtime: scaled-runtime
 	FWLAB_TEST_MEDIA_DIR="$(FWLAB_TEST_MEDIA_DIR)" $(SCALED_BUILD)/native_scaled_offline
@@ -132,7 +132,7 @@ scaled-pump-runtime:
 	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 \
 		-I../../core/ftl-scale -I../../media/file-nand-v2 \
 		$(CFLAGS) $(SCALED_RUNTIME_SOURCES) -Wl,--wrap=ioctl \
-		-o $(SCALED_BUILD)/native_scaled_pump_offline
+		-pthread -o $(SCALED_BUILD)/native_scaled_pump_offline
 
 check-scaled-pump-runtime: scaled-pump-runtime
 	FWLAB_TEST_MEDIA_DIR="$(FWLAB_TEST_MEDIA_DIR)" $(SCALED_BUILD)/native_scaled_pump_offline
@@ -142,7 +142,7 @@ large-runtime:
 	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 \
 		-I../../core/ftl-scale -I../../media/file-nand-v2 \
 		$(CFLAGS) $(SCALED_RUNTIME_SOURCES) -Wl,--wrap=ioctl \
-		-o $(SCALED_BUILD)/native_large_offline
+		-pthread -o $(SCALED_BUILD)/native_large_offline
 
 check-large-runtime: large-runtime
 	FWLAB_TEST_MEDIA_DIR="$(FWLAB_TEST_MEDIA_DIR)" $(SCALED_BUILD)/native_large_offline
@@ -152,7 +152,8 @@ progress-runtime:
 	$(CC) $(CPPFLAGS) -DFWLAB_NATIVE_SCALED=1 -DFWLAB_NATIVE_PUMP=1 -DFWLAB_NATIVE_LARGE=1 -DFWLAB_NATIVE_MQ2=1 \
 		-I../../core/ftl-scale -I../../media/file-nand-v2 \
 		$(CFLAGS) $(SCALED_RUNTIME_SOURCES) -Wl,--wrap=ioctl -Wl,--wrap=nanosleep \
-		-o $(SCALED_BUILD)/native_progress_offline
+		-Wl,--wrap=pthread_create -Wl,--wrap=pthread_tryjoin_np -Wl,--wrap=pthread_join \
+		-Wl,--wrap=aligned_alloc -pthread -o $(SCALED_BUILD)/native_progress_offline
 
 check-progress-runtime: progress-runtime
 	FWLAB_TEST_MEDIA_DIR="$(FWLAB_TEST_MEDIA_DIR)" $(SCALED_BUILD)/native_progress_offline
