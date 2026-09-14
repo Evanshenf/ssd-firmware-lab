@@ -55,6 +55,11 @@ no NUMA placement or timing throttle. Whole-fixture times include deliberate
 startup/return holds and recovery; they do not establish a throughput gain
 or extend any prior native R0 rate to this threaded construction.
 
+The [four-worker native L1 episode](results/2026-09-14-native-four-worker-l1.md)
+subsequently passed actual-driver functional checks, including replacement of
+the four data threads at reset. It measured no bandwidth or CPU/RSS comparison.
+Real execution on four threads is not proof of fourfold—or any—throughput gain.
+
 ## Objective and measurement boundary
 
 The objective is at least 10 decimal GB/s for large sequential reads and writes,

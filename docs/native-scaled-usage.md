@@ -166,10 +166,11 @@ It is valid only with channel-lab4k/64MiB and **cannot be combined with
 `--owner-dir`**. Do not reuse the earlier owner-transfer example for this
 L1-only mode. Startup/recovery/drain use short control-service waits and an
 operational60-second deadline; failure does not permit autoformat or release.
-The [software result](results/2026-09-14-native-worker-lifetime.md) does not
-qualify actual threaded kernel operation. That native journey, ARM/M5 and
-performance remain separate tasks; this section does not authorize changing
-an existing media directory.
+The [software result](results/2026-09-14-native-worker-lifetime.md) does not by
+itself qualify kernel operation. The later [four-worker x86-64 native journey](results/2026-09-14-native-four-worker-l1.md)
+passed the bounded actual-driver data/reset/recovery checks. One-worker native,
+ARM/M5 and performance remain separate tasks; this section does not authorize
+changing an existing media directory.
 
 The [development results](results/2026-09-10-scaled-storage-mq2.md) identify the
 executed native and ownership cases. Later

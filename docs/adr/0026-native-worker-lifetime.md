@@ -86,3 +86,7 @@ default cleanup fixture remains a regression. One exact-source confirmation
 closes this software slice; real native driver operation is a later journey.
 No new test framework, large-capacity campaign, performance claim or media
 conversion is part of this decision.
+
+The later [four-worker native L1 episode](../results/2026-09-14-native-four-worker-l1.md)
+adds actual-driver evidence on the named x86-64 profile. It does not qualify
+one-worker native, ARM, M5, NUMA or a throughput gain.

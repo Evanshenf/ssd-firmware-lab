@@ -117,8 +117,10 @@ also executes the same path through the actual worker loop with fake Host
 ioctls. A subsequent [bounded native x86-64 L1 episode](results/2026-09-14-native-channel-l1.md)
 passed actual-driver data, quiescent reset and cold reopen on that same path.
 The [per-runtime worker integration](results/2026-09-14-native-worker-lifetime.md)
-now passes its fixed software/real-thread checks. Next is a bounded native
-worker journey; new-construction M5/ARM, NUMA/performance and vendor geometry
+now passes its fixed software/real-thread checks. A subsequent
+[native four-worker L1 journey](results/2026-09-14-native-four-worker-l1.md)
+also passed real-driver data, reset and cold recovery. New-construction M5/ARM,
+NUMA/performance and vendor geometry
 remain separate finite work, not reasons to
 repeat or broaden the completed A–D tests.
 Threads/NUMA do not define NAND topology or guarantee a throughput multiplier.

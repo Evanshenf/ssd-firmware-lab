@@ -23,7 +23,7 @@ code without treating historical directory names as dependency boundaries.
 | `large-worker`, Host profile 2 | 64 MiB / 1 MiB, one I/O pair | Same storage stack, explicit PUMP construction, bounded PRP graph |
 | `mq2-worker` default, Host profile 3 | 64 MiB / 1 MiB, two depth-32 I/O pairs, three MSI-X vectors | Same storage stack, **one global I/O frame plus one Admin reserve**; serialized FTL execution, not parallel storage throughput |
 | Same `mq2-worker`, opt-in `channel-lab4k` | 64 MiB only / 1 MiB; unchanged Host limits | Mutable format3 + IPR cooperative channel hub + four strict POSIX physical-v2 shards; [offline construction](results/2026-09-14-native-channel-construction.md) and [bounded actual x86-64 native L1](results/2026-09-14-native-channel-l1.md); not ARM native channel, M5, threads or performance qualification |
-| Same channel option plus `--nand-workers 1\|4` | 64 MiB only, L1-only; rejects `--owner-dir` before device access | Same NAND path with fresh per-runtime Linux workers; [offline native-loop lifetime checks](results/2026-09-14-native-worker-lifetime.md), actual cross-user execution; real threaded native/M5/NUMA/performance not yet qualified |
+| Same channel option plus `--nand-workers 1\|4` | 64 MiB only, L1-only; rejects `--owner-dir` before device access | Same NAND path and per-runtime workers; [software1/4checks](results/2026-09-14-native-worker-lifetime.md) and [actual x86-64 native4worker episode](results/2026-09-14-native-four-worker-l1.md); one-worker native/ARM/M5/NUMA/performance not qualified |
 
 The R0 rows' native capacities are the default 64-MiB configurations. Scaled native
 workers without the channel opt-in accept `--namespace-mib 64|256|65536` using the same construction
@@ -104,8 +104,10 @@ are now followed by [actual x86-64 Linux native L1 checks](results/2026-09-14-na
 for bounded data, quiescent reset and cold reopen. Those do not qualify M5 or
 ARM native channel mode. The subsequent optional1/4worker construction has
 [bounded software lifetime evidence](results/2026-09-14-native-worker-lifetime.md),
-including real joins, startup/control waits and NULL-J0 failure cleanup. Real
-threaded native operation, vendor timing, NUMA locality, concurrent Host
+including real joins, startup/control waits and NULL-J0 failure cleanup. The
+[four-worker native L1 result](results/2026-09-14-native-four-worker-l1.md) now
+adds actual x86-64 driver data, quiescent reset and cold recovery. One-worker
+native, ARM/M5, vendor timing, NUMA locality, concurrent Host
 parents and a throughput gain remain unproved.
 
 | Environment | What has evidence | What is not established |
