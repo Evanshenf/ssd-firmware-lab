@@ -55,6 +55,8 @@ struct scale_storage {
     struct fwlab_nfc_page_v2_model *page_nfc;
     struct fwlab_nfc_page_v2_lab *lab_nfc;
     struct fwlab_nfc_channel_v2 *channel_nfc;
+    struct fwlab_nfc_channel_executor executor;
+    bool stepped, finalized;
     uint64_t trace_windows;
 };
 
@@ -115,6 +117,17 @@ static void storage_release(void *opaque)
     struct scale_storage *storage = opaque;
     if (!storage)
         return;
+    if (storage->executor.ops) {
+        /* release is valid only before first step or after successful fini.
+         * A void release cannot return lost worker ownership to its caller. */
+        if (storage->stepped && !storage->finalized) abort();
+        bool complete = false;
+        while (!complete) {
+            bool advanced = false;
+            if (storage->executor.ops->shutdown(storage->executor.context,
+                &advanced, &complete) != FWLAB_NFC_API_OK) abort();
+        }
+    }
     free(storage->nfc_arena);
     free(storage->ftl_arena);
     storage->magic = 0;
@@ -128,6 +141,7 @@ static enum fwlab_spine_result_v0 storage_step(
     uint32_t total = 0;
     if (!storage || storage->magic != SCALE_STORAGE_MAGIC || !used || !budget)
         return FWLAB_SPINE_V0_INVALID;
+    storage->stepped = true;
     while (total < budget) {
         uint32_t one = 0;
         enum fwlab_spine_result_v0 result =
@@ -163,6 +177,7 @@ static enum fwlab_spine_result_v0 storage_step_report(
     if (!storage || storage->magic != SCALE_STORAGE_MAGIC ||
         (!storage->page_nfc && !storage->lab_nfc && !storage->channel_nfc))
         return FWLAB_SPINE_V0_INVALID;
+    storage->stepped = true;
     return fwlab_ftl_scale_step_report(storage->ftl, budget, used, progress);
 }
 
@@ -178,8 +193,10 @@ static enum fwlab_spine_result_v0 storage_volume(
 static enum fwlab_spine_result_v0 storage_fini(void *opaque)
 {
     struct scale_storage *storage = opaque;
-    return storage && storage->magic == SCALE_STORAGE_MAGIC
-        ? fwlab_ftl_scale_fini(storage->ftl) : FWLAB_SPINE_V0_INVALID;
+    if (!storage || storage->magic != SCALE_STORAGE_MAGIC) return FWLAB_SPINE_V0_INVALID;
+    enum fwlab_spine_result_v0 result = fwlab_ftl_scale_fini(storage->ftl);
+    if (result == FWLAB_SPINE_V0_OK) storage->finalized = true;
+    return result;
 }
 
 static enum fwlab_spine_result_v0 storage_bind_common(
@@ -212,6 +229,10 @@ static enum fwlab_spine_result_v0 storage_bind_common(
         !sf_geometry_counts(&config->media_binding->geometry, &blocks, &pages))
         return FWLAB_SPINE_V0_INVALID;
     if (parallel && (!options || !options->read_lab_config)) return FWLAB_SPINE_V0_INVALID;
+    if (options && options->channel_executor && (!multihead ||
+        !options->channel_executor->ops || !options->channel_executor->context ||
+        !options->channel_executor->ops->submit || !options->channel_executor->ops->poll ||
+        !options->channel_executor->ops->shutdown)) return FWLAB_SPINE_V0_INVALID;
     if ((mutation || channel) && (!options || !options->mutation_lab_config)) return FWLAB_SPINE_V0_INVALID;
     if (channel && (!options->channel_media ||
         options->channel_media->aggregate.context != config->media_binding->media.context ||
@@ -263,6 +284,7 @@ static enum fwlab_spine_result_v0 storage_bind_common(
     storage = calloc(1, sizeof(*storage));
     if (!storage)
         return FWLAB_SPINE_V0_NO_CAPACITY;
+    if (multihead && options->channel_executor) storage->executor = *options->channel_executor;
     storage->ftl_arena = calloc(1, ftl_bytes);
     storage->nfc_arena = window_v2
         ? aligned_alloc(channel ? fwlab_nfc_channel_v2_arena_alignment() :
@@ -288,8 +310,12 @@ static enum fwlab_spine_result_v0 storage_bind_common(
         if (channel) {
             struct fwlab_nfc_page_v2_lab_mutation_config timed = *options->mutation_lab_config;
             timed.read.base = page;
-            if (fwlab_nfc_channel_v2_init(storage->nfc_arena, nfc_bytes, &timed,
-                    options->channel_media, &storage->channel_nfc) != FWLAB_NFC_API_OK) goto failed;
+            enum fwlab_nfc_api_result initialized = storage->executor.ops ?
+                fwlab_nfc_channel_v2_init_executor(storage->nfc_arena, nfc_bytes, &timed,
+                    options->channel_media, &storage->executor, &storage->channel_nfc) :
+                fwlab_nfc_channel_v2_init(storage->nfc_arena, nfc_bytes, &timed,
+                    options->channel_media, &storage->channel_nfc);
+            if (initialized != FWLAB_NFC_API_OK) goto failed;
             page_provider = fwlab_nfc_channel_v2_provider(storage->channel_nfc);
             result = multihead ? fwlab_ftl_scale_init_multihead_v3(storage->ftl_arena, ftl_bytes,
                 &extended, buffer, &page_provider, &storage->ftl) :
@@ -507,6 +533,12 @@ enum fwlab_spine_result_v0 scale_storage_channel_snapshot(const struct j0_runtim
     return storage && storage->channel_nfc &&
         fwlab_nfc_channel_v2_snapshot(storage->channel_nfc, out) == FWLAB_NFC_API_OK ?
         FWLAB_SPINE_V0_OK : FWLAB_SPINE_V0_INVALID;
+}
+
+const struct fwlab_nfc_channel_v2 *scale_storage_channel_hub(const struct j0_runtime *runtime)
+{
+    struct scale_storage *storage = from_runtime(runtime);
+    return storage ? storage->channel_nfc : NULL;
 }
 
 enum fwlab_spine_result_v0 scale_storage_query(

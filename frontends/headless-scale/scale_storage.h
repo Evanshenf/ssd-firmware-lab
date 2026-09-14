@@ -9,6 +9,7 @@
 #include "fwlab/private/nfc_page_v2_lab.h"
 #include "fwlab/private/nand_channel_v2.h"
 #include "fwlab/private/nfc_channel_v2.h"
+#include "fwlab/private/nfc_channel_v2_job.h"
 
 /* A resource ceiling, not a format/recovery capacity override. Zero allocates
  * at most one map slot per physical page. One factory selects the new engine. */
@@ -27,6 +28,11 @@ struct scale_storage_options {
      * the J0 media binding; actual channel children are independently owned.
      * This does not select the new construction in any existing native entry. */
     const struct fwlab_nand_channel_v2 *channel_media;
+    /* Optional construction-time executor for the explicit multihead factory.
+     * NULL keeps the cooperative actor implementation. Caller owns transport
+     * context until runner release; successful close includes its shutdown and
+     * actual joins. This does not select threads in existing native entries. */
+    const struct fwlab_nfc_channel_executor *channel_executor;
 };
 
 /* Shared construction presets, not FTL capacity truth. Recovery still validates
@@ -57,6 +63,9 @@ enum fwlab_spine_result_v0 scale_storage_lab_trace_at(const struct j0_runtime *,
     uint32_t, struct fwlab_nfc_page_v2_lab_trace *);
 enum fwlab_spine_result_v0 scale_storage_channel_snapshot(const struct j0_runtime *,
     struct fwlab_nfc_channel_v2_stats *);
+/* Private composition-only access for the Linux completion wait helper, never
+ * an FTL callback or permission to issue a second PAGE2 consumer's commands. */
+const struct fwlab_nfc_channel_v2 *scale_storage_channel_hub(const struct j0_runtime *);
 enum fwlab_spine_result_v0 scale_storage_query(
     const struct j0_runtime *runtime, struct fwlab_ftl_scale_status *status);
 enum fwlab_spine_result_v0 scale_storage_checkpoint(struct j0_runtime *runtime);
