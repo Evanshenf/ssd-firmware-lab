@@ -76,8 +76,12 @@ An explicit [cooperative channel construction](adr/0020-cooperative-nand-channel
 now composes independent physical-v2 shards beneath the same serial FTL/J0.
 Its [bounded A results](results/2026-09-14-channel-domains.md) cover closed
 batches, real channel/LUN work, time floors, snapshot/ACK ownership and recovery.
-It does not replace native R0 or implement multi-head writes, OS workers or
-independent-plane READ; those are separate B/C/D slices.
+It does not replace native R0. The following explicit
+[format3 multi-head B construction](adr/0021-multihead-ftl-write-waves.md) now has
+[real J0/Block evidence](results/2026-09-14-multihead-write-waves.md): ordered
+write waves, close/failure recovery and bounded low-free GC progress. OS workers
+and independent-plane READ remain the separate C/D slices, not implemented
+capabilities or implied native performance.
 
 | Environment | What has evidence | What is not established |
 |---|---|---|

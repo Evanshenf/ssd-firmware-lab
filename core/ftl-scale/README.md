@@ -241,6 +241,28 @@ a hardware NAND port, timed writes or a large-capacity qualification.
 
 ## Reproduce without a raw device
 
+### Explicit multi-head format3
+
+`fwlab_ftl_scale_init_multihead_v3()` selects derived physical domains and up to
+four owned DATA runs before ordered MAP. Existing formats1/2 and constructors
+remain; recovery never guesses or converts. Serial READ/Flush reuse the window
+path. A single global GC reserve and adaptive width retain usable capacity even
+when metadata occupies an entire domain. All recovered heads seal before READY.
+See [ADR-0021](../../docs/adr/0021-multihead-ftl-write-waves.md) and its
+[bounded evidence](../../docs/results/2026-09-14-multihead-write-waves.md).
+
+```sh
+make -C frontends/headless-scale -f ftl.mk check-multihead-j0
+make -C frontends/headless-scale -f ftl.mk check-multihead-parent
+```
+
+These are fresh small tmpfs fixtures, not the old large-capacity campaign or
+a native mode switch. The second starts at the existing Block/buffer boundary;
+it does not enlarge the legal NVMe-profile transfer size. C OS workers and D
+independent-plane READ are not implemented by this constructor.
+
+### Earlier constructions
+
 The [cooperative channel LAB](../../docs/adr/0020-cooperative-nand-channel-domains.md)
 also binds the existing serial format-2 FTL to independent physical-v2 shards.
 `check-channel-j0` verifies its RMW/FUA/Flush/reopen and Host-close boundaries.

@@ -45,6 +45,7 @@ These are constructor selections, not automatic fallback chains:
 | Original scalable headless format 1 | Same profile/lifecycle seam, `core/ftl-scale` | Scaled C3 construction in `core/nfc-runtime`, original compact file-NAND-v1 qualification |
 | Current scaled/large/MQ2 native workers | Same profile/lifecycle seam, retained scalable FTL parents and format-2 windows | `core/nfc-page-v2` PAGE2-R0, physical NAND v2, explicitly selected mapped-tmpfs byte adapter |
 | Explicit cooperative channel LAB | Same profile/lifecycle/Block and serial format-2 FTL | WAVE4 PAGE2 hub, independently owned timed NFC and physical-v2 shard per channel; [ADR-0020](adr/0020-cooperative-nand-channel-domains.md) |
+| Explicit multi-head format3 LAB | Same profile/lifecycle/Block, physical head domains and ordered DATA-wave/MAP FTL | Same cooperative hub and real v2 channel shards; no OS threads/native selection; [ADR-0021](adr/0021-multihead-ftl-write-waves.md) |
 
 `j0_construction.c` binds a ready volume and its actual Block service;
 `scale_storage.c` constructs the selected FTL/NFC pair. Both reside below

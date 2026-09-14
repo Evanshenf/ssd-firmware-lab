@@ -15,6 +15,11 @@ cooperative/serial-FTL result has no OS workers or new throughput claim. Model
 time, actual execution wall time, Host bytes and NAND traffic stay separate;
 future one/four-worker comparisons must retain identical topology and credits.
 
+[Format3 write waves](results/2026-09-14-multihead-write-waves.md) now supply real
+multi-head work on that cooperative model. B validates ordering/recovery and
+bounded space progress, not CPU-thread acceleration. Its fixture duration/RSS
+must not be substituted for NAND or native SSD throughput.
+
 ## Objective and measurement boundary
 
 The objective is at least 10 decimal GB/s for large sequential reads and writes,
