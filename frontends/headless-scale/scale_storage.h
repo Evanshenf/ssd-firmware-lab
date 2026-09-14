@@ -31,7 +31,8 @@ struct scale_storage_options {
     const struct fwlab_nfc_page_v2_lab_mutation_config *mutation_lab_config;
     /* Explicit WAVE4-LAB4K construction only. Global aggregate identity is
      * the J0 media binding; actual channel children are independently owned.
-     * This does not select the new construction in any existing native entry. */
+     * This field does not change native defaults automatically. MQ2's explicit
+     * channel-lab4k option binds this assembly at native construction. */
     const struct fwlab_nand_channel_v2 *channel_media;
     /* Optional construction-time executor for explicit multihead or parallel
      * channel-READ factories.
