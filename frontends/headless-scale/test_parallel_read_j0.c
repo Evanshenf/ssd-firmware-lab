@@ -48,7 +48,7 @@ static enum fwlab_spine_result_v0 observe_bind(void *opaque,
 static struct fwlab_nfc_page_v2_lab_stats lab_stats(struct fixture *f)
 {
     struct fwlab_nfc_page_v2_lab_stats s;
-    CHECK(scale_storage_read_lab_snapshot(f->runtime, &s) == FWLAB_SPINE_V0_OK);
+    CHECK(scale_storage_lab_snapshot(f->runtime, &s) == FWLAB_SPINE_V0_OK);
     CHECK(!s.trace_dropped && !s.counters_saturated && !s.quarantined);
     return s;
 }
@@ -231,7 +231,7 @@ static void partial_and_hole(int hole)
         uint64_t uid[3] = {0}, terminal[3] = {0}; unsigned admitted = 0;
         for (uint32_t i = 0; i < s.trace_count; ++i) {
             struct fwlab_nfc_page_v2_lab_trace e;
-            CHECK(scale_storage_read_lab_trace_at(f->runtime, i, &e) == FWLAB_SPINE_V0_OK);
+            CHECK(scale_storage_lab_trace_at(f->runtime, i, &e) == FWLAB_SPINE_V0_OK);
             if (e.event == FWLAB_NFC_PAGE_V2_LAB_ADMIT) { CHECK(admitted < 3); uid[admitted++] = e.operation_uid; }
             if (e.event == FWLAB_NFC_PAGE_V2_LAB_TERMINAL)
                 for (unsigned j = 0; j < admitted; ++j) if (uid[j] == e.operation_uid) terminal[j] = e.now_ns;
@@ -278,7 +278,7 @@ static void close_cut(int started)
         else if (s.held_luns) {
             for (uint32_t j = 0; j < s.trace_count; ++j) {
                 struct fwlab_nfc_page_v2_lab_trace e;
-                CHECK(scale_storage_read_lab_trace_at(f->runtime, j, &e) == FWLAB_SPINE_V0_OK);
+                CHECK(scale_storage_lab_trace_at(f->runtime, j, &e) == FWLAB_SPINE_V0_OK);
                 if (e.event == FWLAB_NFC_PAGE_V2_LAB_COMMAND_END) reached = true;
             }
         }

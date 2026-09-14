@@ -27,6 +27,7 @@ BUILD_CONFIG_VALUES = $(call config_quote,CC=$(CC)) \
 TEST := $(BUILD_DIR)/physical_nand_test
 OPERATION_TEST := $(BUILD_DIR)/posix_operation_test
 NFC_LAB_TEST := $(BUILD_DIR)/nfc_lab_media_test
+NFC_MUTATION_TEST := $(BUILD_DIR)/nfc_lab_mutation_media_test
 FWLAB_TEST_MEDIA_DIR ?= /run/fwlab-test-media
 export FWLAB_TEST_MEDIA_DIR
 SOURCES := physical_nand.c physical_nand_codec.c physical_nand_batch.c tests/test_physical_nand.c
@@ -35,6 +36,8 @@ physical_nand_posix.c ../../core/nfc-page-v2/nfc_page_v2.c ../../frontends/headl
 NFC_LAB_SOURCES := physical_nand.c physical_nand_codec.c physical_nand_batch.c \
 	physical_nand_posix.c ../../core/nfc-page-v2/nfc_page_v2.c \
 	../../core/nfc-page-v2/nfc_page_v2_lab.c ../../frontends/headless-scale/test_nfc_lab_media.c
+NFC_MUTATION_SOURCES := $(filter-out ../../frontends/headless-scale/test_nfc_lab_media.c,$(NFC_LAB_SOURCES)) \
+	../../frontends/headless-scale/test_nfc_lab_mutation_media.c
 HEADERS := physical_nand.h physical_nand_internal.h physical_nand_codec.h physical_nand_batch.h \
 	../../include/fwlab/private/nand_batch_v2.h \
 	../../include/fwlab/contracts/nand_media.h \
@@ -42,6 +45,7 @@ HEADERS := physical_nand.h physical_nand_internal.h physical_nand_codec.h physic
 	../../include/fwlab/portable/crc32c_fast.h ../../include/fwlab/portable/crc32c_shift1024.h
 
 .PHONY: all check check-operation check-mapped check-nfc-lab FORCE_MEDIA_CONFIG
+.PHONY: check-nfc-mutation
 all: $(TEST)
 
 FORCE_MEDIA_CONFIG:
@@ -87,3 +91,16 @@ $(NFC_LAB_TEST): $(NFC_LAB_SOURCES) $(HEADERS) Makefile $(MEDIA_CONFIG) \
 
 check-nfc-lab: $(NFC_LAB_TEST)
 	"$(NFC_LAB_TEST)"
+
+$(NFC_MUTATION_TEST): $(NFC_MUTATION_SOURCES) $(HEADERS) Makefile $(MEDIA_CONFIG) \
+	../../include/fwlab/contracts/nfc_page_v2_types.h \
+	../../include/fwlab/contracts/nfc_page_v2_provider.h \
+	../../include/fwlab/private/nfc_page_v2_model.h \
+	../../include/fwlab/private/nfc_page_v2_lab.h \
+	../../core/nfc-page-v2/nfc_page_v2_internal.h
+	mkdir -p "$(BUILD_DIR)"
+	$(CC) -I../../include -I. $(CPPFLAGS) $(CFLAGS) $(NFC_MUTATION_SOURCES) \
+		$(LDFLAGS) $(LDLIBS) -o "$@"
+
+check-nfc-mutation: $(NFC_MUTATION_TEST)
+	"$(NFC_MUTATION_TEST)"

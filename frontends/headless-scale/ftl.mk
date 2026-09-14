@@ -67,6 +67,9 @@ PARENT_PROGRAM := $(BUILD)/test_scale_parent
 PARALLEL_READ_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_ftl.o,$(OBJECTS)) \
 	$(BUILD)/frontends/headless-scale/test_parallel_read_j0.o
 PARALLEL_READ_PROGRAM := $(BUILD)/test_parallel_read_j0
+MUTATION_J0_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_ftl.o,$(OBJECTS)) \
+	$(BUILD)/frontends/headless-scale/test_mutation_j0.o
+MUTATION_J0_PROGRAM := $(BUILD)/test_mutation_j0
 CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 	$(BUILD)/frontends/headless-scale/test_crc.o
 CRC_PROGRAM := $(BUILD)/test_crc
@@ -74,6 +77,7 @@ FAST_CRC_PROGRAM := $(BUILD)/test_crc_fast
 FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
 .PHONY: all check check-crc check-crc-fast check-full check-cuts check-cost check-parent check-parent-window-v2 check-parent-window-v2-operation check-parent-window-v2-mapped check-media-v2 check-media-v2-cuts check-media-v2-cost check-window-v2 check-window-v2-operation check-window-v2-mapped check-window-v2-cost plan-64g check-64g
 .PHONY: check-full-window-v2-mapped plan-64g-reference-v1 check-64g-reference-v1 check-parallel-read-j0
+.PHONY: check-mutation-j0
 all: $(PROGRAM)
 .PHONY: FORCE_MEDIA_CONFIG
 FORCE_MEDIA_CONFIG:
@@ -97,9 +101,13 @@ check-parent: $(PARENT_PROGRAM)
 	$(PARENT_PROGRAM)
 check-parallel-read-j0: $(PARALLEL_READ_PROGRAM)
 	$(PARALLEL_READ_PROGRAM)
+check-mutation-j0: $(MUTATION_J0_PROGRAM)
+	$(MUTATION_J0_PROGRAM)
 
 $(PARALLEL_READ_PROGRAM): $(PARALLEL_READ_OBJECTS)
 	$(CC) $(CFLAGS) $(PARALLEL_READ_OBJECTS) $(LDFLAGS) $(LDLIBS) -o $@
+$(MUTATION_J0_PROGRAM): $(MUTATION_J0_OBJECTS)
+	$(CC) $(CFLAGS) $(MUTATION_J0_OBJECTS) $(LDFLAGS) $(LDLIBS) -o $@
 check-parent-window-v2: $(PARENT_PROGRAM)
 	$(PARENT_PROGRAM) --window-v2
 check-parent-window-v2-operation: $(PARENT_PROGRAM)
@@ -142,4 +150,5 @@ $(PARENT_PROGRAM): $(PARENT_OBJECTS)
 $(BUILD)/%.o: ../../%.c ftl.mk $(MEDIA_CONFIG)
 	mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
--include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d) $(PARENT_OBJECTS:.o=.d) $(FAST_CRC_OBJECT:.o=.d)
+-include $(OBJECTS:.o=.d) $(CRC_OBJECTS:.o=.d) $(PARENT_OBJECTS:.o=.d) $(FAST_CRC_OBJECT:.o=.d) \
+	$(PARALLEL_READ_OBJECTS:.o=.d) $(MUTATION_J0_OBJECTS:.o=.d)
