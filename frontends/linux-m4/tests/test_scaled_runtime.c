@@ -53,9 +53,10 @@ static struct {
 } host;
 static struct fwlab_m4_attachment attached_identity;
 static unsigned owner_identity_fault;
+static enum native_nand_profile test_nand_profile = NATIVE_NAND_R0;
 
 #if FWLAB_NATIVE_MQ2
-#include "ftl_scale.h"
+#include "ftl_scale_internal.h"
 /* Select the actual MQ2 runtime while reusing a single-I/O fake Host.
  * This tests construction/progress, not two kernel queues or IRQ routing. */
 static struct {
@@ -457,6 +458,21 @@ static void check_runtime_profile(const struct native_context *context)
             limits->vectors == (FWLAB_NATIVE_MQ2 ? 3u : 1u));
     REQUIRE(context->runtime->config.buffer_profile ==
             (FWLAB_NATIVE_LARGE ? J0_BUFFER_LARGE_SERIAL : J0_BUFFER_REFERENCE));
+#if FWLAB_NATIVE_MQ2
+    if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K) {
+        const struct fwlab_ftl_scale *ftl = context->runtime->block.context;
+        struct fwlab_nfc_channel_v2_stats stats;
+        REQUIRE(ftl && ftl->disk_format == SF_MULTIHEAD_FORMAT_VERSION &&
+                ftl->root.disk_format == SF_MULTIHEAD_FORMAT_VERSION &&
+                ftl->reads && ftl->writes && ftl->parallel_reads && !ftl->read_only &&
+                !ftl->quarantined && !ftl->admission_closed);
+        REQUIRE(scale_storage_channel_snapshot(context->runtime, &stats) == FWLAB_SPINE_V0_OK &&
+                !stats.closed && !stats.quarantined && !stats.poisoned && !stats.counters_saturated);
+        for (uint32_t channel = 0; channel < 4; ++channel)
+            REQUIRE(stats.channel[channel].read_policy == FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE &&
+                    !stats.channel[channel].quarantined && !stats.channel[channel].counters_saturated);
+    }
+#endif
 }
 
 static void run_script(struct native_context *context, struct native_scaled_media *media)
@@ -528,16 +544,153 @@ static void phase_end(const char *phase, uint32_t epoch, uint64_t start)
            phase, epoch, wall_ns() - start);
 }
 
-static void close_epoch(struct native_context *context, struct native_scaled_media *media)
+/* Same fixture and actual native loop; only the owned physical assembly differs.
+ * Six fixed names are bounded evidence/cleanup, not another media adapter. */
+#define TEST_MEDIA_FILES 6u
+struct test_media_identity { struct stat file[TEST_MEDIA_FILES]; };
+
+static uint32_t test_media_file_count(void)
 {
-    uint64_t started = wall_ns();
-    REQUIRE(runtime_close(context));
-    phase_end("runtime-close", context->epoch, started);
+    return test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K ? TEST_MEDIA_FILES : 1u;
+}
+
+static const char *test_media_file_name(uint32_t index)
+{
+    REQUIRE(index < test_media_file_count());
+    if (test_nand_profile == NATIVE_NAND_R0)
+        return "nand.bin";
+    return index < 4 ? fwlab_nand_channel_volume_shard_name(index) :
+        index == 4 ? FWLAB_NAND_CHANNEL_VOLUME_MANIFEST : FWLAB_NAND_CHANNEL_VOLUME_LOCK;
+}
+
+static int test_media_open(struct native_scaled_media *media,
+    struct native_context *context, const char *directory, const uint8_t uuid[16],
+    int format, uint32_t logical_mib)
+{
+    if (test_nand_profile == NATIVE_NAND_R0)
+        return native_scaled_media_open(media, context, directory, uuid, format, logical_mib);
+    return native_scaled_media_open_profile(media, context, directory, uuid, format,
+                                            logical_mib, test_nand_profile);
+}
+
+static int test_media_present(const struct native_scaled_media *media)
+{
+    return media->opened && media->profile == test_nand_profile &&
+        (test_nand_profile == NATIVE_NAND_R0 ? media->physical != NULL : media->volume != NULL);
+}
+
+static void test_media_snapshot(int directory_fd, struct test_media_identity *identity)
+{
+    for (uint32_t index = 0; index < test_media_file_count(); ++index)
+        REQUIRE(fstatat(directory_fd, test_media_file_name(index), &identity->file[index],
+                        AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(identity->file[index].st_mode));
+    if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K) {
+        struct stat absent;
+        REQUIRE(fstatat(directory_fd, "nand.bin", &absent, AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
+        REQUIRE(fstatat(directory_fd, FWLAB_NAND_CHANNEL_VOLUME_PENDING, &absent,
+                        AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
+    }
+}
+
+static void test_media_identity_check(const struct test_media_identity *before,
+    const struct test_media_identity *after, int unchanged)
+{
+    for (uint32_t index = 0; index < test_media_file_count(); ++index) {
+        const struct stat *a = &before->file[index], *b = &after->file[index];
+        REQUIRE(a->st_dev == b->st_dev && a->st_ino == b->st_ino && a->st_size == b->st_size);
+        if (unchanged)
+            REQUIRE(a->st_mtim.tv_sec == b->st_mtim.tv_sec && a->st_mtim.tv_nsec == b->st_mtim.tv_nsec);
+    }
+}
+
+static void test_media_activity(const struct native_context *context,
+                                const struct native_scaled_media *media)
+{
+    REQUIRE(test_media_present(media));
+    if (test_nand_profile == NATIVE_NAND_R0) {
+        REQUIRE(fwlab_file_nand_v2_sequence(media->physical) > 0);
+        return;
+    }
+    struct fwlab_nfc_channel_v2_stats stats;
+    REQUIRE(!media->physical && media->options.channel_executor == NULL &&
+            media->options.multihead_read_schedule == SCALE_STORAGE_READ_PARALLEL &&
+            media->options.read_policy == FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE &&
+            media->channels.geometry.channels == 4 && media->channels.geometry.luns_per_channel == 1 &&
+            media->channels.geometry.planes_per_lun == 2 && media->channels.geometry.blocks_per_plane == 40 &&
+            media->channels.geometry.pages_per_block == 64 &&
+            media->channels.geometry.plane_parallelism_per_lun == 2);
+    REQUIRE(scale_storage_channel_snapshot(context->runtime, &stats) == FWLAB_SPINE_V0_OK &&
+            stats.now_ns && stats.accepted_requests && stats.sealed_batches && stats.joined_batches &&
+            !stats.closed && !stats.quarantined && !stats.poisoned && !stats.counters_saturated);
+    for (uint32_t channel = 0; channel < 4; ++channel) {
+        const struct fwlab_nfc_page_v2_lab_stats *child = &stats.channel[channel];
+        REQUIRE(fwlab_file_nand_v2_sequence(media->channels.channel[channel].scalar.context) > 0 &&
+                child->read_policy == FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE &&
+                child->accepted_reads && child->materialized_pages && child->data_out_main_bytes &&
+                child->accepted_program_groups && child->successful_program_pages &&
+                child->program_main_bytes && child->channel_busy_ns[0] &&
+                (child->plane_array_busy_ns[0][0] || child->plane_array_busy_ns[0][1]) &&
+                !child->quarantined && !child->counters_saturated);
+    }
+    /* Final retirement ACK may still be owned. Do not manually advance NFC or
+     * require lower live-idle: the next ordinary request/close must drain it. */
+    printf("NATIVE_CHANNEL_ACTIVITY_PASS|channels=4|format3_mutable_parallel_read=1|IPR_policy=1|real_child_program_read=1|model_ns=%" PRIu64 "|cooperative=1|not_plane_overlap_or_throughput_proof=1\n",
+           stats.now_ns);
+}
+
+static void test_runtime_closed(const struct native_context *context)
+{
     REQUIRE(!context->runtime && context->last_closed.quiescent &&
             !context->last_closed.host_authorities && !context->last_closed.dma_operations &&
             !context->last_closed.buffers && !context->last_closed.block_operations &&
             !context->last_closed.nfc_operations && !context->last_closed.pending &&
             !context->last_closed.pinned);
+}
+
+static void test_retained_lock(struct native_context *context,
+    const struct native_scaled_media *media, int directory_fd, const char *directory)
+{
+    if (test_nand_profile != NATIVE_NAND_CHANNEL_LAB4K)
+        return;
+    struct native_scaled_media *other = calloc(1, sizeof(*other));
+    struct test_media_identity before, after;
+    REQUIRE(other && !context->runtime && test_media_present(media));
+    test_media_snapshot(directory_fd, &before);
+    /* A new open description must not acquire the process-lived volume lock
+     * merely because the original firmware runtime is now NULL. */
+    REQUIRE(!test_media_open(other, context, directory, media->native.uuid, 0, 64) &&
+            !other->opened && !other->volume);
+    test_media_snapshot(directory_fd, &after);
+    test_media_identity_check(&before, &after, 1);
+    free(other);
+    puts("NATIVE_CHANNEL_RETAINED_LOCK_PASS|runtime_null=1|competing_recovery_rejected=1|six_files_unchanged=1|not_kernel_owner_switch=1");
+}
+
+static void test_media_cleanup(int directory_fd, const struct test_media_identity *created)
+{
+    struct test_media_identity closed;
+    test_media_snapshot(directory_fd, &closed);
+    test_media_identity_check(created, &closed, 0);
+    /* Shards, manifest, then lock: every exact owned name is rechecked after
+     * successful close and before unlink. Failure leaves remaining evidence. */
+    for (uint32_t index = 0; index < test_media_file_count(); ++index) {
+        struct stat current;
+        const struct stat *expected = &closed.file[index];
+        REQUIRE(fstatat(directory_fd, test_media_file_name(index), &current, AT_SYMLINK_NOFOLLOW) == 0 &&
+                S_ISREG(current.st_mode) && current.st_dev == expected->st_dev &&
+                current.st_ino == expected->st_ino && current.st_size == expected->st_size &&
+                current.st_mtim.tv_sec == expected->st_mtim.tv_sec &&
+                current.st_mtim.tv_nsec == expected->st_mtim.tv_nsec);
+        REQUIRE(unlinkat(directory_fd, test_media_file_name(index), 0) == 0);
+    }
+}
+
+static void close_epoch(struct native_context *context, struct native_scaled_media *media)
+{
+    uint64_t started = wall_ns();
+    REQUIRE(runtime_close(context));
+    phase_end("runtime-close", context->epoch, started);
+    test_runtime_closed(context);
     started = wall_ns();
     REQUIRE(native_scaled_media_close(media));
     phase_end("media-close", context->epoch, started);
@@ -580,21 +733,36 @@ int main(int argc, char **argv)
     const uint8_t binding[32] = {0x4d,0x31,0x42,0x49,0x44,0x45,0x4e,0x54};
     char directory[512];
     struct statfs fs;
-    struct stat before, after;
+    struct stat absent;
+    struct test_media_identity created, before, after;
     struct native_context *context = calloc(1, sizeof(*context));
     struct native_scaled_media *media = calloc(1, sizeof(*media));
     struct fwlab_m4_native_message unsupported;
     struct native_owner owner;
+    struct fwlab_nand_channel_volume *retained_volume;
+    struct fwlab_file_nand_v2 *retained_physical;
+    uint8_t child_uuid[4][16] = {{0}};
     static uint8_t expected[TEST_IO_BYTES]; /* independent expected Host data */
     uint64_t prior_ftl, prior_nfc, started;
     uint32_t logical_mib = NATIVE_SCALED_DEFAULT_MIB;
     uint64_t lba_count;
-    int directory_fd, name_length;
+    int directory_fd, name_length, capacity_seen = 0, profile_seen = 0;
 
-    REQUIRE(argc == 1 || (argc == 3 && !strcmp(argv[1], "--namespace-mib") &&
-            (!strcmp(argv[2], "64") || !strcmp(argv[2], "256"))));
-    if (argc == 3 && !strcmp(argv[2], "256"))
-        logical_mib = 256;
+    for (int index = 1; index < argc; ++index) {
+        REQUIRE(index + 1 < argc);
+        if (!strcmp(argv[index], "--namespace-mib")) {
+            REQUIRE(!capacity_seen++ &&
+                    (!strcmp(argv[index + 1], "64") || !strcmp(argv[index + 1], "256")));
+            logical_mib = !strcmp(argv[++index], "256") ? 256u : 64u;
+        } else {
+            REQUIRE(FWLAB_NATIVE_MQ2 && !profile_seen++ &&
+                    !strcmp(argv[index], "--nand-profile") &&
+                    !strcmp(argv[index + 1], "channel-lab4k"));
+            test_nand_profile = NATIVE_NAND_CHANNEL_LAB4K;
+            ++index;
+        }
+    }
+    REQUIRE(test_nand_profile == NATIVE_NAND_R0 || logical_mib == 64);
     lba_count = (uint64_t)logical_mib * 2048u;
     REQUIRE(root && statfs(root, &fs) == 0 && (unsigned long)fs.f_type == TMPFS_MAGIC);
     REQUIRE((uint64_t)fs.f_bavail * (uint64_t)fs.f_bsize >= UINT64_C(200000000));
@@ -605,7 +773,9 @@ int main(int argc, char **argv)
     directory_fd = open(directory, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     REQUIRE(directory_fd >= 0);
     setvbuf(stdout, NULL, _IOLBF, 0);
-    printf("NATIVE_SCALED_OFFLINE_BEGIN|media=%s/nand.bin|logical_mib=%u|max_io_bytes=%u|fake_ioctl_only|no_attach_M5_or_throughput_claim\n", directory, logical_mib, TEST_IO_BYTES);
+    printf("NATIVE_SCALED_OFFLINE_BEGIN|media=%s/%s|logical_mib=%u|max_io_bytes=%u|fake_ioctl_only|no_attach_M5_or_throughput_claim\n",
+           directory, test_nand_profile == NATIVE_NAND_R0 ? "nand.bin" : FWLAB_NAND_CHANNEL_VOLUME_MANIFEST,
+           logical_mib, TEST_IO_BYTES);
     context->descriptor = OFFLINE_DESCRIPTOR;
     context->function_nonce = UINT64_C(0x4d31414f46464c49);
     context->epoch = 1;
@@ -617,11 +787,25 @@ int main(int argc, char **argv)
     REQUIRE(native_exchange(context, &unsupported) == -ENOTTY && unsupported.result == INT32_MIN);
     errno = 0;
     REQUIRE(__wrap_ioctl(OFFLINE_DESCRIPTOR, 0UL, NULL) == -1 && errno == ENOTTY);
-    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 0, logical_mib));
-    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 1, 65));
-    REQUIRE(fstatat(directory_fd, "nand.bin", &before, AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
+    REQUIRE(!test_media_open(media, context, directory, uuid, 0, logical_mib));
+    REQUIRE(!test_media_open(media, context, directory, uuid, 1, 65));
+    if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K) {
+        REQUIRE(!native_scaled_media_open_profile(media, context, directory, uuid, 1, 64,
+                                                  (enum native_nand_profile)2));
+        REQUIRE(!test_media_open(media, context, directory, uuid, 1, 256));
+        REQUIRE(fstatat(directory_fd, FWLAB_NAND_CHANNEL_VOLUME_PENDING, &absent,
+                        AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
+    }
+    for (uint32_t index = 0; index < test_media_file_count(); ++index)
+        REQUIRE(fstatat(directory_fd, test_media_file_name(index), &absent, AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
     started = wall_ns();
-    REQUIRE(native_scaled_media_open(media, context, directory, uuid, 1, logical_mib));
+    REQUIRE(test_media_open(media, context, directory, uuid, 1, logical_mib));
+    test_media_snapshot(directory_fd, &created);
+    retained_volume = media->volume;
+    retained_physical = media->physical;
+    if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K)
+        for (uint32_t channel = 0; channel < 4; ++channel)
+            memcpy(child_uuid[channel], media->channels.channel[channel].media_uuid, 16);
     phase_end("media-format", context->epoch, started);
 #if FWLAB_NATIVE_LARGE
     REQUIRE(native_attach_profile(context, TEST_HOST_PROFILE,
@@ -640,7 +824,7 @@ int main(int argc, char **argv)
             !context->runtime->config.file && context->runtime->storage.context &&
             context->runtime->config.media_binding == &media->binding &&
             context->runtime->config.storage_factory == &media->factory);
-    REQUIRE(!native_scaled_media_close(media) && media->opened && media->physical);
+    REQUIRE(!native_scaled_media_close(media) && test_media_present(media));
     REQUIRE(native_owner_init(&owner, context, &media->native) &&
             owner.port.stable.media_format_version == FWLAB_M4_MEDIA_SCALED &&
             owner.media == &media->native);
@@ -660,33 +844,50 @@ int main(int argc, char **argv)
     pattern(expected, sizeof(expected), 0x5a);
     REQUIRE(memcmp(host.row[3].bytes, expected, sizeof(expected)) == 0);
     REQUIRE(host.dma_in == 1 && host.dma_out == 2);
-    REQUIRE(fwlab_file_nand_v2_sequence(media->physical) > 0);
+    test_media_activity(context, media);
+    REQUIRE(media->volume == retained_volume && media->physical == retained_physical);
     /* An owner may hold this exact media pointer while runtime is absent.
      * Exercise reconstruction through it without closing/reopening the holder.
      * This is not a fake certificate or an executed kernel owner transition. */
     REQUIRE(runtime_close(context) && !context->runtime && media->opened);
-    REQUIRE(owner.media == &media->native && media->physical);
+    test_runtime_closed(context);
+    REQUIRE(owner.media == &media->native && test_media_present(media) &&
+            media->volume == retained_volume && media->physical == retained_physical);
+    test_retained_lock(context, media, directory_fd, directory);
     ++context->epoch;
     REQUIRE(native_runtime_create(context, owner.media, 0));
     check_runtime_profile(context);
     REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == lba_count &&
             context->runtime->m3p_instance_nonce != prior_ftl && context->runtime->nfc_instance_nonce != prior_nfc);
+    REQUIRE(media->volume == retained_volume && media->physical == retained_physical);
     prior_ftl = context->runtime->m3p_instance_nonce;
     prior_nfc = context->runtime->nfc_instance_nonce;
     puts("NATIVE_RETAINED_MEDIA_PASS|same_holder_between_runtimes=1|not_kernel_owner_switch=1");
     close_epoch(context, media);
-    REQUIRE(fstatat(directory_fd, "nand.bin", &before, AT_SYMLINK_NOFOLLOW) == 0);
-    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 1, logical_mib));
-    REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 0,
-                                      logical_mib == 64 ? 256 : 64));
-    REQUIRE(fstatat(directory_fd, "nand.bin", &after, AT_SYMLINK_NOFOLLOW) == 0 &&
-            after.st_ino == before.st_ino && after.st_size == before.st_size &&
-            after.st_mtim.tv_sec == before.st_mtim.tv_sec &&
-            after.st_mtim.tv_nsec == before.st_mtim.tv_nsec);
+    test_media_snapshot(directory_fd, &before);
+    test_media_identity_check(&created, &before, 0);
+    REQUIRE(!test_media_open(media, context, directory, uuid, 1, logical_mib));
+    REQUIRE(!test_media_open(media, context, directory, uuid, 0,
+                            logical_mib == 64 ? 256 : 64));
+    if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K) {
+        /* Closed, clean assembly only. Never treat failed opening of dirty
+         * physical redo state as an automatically non-mutating operation. */
+        REQUIRE(!native_scaled_media_open(media, context, directory, uuid, 0, logical_mib));
+    }
+    test_media_snapshot(directory_fd, &after);
+    test_media_identity_check(&before, &after, 1);
     puts("NATIVE_CAPACITY_MISMATCH_PASS|recovery_rejected=1|image_identity_size_mtime_unchanged=1|no_resize_or_conversion=1");
     ++context->epoch;
     started = wall_ns();
-    REQUIRE(native_scaled_media_open(media, context, directory, uuid, 0, logical_mib));
+    REQUIRE(test_media_open(media, context, directory, uuid, 0, logical_mib));
+    test_media_snapshot(directory_fd, &after);
+    test_media_identity_check(&created, &after, 0);
+    if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K) {
+        REQUIRE(!memcmp(media->channels.media_uuid, uuid, 16));
+        for (uint32_t channel = 0; channel < 4; ++channel)
+            REQUIRE(!memcmp(child_uuid[channel], media->channels.channel[channel].media_uuid, 16));
+        puts("NATIVE_CHANNEL_IDENTITY_PASS|same_six_files=1|manifest_child_UUIDs_preserved=1|opposite_profile_recovery_rejected=1|no_resize_or_conversion=1");
+    }
     phase_end("media-recover", context->epoch, started);
     started = wall_ns();
     REQUIRE(native_runtime_create(context, &media->native, 0));
@@ -705,8 +906,10 @@ int main(int argc, char **argv)
     pattern(expected, sizeof(expected), 0xa6);
     REQUIRE(memcmp(host.row[3].bytes, expected, sizeof(expected)) == 0);
     REQUIRE(host.dma_in == 1 && host.dma_out == 3);
+    if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K)
+        test_media_activity(context, media);
     close_epoch(context, media);
-    REQUIRE(unlinkat(directory_fd, "nand.bin", 0) == 0);
+    test_media_cleanup(directory_fd, &created);
     REQUIRE(close(directory_fd) == 0 && rmdir(directory) == 0);
     free(media);
     REQUIRE(native_frame_storage_fini(context));
