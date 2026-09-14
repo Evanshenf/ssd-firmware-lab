@@ -48,6 +48,7 @@ SOURCES := \
 	core/ftl-scale/ftl_scale_nfc.c core/ftl-scale/ftl_scale_nfc_v2.c \
 	core/ftl-scale/ftl_scale_window.c core/ftl-scale/ftl_scale_read.c \
 	core/nfc-page-v2/nfc_page_v2.c core/nfc-page-v2/nfc_page_v2_lab.c \
+	core/nfc-page-v2/nfc_channel_v2.c \
 	core/nfc-runtime/nfc_trace_window.c core/nfc-runtime/nfc_scaled_model.c \
 	nfc/nfc_model.c nfc/nfc_scheduler.c nfc/nfc_fault.c nfc/nfc_media.c \
 	media/file-nand-v0/file_nand_codec.c media/file-nand-v0/file_nand_engine.c \
@@ -55,6 +56,7 @@ SOURCES := \
 	media/file-nand-v1/compact_nand.c media/file-nand-v1/compact_nand_posix.c \
 	media/file-nand-v2/physical_nand.c media/file-nand-v2/physical_nand_codec.c \
 	media/file-nand-v2/physical_nand_posix.c media/file-nand-v2/physical_nand_batch.c \
+	media/file-nand-v2/channel_volume.c \
 	frontends/headless-j0/j0_controller_buffer.c \
 	frontends/headless-j0/j0_host_data.c frontends/headless-j0/j0_action_drivers.c \
 	frontends/headless-j0/j0_construction.c \
@@ -70,6 +72,9 @@ PARALLEL_READ_PROGRAM := $(BUILD)/test_parallel_read_j0
 MUTATION_J0_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_ftl.o,$(OBJECTS)) \
 	$(BUILD)/frontends/headless-scale/test_mutation_j0.o
 MUTATION_J0_PROGRAM := $(BUILD)/test_mutation_j0
+CHANNEL_J0_OBJECTS := $(filter-out $(BUILD)/frontends/headless-scale/test_ftl.o,$(OBJECTS)) \
+	$(BUILD)/frontends/headless-scale/test_channel_j0.o
+CHANNEL_J0_PROGRAM := $(BUILD)/test_channel_j0
 CRC_OBJECTS := $(BUILD)/core/ftl-scale/ftl_scale_codec.o \
 	$(BUILD)/frontends/headless-scale/test_crc.o
 CRC_PROGRAM := $(BUILD)/test_crc
@@ -78,6 +83,7 @@ FAST_CRC_OBJECT := $(BUILD)/frontends/headless-scale/test_crc_fast.o
 .PHONY: all check check-crc check-crc-fast check-full check-cuts check-cost check-parent check-parent-window-v2 check-parent-window-v2-operation check-parent-window-v2-mapped check-media-v2 check-media-v2-cuts check-media-v2-cost check-window-v2 check-window-v2-operation check-window-v2-mapped check-window-v2-cost plan-64g check-64g
 .PHONY: check-full-window-v2-mapped plan-64g-reference-v1 check-64g-reference-v1 check-parallel-read-j0
 .PHONY: check-mutation-j0
+.PHONY: check-channel-j0
 all: $(PROGRAM)
 .PHONY: FORCE_MEDIA_CONFIG
 FORCE_MEDIA_CONFIG:
@@ -103,6 +109,11 @@ check-parallel-read-j0: $(PARALLEL_READ_PROGRAM)
 	$(PARALLEL_READ_PROGRAM)
 check-mutation-j0: $(MUTATION_J0_PROGRAM)
 	$(MUTATION_J0_PROGRAM)
+check-channel-j0: $(CHANNEL_J0_PROGRAM)
+	$(CHANNEL_J0_PROGRAM)
+
+$(CHANNEL_J0_PROGRAM): $(CHANNEL_J0_OBJECTS)
+	$(CC) $(CFLAGS) $(CHANNEL_J0_OBJECTS) $(LDFLAGS) $(LDLIBS) -o $@
 
 $(PARALLEL_READ_PROGRAM): $(PARALLEL_READ_OBJECTS)
 	$(CC) $(CFLAGS) $(PARALLEL_READ_OBJECTS) $(LDFLAGS) $(LDLIBS) -o $@

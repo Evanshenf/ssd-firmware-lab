@@ -45,6 +45,7 @@ SCALED_SOURCES := \
 	../../core/ftl-scale/ftl_scale_read.c \
 	../../core/nfc-page-v2/nfc_page_v2.c \
 	../../core/nfc-page-v2/nfc_page_v2_lab.c \
+	../../core/nfc-page-v2/nfc_channel_v2.c \
 	../../core/nfc-runtime/nfc_scaled_model.c \
 	../../media/file-nand-v2/physical_nand.c \
 	../../media/file-nand-v2/physical_nand_codec.c \

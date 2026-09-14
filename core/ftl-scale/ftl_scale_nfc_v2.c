@@ -132,6 +132,16 @@ static bool complete_facts(const struct fwlab_ftl_scale *f, const struct sf_io *
     }
     return true;
 }
+static bool page_drive_io(struct fwlab_ftl_scale *f, struct sf_io *io, bool drive)
+{
+    struct fwlab_nfc_page_v2_step_result step = {0};
+    if (!drive) return false;
+    if (f->page_nfc.ops->step(f->page_nfc.context, 1, &step) != FWLAB_NFC_API_OK ||
+        step.units_used > 1) {
+        failed(io); return true;
+    }
+    return step.units_used != 0;
+}
 bool sf_page_step_io(struct fwlab_ftl_scale *f, struct sf_io *io, bool cancelled, bool drive)
 {
     const struct fwlab_nfc_page_v2_provider *n = &f->page_nfc;
@@ -164,7 +174,11 @@ bool sf_page_step_io(struct fwlab_ftl_scale *f, struct sf_io *io, bool cancelled
             io->result.effect = SF_EFFECT_NONE; io->phase = SF_IO_DONE; return true;
         }
         if (submitted.disposition != FWLAB_NFC_BACKPRESSURE) { failed(io); return true; }
-        return false;
+        /* A consumed result can still own lower retirement/control work.
+         * Preserve this unaccepted UID and shape while pumping that work;
+         * unchanged BP itself is not progress. Pools finish ordered fill
+         * with drive=false before advancing the shared provider. */
+        return page_drive_io(f, io, drive);
     }
     if (io->phase != SF_IO_WAIT_FIRST) { failed(io); return true; }
     if (cancel && !io->cancel_sent) {
@@ -183,14 +197,7 @@ bool sf_page_step_io(struct fwlab_ftl_scale *f, struct sf_io *io, bool cancelled
     status = n->ops->take_result(n->context, &io->page_request.operation, &result,
                                 output.main ? &output : NULL);
     if (status == FWLAB_NFC_API_OK) io->lower_owned = 0;
-    if (status == FWLAB_NFC_API_WRONG_STATE) {
-        struct fwlab_nfc_page_v2_step_result step = {0};
-        if (!drive) return false;
-        if (n->ops->step(n->context, 1, &step) != FWLAB_NFC_API_OK || step.units_used > 1) {
-            failed(io); return true;
-        }
-        return step.units_used != 0;
-    }
+    if (status == FWLAB_NFC_API_WRONG_STATE) return page_drive_io(f, io, drive);
     if (status != FWLAB_NFC_API_OK || !result_shape(io, &result)) { failed(io); return true; }
     for (uint32_t p = 0; p < result.page_count; ++p) io->page_facts[p] = facts(&result.page[p], result.terminal);
     io->result.completion = io->page_facts[0]; io->result.completion.reason = result.reason;

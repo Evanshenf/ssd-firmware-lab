@@ -128,9 +128,10 @@ bool sf_read_pool_step(struct fwlab_ftl_scale *f)
     for (unsigned i = 0; i < SF_READ_RUNS; ++i) {
         struct sf_read_run *r = NULL;
         for (unsigned j = 0; j < SF_READ_RUNS; ++j)
-            if (p->run[j].state == SF_READ_PENDING && p->run[j].io.phase == SF_IO_SUBMIT_FIRST) {
-                r = &p->run[j]; break;
-            }
+            if (p->run[j].state == SF_READ_PENDING && p->run[j].io.phase == SF_IO_SUBMIT_FIRST &&
+                (!r || p->run[j].io.page_request.operation.operation_uid <
+                       r->io.page_request.operation.operation_uid))
+                r = &p->run[j];
         if (!r && !p->stopping && p->issued_lbas < f->parent.request.lba_count) {
             r = empty_run(p);
             if (r) {
@@ -153,7 +154,8 @@ bool sf_read_pool_step(struct fwlab_ftl_scale *f)
         }
     }
     for (unsigned i = 0; i < SF_READ_RUNS; ++i)
-        pending = pending || (p->run[i].state == SF_READ_PENDING && p->run[i].io.phase == SF_IO_WAIT_FIRST);
+        pending = pending || (p->run[i].state == SF_READ_PENDING &&
+            (p->run[i].io.phase == SF_IO_WAIT_FIRST || p->run[i].io.phase == SF_IO_SUBMIT_FIRST));
     if (pending) {
         struct fwlab_nfc_page_v2_step_result result = {0};
         if (f->page_nfc.ops->step(f->page_nfc.context, 1, &result) != FWLAB_NFC_API_OK || result.units_used > 1) {
@@ -167,6 +169,10 @@ bool sf_read_pool_step(struct fwlab_ftl_scale *f)
     for (unsigned i = 0; i < SF_READ_RUNS; ++i) {
         struct sf_read_run *r = &p->run[i];
         if (r->state != SF_READ_PENDING) continue;
+        /* Only ordered fill admits fresh UIDs. A control ACK consumed above
+         * must not let this physical-slot-order collector bypass an older
+         * unaccepted run when credits become available. */
+        if (r->io.phase == SF_IO_SUBMIT_FIRST) continue;
         advanced = sf_page_step_io(f, &r->io, p->stopping != 0, false) || advanced;
         if (r->io.phase != SF_IO_DONE) continue;
         if (r->io.lower_owned) {

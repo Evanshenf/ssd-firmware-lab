@@ -7,6 +7,8 @@
 #include "ftl_scale.h"
 #include "fwlab/private/nand_batch_v2.h"
 #include "fwlab/private/nfc_page_v2_lab.h"
+#include "fwlab/private/nand_channel_v2.h"
+#include "fwlab/private/nfc_channel_v2.h"
 
 /* A resource ceiling, not a format/recovery capacity override. Zero allocates
  * at most one map slot per physical page. One factory selects the new engine. */
@@ -21,6 +23,10 @@ struct scale_storage_options {
     /* Explicit always-timed READ/PROGRAM/ERASE LAB construction, with the
      * ordinary serial format2 FTL. No runtime provider/timing replacement. */
     const struct fwlab_nfc_page_v2_lab_mutation_config *mutation_lab_config;
+    /* Explicit WAVE4-LAB4K construction only. Global aggregate identity is
+     * the J0 media binding; actual channel children are independently owned.
+     * This does not select the new construction in any existing native entry. */
+    const struct fwlab_nand_channel_v2 *channel_media;
 };
 
 /* Shared construction presets, not FTL capacity truth. Recovery still validates
@@ -36,6 +42,8 @@ void scale_storage_parallel_read_lab_factory_init(struct j0_storage_factory *fac
                                                    struct scale_storage_options *options);
 void scale_storage_mutation_lab_factory_init(struct j0_storage_factory *factory,
                                               struct scale_storage_options *options);
+void scale_storage_channel_lab_factory_init(struct j0_storage_factory *factory,
+                                             struct scale_storage_options *options);
 /* Serialized coordinator: requires J0 admission, FTL and NFC live-idle before
  * the one-way lower timing/upper read-only transitions. No provider rebinding. */
 enum fwlab_spine_result_v0 scale_storage_begin_timed_read(struct j0_runtime *runtime);
@@ -44,6 +52,8 @@ enum fwlab_spine_result_v0 scale_storage_lab_snapshot(const struct j0_runtime *,
     struct fwlab_nfc_page_v2_lab_stats *);
 enum fwlab_spine_result_v0 scale_storage_lab_trace_at(const struct j0_runtime *,
     uint32_t, struct fwlab_nfc_page_v2_lab_trace *);
+enum fwlab_spine_result_v0 scale_storage_channel_snapshot(const struct j0_runtime *,
+    struct fwlab_nfc_channel_v2_stats *);
 enum fwlab_spine_result_v0 scale_storage_query(
     const struct j0_runtime *runtime, struct fwlab_ftl_scale_status *status);
 enum fwlab_spine_result_v0 scale_storage_checkpoint(struct j0_runtime *runtime);
