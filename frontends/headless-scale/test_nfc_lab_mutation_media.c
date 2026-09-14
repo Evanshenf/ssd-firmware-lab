@@ -21,6 +21,12 @@
 #define OOB 128u
 #define COUNT 3u
 #define NONCE UINT64_C(0x4e324d4544494131)
+#ifndef MUTATION_MEDIA_PLANES
+#define MUTATION_MEDIA_PLANES 1u
+#endif
+#ifndef MUTATION_MEDIA_PREFIX
+#define MUTATION_MEDIA_PREFIX "fwlab-n2-media"
+#endif
 struct mutation_media {
     char directory[128]; int directory_fd;
     struct fwlab_file_nand_v2_config media_config;
@@ -79,13 +85,13 @@ static struct mutation_media *create_media(uint32_t fault)
         (uint64_t)fs.f_bavail * (uint64_t)fs.f_bsize >= (UINT64_C(64) << 20));
     CHECK(close(fd) == 0);
     f = aligned_alloc(64, sizeof(*f)); CHECK(f); memset(f, 0, sizeof(*f)); active = f; f->fault = fault;
-    n = snprintf(f->directory, sizeof(f->directory), "%s/fwlab-n2-media.XXXXXX", root);
+    n = snprintf(f->directory, sizeof(f->directory), "%s/" MUTATION_MEDIA_PREFIX ".XXXXXX", root);
     CHECK(n > 0 && (size_t)n < sizeof(f->directory) && mkdtemp(f->directory));
     f->directory_fd = open(f->directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW); CHECK(f->directory_fd >= 0);
     f->media_config.geometry = (struct fwlab_nfc_geometry){
         .version = FWLAB_NFC_CONTRACT_VERSION, .size = sizeof(struct fwlab_nfc_geometry),
-        .channels = 2, .luns_per_channel = 2, .planes_per_lun = 1,
-        .blocks_per_plane = 2, .pages_per_block = 64, .plane_parallelism_per_lun = 1,
+        .channels = 2, .luns_per_channel = 2, .planes_per_lun = MUTATION_MEDIA_PLANES,
+        .blocks_per_plane = 2, .pages_per_block = 64, .plane_parallelism_per_lun = MUTATION_MEDIA_PLANES,
         .main_bytes_per_page = MAIN, .oob_bytes_per_page = OOB,
         .max_programs_per_erase = 1, .program_order = FWLAB_NFC_PROGRAM_ASCENDING
     };
