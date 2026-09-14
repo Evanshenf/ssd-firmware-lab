@@ -63,6 +63,15 @@ drained volatile runtime objects may be rebuilt under a new epoch.
 
 ## Platform and persistence support
 
+Separately selected [NAND LAB constructions](adr/0019-timed-nand-mutations.md)
+add resource-timed reads and PROGRAM/ERASE. READ-R1 supplies parallel FTL read
+runs; always-timed RW-R2 initially uses serial format2 FTL. Their
+[bounded results](results/2026-09-14-timed-nand-mutations.md) use small physical-v2
+images and the existing J0 path, not a replacement for the native path above.
+Times are synthetic explicit parameters, not vendor defaults or a wall-clock
+rate limiter. Four slots and current geometry remain finite limits; multi-head
+FTL writes, modern NAND geometry and 4-TB/8-GB/s calibration are not established.
+
 | Environment | What has evidence | What is not established |
 |---|---|---|
 | Linux x86-64 userspace | Current software paths with GCC/Clang; existing targeted sanitizer runs | Arbitrary operating systems or production endurance |

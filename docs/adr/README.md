@@ -21,6 +21,7 @@
 - [ADR-0016: ARM64 native platform binding and atomic DMA callbacks](0016-arm64-native-platform.md)
 - [ADR-0017: Drained shutdown and successor controller readiness](0017-large-controller-readiness.md)
 - [ADR-0018: Resource-scheduled NAND and the first parallel-read slice](0018-resource-scheduled-nand-read-lab.md)
+- [ADR-0019: Timed NAND mutations before multi-head FTL changes](0019-timed-nand-mutations.md)
 
 Accepted ADRs define the design baseline, not an assertion that the component is already implemented or validated. A superseding decision must link the prior ADR and describe migration and compatibility impact.
 

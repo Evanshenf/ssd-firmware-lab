@@ -1,7 +1,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Evanshenf -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
-# NFC page-v2 functional batch model
+# NFC page-v2 functional and resource-timed LAB models
+
+## Functional PAGE2-R0
 
 This is an explicit, unreleased PAGE2-R0 construction, not a silent replacement
 for the existing C3 fault/timing model. It accepts READ_GROUP, PROGRAM_GROUP and
@@ -58,3 +60,49 @@ make -C frontends/headless-scale -f ftl.mk check-window-v2
 
 These are functional/process-recovery checks, not physical disk persistence,
 Host DMA suppression, native NVMe throughput or a 10-GB/s acceptance claim.
+
+## Explicit resource-timed LAB constructions
+
+[LAB-READ-R1](../../docs/adr/0018-resource-scheduled-nand-read-lab.md) adds four
+finite slots, per-LUN read-register/array ownership and shared-channel transfer
+arbitration. PREP uses R0; the one-way timed-read phase rejects mutations.
+Its explicit FTL construction supplies bounded parallel read runs.
+
+[LAB-RW-R2](../../docs/adr/0019-timed-nand-mutations.md) uses the same event engine
+and PAGE2 interfaces, adding PROGRAM/ERASE and STATUS arbitration. It is timed
+from construction, including startup/recovery, and initially binds ordinary
+serial format2 FTL. Accepted PROGRAM bytes are snapshotted; real effects occur
+one page at a time. Once the first confirm starts, normal cancellation drains
+the accepted group. Physical SUCCESS remains SUCCESS; genuine failures preserve
+the known prefix and stop later effects. The media format and FTL recovery are
+unchanged. None of these LAB constructions silently replaces the native R0 path.
+
+`fwlab_nfc_page_v2_lab_mutation_config` requires explicit positive timing and
+channel-rate fields. There is no vendor/default device performance profile.
+The real-media/J0 examples use 4-KiB main/128-B OOB, 1-us command/confirm/status,
+10-us read array, 100-us program array, 1-ms erase array, 1-B status response and
+1-GB/s per channel. These are **synthetic fixture costs**, not commercial NAND
+specifications. The corresponding uncontended main-payload read/program rates
+are about 269.049/38.200 decimal MB/s per LUN, before other work/contention.
+Core fake tests deliberately use a different small time scale.
+
+Each LUN independently applies its array delay, while traffic shares its channel.
+More LUNs can overlap array work; more channels can supply more aggregate bus
+bandwidth. Increasing only capacity or package labels does not increase speed.
+The four active slots can limit scaling, and independent-plane operations are
+not implemented. Virtual time advances without sleep and does not throttle
+wall-clock I/O. Real simulator rate must be measured separately.
+
+Use the existing capped tmpfs and run these media tests **serially**:
+
+```sh
+make -C core/nfc-page-v2 check-mutation
+make -C media/file-nand-v2 check-nfc-mutation
+make -C frontends/headless-scale -f ftl.mk check-mutation-j0
+```
+
+Media tests require `FWLAB_TEST_MEDIA_DIR` (Makefile default
+`/run/fwlab-test-media`), reject absent/non-tmpfs/insufficient storage and use only
+fresh disposable images. They do not format existing images or raw devices.
+See the [exact-source result](../../docs/results/2026-09-14-timed-nand-mutations.md)
+for scope and limitations.
