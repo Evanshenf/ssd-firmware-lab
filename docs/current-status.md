@@ -87,9 +87,13 @@ the same actors on one/four OS data workers, with
 [D's explicit independent-plane READ](adr/0023-independent-plane-read.md) now
 has [real lower/J0 evidence](results/2026-09-14-independent-plane-read.md):
 different-plane arrays overlap while the bus and same-plane accesses serialize.
-Its existing format2 FTL consumer enters read-only after preparation; B3 still
-uses serial READ. Neither C/D selects native threads/IPR or establishes vendor
-timing, full mutable parallel read/write, NUMA locality or a throughput gain.
+Its existing format2 FTL consumer enters read-only after preparation; the
+original B/C format3 choice retains serial READ. A later explicit
+[combined format3 option](adr/0024-mutable-format3-read-write.md) now has
+[same-instance mutable Block/J0 evidence](results/2026-09-14-mutable-read-write.md)
+with both existing schedules, actual GC/IPR and close/recovery. None of these
+LAB options selects native threads/IPR or establishes vendor timing, NUMA
+locality, concurrent Host parents or a measured throughput gain.
 
 | Environment | What has evidence | What is not established |
 |---|---|---|

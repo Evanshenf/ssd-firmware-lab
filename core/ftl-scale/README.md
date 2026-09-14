@@ -291,6 +291,27 @@ uses ordinary allocation for two-plane mappings, unchanged physical media and
 same-format recovery. Model-time overlap is not Host bandwidth; old constructors
 and the native binding remain LUN-exclusive/R0 as previously selected.
 
+### One mutable format3 READ/WRITE instance
+
+`fwlab_ftl_scale_init_read_write_v3()` allocates disjoint existing write/read
+pools, enables parallel READ and stays writable. The existing multihead factory
+selects it with `multihead_read_schedule = SCALE_STORAGE_READ_PARALLEL`; zero
+preserves the original B/C schedule. NAND `read_policy` and optional executor
+remain frontend choices. There is still only one Host parent, and no readonly
+toggle/provider replacement between commands. See
+[ADR-0024](../../docs/adr/0024-mutable-format3-read-write.md).
+
+```sh
+make -C frontends/headless-scale -f ftl.mk check-unified-rw-parent
+make -C frontends/headless-scale -f ftl.mk check-unified-rw-j0
+```
+
+These serial small-tmpfs tests cross actual mixed commands, partial READ
+publication/maintenance exclusion, GC-created plane reads, cancel and accepted
+READ/WRITE close/recovery. The [result](../../docs/results/2026-09-14-mutable-read-write.md)
+separates Block from legal J0 and cooperative from one-worker evidence. No
+native selection, larger NAND geometry or throughput claim is implied.
+
 ### Earlier constructions
 
 The [cooperative channel LAB](../../docs/adr/0020-cooperative-nand-channel-domains.md)

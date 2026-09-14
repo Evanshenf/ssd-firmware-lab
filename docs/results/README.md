@@ -7,6 +7,7 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 
 ## Current entry points
 
+- [2026-09-14: unified mutable READ/WRITE](2026-09-14-mutable-read-write.md): one format3 instance combines existing schedules, real GC/IPR and mixed J0 operations, with partial-read exclusion and accepted-work close/recovery; not native throughput.
 - [2026-09-14: independent-plane READ](2026-09-14-independent-plane-read.md): same-LUN plane array overlap with serialized bus transfers, real FTL/J0 placement/recovery and whole-LUN mutation exclusion; synthetic model time, not native throughput.
 - [2026-09-14: channel workers](2026-09-14-channel-workers.md): same real FTL/NAND under cooperative/one/four workers, byte-equivalent recovery, actual joins and controlled channel-call overlap; no demonstrated throughput win or native selection.
 - [2026-09-14: multi-head write waves](2026-09-14-multihead-write-waves.md): format3, actual multi-head J0/Block I/O, ordered MAP, close/failure recovery and bounded GC/reserve pressure; cooperative, not threaded/native performance.

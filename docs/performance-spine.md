@@ -33,6 +33,11 @@ from30,448ns to19,448ns, with the same shared bus and real data. Same-plane time
 is unchanged. This is an unpaced resource-model result, not faster software
 execution or native throughput. The FTL consumer is readonly after preparation.
 
+The [combined mutable format3 option](results/2026-09-14-mutable-read-write.md)
+then connects existing parallel reads and write waves in one writable instance,
+with real GC/IPR and unchanged lower execution semantics. This is composition
+and correctness evidence, not a new bandwidth measurement or native mode.
+
 ## Objective and measurement boundary
 
 The objective is at least 10 decimal GB/s for large sequential reads and writes,
