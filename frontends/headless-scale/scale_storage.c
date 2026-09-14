@@ -222,6 +222,7 @@ static enum fwlab_spine_result_v0 storage_bind_common(
     bool parallel = binding == SCALE_READ_LAB || parallel_channel;
     bool mutation = binding == SCALE_MUTATION_LAB;
     bool multihead = binding == SCALE_MULTIHEAD_LAB;
+    bool combined = multihead && options && options->multihead_read_schedule == SCALE_STORAGE_READ_PARALLEL;
     bool channel = binding == SCALE_CHANNEL_LAB || multihead || parallel_channel;
     bool lab = parallel || mutation;
     (void)lifecycle_nonce;
@@ -230,8 +231,11 @@ static enum fwlab_spine_result_v0 storage_bind_common(
         !sf_geometry_counts(&config->media_binding->geometry, &blocks, &pages))
         return FWLAB_SPINE_V0_INVALID;
     if (binding == SCALE_READ_LAB && (!options || !options->read_lab_config)) return FWLAB_SPINE_V0_INVALID;
+    if (options && options->multihead_read_schedule != SCALE_STORAGE_READ_SERIAL &&
+        (!multihead || options->multihead_read_schedule != SCALE_STORAGE_READ_PARALLEL))
+        return FWLAB_SPINE_V0_INVALID;
     if (options && options->read_policy != FWLAB_NFC_PAGE_V2_LAB_LUN_EXCLUSIVE &&
-        (!parallel_channel || options->read_policy != FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE))
+        ((!parallel_channel && !combined) || options->read_policy != FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE))
         return FWLAB_SPINE_V0_INVALID;
     if (options && options->channel_executor && ((!multihead && !parallel_channel) ||
         !options->channel_executor->ops || !options->channel_executor->context ||
@@ -275,7 +279,8 @@ static enum fwlab_spine_result_v0 storage_bind_common(
     extended.size = sizeof(extended);
     extended.base = f;
     extended.max_transfer_lbas = FWLAB_FTL_SCALE_EXTENDED_MAX_LBAS;
-    ftl_bytes = multihead ? fwlab_ftl_scale_multihead_v3_arena_size(&extended) :
+    ftl_bytes = combined ? fwlab_ftl_scale_read_write_v3_arena_size(&extended) :
+               multihead ? fwlab_ftl_scale_multihead_v3_arena_size(&extended) :
                parallel ? fwlab_ftl_scale_parallel_read_arena_size(&extended) :
                window_v2 ? fwlab_ftl_scale_window_v2_arena_size(&extended) :
                            fwlab_ftl_scale_arena_size(&f);
@@ -315,7 +320,7 @@ static enum fwlab_spine_result_v0 storage_bind_common(
         if (channel) {
             struct fwlab_nfc_page_v2_lab_mutation_config timed = *options->mutation_lab_config;
             timed.read.base = page;
-            enum fwlab_nfc_api_result initialized = parallel_channel ?
+            enum fwlab_nfc_api_result initialized = (parallel_channel || combined) ?
                 fwlab_nfc_channel_v2_init_policy(storage->nfc_arena, nfc_bytes, &timed,
                     options->channel_media, options->read_policy,
                     storage->executor.ops ? &storage->executor : NULL, &storage->channel_nfc) :
@@ -326,7 +331,9 @@ static enum fwlab_spine_result_v0 storage_bind_common(
                     options->channel_media, &storage->channel_nfc);
             if (initialized != FWLAB_NFC_API_OK) goto failed;
             page_provider = fwlab_nfc_channel_v2_provider(storage->channel_nfc);
-            result = parallel_channel ? fwlab_ftl_scale_init_parallel_read(storage->ftl_arena, ftl_bytes,
+            result = combined ? fwlab_ftl_scale_init_read_write_v3(storage->ftl_arena, ftl_bytes,
+                &extended, buffer, &page_provider, &storage->ftl) :
+                parallel_channel ? fwlab_ftl_scale_init_parallel_read(storage->ftl_arena, ftl_bytes,
                 &extended, buffer, &page_provider, &storage->ftl) :
                 multihead ? fwlab_ftl_scale_init_multihead_v3(storage->ftl_arena, ftl_bytes,
                 &extended, buffer, &page_provider, &storage->ftl) :

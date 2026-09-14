@@ -11,6 +11,11 @@
 #include "fwlab/private/nfc_channel_v2.h"
 #include "fwlab/private/nfc_channel_v2_job.h"
 
+enum scale_storage_read_schedule {
+    SCALE_STORAGE_READ_SERIAL = 0,
+    SCALE_STORAGE_READ_PARALLEL = 1
+};
+
 /* A resource ceiling, not a format/recovery capacity override. Zero allocates
  * at most one map slot per physical page. One factory selects the new engine. */
 struct scale_storage_options {
@@ -34,9 +39,14 @@ struct scale_storage_options {
      * context until runner release; successful close includes its shutdown and
      * actual joins. This does not select threads in existing native entries. */
     const struct fwlab_nfc_channel_executor *channel_executor;
-    /* Explicit parallel-channel factory only. Zero is LUN-exclusive control;
+    /* Explicit parallel-channel or combined multihead construction only.
+     * Zero is LUN-exclusive control;
      * IPR must be selected deliberately and is independent of OS placement. */
     enum fwlab_nfc_page_v2_lab_read_policy read_policy;
+    /* Existing multihead factory only. PARALLEL selects one mutable format3
+     * instance with disjoint read/write pools; zero preserves serial B/C reads.
+     * This is construction-time scheduling, never a read-only transition. */
+    enum scale_storage_read_schedule multihead_read_schedule;
 };
 
 /* Shared construction presets, not FTL capacity truth. Recovery still validates
@@ -54,7 +64,8 @@ void scale_storage_mutation_lab_factory_init(struct j0_storage_factory *factory,
                                               struct scale_storage_options *options);
 void scale_storage_channel_lab_factory_init(struct j0_storage_factory *factory,
                                              struct scale_storage_options *options);
-/* Same actual channel assembly/hub, explicit format3 multi-head FTL. */
+/* Same actual channel assembly/hub, explicit format3 multi-head FTL. The
+ * read-schedule option selects serial or continuously mutable parallel READ. */
 void scale_storage_multihead_lab_factory_init(struct j0_storage_factory *factory,
                                               struct scale_storage_options *options);
 /* Always-timed policy-selected channel hub and the existing format2 READ pool.
