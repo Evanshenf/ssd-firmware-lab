@@ -22,7 +22,7 @@ code without treating historical directory names as dependency boundaries.
 | `scaled-worker` / `scaled-pump-worker` | 64 MiB / 8 KiB | Scalable FTL format 2 + PAGE2-R0 + mapped physical-v2 on bounded tmpfs |
 | `large-worker`, Host profile 2 | 64 MiB / 1 MiB, one I/O pair | Same storage stack, explicit PUMP construction, bounded PRP graph |
 | `mq2-worker` default, Host profile 3 | 64 MiB / 1 MiB, two depth-32 I/O pairs, three MSI-X vectors | Same storage stack, **one global I/O frame plus one Admin reserve**; serialized FTL execution, not parallel storage throughput |
-| Same `mq2-worker`, opt-in `channel-lab4k` | 64 MiB only / 1 MiB; unchanged Host limits | Mutable format3 + IPR cooperative channel hub + four strict POSIX physical-v2 shards; [actual native-constructor/loop, fake Host evidence](results/2026-09-14-native-channel-construction.md), not online kernel or M5 qualification |
+| Same `mq2-worker`, opt-in `channel-lab4k` | 64 MiB only / 1 MiB; unchanged Host limits | Mutable format3 + IPR cooperative channel hub + four strict POSIX physical-v2 shards; [offline construction](results/2026-09-14-native-channel-construction.md) and [bounded actual x86-64 native L1](results/2026-09-14-native-channel-l1.md); not ARM native channel, M5, threads or performance qualification |
 
 The R0 rows' native capacities are the default 64-MiB configurations. Scaled native
 workers without the channel opt-in accept `--namespace-mib 64|256|65536` using the same construction
@@ -99,7 +99,9 @@ headless results alone proves native execution. The subsequent
 [native channel option](adr/0025-native-channel-construction.md) selects that
 combined path in the existing MQ2 constructor with cooperative execution;
 its [offline native-loop checks](results/2026-09-14-native-channel-construction.md)
-do not qualify the actual kernel/driver or M5. Native threads, vendor timing,
+are now followed by [actual x86-64 Linux native L1 checks](results/2026-09-14-native-channel-l1.md)
+for bounded data, quiescent reset and cold reopen. Those do not qualify M5 or
+ARM native channel mode. Native threads, vendor timing,
 NUMA locality, concurrent Host parents and a throughput gain remain unproved.
 
 | Environment | What has evidence | What is not established |

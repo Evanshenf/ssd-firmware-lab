@@ -13,6 +13,9 @@ The sequence below describes the default mapped R0 construction. The separate
 mutable format3, synthetic IPR and strict POSIX channel shards instead. Its
 construction boundary is in [ADR-0025](adr/0025-native-channel-construction.md);
 it is not covered by the older native deployment/performance results below.
+The later [bounded native channel result](results/2026-09-14-native-channel-l1.md)
+qualifies actual-driver functional use on the named x86-64 L1 profile only;
+it does not extend that evidence to ARM, M5 or worker threads.
 
 ## 1. Choose matching builds
 
@@ -155,7 +158,8 @@ timing is unpaced, not a throughput limit, and prior R0 cost measurements do
 not apply. Include the NAND-profile choice and namespace in any later
 operator binding manifest along with exact ELF hashes; do not reuse an R0
 run's identity or treat the M4 media-family number as FTL format3. Online
-qualification, per-runtime worker reconstruction and performance are separate
+qualification has its own [bounded x86-64 result](results/2026-09-14-native-channel-l1.md).
+ARM/M5, per-runtime worker reconstruction and performance remain separate
 tasks; this section does not authorize changing an existing media directory.
 
 The [development results](results/2026-09-10-scaled-storage-mq2.md) identify the

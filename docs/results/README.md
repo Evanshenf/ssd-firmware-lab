@@ -7,6 +7,7 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 
 ## Current entry points
 
+- [2026-09-14: actual native channel L1](2026-09-14-native-channel-l1.md): bounded Linux-driver data/FUA/Flush, quiescent reset, same-media cold reopen and prior-instance restoration; cooperative x86-64 only, not full capacity, M5, threads or performance.
 - [2026-09-14: native channel construction, offline Host](2026-09-14-native-channel-construction.md): same actual native constructor/loop, mutable format3/IPR and process-lived channel volume; exact bounded I/O/reset/recovery, not kernel/M5/threaded or throughput proof.
 - [2026-09-14: unified mutable READ/WRITE](2026-09-14-mutable-read-write.md): one format3 instance combines existing schedules, real GC/IPR and mixed J0 operations, with partial-read exclusion and accepted-work close/recovery; not native throughput.
 - [2026-09-14: independent-plane READ](2026-09-14-independent-plane-read.md): same-LUN plane array overlap with serialized bus transfers, real FTL/J0 placement/recovery and whole-LUN mutation exclusion; synthetic model time, not native throughput.

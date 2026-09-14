@@ -42,6 +42,11 @@ uses that combined path in the existing worker, with fake Host ioctls for its
 bounded checks. It selects strict POSIX channel shards and cooperative jobs,
 not mapped media or OS workers. Its subsecond test budgets are not native
 throughput and cannot be compared as an optimization against earlier R0 rates.
+The later [real native L1 episode](results/2026-09-14-native-channel-l1.md)
+adds actual Linux-driver correctness evidence for that cooperative option.
+It measured no throughput or RSS benchmark; its 1 MiB workloads were split
+into eight 128 KiB wire commands. No older R0 rate is relabeled as channel
+performance, and OS-worker/NUMA measurements remain a separate task.
 
 ## Objective and measurement boundary
 
