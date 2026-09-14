@@ -10,6 +10,13 @@
 #undef main
 #include "channel_volume.h"
 
+#ifndef CHANNEL_J0_ENTRY
+#define CHANNEL_J0_ENTRY main
+#endif
+#ifndef CHANNEL_MEDIA_PREFIX
+#define CHANNEL_MEDIA_PREFIX "fwlab-d212"
+#endif
+
 struct channel_fixture {
     struct fixture f;
     struct fwlab_nand_channel_volume_config config;
@@ -39,7 +46,7 @@ static void channel_close(struct channel_fixture *c)
     CHECK(!c->f.runtime && fwlab_nand_channel_volume_close(c->volume) == FWLAB_NFC_API_OK);
     free(c->volume_arena); c->volume_arena = NULL; c->volume = NULL;
 }
-static struct channel_fixture *channel_create(void)
+static struct channel_fixture *channel_create_blocks(uint16_t blocks_per_plane)
 {
     struct channel_fixture *c = calloc(1, sizeof(*c));
     const char *root = getenv("FWLAB_TEST_MEDIA_DIR");
@@ -52,7 +59,7 @@ static struct channel_fixture *channel_create(void)
     c->config.geometry = (struct fwlab_nfc_geometry){
         .version = FWLAB_NFC_CONTRACT_VERSION, .size = sizeof(struct fwlab_nfc_geometry),
         .channels = 4, .luns_per_channel = 2, .planes_per_lun = 1,
-        .blocks_per_plane = 4, .pages_per_block = 64, .plane_parallelism_per_lun = 1,
+        .blocks_per_plane = blocks_per_plane, .pages_per_block = 64, .plane_parallelism_per_lun = 1,
         .main_bytes_per_page = 4096, .oob_bytes_per_page = 128,
         .max_programs_per_erase = 1, .program_order = FWLAB_NFC_PROGRAM_ASCENDING
     };
@@ -64,7 +71,7 @@ static struct channel_fixture *channel_create(void)
     c->f.media_config.geometry = c->config.geometry;
     memcpy(c->f.media_config.media_uuid, c->config.media_uuid, 16);
     media_preflight(root, 1, &c->f.media_config, 1);
-    n = snprintf(c->f.directory, sizeof(c->f.directory), "%s/fwlab-d212.XXXXXX", root);
+    n = snprintf(c->f.directory, sizeof(c->f.directory), "%s/" CHANNEL_MEDIA_PREFIX ".XXXXXX", root);
     CHECK(n > 0 && (size_t)n < sizeof(c->f.directory) && mkdtemp(c->f.directory));
     c->f.directory_fd = open(c->f.directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     CHECK(c->f.directory_fd >= 0);
@@ -93,6 +100,8 @@ static struct channel_fixture *channel_create(void)
     printf("CHANNEL_A_BEGIN|medium=local_tmpfs|ordinary_POSIX_syncs=1|channels=4|luns_each=2|namespace_bytes=1048576|directory=%s\n", c->f.directory);
     fflush(stdout); return c;
 }
+static struct channel_fixture *channel_create(void)
+{ return channel_create_blocks(4); }
 static void owned_unlink(struct fixture *f, const char *name)
 {
     struct stat st;
@@ -287,7 +296,7 @@ static void close_at_data_admission(int accepted)
     printf("CHANNEL_A_HOST_CLOSE|accepted=%d|accepted_before_child_admit=%d|durable_readback=1|zero_certificate=1\n", accepted, accepted);
     channel_destroy(c);
 }
-int main(void)
+int CHANNEL_J0_ENTRY(void)
 {
     real_hub_journey(); serial_j0_journey();
     close_at_data_admission(0); close_at_data_admission(1);

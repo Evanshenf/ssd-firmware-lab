@@ -238,9 +238,18 @@ static void step(struct fixture *f, int may_fail)
         f->ftl->parent.completed_lbas && f->ftl->parent.completed_lbas < f->ftl->parent.request.lba_count) {
         f->cp_with_parent += f->ftl->checkpoints > cp;
         f->gc_with_parent += f->ftl->garbage_collections > gc;
+        /* Format3 owns its MAP wait in the private wave, not work.phase.
+         * Accept only its actually applied final MAP before aggregate parent
+         * retirement; keep the original phase witness for formats1/2. */
         CHECK(f->ftl->durable_frontier == f->ftl->parent.base_frontier ||
             (f->ftl->durable_frontier == f->ftl->parent.host_sequence &&
-             f->ftl->work.kind == SF_WORK_HOST && f->ftl->work.phase == SF_W_HOST_MAP_WAIT &&
+             f->ftl->work.kind == SF_WORK_HOST &&
+             (f->ftl->work.phase == SF_W_HOST_MAP_WAIT ||
+              (f->ftl->disk_format == SF_MULTIHEAD_FORMAT_VERSION && sf_write_pool_busy(f->ftl) &&
+               !sf_meta_busy(f->ftl) && f->ftl->meta.result == FWLAB_SPINE_V0_OK &&
+               f->ftl->meta.record.kind == SF_MAP_WINDOW &&
+               f->ftl->meta.record.durable_frontier == f->ftl->parent.host_sequence &&
+               f->ftl->meta.record.after_map_seq == f->ftl->map_sequence)) &&
              f->ftl->parent.completed_lbas + f->ftl->work.request.lba_count ==
                  f->ftl->parent.request.lba_count));
     }

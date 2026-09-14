@@ -44,6 +44,9 @@ void scale_storage_mutation_lab_factory_init(struct j0_storage_factory *factory,
                                               struct scale_storage_options *options);
 void scale_storage_channel_lab_factory_init(struct j0_storage_factory *factory,
                                              struct scale_storage_options *options);
+/* Same actual channel assembly/hub, explicit format3 multi-head FTL. */
+void scale_storage_multihead_lab_factory_init(struct j0_storage_factory *factory,
+                                              struct scale_storage_options *options);
 /* Serialized coordinator: requires J0 admission, FTL and NFC live-idle before
  * the one-way lower timing/upper read-only transitions. No provider rebinding. */
 enum fwlab_spine_result_v0 scale_storage_begin_timed_read(struct j0_runtime *runtime);
