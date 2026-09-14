@@ -161,7 +161,15 @@ static void join_floor_retirement(void)
     CHECK(f->provider.ops->take_result(f->hub, &r.operation, &result, &invalid) == FWLAB_NFC_API_INVALID_CONTRACT);
     (void)channel_take(f, &r, true);
     CHECK(f->provider.ops->try_submit(f->hub, &r).reason == FWLAB_NFC_REASON_STALE);
-    channel_tick(f); CHECK(channel_stats(f).retired_acks == 1 && channel_stats(f).occupied_credits == 3);
+    /* Retirement is now a real actor job/reply. Scheduling it is not its ACK;
+     * the result's credit remains owned until the synchronized reply arrives. */
+    channel_tick(f);
+    CHECK(channel_stats(f).retired_acks == 0 && channel_stats(f).occupied_credits == 4);
+    guard = 0;
+    while (channel_stats(f).phase != FWLAB_NFC_CHANNEL_V2_JOINED) {
+        CHECK(++guard < 32); channel_tick(f);
+    }
+    CHECK(channel_stats(f).retired_acks == 1 && channel_stats(f).occupied_credits == 3);
     CHECK(f->provider.ops->try_submit(f->hub, &next).disposition == FWLAB_NFC_BACKPRESSURE);
     struct fwlab_nfc_page_v2_step_result step;
     CHECK(f->provider.ops->step(f->hub, 32, &step) == FWLAB_NFC_API_OK && !step.units_used);

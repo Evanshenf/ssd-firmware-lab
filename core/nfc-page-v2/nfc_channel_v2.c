@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 #include "fwlab/private/nfc_channel_v2.h"
 #include "nfc_page_v2_internal.h"
+#include "nfc_channel_v2_internal.h"
 
 #include <stdalign.h>
 #include <string.h>
@@ -13,29 +14,38 @@
 #define OOB FWLAB_NFC_PAGE_V2_OOB_BYTES
 #define PAGES FWLAB_NFC_PAGE_V2_MAX_PAGES
 
-enum hub_slot_state { HUB_FREE, HUB_QUEUED, HUB_CHILD, HUB_REPORT, HUB_READY, HUB_ACK };
+enum hub_slot_state { HUB_FREE, HUB_QUEUED, HUB_CHILD, HUB_REPORT, HUB_READY, HUB_ACK, HUB_RETIRING };
 struct hub_slot {
     struct fwlab_nfc_page_v2_request request;
     struct fwlab_nfc_page_v2_result result;
     uint64_t charge;
     uint8_t state;
-    _Alignas(64) uint8_t main[PAGES * MAIN];
-    uint8_t oob[PAGES * OOB];
 };
-struct hub_actor {
-    struct fwlab_nfc_page_v2_lab *model;
-    struct fwlab_nfc_page_v2_provider provider;
-    uint8_t reports_held, reset_done, quiet_done;
+struct hub_actor_view {
+    struct fwlab_nfc_page_v2_lab_stats stats;
+    uint64_t sequence;
+    uint8_t batch_mask, accepted, lower_owned, reports, quiet;
 };
 struct fwlab_nfc_channel_v2 {
     uint64_t magic, last_uid, duration[4];
     struct fwlab_nfc_page_v2_lab_mutation_config timing;
     struct fwlab_nand_channel_v2 assembly;
     struct fwlab_nfc_channel_v2_stats stats;
-    struct hub_actor actor[CHANNELS];
+    struct fwlab_nfc_channel_actor actor[CHANNELS];
+    struct hub_actor_view view[CHANNELS];
+    struct fwlab_nfc_channel_executor executor;
+    struct fwlab_nfc_channel_job job[CHANNELS];
+    struct fwlab_nfc_channel_job *cooperative_job[CHANNELS];
+    struct fwlab_nfc_page_v2_lab_trace trace[CHANNELS][FWLAB_NFC_PAGE_V2_LAB_TRACE_CAPACITY];
+    uint32_t trace_count[CHANNELS];
+    uint64_t batch_uid;
+    uint32_t command;
+    uint8_t required, posted, replied, lost, fault_pending;
+    uint8_t cooperative, shutdown_wait, executor_done;
     uint32_t cursor;
     uint8_t busy;
     struct hub_slot slot[CREDITS];
+    struct fwlab_nfc_channel_frame frame[CREDITS];
     _Alignas(64) uint8_t actors[];
 };
 _Static_assert(offsetof(struct fwlab_nfc_channel_v2, actors) ==
@@ -95,12 +105,16 @@ static struct fwlab_nfc_submit_result submit(void *opaque,
     if (reason) return disposition(FWLAB_NFC_REJECTED, reason);
     s = find(h, &r->operation);
     if (s) {
-        bool equal = s->state != HUB_ACK && page2_canonical_equal(r, &s->request);
+        bool equal = s->state != HUB_ACK && s->state != HUB_RETIRING && page2_canonical_equal(r, &s->request);
         return disposition(equal ? FWLAB_NFC_ACCEPTED : FWLAB_NFC_REJECTED,
                            equal ? FWLAB_NFC_REASON_NONE : FWLAB_NFC_REASON_STALE);
     }
     if (h->stats.closed || h->stats.quarantined)
         return disposition(FWLAB_NFC_REJECTED, h->stats.closed ? FWLAB_NFC_REASON_RESET : FWLAB_NFC_REASON_INTERNAL);
+    if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_BUILD && !occupied(h))
+        for (unsigned c = 0; c < h->assembly.geometry.channels; ++c)
+            if (h->view[c].sequence > UINT64_MAX - 7u)
+                return disposition(FWLAB_NFC_REJECTED, FWLAB_NFC_REASON_RANGE);
     if (r->operation.operation_uid <= h->last_uid)
         return disposition(FWLAB_NFC_REJECTED, FWLAB_NFC_REASON_STALE);
     if (h->stats.phase != FWLAB_NFC_CHANNEL_V2_BUILD || occupied(h) == CREDITS)
@@ -125,7 +139,8 @@ static struct fwlab_nfc_submit_result submit(void *opaque,
     s->request = *r;
     memset(&s->result, 0, sizeof(s->result));
     if (r->kind == FWLAB_NFC_PAGE_V2_PROGRAM_GROUP) {
-        memcpy(s->main, r->main, r->main_bytes); memcpy(s->oob, r->oob, r->oob_bytes);
+        struct fwlab_nfc_channel_frame *frame = &h->frame[s - h->slot];
+        memcpy(frame->main, r->main, r->main_bytes); memcpy(frame->oob, r->oob, r->oob_bytes);
         count(h, &h->stats.snapshot_main_bytes, r->main_bytes);
         count(h, &h->stats.snapshot_oob_bytes, r->oob_bytes);
     }
@@ -143,178 +158,249 @@ static enum fwlab_nfc_api_result cancel(void *opaque, const struct fwlab_nfc_ope
     if (h->busy) return FWLAB_NFC_API_WRONG_STATE;
     if (!page2_key_valid(&h->timing.read.base, key)) return FWLAB_NFC_API_STALE_TOKEN;
     s = find(h, key);
-    if (!s || s->state == HUB_ACK) return FWLAB_NFC_API_STALE_TOKEN;
+    if (!s || s->state == HUB_ACK || s->state == HUB_RETIRING) return FWLAB_NFC_API_STALE_TOKEN;
     /* WAVE4 drain-only policy: no child cancel, even before child admission.
      * The upper owner decides whether to publish or discard the result. */
     return FWLAB_NFC_API_OK;
 }
-static void rejected_child(struct fwlab_nfc_channel_v2 *h, unsigned index,
-                            struct fwlab_nfc_submit_result submitted)
+
+static unsigned bits(uint8_t mask)
 {
-    struct hub_slot *s = &h->slot[index];
-    struct fwlab_nfc_page_v2_result *r = &s->result;
-    memset(r, 0, sizeof(*r));
-    r->version = FWLAB_NFC_PAGE_V2_VERSION; r->size = sizeof(*r);
-    r->operation = s->request.operation; r->first = s->request.first;
-    r->page_count = s->request.page_count; r->kind = s->request.kind;
-    r->terminal = FWLAB_NFC_TERMINAL_FAILED;
-    r->reason = submitted.reason && submitted.reason <= FWLAB_NFC_REASON_INTERNAL ?
-        (uint8_t)submitted.reason : FWLAB_NFC_REASON_INTERNAL;
-    r->backend_status = submitted.disposition == FWLAB_NFC_BACKPRESSURE ?
-        FWLAB_NFC_API_NO_CAPACITY : FWLAB_NFC_API_INVALID_CONTRACT;
-    if (r->kind != FWLAB_NFC_PAGE_V2_READ_GROUP)
-        for (uint32_t i = 0; i < r->page_count; ++i) r->page[i].facts_valid = FWLAB_NFC_PAGE_V2_FACT_EFFECT;
-    s->state = HUB_REPORT;
-    h->actor[r->first.channel].reports_held |= (uint8_t)(1u << index);
-    h->stats.quarantined = 1;
+    unsigned n = 0;
+    for (; mask; mask &= (uint8_t)(mask - 1u)) ++n;
+    return n;
 }
-static bool result_identity(const struct hub_slot *s)
+static enum fwlab_nfc_api_result cooperative_submit(void *opaque, struct fwlab_nfc_channel_job *j)
 {
-    struct fwlab_nfc_ppa local = s->request.first;
-    const struct fwlab_nfc_page_v2_result *r = &s->result;
-    local.channel = 0;
-    return r->version == FWLAB_NFC_PAGE_V2_VERSION && r->size == sizeof(*r) &&
-        !r->reserved0 && !r->reserved1 && page2_key_equal(&r->operation, &s->request.operation) &&
-        !memcmp(&r->first, &local, sizeof(local)) && r->kind == s->request.kind &&
-        r->page_count == s->request.page_count && r->terminal <= FWLAB_NFC_TERMINAL_FAILED &&
-        r->read_valid <= 1 && r->delivered_pages ==
-            (r->kind == FWLAB_NFC_PAGE_V2_READ_GROUP && r->read_valid ? r->page_count : 0);
+    struct fwlab_nfc_channel_v2 *h = opaque;
+    if (!j || j->channel >= h->assembly.geometry.channels) return FWLAB_NFC_API_INVALID_CONTRACT;
+    if (h->cooperative_job[j->channel]) return FWLAB_NFC_API_NO_CAPACITY;
+    h->cooperative_job[j->channel] = j;
+    return FWLAB_NFC_API_OK;
 }
-static enum fwlab_nfc_api_result run_one(struct fwlab_nfc_channel_v2 *h, bool *advanced)
+static enum fwlab_nfc_api_result cooperative_poll(void *opaque, uint32_t channel,
+    struct fwlab_nfc_channel_job **out, bool *advanced)
 {
-    unsigned outstanding = 0;
-    /* Collection is internal, not conditional on caller take/discard. The
-     * actor reports remain owned until their later retirement acknowledgment. */
-    for (unsigned i = 0; i < CREDITS; ++i) {
-        struct hub_slot *s = &h->slot[i];
-        struct fwlab_nfc_page_v2_output output = {s->main, (size_t)s->request.page_count * MAIN,
-                                                 s->oob, (size_t)s->request.page_count * OOB};
-        if (s->state != HUB_CHILD) continue;
-        struct hub_actor *a = &h->actor[s->request.first.channel];
-        enum fwlab_nfc_api_result r = a->provider.ops->take_result(a->provider.context,
-            &s->request.operation, &s->result, s->request.kind == FWLAB_NFC_PAGE_V2_READ_GROUP ? &output : NULL);
-        if (r == FWLAB_NFC_API_OK) {
-            --h->stats.actor_owned[s->request.first.channel];
-            s->state = HUB_REPORT; a->reports_held |= (uint8_t)(1u << i);
-            if (!result_identity(s)) return poison(h);
-            s->result.first = s->request.first;
-            s->result.delivered_pages = 0; /* No caller output has occurred. */
-            *advanced = true;
-            return FWLAB_NFC_API_OK;
+    struct fwlab_nfc_channel_v2 *h = opaque;
+    bool complete = false;
+    *out = NULL; *advanced = false;
+    if (channel >= h->assembly.geometry.channels) return FWLAB_NFC_API_INVALID_CONTRACT;
+    struct fwlab_nfc_channel_job *j = h->cooperative_job[channel];
+    if (!j) return FWLAB_NFC_API_OK;
+    enum fwlab_nfc_api_result r = fwlab_nfc_channel_v2_actor_job_step(j, advanced, &complete);
+    if (r == FWLAB_NFC_API_OK && complete) { h->cooperative_job[channel] = NULL; *out = j; }
+    return r;
+}
+static enum fwlab_nfc_api_result cooperative_shutdown(void *opaque, bool *advanced, bool *complete)
+{
+    struct fwlab_nfc_channel_v2 *h = opaque;
+    *advanced = false; *complete = false;
+    for (unsigned c = 0; c < h->assembly.geometry.channels; ++c)
+        if (h->cooperative_job[c]) return FWLAB_NFC_API_WRONG_STATE;
+    *complete = true;
+    return FWLAB_NFC_API_OK;
+}
+static const struct fwlab_nfc_channel_executor_ops cooperative_ops = {
+    cooperative_submit, cooperative_poll, cooperative_shutdown
+};
+static void fault(struct fwlab_nfc_channel_v2 *h, unsigned c, bool lost)
+{
+    h->fault_pending = h->stats.quarantined = 1;
+    if (lost) h->lost |= (uint8_t)(1u << c);
+}
+static bool setup_jobs(struct fwlab_nfc_channel_v2 *h, uint32_t command, uint8_t mask)
+{
+    h->command = command; h->required = mask; h->posted = h->replied = 0; h->cursor = 0;
+    for (unsigned c = 0; c < h->assembly.geometry.channels; ++c) {
+        if (!(mask & (1u << c))) continue;
+        struct fwlab_nfc_channel_job *j = &h->job[c];
+        if (h->view[c].sequence == UINT64_MAX) return false;
+        memset(j, 0, sizeof(*j));
+        j->actor = &h->actor[c]; j->channel = c; j->command = command;
+        j->job_sequence = ++h->view[c].sequence;
+        j->batch_uid = h->batch_uid; j->admission_floor_ns = h->stats.now_ns;
+        if (command == FWLAB_CHANNEL_PREP || command == FWLAB_CHANNEL_RUN)
+            j->slot_mask = h->view[c].batch_mask;
+        if (command == FWLAB_CHANNEL_PREP) {
+            for (unsigned i = 0; i < CREDITS; ++i) if (j->slot_mask & (1u << i)) {
+                j->entry[i].request = h->slot[i].request;
+                j->entry[i].frame = &h->frame[i];
+            }
+        } else if (command == FWLAB_CHANNEL_RETIRE) {
+            for (unsigned i = 0; i < CREDITS; ++i)
+                if (h->slot[i].state == HUB_ACK && h->slot[i].request.first.channel == c) {
+                    j->slot_mask |= (uint8_t)(1u << i); h->slot[i].state = HUB_RETIRING;
+                }
         }
-        if (r != FWLAB_NFC_API_WRONG_STATE) return poison(h);
-        ++outstanding;
     }
-    if (!outstanding) {
-        uint64_t joined = h->stats.now_ns;
-        for (unsigned c = 0; c < h->assembly.geometry.channels; ++c) {
-            if (fwlab_nfc_page_v2_lab_snapshot(h->actor[c].model, &h->stats.channel[c]) != FWLAB_NFC_API_OK ||
-                h->stats.channel[c].active_slots || h->stats.channel[c].held_luns || h->stats.channel[c].busy_channels)
-                return poison(h);
-            if (joined < h->stats.channel[c].now_ns) joined = h->stats.channel[c].now_ns;
-            if (h->stats.channel[c].quarantined) h->stats.quarantined = 1;
+    return true;
+}
+static bool import_reply(struct fwlab_nfc_channel_v2 *h, unsigned c)
+{
+    struct fwlab_nfc_channel_job *j = &h->job[c];
+    const struct fwlab_nfc_channel_reply *r = &j->reply;
+    struct hub_actor_view *v = &h->view[c];
+    uint8_t prior_accepted = v->accepted;
+    if (r->job_sequence != v->sequence || r->batch_uid != h->batch_uid ||
+        r->channel != c || r->command != h->command ||
+        (r->accepted_mask | r->completed_mask | r->lower_owned_mask | r->reports_held_mask) & (uint8_t)~v->batch_mask ||
+        r->closed > 1 || r->quiet > 1 || r->reserved[0] || r->reserved[1] ||
+        r->trace_start != h->trace_count[c] ||
+        r->trace_count > FWLAB_NFC_PAGE_V2_LAB_TRACE_CAPACITY - h->trace_count[c] ||
+        r->stats.trace_count != r->trace_start + r->trace_count)
+        return false;
+    memcpy(h->trace[c] + r->trace_start, r->trace, r->trace_count * sizeof(r->trace[0]));
+    h->trace_count[c] += r->trace_count;
+    v->stats = r->stats; v->accepted = r->accepted_mask;
+    v->lower_owned = r->lower_owned_mask; v->reports = r->reports_held_mask; v->quiet = r->quiet;
+    h->stats.actor_owned[c] = bits(v->lower_owned);
+    if (r->stats.quarantined) h->stats.quarantined = 1;
+    if (r->status != FWLAB_NFC_API_OK) { fault(h, c, false); return true; }
+    if (h->command == FWLAB_CHANNEL_PREP)
+        return r->accepted_mask == r->lower_owned_mask &&
+            (uint8_t)(r->lower_owned_mask | r->completed_mask) == v->batch_mask &&
+            !(r->lower_owned_mask & r->completed_mask) && r->reports_held_mask == r->completed_mask;
+    if (h->command == FWLAB_CHANNEL_RUN) {
+        if (r->accepted_mask != prior_accepted || r->lower_owned_mask ||
+            r->completed_mask != v->batch_mask || r->reports_held_mask != v->batch_mask ||
+            r->stats.active_slots || r->stats.held_luns || r->stats.busy_channels ||
+            r->terminal_ns != r->stats.now_ns || r->terminal_ns < h->stats.now_ns) return false;
+        for (unsigned i = 0; i < CREDITS; ++i) if (v->batch_mask & (1u << i)) {
+            struct hub_slot *s = &h->slot[i];
+            const struct fwlab_nfc_page_v2_result *result = &h->frame[i].result;
+            if (result->version != FWLAB_NFC_PAGE_V2_VERSION || result->size != sizeof(*result) ||
+                result->reserved0 || result->reserved1 ||
+                !page2_key_equal(&result->operation, &s->request.operation) ||
+                memcmp(&result->first, &s->request.first, sizeof(result->first)) ||
+                result->kind != s->request.kind || result->page_count != s->request.page_count ||
+                result->terminal > FWLAB_NFC_TERMINAL_FAILED || result->read_valid > 1 || result->delivered_pages)
+                return false;
+            s->result = *result; s->state = HUB_REPORT;
         }
-        h->stats.now_ns = joined;
-        for (unsigned i = 0; i < CREDITS; ++i)
-            if (h->slot[i].state == HUB_REPORT) h->slot[i].state = HUB_READY;
-        h->stats.phase = FWLAB_NFC_CHANNEL_V2_JOINED;
-        count(h, &h->stats.joined_batches, 1); *advanced = true;
+    } else if (h->command == FWLAB_CHANNEL_RETIRE) {
+        if (r->lower_owned_mask || r->accepted_mask != (uint8_t)(prior_accepted & (uint8_t)~j->slot_mask) ||
+            r->completed_mask != r->reports_held_mask ||
+            r->reports_held_mask != (uint8_t)(v->batch_mask & (uint8_t)~j->slot_mask))
+            return false;
+        for (unsigned i = 0; i < CREDITS; ++i) if (j->slot_mask & (1u << i)) {
+            struct hub_slot *s = &h->slot[i];
+            if (s->state != HUB_RETIRING || s->request.first.channel != c) return false;
+            memset(s, 0, sizeof(*s)); count(h, &h->stats.retired_acks, 1);
+        }
+        v->batch_mask &= (uint8_t)~j->slot_mask;
+    } else if (h->command == FWLAB_CHANNEL_CLOSE) {
+        if (!r->closed || !r->quiet || r->accepted_mask || r->completed_mask ||
+            r->lower_owned_mask || r->reports_held_mask ||
+            r->stats.active_slots || r->stats.held_luns || r->stats.busy_channels) return false;
+        h->stats.channel[c] = r->stats;
+    }
+    return true;
+}
+static bool jobs_complete(const struct fwlab_nfc_channel_v2 *h)
+{ return (uint8_t)((h->replied | h->lost) & h->required) == h->required; }
+static enum fwlab_nfc_api_result jobs_step(struct fwlab_nfc_channel_v2 *h, bool *advanced)
+{
+    /* Dispatch the whole phase before polling. In particular, a blocked real
+     * overlap witness cannot strand an unsent channel by putting us to sleep. */
+    for (unsigned c = 0; c < h->assembly.geometry.channels; ++c) {
+        uint8_t bit = (uint8_t)(1u << c);
+        if (!(h->required & bit) || (h->posted & bit) || (h->lost & bit)) continue;
+        enum fwlab_nfc_api_result r = h->executor.ops->submit(h->executor.context, &h->job[c]);
+        if (r == FWLAB_NFC_API_NO_CAPACITY) return FWLAB_NFC_API_OK;
+        if (r != FWLAB_NFC_API_OK) fault(h, c, true);
+        else h->posted |= bit;
+        *advanced = true;
         return FWLAB_NFC_API_OK;
     }
     for (unsigned n = 0; n < h->assembly.geometry.channels; ++n) {
         unsigned c = h->cursor++ % h->assembly.geometry.channels;
-        if (!h->stats.actor_owned[c]) continue;
-        struct fwlab_nfc_page_v2_step_result result = {0};
-        enum fwlab_nfc_api_result r = h->actor[c].provider.ops->step(h->actor[c].provider.context, 1, &result);
-        if (r != FWLAB_NFC_API_OK || result.units_used > 1) return poison(h);
-        *advanced = result.units_used != 0;
-        return FWLAB_NFC_API_OK;
+        uint8_t bit = (uint8_t)(1u << c);
+        if (!(h->required & bit) || !(h->posted & bit) || ((h->replied | h->lost) & bit)) continue;
+        struct fwlab_nfc_channel_job *j = NULL;
+        bool progress = false;
+        enum fwlab_nfc_api_result r = h->executor.ops->poll(h->executor.context, c, &j, &progress);
+        if (r != FWLAB_NFC_API_OK) { fault(h, c, true); *advanced = true; return FWLAB_NFC_API_OK; }
+        if (j) {
+            if (j != &h->job[c]) fault(h, c, true);
+            else { h->replied |= bit; if (!import_reply(h, c)) fault(h, c, false); }
+            *advanced = true;
+            return FWLAB_NFC_API_OK;
+        }
+        if (progress) { *advanced = true; return FWLAB_NFC_API_OK; }
     }
-    return poison(h);
+    return FWLAB_NFC_API_OK;
 }
 static enum fwlab_nfc_api_result step_one(struct fwlab_nfc_channel_v2 *h, bool *advanced)
 {
-    enum fwlab_nfc_api_result r;
+    uint8_t all = (uint8_t)((1u << h->assembly.geometry.channels) - 1u);
     *advanced = false;
     if (h->stats.poisoned) return FWLAB_NFC_API_INVARIANT_FAILURE;
-    if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_JOINED) {
-        for (unsigned i = 0; i < CREDITS; ++i) {
-            struct hub_slot *s = &h->slot[i];
-            if (s->state != HUB_ACK) continue;
-            struct hub_actor *a = &h->actor[s->request.first.channel];
-            if (!(a->reports_held & (1u << i))) return poison(h);
-            a->reports_held &= (uint8_t)~(1u << i);
-            memset(&s->request, 0, sizeof(s->request)); memset(&s->result, 0, sizeof(s->result));
-            s->charge = 0; s->state = HUB_FREE;
-            count(h, &h->stats.retired_acks, 1); *advanced = true;
-            if (!occupied(h)) h->stats.phase = FWLAB_NFC_CHANNEL_V2_BUILD;
-            return FWLAB_NFC_API_OK;
-        }
-        return FWLAB_NFC_API_OK; /* Caller still owns one or more results. */
-    }
     if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_BUILD) {
         if (occupied(h)) {
             memset(h->stats.batch_requests, 0, sizeof(h->stats.batch_requests));
-            for (unsigned i = 0; i < CREDITS; ++i)
-                if (h->slot[i].state == HUB_QUEUED) ++h->stats.batch_requests[h->slot[i].request.first.channel];
-            h->cursor = 0; h->stats.phase = FWLAB_NFC_CHANNEL_V2_FLOOR;
+            h->batch_uid = h->slot[0].request.operation.operation_uid;
+            for (unsigned c = 0; c < h->assembly.geometry.channels; ++c) h->view[c].batch_mask = 0;
+            for (unsigned i = 0; i < CREDITS; ++i) if (h->slot[i].state == HUB_QUEUED) {
+                unsigned c = h->slot[i].request.first.channel;
+                ++h->stats.batch_requests[c]; h->view[c].batch_mask |= (uint8_t)(1u << i);
+            }
+            h->stats.phase = FWLAB_NFC_CHANNEL_V2_FLOOR;
             count(h, &h->stats.sealed_batches, 1); *advanced = true;
         } else if (h->stats.closed) {
-            h->cursor = 0; h->stats.phase = FWLAB_NFC_CHANNEL_V2_CLOSING; *advanced = true;
+            if (!setup_jobs(h, FWLAB_CHANNEL_CLOSE, all)) return poison(h);
+            h->stats.phase = FWLAB_NFC_CHANNEL_V2_CLOSING; *advanced = true;
         }
         return FWLAB_NFC_API_OK;
     }
     if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_FLOOR) {
-        r = fwlab_nfc_page_v2_lab_admission_floor(h->actor[h->cursor].model, h->stats.now_ns);
-        if (r != FWLAB_NFC_API_OK) return poison(h);
-        if (++h->cursor == h->assembly.geometry.channels) {
-            h->cursor = 0; h->stats.phase = FWLAB_NFC_CHANNEL_V2_ADMIT;
-        }
-        *advanced = true; return FWLAB_NFC_API_OK;
+        if (!setup_jobs(h, FWLAB_CHANNEL_PREP, all)) return poison(h);
+        h->stats.phase = FWLAB_NFC_CHANNEL_V2_ADMIT; *advanced = true;
+        return FWLAB_NFC_API_OK;
     }
-    if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_ADMIT) {
-        /* BUILD can only start with all credits free: occupied slot order is
-         * global admission/UID order. All ingress completes before RUN. */
-        while (h->cursor < CREDITS && h->slot[h->cursor].state != HUB_QUEUED) ++h->cursor;
-        if (h->cursor < CREDITS) {
-            unsigned i = h->cursor++;
-            struct hub_slot *s = &h->slot[i];
-            struct fwlab_nfc_page_v2_request local = s->request;
-            struct hub_actor *a = &h->actor[local.first.channel];
-            local.first.channel = 0;
-            if (local.kind == FWLAB_NFC_PAGE_V2_PROGRAM_GROUP) { local.main = s->main; local.oob = s->oob; }
-            struct fwlab_nfc_submit_result result = a->provider.ops->try_submit(a->provider.context, &local);
-            if (result.disposition == FWLAB_NFC_ACCEPTED) {
-                s->state = HUB_CHILD; ++h->stats.actor_owned[s->request.first.channel];
-            } else if (result.disposition == FWLAB_NFC_REJECTED || result.disposition == FWLAB_NFC_BACKPRESSURE)
-                rejected_child(h, i, result); /* Accepted by hub, never by child: known NONE. */
-            else return poison(h);
-        } else { h->cursor = 0; h->stats.phase = FWLAB_NFC_CHANNEL_V2_RUN; }
-        *advanced = true; return FWLAB_NFC_API_OK;
-    }
-    if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_RUN) return run_one(h, advanced);
-    if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_CLOSING) {
-        if (h->cursor == h->assembly.geometry.channels) {
-            h->stats.phase = FWLAB_NFC_CHANNEL_V2_CLOSED; *advanced = true; return FWLAB_NFC_API_OK;
-        }
-        struct hub_actor *a = &h->actor[h->cursor];
-        if (a->reports_held || h->stats.actor_owned[h->cursor]) return poison(h);
-        if (!a->reset_done) {
-            r = a->provider.ops->reset_begin(a->provider.context,
-                h->timing.read.base.instance_nonce, h->timing.read.base.controller_epoch);
-            if (r != FWLAB_NFC_API_OK) return poison(h);
-            a->reset_done = 1; *advanced = true;
-        } else {
-            bool quiet = false;
-            r = a->provider.ops->quiescent(a->provider.context, h->timing.read.base.instance_nonce,
-                h->timing.read.base.controller_epoch, &quiet);
-            if (r != FWLAB_NFC_API_OK) return poison(h);
-            if (quiet) {
-                if (fwlab_nfc_page_v2_lab_snapshot(a->model, &h->stats.channel[h->cursor]) != FWLAB_NFC_API_OK)
-                    return poison(h);
-                a->quiet_done = 1; ++h->cursor; *advanced = true;
+    if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_ADMIT || h->stats.phase == FWLAB_NFC_CHANNEL_V2_RUN ||
+        h->stats.phase == FWLAB_NFC_CHANNEL_V2_RETIRING || h->stats.phase == FWLAB_NFC_CHANNEL_V2_CLOSING) {
+        if (!jobs_complete(h)) return jobs_step(h, advanced);
+        if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_ADMIT) {
+            /* Even an error in one PREP cannot suppress accepted healthy siblings. */
+            if (!setup_jobs(h, FWLAB_CHANNEL_RUN, (uint8_t)(all & (uint8_t)~h->lost))) return poison(h);
+            h->stats.phase = FWLAB_NFC_CHANNEL_V2_RUN;
+        } else if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_RUN) {
+            if (h->fault_pending) return poison(h);
+            for (unsigned c = 0; c < h->assembly.geometry.channels; ++c) {
+                h->stats.channel[c] = h->view[c].stats;
+                if (h->stats.now_ns < h->view[c].stats.now_ns) h->stats.now_ns = h->view[c].stats.now_ns;
             }
+            for (unsigned i = 0; i < CREDITS; ++i)
+                if (h->slot[i].state == HUB_REPORT) h->slot[i].state = HUB_READY;
+            h->stats.phase = FWLAB_NFC_CHANNEL_V2_JOINED;
+            count(h, &h->stats.joined_batches, 1);
+        } else if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_RETIRING) {
+            if (h->fault_pending) return poison(h);
+            h->stats.phase = occupied(h) ? FWLAB_NFC_CHANNEL_V2_JOINED : FWLAB_NFC_CHANNEL_V2_BUILD;
+        } else {
+            if (h->fault_pending) return poison(h);
+            h->stats.phase = FWLAB_NFC_CHANNEL_V2_SHUTDOWN;
         }
+        *advanced = true;
+        return FWLAB_NFC_API_OK;
+    }
+    if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_JOINED) {
+        uint8_t mask = 0;
+        for (unsigned i = 0; i < CREDITS; ++i)
+            if (h->slot[i].state == HUB_ACK) mask |= (uint8_t)(1u << h->slot[i].request.first.channel);
+        if (mask) {
+            if (!setup_jobs(h, FWLAB_CHANNEL_RETIRE, mask)) return poison(h);
+            h->stats.phase = FWLAB_NFC_CHANNEL_V2_RETIRING; *advanced = true;
+        }
+        return FWLAB_NFC_API_OK;
+    }
+    if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_SHUTDOWN) {
+        bool complete = false, progress = false;
+        enum fwlab_nfc_api_result r = h->executor.ops->shutdown(h->executor.context, &progress, &complete);
+        if (r != FWLAB_NFC_API_OK) return poison(h);
+        h->shutdown_wait = (uint8_t)(!progress && !complete);
+        if (complete) { h->executor_done = 1; h->stats.phase = FWLAB_NFC_CHANNEL_V2_CLOSED; }
+        *advanced = progress || complete;
     }
     return FWLAB_NFC_API_OK;
 }
@@ -347,7 +433,7 @@ static enum fwlab_nfc_api_result take(void *opaque, const struct fwlab_nfc_opera
     if (h->busy) return FWLAB_NFC_API_WRONG_STATE;
     if (!page2_key_valid(&h->timing.read.base, key)) return FWLAB_NFC_API_STALE_TOKEN;
     s = find(h, key);
-    if (!s || s->state == HUB_ACK) return FWLAB_NFC_API_STALE_TOKEN;
+    if (!s || s->state == HUB_ACK || s->state == HUB_RETIRING) return FWLAB_NFC_API_STALE_TOKEN;
     if (h->stats.poisoned) return FWLAB_NFC_API_INVARIANT_FAILURE;
     if (s->state != HUB_READY) return FWLAB_NFC_API_WRONG_STATE;
     if (destination) d = *destination;
@@ -358,7 +444,8 @@ static enum fwlab_nfc_api_result take(void *opaque, const struct fwlab_nfc_opera
         overlap(d.main, d.main_bytes, d.oob, d.oob_bytes) || overlap(out, sizeof(*out), d.main, d.main_bytes) ||
         overlap(out, sizeof(*out), d.oob, d.oob_bytes))) return FWLAB_NFC_API_INVALID_CONTRACT;
     if (!discard && s->result.read_valid) {
-        memcpy(d.main, s->main, d.main_bytes); memcpy(d.oob, s->oob, d.oob_bytes);
+        const struct fwlab_nfc_channel_frame *frame = &h->frame[s - h->slot];
+        memcpy(d.main, frame->main, d.main_bytes); memcpy(d.oob, frame->oob, d.oob_bytes);
         s->result.delivered_pages = s->request.page_count;
     }
     *out = s->result; s->state = HUB_ACK;
@@ -382,9 +469,9 @@ static enum fwlab_nfc_api_result quiet(void *opaque, uint64_t nonce, uint32_t ep
     if (nonce != h->timing.read.base.instance_nonce || epoch != h->timing.read.base.controller_epoch)
         return FWLAB_NFC_API_STALE_TOKEN;
     if (h->stats.poisoned) return FWLAB_NFC_API_INVARIANT_FAILURE;
-    *out = h->stats.closed && h->stats.phase == FWLAB_NFC_CHANNEL_V2_CLOSED && !occupied(h);
+    *out = h->stats.closed && h->stats.phase == FWLAB_NFC_CHANNEL_V2_CLOSED && h->executor_done && !occupied(h);
     for (unsigned c = 0; c < h->assembly.geometry.channels; ++c)
-        if (!h->actor[c].quiet_done || h->actor[c].reports_held || h->stats.actor_owned[c]) *out = false;
+        if (!h->view[c].quiet || h->view[c].reports || h->stats.actor_owned[c]) *out = false;
     return FWLAB_NFC_API_OK;
 }
 static const struct fwlab_nfc_page_v2_provider_ops operations = {
@@ -414,9 +501,10 @@ static bool durations(struct fwlab_nfc_channel_v2 *h)
         add(c->erase_command_ns, c->array_erase_ns, &h->duration[3]) &&
         add(h->duration[3], status, &h->duration[3]);
 }
-enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init(void *arena, size_t bytes,
+enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init_executor(void *arena, size_t bytes,
     const struct fwlab_nfc_page_v2_lab_mutation_config *timing,
-    const struct fwlab_nand_channel_v2 *assembly, struct fwlab_nfc_channel_v2 **out)
+    const struct fwlab_nand_channel_v2 *assembly, const struct fwlab_nfc_channel_executor *executor,
+    struct fwlab_nfc_channel_v2 **out)
 {
     struct fwlab_nfc_channel_v2 *h = arena;
     struct fwlab_nfc_page_v2_lab_mutation_config t;
@@ -426,6 +514,10 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init(void *arena, size_t bytes,
         !page2_span(arena, fwlab_nfc_channel_v2_arena_size()) ||
         (uintptr_t)arena % alignof(struct fwlab_nfc_channel_v2) || !timing || !assembly ||
         !out || !outside(h, out, sizeof(*out))) return FWLAB_NFC_API_INVALID_CONTRACT;
+    if (executor && (!executor->context || !executor->ops || !executor->ops->submit ||
+        !executor->ops->poll || !executor->ops->shutdown)) return FWLAB_NFC_API_INVALID_CONTRACT;
+    struct fwlab_nfc_channel_executor execution = executor ? *executor :
+        (struct fwlab_nfc_channel_executor){&cooperative_ops, h};
     t = *timing; a = *assembly;
     if (a.version != FWLAB_NAND_CHANNEL_V2_VERSION || a.size != sizeof(a) || a.reserved ||
         !a.geometry.channels || a.geometry.channels > CHANNELS ||
@@ -453,6 +545,7 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init(void *arena, size_t bytes,
                 a.channel[c].scalar.context == a.channel[j].scalar.context) return FWLAB_NFC_API_INVALID_CONTRACT;
     }
     memset(h, 0, fwlab_nfc_channel_v2_arena_size()); h->timing = t; h->assembly = a;
+    h->executor = execution; h->cooperative = (uint8_t)(executor == NULL);
     if (!durations(h)) return FWLAB_NFC_API_INVALID_CONTRACT;
     for (unsigned c = 0; c < a.geometry.channels; ++c) {
         struct fwlab_nfc_page_v2_lab_mutation_config child = t;
@@ -460,16 +553,19 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init(void *arena, size_t bytes,
         memset(child.read.lun, 0, sizeof(child.read.lun));
         memcpy(child.read.lun, t.read.lun + c * local.luns_per_channel,
                local.luns_per_channel * sizeof(child.read.lun[0]));
-        if (fwlab_nfc_page_v2_lab_mutation_init(h->actors + c * fwlab_nfc_page_v2_lab_arena_size(),
-            fwlab_nfc_page_v2_lab_arena_size(), &child, &a.channel[c], &h->actor[c].model) != FWLAB_NFC_API_OK)
+        if (fwlab_nfc_channel_actor_init(&h->actor[c], c,
+            h->actors + c * fwlab_nfc_page_v2_lab_arena_size(), fwlab_nfc_page_v2_lab_arena_size(),
+            &child, &a.channel[c], &h->stats.channel[c]) != FWLAB_NFC_API_OK)
             return FWLAB_NFC_API_INVALID_CONTRACT;
-        h->actor[c].provider = fwlab_nfc_page_v2_lab_provider(h->actor[c].model);
-        if (fwlab_nfc_page_v2_lab_snapshot(h->actor[c].model, &h->stats.channel[c]) != FWLAB_NFC_API_OK)
-            return FWLAB_NFC_API_INVALID_CONTRACT;
+        h->view[c].stats = h->stats.channel[c];
     }
     h->magic = HUB_MAGIC; *out = h;
     return FWLAB_NFC_API_OK;
 }
+enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init(void *arena, size_t bytes,
+    const struct fwlab_nfc_page_v2_lab_mutation_config *timing,
+    const struct fwlab_nand_channel_v2 *assembly, struct fwlab_nfc_channel_v2 **out)
+{ return fwlab_nfc_channel_v2_init_executor(arena, bytes, timing, assembly, NULL, out); }
 struct fwlab_nfc_page_v2_provider fwlab_nfc_channel_v2_provider(struct fwlab_nfc_channel_v2 *h)
 { return (struct fwlab_nfc_page_v2_provider){live(h) ? &operations : NULL, live(h) ? h : NULL}; }
 enum fwlab_nfc_api_result fwlab_nfc_channel_v2_live_idle(const struct fwlab_nfc_channel_v2 *h, bool *out)
@@ -478,7 +574,7 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_v2_live_idle(const struct fwlab_nfc_
     if (h->busy) return FWLAB_NFC_API_WRONG_STATE;
     *out = h->stats.phase == FWLAB_NFC_CHANNEL_V2_BUILD && !h->stats.closed && !h->stats.quarantined && !occupied(h);
     for (unsigned c = 0; c < h->assembly.geometry.channels; ++c)
-        if (h->actor[c].reports_held || h->stats.actor_owned[c]) *out = false;
+        if (h->view[c].reports || h->stats.actor_owned[c]) *out = false;
     return FWLAB_NFC_API_OK;
 }
 enum fwlab_nfc_api_result fwlab_nfc_channel_v2_snapshot(const struct fwlab_nfc_channel_v2 *h,
@@ -487,7 +583,7 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_v2_snapshot(const struct fwlab_nfc_c
     if (!live(h) || !outside(h, out, sizeof(*out))) return FWLAB_NFC_API_INVALID_CONTRACT;
     if (h->busy) return FWLAB_NFC_API_WRONG_STATE;
     *out = h->stats; out->occupied_credits = occupied(h); out->results_pending = ready(h);
-    for (unsigned i = 0; i < CREDITS; ++i) out->retirement_pending += h->slot[i].state == HUB_ACK;
+    for (unsigned i = 0; i < CREDITS; ++i) out->retirement_pending += h->slot[i].state == HUB_ACK || h->slot[i].state == HUB_RETIRING;
     return FWLAB_NFC_API_OK;
 }
 enum fwlab_nfc_api_result fwlab_nfc_channel_v2_trace_at(const struct fwlab_nfc_channel_v2 *h,
@@ -498,7 +594,20 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_v2_trace_at(const struct fwlab_nfc_c
     if (h->busy || (h->stats.phase != FWLAB_NFC_CHANNEL_V2_BUILD &&
         h->stats.phase != FWLAB_NFC_CHANNEL_V2_JOINED && h->stats.phase != FWLAB_NFC_CHANNEL_V2_CLOSED))
         return FWLAB_NFC_API_WRONG_STATE;
-    enum fwlab_nfc_api_result r = fwlab_nfc_page_v2_lab_trace_at(h->actor[channel].model, index, out);
-    if (r == FWLAB_NFC_API_OK) out->ppa.channel = (uint16_t)channel;
-    return r;
+    if (index >= h->trace_count[channel]) return FWLAB_NFC_API_NOT_FOUND;
+    *out = h->trace[channel][index]; out->ppa.channel = (uint16_t)channel;
+    return FWLAB_NFC_API_OK;
+}
+
+enum fwlab_nfc_api_result fwlab_nfc_channel_v2_external_wait(const struct fwlab_nfc_channel_v2 *h, bool *out)
+{
+    if (!live(h) || !outside(h, out, sizeof(*out))) return FWLAB_NFC_API_INVALID_CONTRACT;
+    if (h->busy) return FWLAB_NFC_API_WRONG_STATE;
+    *out = false;
+    if (h->cooperative || h->stats.poisoned || h->lost || ready(h)) return FWLAB_NFC_API_OK;
+    if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_SHUTDOWN) *out = h->shutdown_wait != 0;
+    else if (h->stats.phase == FWLAB_NFC_CHANNEL_V2_ADMIT || h->stats.phase == FWLAB_NFC_CHANNEL_V2_RUN ||
+             h->stats.phase == FWLAB_NFC_CHANNEL_V2_RETIRING || h->stats.phase == FWLAB_NFC_CHANNEL_V2_CLOSING)
+        *out = h->posted == h->required && !jobs_complete(h);
+    return FWLAB_NFC_API_OK;
 }

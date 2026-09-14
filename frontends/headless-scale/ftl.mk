@@ -49,7 +49,7 @@ SOURCES := \
 	core/ftl-scale/ftl_scale_nfc.c core/ftl-scale/ftl_scale_nfc_v2.c \
 	core/ftl-scale/ftl_scale_window.c core/ftl-scale/ftl_scale_read.c \
 	core/nfc-page-v2/nfc_page_v2.c core/nfc-page-v2/nfc_page_v2_lab.c \
-	core/nfc-page-v2/nfc_channel_v2.c \
+	core/nfc-page-v2/nfc_channel_v2.c core/nfc-page-v2/nfc_channel_v2_actor.c \
 	core/nfc-runtime/nfc_trace_window.c core/nfc-runtime/nfc_scaled_model.c \
 	nfc/nfc_model.c nfc/nfc_scheduler.c nfc/nfc_fault.c nfc/nfc_media.c \
 	media/file-nand-v0/file_nand_codec.c media/file-nand-v0/file_nand_engine.c \
