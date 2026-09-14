@@ -105,7 +105,9 @@ The NAND resource route now has a finite [A–D sequence](adr/0020-cooperative-n
 A cooperative channel domains with real independent shards and serial FTL/J0;
 B multi-head format-3 DATA waves and ordered MAP/recovery; C the same logical
 resources on one/four actual data workers; D actual independent-plane READ.
-Both [A](results/2026-09-14-channel-domains.md) and
-[B](results/2026-09-14-multihead-write-waves.md) now have bounded implementation
-evidence. Next is C's actual worker transport, not further expansion of B.
+[A](results/2026-09-14-channel-domains.md),
+[B](results/2026-09-14-multihead-write-waves.md) and
+[C](results/2026-09-14-channel-workers.md) now have bounded implementation
+evidence. C's exact-source disposition is recorded with its result; next is
+D's independent-plane READ contract, not repeated expansion of A/B/C tests.
 Threads/NUMA do not define NAND topology or guarantee a throughput multiplier.

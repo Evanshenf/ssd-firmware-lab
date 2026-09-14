@@ -46,6 +46,7 @@ These are constructor selections, not automatic fallback chains:
 | Current scaled/large/MQ2 native workers | Same profile/lifecycle seam, retained scalable FTL parents and format-2 windows | `core/nfc-page-v2` PAGE2-R0, physical NAND v2, explicitly selected mapped-tmpfs byte adapter |
 | Explicit cooperative channel LAB | Same profile/lifecycle/Block and serial format-2 FTL | WAVE4 PAGE2 hub, independently owned timed NFC and physical-v2 shard per channel; [ADR-0020](adr/0020-cooperative-nand-channel-domains.md) |
 | Explicit multi-head format3 LAB | Same profile/lifecycle/Block, physical head domains and ordered DATA-wave/MAP FTL | Same cooperative hub and real v2 channel shards; no OS threads/native selection; [ADR-0021](adr/0021-multihead-ftl-write-waves.md) |
+| Explicit channel-worker LAB | Same format3 FTL and portable actors, optional construction-time executor | Cooperative/one/four Linux data workers over the same timed NAND and real shards; actual join before release, no native selection; [ADR-0022](adr/0022-channel-worker-execution.md) |
 
 `j0_construction.c` binds a ready volume and its actual Block service;
 `scale_storage.c` constructs the selected FTL/NFC pair. Both reside below
@@ -66,6 +67,9 @@ The separately selected cooperative channel LAB uses a closed-batch JOIN and
 monotonic admission floors around independent timed child engines. It does not
 make R0 timed or the native FTL parallel. Worker/NUMA placement and actual plane
 capabilities remain distinct from NAND address geometry.
+The optional Linux executor transports PREP/RUN/RETIRE/CLOSE jobs, not FTL
+commands. Its threads share no actor/media engine concurrently; only the
+coordinator publishes JOIN results and retains the global token registry.
 
 Physical versions v0/v1 retain their own redo-based engines. Physical v2 orders
 INTENT, physical homes and terminal COMMIT; interrupted reservations recover

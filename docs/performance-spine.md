@@ -13,12 +13,19 @@ The separate [channel-domain LAB](adr/0020-cooperative-nand-channel-domains.md)
 models physical resource composition, not measured thread speedup. Its initial
 cooperative/serial-FTL result has no OS workers or new throughput claim. Model
 time, actual execution wall time, Host bytes and NAND traffic stay separate;
-future one/four-worker comparisons must retain identical topology and credits.
+one/four-worker comparisons must retain identical topology and credits.
 
 [Format3 write waves](results/2026-09-14-multihead-write-waves.md) now supply real
 multi-head work on that cooperative model. B validates ordering/recovery and
 bounded space progress, not CPU-thread acceleration. Its fixture duration/RSS
 must not be substituted for NAND or native SSD throughput.
+
+[C's real worker comparison](results/2026-09-14-channel-workers.md) now keeps
+those resources fixed and proves byte/model equivalence plus actual callback
+overlap. Separate coordinator/worker/process CPU is reported. Its short
+ordinary-POSIX subphase does not demonstrate a wall-time speedup and is not
+comparable to the earlier optimized mapped ARM measurements. Worker placement
+does not change NAND timing or create a throughput multiplier.
 
 ## Objective and measurement boundary
 

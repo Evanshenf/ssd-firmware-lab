@@ -69,8 +69,9 @@ runs; always-timed RW-R2 initially uses serial format2 FTL. Their
 [bounded results](results/2026-09-14-timed-nand-mutations.md) use small physical-v2
 images and the existing J0 path, not a replacement for the native path above.
 Times are synthetic explicit parameters, not vendor defaults or a wall-clock
-rate limiter. Four slots and current geometry remain finite limits; multi-head
-FTL writes, modern NAND geometry and 4-TB/8-GB/s calibration are not established.
+rate limiter. Four slots and current geometry remain finite limits. The later
+multi-head construction is separate; modern NAND geometry and 4-TB/8-GB/s
+calibration are not established.
 
 An explicit [cooperative channel construction](adr/0020-cooperative-nand-channel-domains.md)
 now composes independent physical-v2 shards beneath the same serial FTL/J0.
@@ -79,9 +80,12 @@ batches, real channel/LUN work, time floors, snapshot/ACK ownership and recovery
 It does not replace native R0. The following explicit
 [format3 multi-head B construction](adr/0021-multihead-ftl-write-waves.md) now has
 [real J0/Block evidence](results/2026-09-14-multihead-write-waves.md): ordered
-write waves, close/failure recovery and bounded low-free GC progress. OS workers
-and independent-plane READ remain the separate C/D slices, not implemented
-capabilities or implied native performance.
+write waves, close/failure recovery and bounded low-free GC progress.
+[C's optional execution transport](adr/0022-channel-worker-execution.md) runs
+the same actors on one/four OS data workers, with
+[actual Block/J0 and byte-equivalence results](results/2026-09-14-channel-workers.md).
+Independent-plane READ remains D, not an implemented capability; C does not
+select native threads or demonstrate a throughput gain.
 
 | Environment | What has evidence | What is not established |
 |---|---|---|

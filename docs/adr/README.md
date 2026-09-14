@@ -24,6 +24,7 @@
 - [ADR-0019: Timed NAND mutations before multi-head FTL changes](0019-timed-nand-mutations.md)
 - [ADR-0020: Independent NAND channel domains before parallel FTL writes](0020-cooperative-nand-channel-domains.md)
 - [ADR-0021: Format3 physical head domains and ordered write waves](0021-multihead-ftl-write-waves.md)
+- [ADR-0022: Channel-owned actors with a separate Linux execution transport](0022-channel-worker-execution.md)
 
 Accepted ADRs define the design baseline, not an assertion that the component is already implemented or validated. A superseding decision must link the prior ADR and describe migration and compatibility impact.
 

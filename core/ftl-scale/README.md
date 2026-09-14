@@ -258,8 +258,20 @@ make -C frontends/headless-scale -f ftl.mk check-multihead-parent
 
 These are fresh small tmpfs fixtures, not the old large-capacity campaign or
 a native mode switch. The second starts at the existing Block/buffer boundary;
-it does not enlarge the legal NVMe-profile transfer size. C OS workers and D
-independent-plane READ are not implemented by this constructor.
+it does not enlarge the legal NVMe-profile transfer size. The FTL constructor
+itself does not own threads. [C's optional Linux executor](../../docs/adr/0022-channel-worker-execution.md)
+now runs the same lower actors on one/four workers; independent-plane READ is
+still deferred. The FTL, LAB engine and media semantics are unchanged by C.
+
+```sh
+make -C frontends/headless-scale -f ftl.mk check-channel-workers
+make -C frontends/headless-scale -f ftl.mk check-channel-workers-j0
+```
+
+Run these small fixtures serially as UID1000 in the prepared capped tmpfs.
+The first requires four allowed CPUs. See the
+[exact scope and CPU accounting](../../docs/results/2026-09-14-channel-workers.md);
+no native selection, NUMA placement or throughput gain follows automatically.
 
 ### Earlier constructions
 

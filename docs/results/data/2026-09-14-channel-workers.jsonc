@@ -1,0 +1,21 @@
+// SPDX-FileCopyrightText: 2026 Evanshenf
+// SPDX-License-Identifier: BSD-3-Clause
+{
+  "source": "bbadc16414c3fe6bb777216b6212d59531924a52",
+  "profile": "WAVE4-LAB4K-C",
+  "scope": "one unreplicated matched Block subphase per mode; includes harness fill and verification",
+  "medium": "local tmpfs, ordinary POSIX physical-v2 channel shards, syncs and locks retained",
+  "not_claimed": "native SSD throughput, optimized mapped ARM comparison, NUMA placement, speedup or single whole-system CPU",
+  "physical_channels": 4,
+  "total_DATA_credits": 4,
+  "write_bytes": 4194304,
+  "read_bytes": 8388608,
+  "model_delta_ns": 72567602,
+  "samples": [
+    {"workers": 0, "wall_ns": 79391036, "coordinator_cpu_ns": 79391160, "process_cpu_ns": 79391105, "worker_cpu_ns": [], "worker_cpus": []},
+    {"workers": 1, "wall_ns": 84479613, "coordinator_cpu_ns": 37364554, "process_cpu_ns": 84218910, "worker_cpu_ns": [46854287], "worker_cpus": [0]},
+    {"workers": 4, "wall_ns": 83601207, "coordinator_cpu_ns": 44418432, "process_cpu_ns": 104338810, "worker_cpu_ns": [7808802, 19548418, 16241757, 16321130], "worker_cpus": [0, 1, 2, 3]}
+  ],
+  "outcome": {"frontier": 6, "total_model_ns": 154967031, "media_semantic_hash": "77befaaa65c1232d", "all_six_closed_files_byte_equal": true},
+  "controlled_overlap": "four distinct real program callback intervals; not inside cost subphase and not parallel CRC measurement"
+}
