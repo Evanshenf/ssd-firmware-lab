@@ -42,6 +42,12 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init_executor(
     void *, size_t, const struct fwlab_nfc_page_v2_lab_mutation_config *,
     const struct fwlab_nand_channel_v2 *, const struct fwlab_nfc_channel_executor *,
     struct fwlab_nfc_channel_v2 **);
+/* Policy selection is independent of placement; NULL executor is cooperative.
+ * Existing channel constructors retain LUN-exclusive READ semantics. */
+enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init_policy(
+    void *, size_t, const struct fwlab_nfc_page_v2_lab_mutation_config *,
+    const struct fwlab_nand_channel_v2 *, enum fwlab_nfc_page_v2_lab_read_policy,
+    const struct fwlab_nfc_channel_executor *, struct fwlab_nfc_channel_v2 **);
 /* Executor callbacks/lifetime belong to the construction owner. They must not
  * reenter this PAGE2 facade. NULL selects the same bounded cooperative jobs. */
 struct fwlab_nfc_page_v2_provider fwlab_nfc_channel_v2_provider(struct fwlab_nfc_channel_v2 *);

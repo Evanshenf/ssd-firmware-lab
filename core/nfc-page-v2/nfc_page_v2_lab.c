@@ -38,6 +38,7 @@ struct fwlab_nfc_page_v2_lab {
     struct fwlab_nfc_page_v2_lab_trace trace[FWLAB_NFC_PAGE_V2_LAB_TRACE_CAPACITY];
     uint8_t channel_owner[FWLAB_NFC_PAGE_V2_LAB_CHANNELS];
     uint8_t lun_owner[FWLAB_NFC_PAGE_V2_LAB_LUNS];
+    uint8_t plane_owner[FWLAB_NFC_PAGE_V2_LAB_LUNS][FWLAB_NFC_PAGE_V2_LAB_PLANES];
     uint8_t busy, prep_active, prep_pending;
     /* Serialized validation scratch must never overwrite an accepted PROGRAM
      * snapshot, including when a later page is checked after an earlier effect. */
@@ -71,6 +72,38 @@ static uint32_t lun_index(const struct fwlab_nfc_page_v2_lab *m, const struct la
 { return s->request.first.channel * m->config.base.geometry.luns_per_channel + s->request.first.lun; }
 static bool mutating(const struct lab_slot *s)
 { return s->request.kind != FWLAB_NFC_PAGE_V2_READ_GROUP; }
+static unsigned plane_registers(const struct fwlab_nfc_page_v2_lab *m, unsigned lun)
+{
+    unsigned count = 0;
+    for (unsigned p = 0; p < FWLAB_NFC_PAGE_V2_LAB_PLANES; ++p)
+        count += m->plane_owner[lun][p] != 0;
+    return count;
+}
+static bool command_resources_free(const struct fwlab_nfc_page_v2_lab *m,
+                                    const struct lab_slot *s, uint8_t owner)
+{
+    unsigned lun = lun_index(m, s);
+    if (mutating(s))
+        return (!m->lun_owner[lun] || m->lun_owner[lun] == owner) && !plane_registers(m, lun);
+    if (m->stats.read_policy == FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE)
+        return !m->lun_owner[lun] && !m->plane_owner[lun][s->request.first.plane] &&
+            plane_registers(m, lun) < m->config.base.geometry.plane_parallelism_per_lun;
+    return !m->lun_owner[lun];
+}
+static uint8_t *read_owner(struct fwlab_nfc_page_v2_lab *m, const struct lab_slot *s)
+{
+    unsigned lun = lun_index(m, s);
+    return m->stats.read_policy == FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE ?
+        &m->plane_owner[lun][s->request.first.plane] : &m->lun_owner[lun];
+}
+static bool resources_idle(const struct fwlab_nfc_page_v2_lab *m)
+{
+    for (unsigned c = 0; c < FWLAB_NFC_PAGE_V2_LAB_CHANNELS; ++c)
+        if (m->channel_owner[c]) return false;
+    for (unsigned l = 0; l < FWLAB_NFC_PAGE_V2_LAB_LUNS; ++l)
+        if (m->lun_owner[l] || plane_registers(m, l)) return false;
+    return true;
+}
 static bool interrupted(const struct fwlab_nfc_page_v2_lab *m, const struct lab_slot *s)
 {
     return m->stats.quarantined || s->hard_failed ||
@@ -364,9 +397,9 @@ static struct lab_slot *next(struct fwlab_nfc_page_v2_lab *m, uint64_t *at)
         if (s->state == LAB_EMPTY || s->state == LAB_DONE) continue;
         due = m->stats.now_ns;
         if (s->state == LAB_WAIT_COMMAND) {
-            uint8_t owner = (uint8_t)(i + 1u), lun_owner = m->lun_owner[lun_index(m, s)];
+            uint8_t owner = (uint8_t)(i + 1u);
             if (!interrupted(m, s) &&
-                (m->channel_owner[s->request.first.channel] || (lun_owner && lun_owner != owner)))
+                (m->channel_owner[s->request.first.channel] || !command_resources_free(m, s, owner)))
                 continue;
         } else if (s->state == LAB_WAIT_DATA || s->state == LAB_WAIT_STATUS) {
             if (m->channel_owner[s->request.first.channel]) continue;
@@ -434,7 +467,7 @@ static void advance(struct fwlab_nfc_page_v2_lab *m, struct lab_slot *s)
             break;
         }
         if (interrupted(m, s)) { terminal(m, s); break; }
-        m->channel_owner[channel] = owner; m->lun_owner[lun] = owner;
+        m->channel_owner[channel] = owner; *read_owner(m, s) = owner;
         s->register_start = m->stats.now_ns;
         s->due = m->stats.now_ns + m->config.command_ns;
         s->state = LAB_COMMAND;
@@ -450,6 +483,7 @@ static void advance(struct fwlab_nfc_page_v2_lab *m, struct lab_slot *s)
     case LAB_ARRAY:
         materialize(m, s);
         count(m, &m->stats.array_busy_ns[lun], m->config.array_read_ns);
+        count(m, &m->stats.plane_array_busy_ns[lun][s->request.first.plane], m->config.array_read_ns);
         s->state = LAB_WAIT_DATA;
         trace(m, s, FWLAB_NFC_PAGE_V2_LAB_ARRAY_READY);
         break;
@@ -460,11 +494,18 @@ static void advance(struct fwlab_nfc_page_v2_lab *m, struct lab_slot *s)
         trace(m, s, FWLAB_NFC_PAGE_V2_LAB_DATA_BEGIN);
         break;
     case LAB_DATA:
-        m->channel_owner[channel] = 0; m->lun_owner[lun] = 0;
+        m->channel_owner[channel] = 0;
+        if (*read_owner(m, s) == owner) *read_owner(m, s) = 0;
+        else {
+            /* A foreign reservation is never erased to manufacture drain. */
+            m->stats.quarantined = 1; s->result.reason = FWLAB_NFC_REASON_INTERNAL;
+        }
         count(m, &m->stats.channel_busy_ns[channel], m->transfer_ns);
         count(m, &m->stats.data_out_main_bytes, MAIN);
         count(m, &m->stats.data_out_oob_bytes, OOB);
         count(m, &m->stats.register_busy_ns[lun], m->stats.now_ns - s->register_start);
+        count(m, &m->stats.plane_register_busy_ns[lun][s->request.first.plane],
+              m->stats.now_ns - s->register_start);
         trace(m, s, FWLAB_NFC_PAGE_V2_LAB_DATA_END);
         if (s->cancelled || m->stats.closed || m->stats.quarantined || s->result.reason ||
             s->page + 1u == s->request.page_count) terminal(m, s);
@@ -643,8 +684,7 @@ static enum fwlab_nfc_api_result quiet(void *opaque, uint64_t instance, uint32_t
         return m->prep.ops->quiescent(m->prep.context, instance, epoch, out);
     *out = m->stats.closed;
     for (unsigned i = 0; i < SLOTS; ++i) if (m->slot[i].state != LAB_EMPTY) *out = false;
-    for (unsigned i = 0; i < FWLAB_NFC_PAGE_V2_LAB_CHANNELS; ++i) if (m->channel_owner[i]) *out = false;
-    for (unsigned i = 0; i < FWLAB_NFC_PAGE_V2_LAB_LUNS; ++i) if (m->lun_owner[i]) *out = false;
+    if (!resources_idle(m)) *out = false;
     return FWLAB_NFC_API_OK;
 }
 static const struct fwlab_nfc_page_v2_provider_ops operations = {
@@ -707,15 +747,17 @@ enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_init(void *arena, size_t bytes,
     *out = m;
     return FWLAB_NFC_API_OK;
 }
-enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_mutation_init(void *arena, size_t bytes,
+enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_mutation_init_policy(void *arena, size_t bytes,
     const struct fwlab_nfc_page_v2_lab_mutation_config *config,
-    const struct fwlab_nand_batch_v2 *media, struct fwlab_nfc_page_v2_lab **out)
+    const struct fwlab_nand_batch_v2 *media, enum fwlab_nfc_page_v2_lab_read_policy policy,
+    struct fwlab_nfc_page_v2_lab **out)
 {
     struct fwlab_nfc_page_v2_lab_mutation_config c;
     struct fwlab_nfc_page_v2_lab *m;
     uint64_t status, program, erase, transfer, response;
     const uint64_t page_byte_ns = (uint64_t)(MAIN + OOB) * UINT64_C(1000000000);
-    if (!config || !out) return FWLAB_NFC_API_INVALID_CONTRACT;
+    if (!config || !out || (policy != FWLAB_NFC_PAGE_V2_LAB_LUN_EXCLUSIVE &&
+        policy != FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE)) return FWLAB_NFC_API_INVALID_CONTRACT;
     c = *config;
     if (c.version != FWLAB_NFC_PAGE_V2_LAB_MUTATION_VERSION || c.size != sizeof(c) ||
         c.reserved || c.reserved1 || !c.program_confirm_ns || !c.array_program_ns ||
@@ -743,8 +785,16 @@ enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_mutation_init(void *arena, size_
     if (!outside(m, out, sizeof(*out))) { m->magic = 0; return FWLAB_NFC_API_INVALID_CONTRACT; }
     m->mutation = c; m->program_page_ns = program; m->erase_ns = erase; m->status_ns = status;
     m->stats.phase = FWLAB_NFC_PAGE_V2_LAB_TIMED_RW;
+    m->stats.read_policy = (uint32_t)policy;
     *out = m;
     return FWLAB_NFC_API_OK;
+}
+enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_mutation_init(void *arena, size_t bytes,
+    const struct fwlab_nfc_page_v2_lab_mutation_config *config,
+    const struct fwlab_nand_batch_v2 *media, struct fwlab_nfc_page_v2_lab **out)
+{
+    return fwlab_nfc_page_v2_lab_mutation_init_policy(arena, bytes, config, media,
+        FWLAB_NFC_PAGE_V2_LAB_LUN_EXCLUSIVE, out);
 }
 struct fwlab_nfc_page_v2_provider fwlab_nfc_page_v2_lab_provider(struct fwlab_nfc_page_v2_lab *m)
 { return (struct fwlab_nfc_page_v2_provider){live(m) ? &operations : NULL, live(m) ? m : NULL}; }
@@ -757,6 +807,7 @@ enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_live_idle(const struct fwlab_nfc
     if (m->stats.phase == FWLAB_NFC_PAGE_V2_LAB_PREP)
         return fwlab_nfc_page_v2_live_idle(m->prep_model, out);
     for (unsigned i = 0; i < SLOTS; ++i) if (m->slot[i].state != LAB_EMPTY) return FWLAB_NFC_API_OK;
+    if (!resources_idle(m)) return FWLAB_NFC_API_OK;
     *out = true;
     return FWLAB_NFC_API_OK;
 }
@@ -799,7 +850,16 @@ enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_snapshot(const struct fwlab_nfc_
         out->results_pending = pending(m);
         for (unsigned i = 0; i < SLOTS; ++i) out->active_slots += m->slot[i].state != LAB_EMPTY;
         for (unsigned i = 0; i < FWLAB_NFC_PAGE_V2_LAB_CHANNELS; ++i) out->busy_channels += m->channel_owner[i] != 0;
-        for (unsigned i = 0; i < FWLAB_NFC_PAGE_V2_LAB_LUNS; ++i) out->held_luns += m->lun_owner[i] != 0;
+        for (unsigned i = 0; i < FWLAB_NFC_PAGE_V2_LAB_LUNS; ++i)
+            out->held_luns += m->lun_owner[i] != 0 || plane_registers(m, i) != 0;
+        for (unsigned i = 0; i < SLOTS; ++i) {
+            const struct lab_slot *s = &m->slot[i];
+            if (s->request.kind == FWLAB_NFC_PAGE_V2_READ_GROUP) {
+                out->held_read_planes += s->state == LAB_COMMAND || s->state == LAB_ARRAY ||
+                    s->state == LAB_WAIT_DATA || s->state == LAB_DATA;
+                out->active_read_arrays += s->state == LAB_ARRAY;
+            }
+        }
     }
     return FWLAB_NFC_API_OK;
 }

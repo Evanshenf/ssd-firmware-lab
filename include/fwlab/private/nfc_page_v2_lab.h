@@ -9,8 +9,16 @@
 #define FWLAB_NFC_PAGE_V2_LAB_SLOTS 4u
 #define FWLAB_NFC_PAGE_V2_LAB_CHANNELS 4u
 #define FWLAB_NFC_PAGE_V2_LAB_LUNS 16u
+#define FWLAB_NFC_PAGE_V2_LAB_PLANES 4u
 #define FWLAB_NFC_PAGE_V2_LAB_TRACE_CAPACITY 256u
 #define FWLAB_NFC_PAGE_V2_LAB_MUTATION_VERSION 1u
+
+/* Synthetic resource policy, independent of OS worker placement. Geometry
+ * alone never enables IPR. No mixed read/program, cache or vendor claim. */
+enum fwlab_nfc_page_v2_lab_read_policy {
+    FWLAB_NFC_PAGE_V2_LAB_LUN_EXCLUSIVE = 0,
+    FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE = 1
+};
 
 /* Explicit LAB wiring: index = channel * geometry.luns_per_channel + lun.
  * target/CE are channel-local; package/die are global membership identifiers.
@@ -98,6 +106,13 @@ struct fwlab_nfc_page_v2_lab_stats {
     uint64_t program_array_busy_ns[FWLAB_NFC_PAGE_V2_LAB_LUNS];
     uint64_t erase_array_busy_ns[FWLAB_NFC_PAGE_V2_LAB_LUNS];
     uint64_t mutation_reservation_ns[FWLAB_NFC_PAGE_V2_LAB_LUNS];
+    /* READ work intervals, recorded under both policies. Per-LUN array and
+     * register counters above are sums, not elapsed-time utilization: IPR
+     * permits their overlapping intervals to exceed model elapsed time.
+     * held_luns counts distinct whole-LUN OR plane-reserved LUNs. */
+    uint32_t read_policy, held_read_planes, active_read_arrays;
+    uint64_t plane_array_busy_ns[FWLAB_NFC_PAGE_V2_LAB_LUNS][FWLAB_NFC_PAGE_V2_LAB_PLANES];
+    uint64_t plane_register_busy_ns[FWLAB_NFC_PAGE_V2_LAB_LUNS][FWLAB_NFC_PAGE_V2_LAB_PLANES];
 };
 struct fwlab_nfc_page_v2_lab;
 size_t fwlab_nfc_page_v2_lab_arena_size(void);
@@ -114,6 +129,14 @@ enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_init(
 enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_mutation_init(
     void *, size_t, const struct fwlab_nfc_page_v2_lab_mutation_config *,
     const struct fwlab_nand_batch_v2 *, struct fwlab_nfc_page_v2_lab **);
+/* Always timed RW, with construction-only selection. IPR holds its addressed
+ * plane register from command through DATA_END, capped by geometry's plane
+ * parallelism. PROGRAM/ERASE still reserve the entire LUN. Old constructors
+ * remain LUN-exclusive. No live resource-policy transition is provided. */
+enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_mutation_init_policy(
+    void *, size_t, const struct fwlab_nfc_page_v2_lab_mutation_config *,
+    const struct fwlab_nand_batch_v2 *, enum fwlab_nfc_page_v2_lab_read_policy,
+    struct fwlab_nfc_page_v2_lab **);
 struct fwlab_nfc_page_v2_provider fwlab_nfc_page_v2_lab_provider(
     struct fwlab_nfc_page_v2_lab *);
 /* READ cancellation of a started page drains its fixed stages, then discards it.

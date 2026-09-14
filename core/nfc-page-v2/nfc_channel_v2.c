@@ -501,9 +501,10 @@ static bool durations(struct fwlab_nfc_channel_v2 *h)
         add(c->erase_command_ns, c->array_erase_ns, &h->duration[3]) &&
         add(h->duration[3], status, &h->duration[3]);
 }
-enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init_executor(void *arena, size_t bytes,
+enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init_policy(void *arena, size_t bytes,
     const struct fwlab_nfc_page_v2_lab_mutation_config *timing,
-    const struct fwlab_nand_channel_v2 *assembly, const struct fwlab_nfc_channel_executor *executor,
+    const struct fwlab_nand_channel_v2 *assembly, enum fwlab_nfc_page_v2_lab_read_policy policy,
+    const struct fwlab_nfc_channel_executor *executor,
     struct fwlab_nfc_channel_v2 **out)
 {
     struct fwlab_nfc_channel_v2 *h = arena;
@@ -514,6 +515,8 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init_executor(void *arena, size_t
         !page2_span(arena, fwlab_nfc_channel_v2_arena_size()) ||
         (uintptr_t)arena % alignof(struct fwlab_nfc_channel_v2) || !timing || !assembly ||
         !out || !outside(h, out, sizeof(*out))) return FWLAB_NFC_API_INVALID_CONTRACT;
+    if (policy != FWLAB_NFC_PAGE_V2_LAB_LUN_EXCLUSIVE && policy != FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE)
+        return FWLAB_NFC_API_INVALID_CONTRACT;
     if (executor && (!executor->context || !executor->ops || !executor->ops->submit ||
         !executor->ops->poll || !executor->ops->shutdown)) return FWLAB_NFC_API_INVALID_CONTRACT;
     struct fwlab_nfc_channel_executor execution = executor ? *executor :
@@ -555,12 +558,20 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init_executor(void *arena, size_t
                local.luns_per_channel * sizeof(child.read.lun[0]));
         if (fwlab_nfc_channel_actor_init(&h->actor[c], c,
             h->actors + c * fwlab_nfc_page_v2_lab_arena_size(), fwlab_nfc_page_v2_lab_arena_size(),
-            &child, &a.channel[c], &h->stats.channel[c]) != FWLAB_NFC_API_OK)
+            &child, &a.channel[c], policy, &h->stats.channel[c]) != FWLAB_NFC_API_OK)
             return FWLAB_NFC_API_INVALID_CONTRACT;
         h->view[c].stats = h->stats.channel[c];
     }
     h->magic = HUB_MAGIC; *out = h;
     return FWLAB_NFC_API_OK;
+}
+enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init_executor(void *arena, size_t bytes,
+    const struct fwlab_nfc_page_v2_lab_mutation_config *timing,
+    const struct fwlab_nand_channel_v2 *assembly, const struct fwlab_nfc_channel_executor *executor,
+    struct fwlab_nfc_channel_v2 **out)
+{
+    return fwlab_nfc_channel_v2_init_policy(arena, bytes, timing, assembly,
+        FWLAB_NFC_PAGE_V2_LAB_LUN_EXCLUSIVE, executor, out);
 }
 enum fwlab_nfc_api_result fwlab_nfc_channel_v2_init(void *arena, size_t bytes,
     const struct fwlab_nfc_page_v2_lab_mutation_config *timing,

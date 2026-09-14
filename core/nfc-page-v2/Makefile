@@ -18,10 +18,12 @@ PROGRAM := $(BUILD_DIR)/test_nfc_page_v2
 LAB_PROGRAM := $(BUILD_DIR)/test_nfc_page_v2_lab
 MUTATION_PROGRAM := $(BUILD_DIR)/test_nfc_page_v2_mutation
 CHANNEL_PROGRAM := $(BUILD_DIR)/test_nfc_channel_v2
+PLANE_PROGRAM := $(BUILD_DIR)/test_nfc_page_v2_plane
 SOURCES := nfc_page_v2.c tests/test_nfc_page_v2.c
 LAB_SOURCES := nfc_page_v2.c nfc_page_v2_lab.c tests/test_nfc_page_v2_lab.c
 MUTATION_SOURCES := nfc_page_v2.c nfc_page_v2_lab.c tests/test_nfc_page_v2_mutation.c
 CHANNEL_SOURCES := nfc_page_v2.c nfc_page_v2_lab.c nfc_channel_v2.c nfc_channel_v2_actor.c tests/test_nfc_channel_v2.c
+PLANE_SOURCES := nfc_page_v2.c nfc_page_v2_lab.c tests/test_nfc_page_v2_plane.c
 HEADERS := nfc_page_v2_internal.h ../../include/fwlab/contracts/nfc_page_v2_types.h \
     ../../include/fwlab/contracts/nfc_page_v2_provider.h \
     ../../include/fwlab/private/nfc_page_v2_model.h \
@@ -29,7 +31,7 @@ HEADERS := nfc_page_v2_internal.h ../../include/fwlab/contracts/nfc_page_v2_type
     ../../include/fwlab/contracts/nand_media.h \
     ../../include/fwlab/portable/nfc_types.h
 .PHONY: all check FORCE_BUILD_CONFIG
-all: $(PROGRAM) $(LAB_PROGRAM) $(MUTATION_PROGRAM) $(CHANNEL_PROGRAM)
+all: $(PROGRAM) $(LAB_PROGRAM) $(MUTATION_PROGRAM) $(CHANNEL_PROGRAM) $(PLANE_PROGRAM)
 FORCE_BUILD_CONFIG:
 $(BUILD_CONFIG): FORCE_BUILD_CONFIG
 	@mkdir -p "$(BUILD_DIR)"
@@ -53,8 +55,15 @@ $(CHANNEL_PROGRAM): $(CHANNEL_SOURCES) tests/test_nfc_page_v2_lab.c $(HEADERS) n
 .PHONY: check-channel
 check-channel: $(CHANNEL_PROGRAM)
 	"$(CHANNEL_PROGRAM)"
-check: $(PROGRAM) $(LAB_PROGRAM) $(MUTATION_PROGRAM) $(CHANNEL_PROGRAM)
+$(PLANE_PROGRAM): $(PLANE_SOURCES) tests/test_nfc_page_v2_lab.c $(HEADERS) ../../include/fwlab/private/nfc_page_v2_lab.h Makefile $(BUILD_CONFIG)
+	mkdir -p "$(BUILD_DIR)"
+	$(CC) -I../../include $(CPPFLAGS) $(CFLAGS) $(PLANE_SOURCES) $(LDFLAGS) $(LDLIBS) -o "$@"
+.PHONY: check-plane
+check-plane: $(PLANE_PROGRAM)
+	"$(PLANE_PROGRAM)"
+check: $(PROGRAM) $(LAB_PROGRAM) $(MUTATION_PROGRAM) $(CHANNEL_PROGRAM) $(PLANE_PROGRAM)
 	"$(PROGRAM)"
 	"$(LAB_PROGRAM)"
 	"$(MUTATION_PROGRAM)"
 	"$(CHANNEL_PROGRAM)"
+	"$(PLANE_PROGRAM)"

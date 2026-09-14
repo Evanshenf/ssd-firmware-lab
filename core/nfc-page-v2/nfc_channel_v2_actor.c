@@ -11,10 +11,11 @@
 enum fwlab_nfc_api_result fwlab_nfc_channel_actor_init(
     struct fwlab_nfc_channel_actor *a, uint32_t channel, void *arena, size_t bytes,
     const struct fwlab_nfc_page_v2_lab_mutation_config *timing,
-    const struct fwlab_nand_batch_v2 *media, struct fwlab_nfc_page_v2_lab_stats *stats)
+    const struct fwlab_nand_batch_v2 *media, enum fwlab_nfc_page_v2_lab_read_policy policy,
+    struct fwlab_nfc_page_v2_lab_stats *stats)
 {
     memset(a, 0, sizeof(*a));
-    enum fwlab_nfc_api_result r = fwlab_nfc_page_v2_lab_mutation_init(arena, bytes, timing, media, &a->model);
+    enum fwlab_nfc_api_result r = fwlab_nfc_page_v2_lab_mutation_init_policy(arena, bytes, timing, media, policy, &a->model);
     if (r != FWLAB_NFC_API_OK) return r;
     a->provider = fwlab_nfc_page_v2_lab_provider(a->model);
     a->channel = channel; a->instance_nonce = timing->read.base.instance_nonce;

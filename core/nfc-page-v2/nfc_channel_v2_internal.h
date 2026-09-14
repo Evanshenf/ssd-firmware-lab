@@ -20,5 +20,6 @@ struct fwlab_nfc_channel_actor {
 enum fwlab_nfc_api_result fwlab_nfc_channel_actor_init(
     struct fwlab_nfc_channel_actor *, uint32_t channel, void *, size_t,
     const struct fwlab_nfc_page_v2_lab_mutation_config *,
-    const struct fwlab_nand_batch_v2 *, struct fwlab_nfc_page_v2_lab_stats *);
+    const struct fwlab_nand_batch_v2 *, enum fwlab_nfc_page_v2_lab_read_policy,
+    struct fwlab_nfc_page_v2_lab_stats *);
 #endif
