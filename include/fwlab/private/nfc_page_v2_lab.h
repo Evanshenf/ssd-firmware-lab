@@ -127,6 +127,11 @@ enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_begin_timed_read(
     struct fwlab_nfc_page_v2_lab *);
 enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_live_idle(
     const struct fwlab_nfc_page_v2_lab *, bool *);
+/* Private closed-batch coordination. Open, healthy, timed and completely idle
+ * only; raises the actual scheduling floor without changing UIDs or counters.
+ * Equal time is idempotent; decreasing or out-of-budget time rejects. */
+enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_admission_floor(
+    struct fwlab_nfc_page_v2_lab *, uint64_t);
 enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_snapshot(
     const struct fwlab_nfc_page_v2_lab *, struct fwlab_nfc_page_v2_lab_stats *);
 enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_trace_at(

@@ -772,6 +772,21 @@ enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_begin_timed_read(struct fwlab_nf
     m->stats.phase = FWLAB_NFC_PAGE_V2_LAB_TIMED_READ;
     return FWLAB_NFC_API_OK;
 }
+enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_admission_floor(
+    struct fwlab_nfc_page_v2_lab *m, uint64_t time)
+{
+    bool idle = false;
+    enum fwlab_nfc_api_result r;
+    if (!live(m)) return FWLAB_NFC_API_INVALID_CONTRACT;
+    if (m->stats.phase == FWLAB_NFC_PAGE_V2_LAB_PREP ||
+        time < m->stats.now_ns || time > m->config.virtual_ns_limit)
+        return FWLAB_NFC_API_WRONG_STATE;
+    r = fwlab_nfc_page_v2_lab_live_idle(m, &idle);
+    if (r != FWLAB_NFC_API_OK) return r;
+    if (!idle) return FWLAB_NFC_API_WRONG_STATE;
+    m->stats.now_ns = time;
+    return FWLAB_NFC_API_OK;
+}
 enum fwlab_nfc_api_result fwlab_nfc_page_v2_lab_snapshot(const struct fwlab_nfc_page_v2_lab *m,
                                                        struct fwlab_nfc_page_v2_lab_stats *out)
 {
