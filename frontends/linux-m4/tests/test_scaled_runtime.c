@@ -11,6 +11,8 @@
 #undef main
 
 #include <linux/magic.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdarg.h>
 #include <sys/vfs.h>
 
@@ -54,9 +56,205 @@ static struct {
 static struct fwlab_m4_attachment attached_identity;
 static unsigned owner_identity_fault;
 static enum native_nand_profile test_nand_profile = NATIVE_NAND_R0;
+static uint32_t test_workers;
 
 #if FWLAB_NATIVE_MQ2
 #include "ftl_scale_internal.h"
+
+/* Link wrappers control real Linux thread entry/return, never actor results or
+ * join success. Every successful creation is matched to a real successful
+ * join, including failure cleanup and new runtime incarnations. The bounds
+ * cover only this finite fixture; they are not product lifetime counters. */
+#define TEST_THREAD_RECORDS 64u
+struct test_thread_record {
+    pthread_t thread;
+    void *(*entry)(void *);
+    void *argument;
+    atomic_uint entered, returned, release_start, release_return;
+    uint32_t generation, prior_closed_epoch, start_pumps, return_pumps, busy;
+    uint8_t created, joined, hold_start, hold_return;
+};
+static struct {
+    struct native_context *context;
+    struct native_scaled_media *media;
+    struct test_thread_record record[TEST_THREAD_RECORDS];
+    atomic_uint wait_timeout;
+    uint32_t calls, created, joined, tryjoins, blocking_joins, generations;
+    uint32_t in_generation, expected_workers, fail_create_at;
+    uint32_t start_holds, return_holds, busy_returns, fail_allocation, allocation_failures;
+    uint8_t hold_next_start, hold_next_return;
+} thread_gate;
+
+int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *);
+int __real_pthread_tryjoin_np(pthread_t, void **);
+int __real_pthread_join(pthread_t, void **);
+int __real_nanosleep(const struct timespec *, struct timespec *);
+void *__real_aligned_alloc(size_t, size_t);
+
+static void test_thread_wait(atomic_uint *release)
+{
+    struct timespec begin, now, delay = {0, 100000};
+    REQUIRE(clock_gettime(CLOCK_MONOTONIC, &begin) == 0);
+    while (!atomic_load_explicit(release, memory_order_acquire)) {
+        REQUIRE(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
+        if (now.tv_sec - begin.tv_sec >= 5) {
+            /* A broken coordinator must fail the test, not hang its runner.
+             * Let the real worker proceed so no forged join is needed. */
+            atomic_store_explicit(&thread_gate.wait_timeout, 1, memory_order_release);
+            return;
+        }
+        REQUIRE(__real_nanosleep(&delay, NULL) == 0);
+    }
+}
+
+static void *test_thread_entry(void *opaque)
+{
+    struct test_thread_record *record = opaque;
+    void *result;
+    atomic_store_explicit(&record->entered, 1, memory_order_release);
+    if (record->hold_start) test_thread_wait(&record->release_start);
+    result = record->entry(record->argument);
+    atomic_store_explicit(&record->returned, 1, memory_order_release);
+    if (record->hold_return) test_thread_wait(&record->release_return);
+    return result;
+}
+
+int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attributes,
+                         void *(*entry)(void *), void *argument)
+{
+    struct test_thread_record *record;
+    int result;
+    if (!test_workers) return __real_pthread_create(thread, attributes, entry, argument);
+    ++thread_gate.calls;
+    if (thread_gate.fail_create_at == thread_gate.calls) {
+        thread_gate.fail_create_at = 0;
+        thread_gate.in_generation = thread_gate.expected_workers;
+        return EAGAIN;
+    }
+    REQUIRE(thread_gate.created < TEST_THREAD_RECORDS);
+    if (!thread_gate.in_generation || thread_gate.in_generation == thread_gate.expected_workers) {
+        REQUIRE(thread_gate.created == thread_gate.joined);
+        thread_gate.in_generation = 0;
+        ++thread_gate.generations;
+    }
+    record = &thread_gate.record[thread_gate.created];
+    memset(record, 0, sizeof(*record));
+    atomic_init(&record->entered, 0);
+    atomic_init(&record->returned, 0);
+    atomic_init(&record->release_start, 0);
+    atomic_init(&record->release_return, 0);
+    record->entry = entry;
+    record->argument = argument;
+    record->generation = thread_gate.generations;
+    record->prior_closed_epoch = thread_gate.context->last_closed_epoch;
+    record->hold_start = thread_gate.hold_next_start;
+    record->hold_return = thread_gate.hold_next_return;
+    thread_gate.hold_next_start = thread_gate.hold_next_return = 0;
+    result = __real_pthread_create(thread, attributes, test_thread_entry, record);
+    if (!result) {
+        record->thread = *thread;
+        record->created = 1;
+        ++thread_gate.created;
+        ++thread_gate.in_generation;
+    }
+    return result;
+}
+
+static struct test_thread_record *test_join_record(pthread_t thread)
+{
+    for (uint32_t index = 0; index < thread_gate.created; ++index) {
+        struct test_thread_record *record = &thread_gate.record[index];
+        if (record->created && !record->joined && pthread_equal(record->thread, thread))
+            return record;
+    }
+    REQUIRE(0 && "join must name a currently owned real thread");
+    return NULL;
+}
+
+int __wrap_pthread_tryjoin_np(pthread_t thread, void **value)
+{
+    struct test_thread_record *record = test_workers ? test_join_record(thread) : NULL;
+    int result = __real_pthread_tryjoin_np(thread, value);
+    if (!record) return result;
+    ++thread_gate.tryjoins;
+    if (!result) {
+        REQUIRE(atomic_load_explicit(&record->returned, memory_order_acquire));
+        REQUIRE(!record->hold_return || atomic_load_explicit(&record->release_return, memory_order_acquire));
+        record->joined = 1;
+        ++thread_gate.joined;
+    } else if (result == EBUSY && record->hold_return &&
+               atomic_load_explicit(&record->returned, memory_order_acquire) &&
+               !atomic_load_explicit(&record->release_return, memory_order_acquire)) {
+        ++record->busy;
+        ++thread_gate.busy_returns;
+    }
+    return result; /* EBUSY and success are both the real libc result. */
+}
+
+int __wrap_pthread_join(pthread_t thread, void **value)
+{
+    struct test_thread_record *record = test_workers ? test_join_record(thread) : NULL;
+    int result = __real_pthread_join(thread, value);
+    if (record && !result) {
+        REQUIRE(atomic_load_explicit(&record->returned, memory_order_acquire));
+        record->joined = 1;
+        ++thread_gate.joined;
+        ++thread_gate.blocking_joins;
+    }
+    return result;
+}
+
+void *__wrap_aligned_alloc(size_t alignment, size_t bytes)
+{
+    if (thread_gate.fail_allocation && alignment == fwlab_nfc_channel_v2_arena_alignment() &&
+        bytes == fwlab_nfc_channel_v2_arena_size()) {
+        thread_gate.fail_allocation = 0;
+        ++thread_gate.allocation_failures;
+        errno = ENOMEM;
+        return NULL; /* One ordinary allocation failure, before any NAND job. */
+    }
+    return __real_aligned_alloc(alignment, bytes);
+}
+
+static void thread_control_pump(void)
+{
+    struct native_context *context = thread_gate.context;
+    if (!test_workers) return;
+    REQUIRE(context && !atomic_load_explicit(&thread_gate.wait_timeout, memory_order_acquire));
+    for (uint32_t index = 0; index < thread_gate.created; ++index) {
+        struct test_thread_record *record = &thread_gate.record[index];
+        if (record->hold_start && atomic_load_explicit(&record->entered, memory_order_acquire) &&
+            !atomic_load_explicit(&record->release_start, memory_order_acquire)) {
+            REQUIRE(context->runtime_media == &thread_gate.media->native &&
+                    (!context->runtime || !context->runtime->ready));
+            REQUIRE(!host.occupied && !host.delivered);
+            for (uint32_t slot = 0; slot < NATIVE_COMMANDS; ++slot)
+                REQUIRE(!context->slot[slot].occupied && !context->slot[slot].admitted);
+            REQUIRE(thread_gate.media->options.channel_executor == NULL);
+            if (++record->start_pumps == 4) {
+                ++thread_gate.start_holds;
+                atomic_store_explicit(&record->release_start, 1, memory_order_release);
+            }
+        }
+        if (record->hold_return && atomic_load_explicit(&record->returned, memory_order_acquire) &&
+            !atomic_load_explicit(&record->release_return, memory_order_acquire)) {
+            REQUIRE(context->runtime_media == &thread_gate.media->native &&
+                    context->last_closed_epoch == record->prior_closed_epoch && !record->joined &&
+                    !native_scaled_media_close(thread_gate.media));
+            if (++record->return_pumps >= 4 && record->busy) {
+                ++thread_gate.return_holds;
+                atomic_store_explicit(&record->release_return, 1, memory_order_release);
+            }
+        }
+    }
+}
+
+static void test_thread_balance(uint32_t live)
+{
+    REQUIRE(!atomic_load_explicit(&thread_gate.wait_timeout, memory_order_acquire));
+    REQUIRE(thread_gate.created == thread_gate.joined + live);
+}
+
 /* Select the actual MQ2 runtime while reusing a single-I/O fake Host.
  * This tests construction/progress, not two kernel queues or IRQ routing. */
 static struct {
@@ -116,8 +314,9 @@ static void install_progress_gate(void)
 }
 #endif
 
-/* Only the ioctl boundary is fake. It owns Host byte buffers/transport tuples,
- * never NAND media, mappings, namespace data or storage-success decisions. */
+/* Host ioctls are emulated; the explicit thread/allocation controls above
+ * still execute real worker jobs/joins. This Host owns byte buffers/transport
+ * tuples, never NAND mappings, namespace data or storage-success decisions. */
 int __wrap_ioctl(int descriptor, unsigned long request, ...)
 {
     struct fwlab_m4_native_message *message;
@@ -179,6 +378,9 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
         REQUIRE(attached_identity.media_format_version == FWLAB_M4_MEDIA_SCALED &&
                 pump->function_nonce == host.function);
         ++host.pump_ticks;
+#if FWLAB_NATIVE_MQ2
+        thread_control_pump();
+#endif
         if (host.reset_pending && host.drain_acks) {
             REQUIRE(!host.occupied && !host.next);
             ++host.recovery_pumps;
@@ -263,6 +465,12 @@ int __wrap_ioctl(int descriptor, unsigned long request, ...)
     if (message->operation == FWLAB_M4_NATIVE_DRAIN_ACK) {
         REQUIRE(FWLAB_NATIVE_LARGE && host.reset_pending && !host.occupied && !host.next);
         REQUIRE(message->controller_epoch == host.epoch + 1u && !host.drain_acks);
+#if FWLAB_NATIVE_MQ2
+        if (test_workers) {
+            test_thread_balance(0);
+            REQUIRE(!thread_gate.media->workers && !thread_gate.context->runtime_media);
+        }
+#endif
         ++host.drain_acks;
         return 0;
     }
@@ -478,8 +686,9 @@ static void check_runtime_profile(const struct native_context *context)
 static void run_script(struct native_context *context, struct native_scaled_media *media)
 {
 #if FWLAB_NATIVE_MQ2
+    uint32_t prior_created = thread_gate.created, prior_joined = thread_gate.joined;
     memset(&progress_gate, 0, sizeof(progress_gate));
-    progress_gate.context = context;
+    if (!test_workers) progress_gate.context = context;
 #endif
 #if FWLAB_NATIVE_PUMP
     host.service_fault_once = 1;
@@ -492,13 +701,24 @@ static void run_script(struct native_context *context, struct native_scaled_medi
     /* The loop also rebuilds the runtime after the existing service-fault cut. */
     check_runtime_profile(context);
 #if FWLAB_NATIVE_MQ2
-    REQUIRE(progress_gate.inserted && !progress_gate.waiting && progress_gate.sleeps &&
-            !progress_gate.advanced_sleeps && progress_gate.pump_during_wait >= 4 &&
-            progress_gate.status_during_wait >= 4);
-    REQUIRE(context->runtime->storage.step_report == progress_gate_step);
-    context->runtime->storage.step_report = progress_gate.real_step;
-    printf("NATIVE_PROGRESS_LOOP_PASS|host_profile=3|configured_io_pairs=2|configured_vectors=3|fake_io_queues_exercised=1|actual_large_parent=1|controlled_wait_visits=96|idle_sleeps=%u|sleep_after_storage_progress=0|pump_during_wait=%u|status_during_wait=%u|not_two_queue_kernel_proof=1\n",
-           progress_gate.sleeps, progress_gate.pump_during_wait, progress_gate.status_during_wait);
+    if (!test_workers) {
+        REQUIRE(progress_gate.inserted && !progress_gate.waiting && progress_gate.sleeps &&
+                !progress_gate.advanced_sleeps && progress_gate.pump_during_wait >= 4 &&
+                progress_gate.status_during_wait >= 4);
+        REQUIRE(context->runtime->storage.step_report == progress_gate_step);
+        context->runtime->storage.step_report = progress_gate.real_step;
+        printf("NATIVE_PROGRESS_LOOP_PASS|host_profile=3|configured_io_pairs=2|configured_vectors=3|fake_io_queues_exercised=1|actual_large_parent=1|controlled_wait_visits=96|idle_sleeps=%u|sleep_after_storage_progress=0|pump_during_wait=%u|status_during_wait=%u|not_two_queue_kernel_proof=1\n",
+               progress_gate.sleeps, progress_gate.pump_during_wait, progress_gate.status_during_wait);
+    } else {
+        /* The ordinary service-fault reset must join all old threads before
+         * creating this exact number of successor threads. No fabricated
+         * storage wait is inserted into the threaded fixture. */
+        REQUIRE(thread_gate.created == prior_created + test_workers &&
+                thread_gate.joined == prior_joined + test_workers);
+        test_thread_balance(test_workers);
+        printf("NATIVE_THREAD_RESET_PASS|workers=%u|old_threads_actually_joined=%u|new_threads_actually_created=%u|same_media=1|continued_IO=1|not_native_kernel_reset_proof=1\n",
+               test_workers, thread_gate.joined - prior_joined, thread_gate.created - prior_created);
+    }
     progress_gate.context = NULL;
 #endif
     REQUIRE(host.next == host.count && !host.occupied);
@@ -569,8 +789,13 @@ static int test_media_open(struct native_scaled_media *media,
 {
     if (test_nand_profile == NATIVE_NAND_R0)
         return native_scaled_media_open(media, context, directory, uuid, format, logical_mib);
-    return native_scaled_media_open_profile(media, context, directory, uuid, format,
-                                            logical_mib, test_nand_profile);
+    int opened = native_scaled_media_open_profile(media, context, directory, uuid, format,
+                                                  logical_mib, test_nand_profile);
+#if FWLAB_NATIVE_MQ2
+    if (opened && test_workers)
+        REQUIRE(native_scaled_media_enable_workers(media, test_workers));
+#endif
+    return opened;
 }
 
 static int test_media_present(const struct native_scaled_media *media)
@@ -612,7 +837,9 @@ static void test_media_activity(const struct native_context *context,
         return;
     }
     struct fwlab_nfc_channel_v2_stats stats;
-    REQUIRE(!media->physical && media->options.channel_executor == NULL &&
+    REQUIRE(!media->physical &&
+            ((!test_workers && media->options.channel_executor == NULL) ||
+             (test_workers && media->options.channel_executor != NULL)) &&
             media->options.multihead_read_schedule == SCALE_STORAGE_READ_PARALLEL &&
             media->options.read_policy == FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE &&
             media->channels.geometry.channels == 4 && media->channels.geometry.luns_per_channel == 1 &&
@@ -634,17 +861,41 @@ static void test_media_activity(const struct native_context *context,
     }
     /* Final retirement ACK may still be owned. Do not manually advance NFC or
      * require lower live-idle: the next ordinary request/close must drain it. */
-    printf("NATIVE_CHANNEL_ACTIVITY_PASS|channels=4|format3_mutable_parallel_read=1|IPR_policy=1|real_child_program_read=1|model_ns=%" PRIu64 "|cooperative=1|not_plane_overlap_or_throughput_proof=1\n",
-           stats.now_ns);
+    printf("NATIVE_CHANNEL_ACTIVITY_PASS|channels=4|format3_mutable_parallel_read=1|IPR_policy=1|real_child_program_read=1|model_ns=%" PRIu64 "|cooperative=%u|workers=%u|not_plane_overlap_or_throughput_proof=1\n",
+           stats.now_ns, test_workers == 0, test_workers);
+#if FWLAB_NATIVE_MQ2
+    if (test_workers) {
+        struct fwlab_nfc_channel_workers_stats workers;
+        REQUIRE(media->workers && media->options.channel_executor == &media->executor &&
+                fwlab_nfc_channel_workers_snapshot(media->workers, &workers) == FWLAB_NFC_API_OK &&
+                workers.workers == test_workers && workers.channels == 4 &&
+                workers.created_workers == test_workers && !workers.joined_workers &&
+                workers.submitted_jobs && workers.returned_jobs &&
+                !workers.stopping && !workers.failed);
+        for (uint32_t index = 0; index < test_workers; ++index)
+            REQUIRE(workers.worker[index].created && !workers.worker[index].joined &&
+                    !workers.worker[index].failed && workers.worker[index].thread_id &&
+                    workers.worker[index].completed_jobs && workers.worker[index].actor_quanta &&
+                    workers.worker[index].channel_mask == (test_workers == 1 ? 15u : 1u << index));
+        printf("NATIVE_THREAD_ACTIVITY_PASS|workers=%u|submitted=%" PRIu64 "|returned=%" PRIu64 "|wait_calls=%" PRIu64 "|real_actor_jobs=1|no_throughput_claim=1\n",
+               test_workers, workers.submitted_jobs, workers.returned_jobs, workers.wait_calls);
+    }
+#endif
 }
 
 static void test_runtime_closed(const struct native_context *context)
 {
-    REQUIRE(!context->runtime && context->last_closed.quiescent &&
+    REQUIRE(!context->runtime && !context->runtime_media && context->last_closed.quiescent &&
             !context->last_closed.host_authorities && !context->last_closed.dma_operations &&
             !context->last_closed.buffers && !context->last_closed.block_operations &&
             !context->last_closed.nfc_operations && !context->last_closed.pending &&
             !context->last_closed.pinned);
+#if FWLAB_NATIVE_MQ2
+    if (test_workers) {
+        test_thread_balance(0);
+        REQUIRE(!thread_gate.media->workers && !thread_gate.media->options.channel_executor);
+    }
+#endif
 }
 
 static void test_retained_lock(struct native_context *context,
@@ -696,6 +947,58 @@ static void close_epoch(struct native_context *context, struct native_scaled_med
     phase_end("media-close", context->epoch, started);
 }
 
+#if FWLAB_NATIVE_MQ2
+static void test_pre_step_failures(struct native_context *context,
+    struct native_scaled_media *media, int directory_fd)
+{
+    if (test_workers != 4) return;
+    for (uint32_t phase = 0; phase < 2; ++phase) {
+        struct test_media_identity before, after;
+        struct fwlab_nfc_channel_workers_stats workers;
+        struct j0_close_status prior_closed = context->last_closed;
+        uint32_t prior_epoch = context->last_closed_epoch;
+        uint32_t prior_created = thread_gate.created, prior_joined = thread_gate.joined;
+        uint32_t allocation_failures = thread_gate.allocation_failures;
+        uint64_t sequence[4];
+        test_thread_balance(0);
+        test_media_snapshot(directory_fd, &before);
+        for (uint32_t channel = 0; channel < 4; ++channel)
+            sequence[channel] = fwlab_file_nand_v2_sequence(media->channels.channel[channel].scalar.context);
+        script_begin(context);
+        thread_gate.hold_next_return = 1;
+        if (!phase) thread_gate.fail_create_at = thread_gate.calls + 2u;
+        else thread_gate.fail_allocation = 1;
+        REQUIRE(!native_runtime_create(context, &media->native, 1));
+        REQUIRE(!context->runtime && context->runtime_media == &media->native &&
+                media->workers && !context->runtime_finalized);
+        REQUIRE(!thread_gate.fail_create_at && !thread_gate.fail_allocation);
+        REQUIRE(thread_gate.created - prior_created == (phase ? 4u : 1u));
+        REQUIRE(thread_gate.allocation_failures == allocation_failures + phase);
+        REQUIRE(fwlab_nfc_channel_workers_snapshot(media->workers, &workers) == FWLAB_NFC_API_OK &&
+                !workers.submitted_jobs && !workers.returned_jobs && !workers.occupied_mailboxes);
+        /* The NULL runtime still owes resource cleanup; neither a second
+         * incarnation nor final media close may hide that retained owner. */
+        uint32_t calls = thread_gate.calls;
+        REQUIRE(!native_runtime_create(context, &media->native, 1) && thread_gate.calls == calls);
+        REQUIRE(!native_scaled_media_close(media) && test_media_present(media));
+        REQUIRE(runtime_close(context));
+        test_thread_balance(0);
+        REQUIRE(!context->runtime && !context->runtime_media && !media->workers &&
+                !media->options.channel_executor &&
+                thread_gate.joined - prior_joined == (phase ? 4u : 1u));
+        REQUIRE(context->last_closed_epoch == prior_epoch &&
+                !memcmp(&context->last_closed, &prior_closed, sizeof(prior_closed)));
+        for (uint32_t channel = 0; channel < 4; ++channel)
+            REQUIRE(sequence[channel] == fwlab_file_nand_v2_sequence(media->channels.channel[channel].scalar.context));
+        test_media_snapshot(directory_fd, &after);
+        test_media_identity_check(&before, &after, 1);
+        printf("NATIVE_THREAD_PRESTEP_PASS|failure=%s|created=%u|actually_joined=%u|no_NAND_jobs=1|six_files_unchanged=1|no_epoch_certificate=1|retained_null_runtime_cleanup=1\n",
+               phase ? "NFC_arena_ENOMEM" : "second_pthread_create_EAGAIN",
+               thread_gate.created - prior_created, thread_gate.joined - prior_joined);
+    }
+}
+#endif
+
 #if !FWLAB_NATIVE_SCALED
 static void legacy_constructor_smoke(int directory_fd, const char *directory,
                                       const uint8_t uuid[16])
@@ -746,7 +1049,7 @@ int main(int argc, char **argv)
     uint64_t prior_ftl, prior_nfc, started;
     uint32_t logical_mib = NATIVE_SCALED_DEFAULT_MIB;
     uint64_t lba_count;
-    int directory_fd, name_length, capacity_seen = 0, profile_seen = 0;
+    int directory_fd, name_length, capacity_seen = 0, profile_seen = 0, workers_seen = 0;
 
     for (int index = 1; index < argc; ++index) {
         REQUIRE(index + 1 < argc);
@@ -754,6 +1057,10 @@ int main(int argc, char **argv)
             REQUIRE(!capacity_seen++ &&
                     (!strcmp(argv[index + 1], "64") || !strcmp(argv[index + 1], "256")));
             logical_mib = !strcmp(argv[++index], "256") ? 256u : 64u;
+        } else if (!strcmp(argv[index], "--nand-workers")) {
+            REQUIRE(FWLAB_NATIVE_MQ2 && !workers_seen++ &&
+                    (!strcmp(argv[index + 1], "1") || !strcmp(argv[index + 1], "4")));
+            test_workers = !strcmp(argv[++index], "4") ? 4u : 1u;
         } else {
             REQUIRE(FWLAB_NATIVE_MQ2 && !profile_seen++ &&
                     !strcmp(argv[index], "--nand-profile") &&
@@ -763,6 +1070,13 @@ int main(int argc, char **argv)
         }
     }
     REQUIRE(test_nand_profile == NATIVE_NAND_R0 || logical_mib == 64);
+    REQUIRE(!test_workers || test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K);
+#if FWLAB_NATIVE_MQ2
+    thread_gate.context = context;
+    thread_gate.media = media;
+    thread_gate.expected_workers = test_workers;
+    atomic_init(&thread_gate.wait_timeout, 0);
+#endif
     lba_count = (uint64_t)logical_mib * 2048u;
     REQUIRE(root && statfs(root, &fs) == 0 && (unsigned long)fs.f_type == TMPFS_MAGIC);
     REQUIRE((uint64_t)fs.f_bavail * (uint64_t)fs.f_bsize >= UINT64_C(200000000));
@@ -773,9 +1087,9 @@ int main(int argc, char **argv)
     directory_fd = open(directory, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     REQUIRE(directory_fd >= 0);
     setvbuf(stdout, NULL, _IOLBF, 0);
-    printf("NATIVE_SCALED_OFFLINE_BEGIN|media=%s/%s|logical_mib=%u|max_io_bytes=%u|fake_ioctl_only|no_attach_M5_or_throughput_claim\n",
+    printf("NATIVE_SCALED_OFFLINE_BEGIN|media=%s/%s|logical_mib=%u|max_io_bytes=%u|workers=%u|fake_ioctl_only|no_attach_M5_or_throughput_claim\n",
            directory, test_nand_profile == NATIVE_NAND_R0 ? "nand.bin" : FWLAB_NAND_CHANNEL_VOLUME_MANIFEST,
-           logical_mib, TEST_IO_BYTES);
+           logical_mib, TEST_IO_BYTES, test_workers);
     context->descriptor = OFFLINE_DESCRIPTOR;
     context->function_nonce = UINT64_C(0x4d31414f46464c49);
     context->epoch = 1;
@@ -816,6 +1130,14 @@ int main(int argc, char **argv)
 #else
     REQUIRE(native_attach_explicit(context, FWLAB_M4_MEDIA_SCALED, media->native.uuid, binding) == 0);
 #endif
+#if FWLAB_NATIVE_MQ2
+    test_pre_step_failures(context, media, directory_fd);
+    if (test_workers) {
+        thread_gate.hold_next_start = 1;
+        thread_gate.hold_next_return = 1;
+    }
+#endif
+    script_begin(context);
     started = wall_ns();
     REQUIRE(native_runtime_create(context, &media->native, 1));
     check_runtime_profile(context);
@@ -855,6 +1177,7 @@ int main(int argc, char **argv)
             media->volume == retained_volume && media->physical == retained_physical);
     test_retained_lock(context, media, directory_fd, directory);
     ++context->epoch;
+    script_begin(context);
     REQUIRE(native_runtime_create(context, owner.media, 0));
     check_runtime_profile(context);
     REQUIRE(context->runtime->ready && context->runtime->volume.lba_count == lba_count &&
@@ -889,6 +1212,7 @@ int main(int argc, char **argv)
         puts("NATIVE_CHANNEL_IDENTITY_PASS|same_six_files=1|manifest_child_UUIDs_preserved=1|opposite_profile_recovery_rejected=1|no_resize_or_conversion=1");
     }
     phase_end("media-recover", context->epoch, started);
+    script_begin(context);
     started = wall_ns();
     REQUIRE(native_runtime_create(context, &media->native, 0));
     check_runtime_profile(context);
@@ -909,6 +1233,18 @@ int main(int argc, char **argv)
     if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K)
         test_media_activity(context, media);
     close_epoch(context, media);
+#if FWLAB_NATIVE_MQ2
+    if (test_workers) {
+        test_thread_balance(0);
+        REQUIRE(thread_gate.start_holds == 1 &&
+                thread_gate.return_holds == (test_workers == 4 ? 3u : 1u) &&
+                thread_gate.busy_returns >= thread_gate.return_holds &&
+                thread_gate.tryjoins && !thread_gate.blocking_joins);
+        printf("NATIVE_THREAD_LIFETIME_PASS|workers=%u|real_creates=%u|real_joins=%u|generations=%u|startup_held_pump_visits=4|return_holds=%u|actual_tryjoin_EBUSY=%u|blocking_joins=0|no_early_ready_drain_or_release=1|no_M5_or_performance_claim=1\n",
+               test_workers, thread_gate.created, thread_gate.joined, thread_gate.generations,
+               thread_gate.return_holds, thread_gate.busy_returns);
+    }
+#endif
     test_media_cleanup(directory_fd, &created);
     REQUIRE(close(directory_fd) == 0 && rmdir(directory) == 0);
     free(media);
