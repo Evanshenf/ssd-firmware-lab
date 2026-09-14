@@ -100,3 +100,10 @@ For privileged Host work, run affected local checks during development, seal an 
 Do not grow a new test framework or reopen closed component reviews merely to
 advance the roadmap. Name one real journey, its owned changes, executed checks
 and stop condition before beginning another implementation slice.
+
+The NAND resource route now has a finite [A–D sequence](adr/0020-cooperative-nand-channel-domains.md):
+A cooperative channel domains with real independent shards and serial FTL/J0;
+B multi-head format-3 DATA waves and ordered MAP/recovery; C the same logical
+resources on one/four actual data workers; D actual independent-plane READ.
+Only A has [implementation evidence](results/2026-09-14-channel-domains.md).
+Threads/NUMA do not define NAND topology or guarantee a throughput multiplier.

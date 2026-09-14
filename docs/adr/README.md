@@ -22,6 +22,7 @@
 - [ADR-0017: Drained shutdown and successor controller readiness](0017-large-controller-readiness.md)
 - [ADR-0018: Resource-scheduled NAND and the first parallel-read slice](0018-resource-scheduled-nand-read-lab.md)
 - [ADR-0019: Timed NAND mutations before multi-head FTL changes](0019-timed-nand-mutations.md)
+- [ADR-0020: Independent NAND channel domains before parallel FTL writes](0020-cooperative-nand-channel-domains.md)
 
 Accepted ADRs define the design baseline, not an assertion that the component is already implemented or validated. A superseding decision must link the prior ADR and describe migration and compatibility impact.
 

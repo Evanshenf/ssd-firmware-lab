@@ -9,6 +9,12 @@ adopted source now includes serial-credit MQ2, not parallel FTL. Use the
 [current matrix](current-status.md) and [dated performance report](results/2026-09-10-throughput.md)
 for current claims. The fixed-profile tag and its evidence remain unchanged.
 
+The separate [channel-domain LAB](adr/0020-cooperative-nand-channel-domains.md)
+models physical resource composition, not measured thread speedup. Its initial
+cooperative/serial-FTL result has no OS workers or new throughput claim. Model
+time, actual execution wall time, Host bytes and NAND traffic stay separate;
+future one/four-worker comparisons must retain identical topology and credits.
+
 ## Objective and measurement boundary
 
 The objective is at least 10 decimal GB/s for large sequential reads and writes,

@@ -44,6 +44,7 @@ These are constructor selections, not automatic fallback chains:
 | Tagged preview / ordinary native `worker` | Shared `command-spine` and reference `core/m3p` | C3 model in `nfc/`, file-NAND-v0 |
 | Original scalable headless format 1 | Same profile/lifecycle seam, `core/ftl-scale` | Scaled C3 construction in `core/nfc-runtime`, original compact file-NAND-v1 qualification |
 | Current scaled/large/MQ2 native workers | Same profile/lifecycle seam, retained scalable FTL parents and format-2 windows | `core/nfc-page-v2` PAGE2-R0, physical NAND v2, explicitly selected mapped-tmpfs byte adapter |
+| Explicit cooperative channel LAB | Same profile/lifecycle/Block and serial format-2 FTL | WAVE4 PAGE2 hub, independently owned timed NFC and physical-v2 shard per channel; [ADR-0020](adr/0020-cooperative-nand-channel-domains.md) |
 
 `j0_construction.c` binds a ready volume and its actual Block service;
 `scale_storage.c` constructs the selected FTL/NFC pair. Both reside below
@@ -59,6 +60,11 @@ generation and failure facts participate, but unsupported nonzero timing,
 retry and injected-fault settings are rejected. A 64-page group is not 64-way
 NAND parallelism. Neither the current path nor this diagram implies advanced
 wear leveling or a real NAND/RTOS implementation.
+
+The separately selected cooperative channel LAB uses a closed-batch JOIN and
+monotonic admission floors around independent timed child engines. It does not
+make R0 timed or the native FTL parallel. Worker/NUMA placement and actual plane
+capabilities remain distinct from NAND address geometry.
 
 Physical versions v0/v1 retain their own redo-based engines. Physical v2 orders
 INTENT, physical homes and terminal COMMIT; interrupted reservations recover

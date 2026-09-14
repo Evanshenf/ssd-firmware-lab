@@ -39,6 +39,16 @@ write. All actual metadata writes and synchronization remain in cost accounting.
 
 ## Cost and evidence boundary
 
+An explicit [channel-volume assembly](channel_volume.h) can now compose up to
+four unchanged v2 engines/files, one owner and local transaction chain per
+channel. Its immutable LE/CRC manifest binds global identity and exact child
+UUID/geometry/name/size. Physical PPA routing preserves opaque main/OOB bytes;
+there is no global transaction sequence or multi-file atomic commit.
+Create is new-only and publishes the manifest last; recovery never creates,
+resizes or guesses missing shards. A physical assembly is not an initialized
+FTL. The first binding uses ordinary POSIX IO on capped tmpfs; it is not a
+mapped-mode migration or a raw backend. See [ADR-0020](../../docs/adr/0020-cooperative-nand-channel-domains.md).
+
 With 256-byte page records, 64-byte block records, a 1024-byte intent and a
 512-byte terminal, a successful full-page batch writes `4352*n + 1600` bytes.
 The direct 64-page case measured 280128 written bytes, five write calls and

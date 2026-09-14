@@ -72,6 +72,13 @@ Times are synthetic explicit parameters, not vendor defaults or a wall-clock
 rate limiter. Four slots and current geometry remain finite limits; multi-head
 FTL writes, modern NAND geometry and 4-TB/8-GB/s calibration are not established.
 
+An explicit [cooperative channel construction](adr/0020-cooperative-nand-channel-domains.md)
+now composes independent physical-v2 shards beneath the same serial FTL/J0.
+Its [bounded A results](results/2026-09-14-channel-domains.md) cover closed
+batches, real channel/LUN work, time floors, snapshot/ACK ownership and recovery.
+It does not replace native R0 or implement multi-head writes, OS workers or
+independent-plane READ; those are separate B/C/D slices.
+
 | Environment | What has evidence | What is not established |
 |---|---|---|
 | Linux x86-64 userspace | Current software paths with GCC/Clang; existing targeted sanitizer runs | Arbitrary operating systems or production endurance |

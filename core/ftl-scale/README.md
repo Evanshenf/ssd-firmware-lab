@@ -241,6 +241,13 @@ a hardware NAND port, timed writes or a large-capacity qualification.
 
 ## Reproduce without a raw device
 
+The [cooperative channel LAB](../../docs/adr/0020-cooperative-nand-channel-domains.md)
+also binds the existing serial format-2 FTL to independent physical-v2 shards.
+`check-channel-j0` verifies its RMW/FUA/Flush/reopen and Host-close boundaries.
+Generic PAGE2 backpressure now pumps lower retirement work, and only ordered
+READ fill admits new UIDs. This does not add multiple write heads or change the
+existing format; DATA-wave/OPEN-head recovery belongs to the separate B slice.
+
 From the repository root, as an ordinary user:
 
 ```sh

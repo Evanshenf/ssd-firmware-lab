@@ -7,6 +7,7 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 
 ## Current entry points
 
+- [2026-09-14: cooperative channel domains](2026-09-14-channel-domains.md): independent physical-v2 shards, closed PAGE2 batches and the existing serial FTL/J0; not OS threads, multi-head writes or a native performance result.
 - [2026-09-14: resource-timed NAND mutations](2026-09-14-timed-nand-mutations.md): actual page/OOB effects, shared resources, cancellation and serial FTL integration; synthetic timing, not native or vendor-NAND performance.
 - [2026-09-10: adopted scalable storage and serial-credit MQ2](2026-09-10-scaled-storage-mq2.md): source checkpoints, separate disk/tmpfs/ARM/native scopes and retained evidence identities; not a new frozen release.
 - [2026-09-10: separated throughput results and samples](2026-09-10-throughput.md): isolated ARM layers, paired native comparisons and the rejected experiment; no end-to-end 10-GB/s claim.

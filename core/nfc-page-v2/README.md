@@ -106,3 +106,25 @@ Media tests require `FWLAB_TEST_MEDIA_DIR` (Makefile default
 fresh disposable images. They do not format existing images or raw devices.
 See the [exact-source result](../../docs/results/2026-09-14-timed-nand-mutations.md)
 for scope and limitations.
+
+## Cooperative channel domains
+
+`fwlab_nfc_channel_v2_init()` explicitly selects WAVE4-LAB4K-A, a PAGE2 hub over
+independent timed child engines and real physical-v2 channel shards. Four total
+credits apply across channels. It snapshots PROGRAM before ACCEPTED, seals
+batch ingress, joins real results, and enforces each next idle-channel time
+floor. Take/discard retains the frame until retirement ACK. Accepted cancellation
+is drain-only and is not forwarded to N2a's child cancel mechanism.
+
+This is cooperative execution, not yet OS workers or independent-plane READ.
+The existing serial FTL remains the real consumer; no FTL clock or outer NAND
+action nodes are added. See [ADR-0020](../../docs/adr/0020-cooperative-nand-channel-domains.md)
+and the [exact-source results](../../docs/results/2026-09-14-channel-domains.md).
+
+```sh
+make -C core/nfc-page-v2 check-channel
+make -C frontends/headless-scale -f ftl.mk check-channel-j0
+```
+
+The second command requires the same capped tmpfs and creates fresh shardsets
+only. It does not split, convert or replace an existing `nand.bin`.
