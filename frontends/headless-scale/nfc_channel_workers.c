@@ -40,6 +40,7 @@ struct channel_worker {
     int requested_cpu, startup_error;
     atomic_int error;
     uint8_t mutex_initialized, condition_initialized, created, joined;
+    uint8_t startup_collected; /* Coordinator-only ACK consumption. */
     uint8_t startup_done, stop, exited; /* Worker sleep-mutex protected. */
 };
 struct fwlab_nfc_channel_workers {
@@ -47,9 +48,10 @@ struct fwlab_nfc_channel_workers {
     struct fwlab_nfc_channel_workers_config config;
     struct channel_worker worker[WORKERS];
     struct worker_mailbox mailbox[WORKERS];
-    uint32_t created, joined;
+    uint32_t created, joined, startup_acks;
+    enum fwlab_nfc_api_result start_result;
     int completion_fd;
-    uint8_t published, stopping, failed;
+    uint8_t published, stopping, failed, join_wait, join_failed;
 };
 _Static_assert(CPU_SETSIZE <= FWLAB_NFC_CHANNEL_WORKER_AFFINITY_WORDS * 64u,
                "private affinity bitmap covers the supported Linux CPU set");
@@ -85,7 +87,7 @@ static uint32_t owner(const struct fwlab_nfc_channel_workers *r, uint32_t channe
 { return r->config.workers == 1 ? 0 : channel; }
 static bool workers_failed(const struct fwlab_nfc_channel_workers *r)
 {
-    if (r->failed) return true;
+    if (r->failed || r->start_result != FWLAB_NFC_API_OK) return true;
     for (uint32_t i = 0; i < r->created; ++i)
         if (atomic_load_explicit(&r->worker[i].error, memory_order_acquire)) return true;
     return false;
@@ -160,6 +162,7 @@ static void *worker_main(void *opaque)
     w->thread_id = tid > 0 ? (uint64_t)tid : 0;
     w->startup_error = error; w->startup_done = 1;
     synchronized(pthread_cond_signal(&w->condition));
+    notify_worker(w); /* Startup has no hub, but uses the same wake doorbell. */
     for (;;) {
         struct worker_mailbox *mailbox;
         if (w->stop) break;
@@ -225,12 +228,14 @@ static enum fwlab_nfc_api_result poll_job(void *opaque, uint32_t channel,
     *advanced = true;
     return FWLAB_NFC_API_OK;
 }
-static enum fwlab_nfc_api_result shutdown_workers(void *opaque, bool *advanced, bool *complete)
+static enum fwlab_nfc_api_result shutdown_common(void *opaque, bool *advanced,
+    bool *complete, bool blocking)
 {
     struct fwlab_nfc_channel_workers *r = opaque;
     if (!live(r) || !advanced || !complete) return FWLAB_NFC_API_INVALID_CONTRACT;
     *advanced = *complete = false;
     if (occupied(r)) return FWLAB_NFC_API_WRONG_STATE;
+    if (r->join_failed) return FWLAB_NFC_API_INVARIANT_FAILURE;
     if (!r->stopping) {
         r->stopping = 1;
         for (uint32_t i = 0; i < r->created; ++i) {
@@ -245,17 +250,31 @@ static enum fwlab_nfc_api_result shutdown_workers(void *opaque, bool *advanced, 
     for (uint32_t i = 0; i < r->created; ++i) {
         struct channel_worker *w = &r->worker[i];
         if (w->joined) continue;
-        /* All jobs are returned. Join one idle/stopping worker, never detach,
-         * cancel or substitute an exit flag. There is no wall-time promise. */
-        if (pthread_join(w->thread, NULL) != 0) { r->failed = 1; return FWLAB_NFC_API_INVARIANT_FAILURE; }
+        /* All jobs are returned. Join one worker, never detach, cancel or
+         * substitute an exit flag. Even a tryjoin is not a realtime promise. */
+        int error = blocking ? pthread_join(w->thread, NULL) : pthread_tryjoin_np(w->thread, NULL);
+        if (!blocking && error == EBUSY) {
+            r->join_wait = 1;
+            return FWLAB_NFC_API_OK;
+        }
+        r->join_wait = 0;
+        if (error) { r->failed = r->join_failed = 1; return FWLAB_NFC_API_INVARIANT_FAILURE; }
         w->joined = 1; ++r->joined; *advanced = true;
         break;
     }
     *complete = r->created == r->joined;
+    if (*complete) r->join_wait = 0;
     return FWLAB_NFC_API_OK;
 }
+static enum fwlab_nfc_api_result shutdown_workers(void *opaque, bool *advanced, bool *complete)
+{ return shutdown_common(opaque, advanced, complete, true); }
+static enum fwlab_nfc_api_result shutdown_polling(void *opaque, bool *advanced, bool *complete)
+{ return shutdown_common(opaque, advanced, complete, false); }
 static const struct fwlab_nfc_channel_executor_ops executor_ops = {
     submit, poll_job, shutdown_workers
+};
+static const struct fwlab_nfc_channel_executor_ops polling_executor_ops = {
+    submit, poll_job, shutdown_polling
 };
 struct fwlab_nfc_channel_executor fwlab_nfc_channel_workers_executor(struct fwlab_nfc_channel_workers *r)
 {
@@ -263,13 +282,18 @@ struct fwlab_nfc_channel_executor fwlab_nfc_channel_workers_executor(struct fwla
     if (live(r)) { executor.ops = &executor_ops; executor.context = r; }
     return executor;
 }
+struct fwlab_nfc_channel_executor fwlab_nfc_channel_workers_executor_polling(struct fwlab_nfc_channel_workers *r)
+{
+    struct fwlab_nfc_channel_executor executor = {0};
+    if (live(r)) { executor.ops = &polling_executor_ops; executor.context = r; }
+    return executor;
+}
 
-enum fwlab_nfc_api_result fwlab_nfc_channel_workers_create(
+enum fwlab_nfc_api_result fwlab_nfc_channel_workers_prepare(
     const struct fwlab_nfc_channel_workers_config *config, struct fwlab_nfc_channel_workers **out)
 {
     struct fwlab_nfc_channel_workers *r;
     enum fwlab_nfc_api_result result = FWLAB_NFC_API_NO_CAPACITY;
-    bool complete = false, advanced;
     if (out) *out = NULL;
     if (!out || !config || !config->channels || config->channels > WORKERS ||
         (config->workers != 1 && config->workers != 4) ||
@@ -281,6 +305,7 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_workers_create(
     r = calloc(1, sizeof(*r));
     if (!r) return result;
     r->magic = WORKERS_MAGIC; r->config = *config; r->completion_fd = -1;
+    r->start_result = FWLAB_NFC_API_OK;
     for (uint32_t i = 0; i < WORKERS; ++i) {
         atomic_init(&r->mailbox[i].state, MAILBOX_EMPTY);
         atomic_init(&r->worker[i].error, 0);
@@ -296,30 +321,99 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_workers_create(
         if (pthread_cond_init(&w->condition, NULL) != 0) goto failed;
         w->condition_initialized = 1;
     }
-    for (uint32_t i = 0; i < config->workers; ++i) {
+    *out = r;
+    return FWLAB_NFC_API_OK;
+failed:
+    /* No pthread_create has occurred: only local allocation/primitives exist. */
+    if (fwlab_nfc_channel_workers_destroy(r) != FWLAB_NFC_API_OK) {
+        *out = r; return FWLAB_NFC_API_INVARIANT_FAILURE;
+    }
+    return result;
+}
+
+enum fwlab_nfc_api_result fwlab_nfc_channel_workers_start_step(
+    struct fwlab_nfc_channel_workers *r, bool *advanced, bool *complete)
+{
+    if (!live(r) || !advanced || !complete) return FWLAB_NFC_API_INVALID_CONTRACT;
+    *advanced = *complete = false;
+    if (r->stopping) return FWLAB_NFC_API_WRONG_STATE;
+    if (r->start_result != FWLAB_NFC_API_OK) return r->start_result;
+    if (workers_failed(r)) return FWLAB_NFC_API_INVARIANT_FAILURE;
+    if (r->published) { *complete = true; return FWLAB_NFC_API_OK; }
+    if (r->created < r->config.workers) {
+        uint32_t i = r->created;
         struct channel_worker *w = &r->worker[i];
         pthread_attr_t attributes;
         int error;
-        if (pthread_attr_init(&attributes) != 0) goto failed;
-        if (config->pin_workers) {
+        if (pthread_attr_init(&attributes) != 0) {
+            r->start_result = FWLAB_NFC_API_NO_CAPACITY;
+            return r->start_result;
+        }
+        if (r->config.pin_workers) {
             cpu_set_t selected;
-            CPU_ZERO(&selected); CPU_SET(config->cpus[i], &selected);
+            CPU_ZERO(&selected); CPU_SET(r->config.cpus[i], &selected);
             error = pthread_attr_setaffinity_np(&attributes, sizeof(selected), &selected);
-            if (error) { synchronized(pthread_attr_destroy(&attributes)); result = FWLAB_NFC_API_INVALID_CONTRACT; goto failed; }
+            if (error) {
+                synchronized(pthread_attr_destroy(&attributes));
+                r->start_result = FWLAB_NFC_API_INVALID_CONTRACT;
+                return r->start_result;
+            }
         }
         error = pthread_create(&w->thread, &attributes, worker_main, w);
         synchronized(pthread_attr_destroy(&attributes));
-        if (error) goto failed;
+        if (error) { r->start_result = FWLAB_NFC_API_NO_CAPACITY; return r->start_result; }
         w->created = 1; ++r->created;
-        synchronized(pthread_mutex_lock(&w->mutex));
-        while (!w->startup_done) synchronized(pthread_cond_wait(&w->condition, &w->mutex));
+        *advanced = true;
+        return FWLAB_NFC_API_OK;
+    }
+    for (uint32_t i = 0; i < r->created; ++i) {
+        struct channel_worker *w = &r->worker[i];
+        if (w->startup_collected) continue;
+        int error = pthread_mutex_trylock(&w->mutex);
+        if (error == EBUSY) continue;
+        synchronized(error);
+        if (!w->startup_done) {
+            synchronized(pthread_mutex_unlock(&w->mutex));
+            continue;
+        }
         error = w->startup_error;
         synchronized(pthread_mutex_unlock(&w->mutex));
-        if (error) { result = FWLAB_NFC_API_INVALID_CONTRACT; goto failed; }
+        w->startup_collected = 1; ++r->startup_acks; *advanced = true;
+        if (error) { r->start_result = FWLAB_NFC_API_INVALID_CONTRACT; return r->start_result; }
+        if (r->startup_acks == r->config.workers) { r->published = 1; *complete = true; }
+        return FWLAB_NFC_API_OK;
     }
-    r->published = 1; *out = r;
+    return FWLAB_NFC_API_OK;
+}
+
+enum fwlab_nfc_api_result fwlab_nfc_channel_workers_create(
+    const struct fwlab_nfc_channel_workers_config *config, struct fwlab_nfc_channel_workers **out)
+{
+    struct fwlab_nfc_channel_workers *r = NULL;
+    enum fwlab_nfc_api_result result = fwlab_nfc_channel_workers_prepare(config, out);
+    bool complete = false, advanced;
+    if (result != FWLAB_NFC_API_OK) return result;
+    r = *out; *out = NULL;
+    while (!complete) {
+        result = fwlab_nfc_channel_workers_start_step(r, &advanced, &complete);
+        if (result != FWLAB_NFC_API_OK) goto failed;
+        if (!advanced && !complete) {
+            /* Preserve the blocking convenience API, using the same startup
+             * state rather than a second thread-creation implementation. */
+            for (uint32_t i = 0; i < r->created; ++i) {
+                struct channel_worker *w = &r->worker[i];
+                if (w->startup_collected) continue;
+                synchronized(pthread_mutex_lock(&w->mutex));
+                while (!w->startup_done) synchronized(pthread_cond_wait(&w->condition, &w->mutex));
+                synchronized(pthread_mutex_unlock(&w->mutex));
+                break;
+            }
+        }
+    }
+    *out = r;
     return FWLAB_NFC_API_OK;
 failed:
+    complete = false;
     while (!complete) {
         if (shutdown_workers(r, &advanced, &complete) != FWLAB_NFC_API_OK) {
             *out = r; return FWLAB_NFC_API_INVARIANT_FAILURE;
@@ -365,6 +459,70 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_workers_wait(
     return FWLAB_NFC_API_OK;
 }
 
+static enum fwlab_nfc_api_result lifecycle_pending(
+    struct fwlab_nfc_channel_workers *r, bool *pending)
+{
+    *pending = false;
+    if (r->join_failed) return FWLAB_NFC_API_INVARIANT_FAILURE;
+    if (r->stopping) {
+        *pending = r->join_wait && r->joined < r->created && !occupied(r);
+        return FWLAB_NFC_API_OK;
+    }
+    if (r->published || workers_failed(r) || r->created < r->config.workers)
+        return FWLAB_NFC_API_OK; /* Ready, failed, or local thread-create work. */
+    bool waiting = false;
+    for (uint32_t i = 0; i < r->created; ++i) {
+        struct channel_worker *w = &r->worker[i];
+        if (w->startup_collected) continue;
+        int error = pthread_mutex_trylock(&w->mutex);
+        if (error == EBUSY) return FWLAB_NFC_API_OK; /* No proven wait snapshot. */
+        synchronized(error);
+        bool done = w->startup_done != 0;
+        synchronized(pthread_mutex_unlock(&w->mutex));
+        if (done) return FWLAB_NFC_API_OK; /* A startup ACK can be collected. */
+        waiting = true;
+    }
+    *pending = waiting;
+    return FWLAB_NFC_API_OK;
+}
+
+enum fwlab_nfc_api_result fwlab_nfc_channel_workers_lifecycle_wait(
+    struct fwlab_nfc_channel_workers *r, uint32_t timeout_ms,
+    bool *eligible, bool *notified)
+{
+    uint64_t notifications;
+    ssize_t bytes;
+    struct pollfd fd;
+    int result;
+    enum fwlab_nfc_api_result status;
+    if (!live(r) || !eligible || !notified || timeout_ms > 1)
+        return FWLAB_NFC_API_INVALID_CONTRACT;
+    *eligible = *notified = false;
+    status = lifecycle_pending(r, eligible);
+    if (status != FWLAB_NFC_API_OK || !*eligible) return status;
+    counter(r, &r->wait_calls, 1);
+    /* One nonblocking read drains the accumulated eventfd count. New events
+     * racing this read remain readable for poll; EINTR returns to control. */
+    bytes = read(r->completion_fd, &notifications, sizeof(notifications));
+    if (bytes < 0 && errno == EINTR) return FWLAB_NFC_API_OK;
+    if (bytes == (ssize_t)sizeof(notifications)) {
+        counter(r, &r->wake_events, notifications);
+        *notified = true;
+    } else if (bytes >= 0 || errno != EAGAIN) return FWLAB_NFC_API_INVARIANT_FAILURE;
+    if (r->failed) return FWLAB_NFC_API_INVARIANT_FAILURE;
+    status = lifecycle_pending(r, eligible);
+    if (status != FWLAB_NFC_API_OK || !*eligible || *notified) return status;
+    /* An exit flag is deliberately not a permanent immediate-return hint:
+     * tryjoin can still report EBUSY until the thread's actual final return. */
+    fd = (struct pollfd){ .fd = r->completion_fd, .events = POLLIN };
+    result = poll(&fd, 1, (int)timeout_ms);
+    if (result < 0 && errno == EINTR) return FWLAB_NFC_API_OK;
+    if (result < 0 || (fd.revents & (POLLERR | POLLHUP | POLLNVAL)))
+        return FWLAB_NFC_API_INVARIANT_FAILURE;
+    *notified = result > 0;
+    return FWLAB_NFC_API_OK;
+}
+
 enum fwlab_nfc_api_result fwlab_nfc_channel_workers_snapshot(
     struct fwlab_nfc_channel_workers *r, struct fwlab_nfc_channel_workers_stats *out)
 {
@@ -379,15 +537,25 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_workers_snapshot(
         struct channel_worker *w = &r->worker[i];
         struct fwlab_nfc_channel_worker_stats *s = &out->worker[i];
         uint64_t now;
-        synchronized(pthread_mutex_lock(&w->mutex));
-        s->thread_id = w->thread_id; s->channel_mask = w->channel_mask;
-        s->requested_cpu = w->requested_cpu; s->created = w->created; s->joined = w->joined; s->exited = w->exited;
-        s->failed = w->startup_error || atomic_load_explicit(&w->error, memory_order_acquire);
+        s->channel_mask = w->channel_mask; s->requested_cpu = w->requested_cpu;
+        s->created = w->created; s->joined = w->joined;
         s->completed_jobs = w->completed_jobs; s->actor_quanta = w->actor_quanta;
+        s->failed = atomic_load_explicit(&w->error, memory_order_acquire) != 0;
+        synchronized(pthread_mutex_lock(&w->mutex));
+        if (!w->startup_done) {
+            /* cpu_clock/affinity/start time are written before the worker
+             * takes this mutex to publish its startup ACK. Do not read them. */
+            synchronized(pthread_mutex_unlock(&w->mutex));
+            continue;
+        }
+        s->thread_id = w->thread_id; s->exited = w->exited;
+        s->failed |= w->startup_error != 0;
+        out->failed |= s->failed;
         for (unsigned cpu = 0; cpu < CPU_SETSIZE; ++cpu)
             if (CPU_ISSET(cpu, &w->affinity)) s->affinity[cpu / 64u] |= UINT64_C(1) << (cpu % 64u);
         if (w->exited) s->cpu_ns = w->cpu_final;
-        else if (!w->startup_error && clock_ns(w->cpu_clock, &now) && now >= w->cpu_start)
+        else if (w->startup_error) s->cpu_ns = 0;
+        else if (clock_ns(w->cpu_clock, &now) && now >= w->cpu_start)
             s->cpu_ns = now - w->cpu_start;
         else {
             synchronized(pthread_mutex_unlock(&w->mutex));

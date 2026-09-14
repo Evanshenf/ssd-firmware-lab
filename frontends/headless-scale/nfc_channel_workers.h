@@ -41,6 +41,33 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_workers_create(
     const struct fwlab_nfc_channel_workers_config *, struct fwlab_nfc_channel_workers **);
 struct fwlab_nfc_channel_executor fwlab_nfc_channel_workers_executor(struct fwlab_nfc_channel_workers *);
 
+/* Polling lifecycle for a serialized native construction owner. prepare owns
+ * only allocation/eventfd/primitives, never a thread or actor job. Ordinary
+ * failure leaves *out NULL; exceptional cleanup failure retains a handle.
+ * start_step makes at most one thread creation or startup-ACK collection.
+ * OK + !complete is pending; an error retains the handle for real cleanup.
+ * No admission is published until all requested startup ACKs are collected.
+ * Neither allocation nor pthread_create has a hard wall-clock bound. */
+enum fwlab_nfc_api_result fwlab_nfc_channel_workers_prepare(
+    const struct fwlab_nfc_channel_workers_config *, struct fwlab_nfc_channel_workers **);
+enum fwlab_nfc_api_result fwlab_nfc_channel_workers_start_step(
+    struct fwlab_nfc_channel_workers *, bool *advanced, bool *complete);
+/* Available even before startup completes, so partial startup can be cleaned
+ * up. Submit/poll are shared with the blocking view; only shutdown differs.
+ * At most one actual tryjoin per call. EBUSY is pending, never a join proof.
+ * Do not drive both views concurrently; caller retains the object until all
+ * created workers are actually joined and destroy succeeds. */
+struct fwlab_nfc_channel_executor fwlab_nfc_channel_workers_executor_polling(
+    struct fwlab_nfc_channel_workers *);
+/* No hub is needed for pending startup/STOP. eligible is an explicit external
+ * lifecycle wait, not a generic !complete inference. Local create/ACK work is
+ * ineligible. A last-tryjoin EBUSY remains eligible even after an exit hint:
+ * the final thread return and successful join still have to occur. Timeout is
+ * 0 or 1 ms; notification/timeout never consumes an ACK or joins a thread. */
+enum fwlab_nfc_api_result fwlab_nfc_channel_workers_lifecycle_wait(
+    struct fwlab_nfc_channel_workers *, uint32_t timeout_ms,
+    bool *eligible, bool *notified);
+
 /* Linux composition helper, never an FTL callback. Only the hub's explicit
  * all-posted external-wait state may block. Drains the doorbell then rechecks
  * hub eligibility and acquire-visible replies before bounded polling (<=1s).
@@ -52,7 +79,9 @@ enum fwlab_nfc_api_result fwlab_nfc_channel_workers_wait(
 /* Cumulative worker CPU from startup handshake; capture phase deltas while
  * live. Final CPU and affinity remain available after join. Coordinator CPU
  * is intentionally not included. Counts include only synchronized job replies;
- * affinity is the actual readback mask for Linux CPU indices0..1023. */
+ * affinity is the actual readback mask for Linux CPU indices0..1023. Before a
+ * worker's synchronized startup ACK, only created/joined/placement fields are
+ * returned for it; its thread ID, CPU and affinity remain zero. */
 enum fwlab_nfc_api_result fwlab_nfc_channel_workers_snapshot(
     struct fwlab_nfc_channel_workers *, struct fwlab_nfc_channel_workers_stats *);
 
