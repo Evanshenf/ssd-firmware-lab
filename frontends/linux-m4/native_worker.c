@@ -655,6 +655,9 @@ int main(int argc, char **argv)
 #if FWLAB_NATIVE_SCALED
     uint32_t logical_mib = NATIVE_SCALED_DEFAULT_MIB;
 #endif
+#if FWLAB_NATIVE_MQ2
+    enum native_nand_profile nand_profile = NATIVE_NAND_R0;
+#endif
 
     memset(&media_owner, 0, sizeof(media_owner));
     media->directory_fd = -1;
@@ -675,8 +678,18 @@ int main(int argc, char **argv)
             else goto usage;
         }
 #endif
+#if FWLAB_NATIVE_MQ2
+        else if (!strcmp(argv[index], "--nand-profile")) {
+            if (strcmp(argv[++index], "channel-lab4k")) goto usage;
+            nand_profile = NATIVE_NAND_CHANNEL_LAB4K;
+        }
+#endif
         else goto usage;
     }
+#if FWLAB_NATIVE_MQ2
+    if (nand_profile == NATIVE_NAND_CHANNEL_LAB4K && logical_mib != 64)
+        goto usage;
+#endif
     if (!device || strncmp(device, "/dev/fwlab-native-", 18) || !directory ||
         !hex_bytes(uuid, media_uuid, sizeof(media_uuid)) ||
         !hex_bytes(digest, binding, sizeof(binding)))
@@ -689,8 +702,17 @@ int main(int argc, char **argv)
     if (context->descriptor < 0 || fstat(context->descriptor, &st) || !S_ISCHR(st.st_mode))
         goto done;
 #if FWLAB_NATIVE_SCALED
+#if FWLAB_NATIVE_MQ2
+    if (!native_scaled_media_open_profile(&media_owner, context, directory,
+            media_uuid, format, logical_mib, nand_profile))
+#else
     if (!native_scaled_media_open(&media_owner, context, directory, media_uuid, format, logical_mib))
+#endif
         goto done;
+#if FWLAB_NATIVE_MQ2
+    if (nand_profile == NATIVE_NAND_CHANNEL_LAB4K)
+        puts("NATIVE_STORAGE_PROFILE|profile=channel-lab4k|namespace_mib=64|ftl_format=3|physical_format=2|channels=4|luns_per_channel=1|planes_per_lun=2|execution=cooperative|backend=strict_posix|timing=synthetic_unpaced|not_vendor_or_throughput_claim=1");
+#endif
 #if FWLAB_NATIVE_LARGE
     if (native_attach_profile(context, FWLAB_NATIVE_MQ2
             ? FWLAB_M4_HOST_PROFILE_LARGE_MQ2_SERIAL : FWLAB_M4_HOST_PROFILE_LARGE_SERIAL,
@@ -773,6 +795,9 @@ usage:
                     "--uuid 32hex --binding-sha 64hex [--format] [--owner-dir DIR]"
 #if FWLAB_NATIVE_SCALED
                     " [--namespace-mib 64|256|65536]"
+#endif
+#if FWLAB_NATIVE_MQ2
+                    " [--nand-profile channel-lab4k (64 MiB only)]"
 #endif
                     "\n", argv[0]);
     return 2;

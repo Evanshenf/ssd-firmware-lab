@@ -53,6 +53,7 @@ SCALED_SOURCES := \
 	../../media/file-nand-v2/physical_nand_codec.c \
 	../../media/file-nand-v2/physical_nand_posix.c \
 	../../media/file-nand-v2/physical_nand_batch.c \
+	../../media/file-nand-v2/channel_volume.c \
 	../headless-scale/scale_storage.c
 SCALED_RUNTIME_SOURCES := tests/test_scaled_runtime.c native_scaled_media.c \
 	native_attach.c native_pump.c native_host.c native_owner.c native_owner_socket.c \
