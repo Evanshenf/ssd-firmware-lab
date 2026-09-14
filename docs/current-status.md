@@ -84,8 +84,12 @@ write waves, close/failure recovery and bounded low-free GC progress.
 [C's optional execution transport](adr/0022-channel-worker-execution.md) runs
 the same actors on one/four OS data workers, with
 [actual Block/J0 and byte-equivalence results](results/2026-09-14-channel-workers.md).
-Independent-plane READ remains D, not an implemented capability; C does not
-select native threads or demonstrate a throughput gain.
+[D's explicit independent-plane READ](adr/0023-independent-plane-read.md) now
+has [real lower/J0 evidence](results/2026-09-14-independent-plane-read.md):
+different-plane arrays overlap while the bus and same-plane accesses serialize.
+Its existing format2 FTL consumer enters read-only after preparation; B3 still
+uses serial READ. Neither C/D selects native threads/IPR or establishes vendor
+timing, full mutable parallel read/write, NUMA locality or a throughput gain.
 
 | Environment | What has evidence | What is not established |
 |---|---|---|

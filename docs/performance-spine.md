@@ -27,6 +27,12 @@ ordinary-POSIX subphase does not demonstrate a wall-time speedup and is not
 comparable to the earlier optimized mapped ARM measurements. Worker placement
 does not change NAND timing or create a throughput multiplier.
 
+[D's explicit independent-plane READ](results/2026-09-14-independent-plane-read.md)
+demonstrates a different kind of improvement: paired two-plane model time drops
+from30,448ns to19,448ns, with the same shared bus and real data. Same-plane time
+is unchanged. This is an unpaced resource-model result, not faster software
+execution or native throughput. The FTL consumer is readonly after preparation.
+
 ## Objective and measurement boundary
 
 The objective is at least 10 decimal GB/s for large sequential reads and writes,

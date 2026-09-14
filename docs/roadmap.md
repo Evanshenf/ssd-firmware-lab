@@ -107,7 +107,9 @@ B multi-head format-3 DATA waves and ordered MAP/recovery; C the same logical
 resources on one/four actual data workers; D actual independent-plane READ.
 [A](results/2026-09-14-channel-domains.md),
 [B](results/2026-09-14-multihead-write-waves.md) and
-[C](results/2026-09-14-channel-workers.md) now have bounded implementation
-evidence. C's exact-source disposition is recorded with its result; next is
-D's independent-plane READ contract, not repeated expansion of A/B/C tests.
+[C](results/2026-09-14-channel-workers.md) and
+[D](results/2026-09-14-independent-plane-read.md) now have bounded implementation
+evidence; each result records its exact-source disposition. A later combined
+mutable format3 READ/write construction, native selection or vendor geometry
+needs a separate finite design, not repeated expansion of A–D tests.
 Threads/NUMA do not define NAND topology or guarantee a throughput multiplier.

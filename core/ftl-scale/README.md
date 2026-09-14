@@ -260,8 +260,8 @@ These are fresh small tmpfs fixtures, not the old large-capacity campaign or
 a native mode switch. The second starts at the existing Block/buffer boundary;
 it does not enlarge the legal NVMe-profile transfer size. The FTL constructor
 itself does not own threads. [C's optional Linux executor](../../docs/adr/0022-channel-worker-execution.md)
-now runs the same lower actors on one/four workers; independent-plane READ is
-still deferred. The FTL, LAB engine and media semantics are unchanged by C.
+now runs the same lower actors on one/four workers. The FTL, LAB engine and
+media semantics are unchanged by C; D's later policy is selected separately.
 
 ```sh
 make -C frontends/headless-scale -f ftl.mk check-channel-workers
@@ -272,6 +272,24 @@ Run these small fixtures serially as UID1000 in the prepared capped tmpfs.
 The first requires four allowed CPUs. See the
 [exact scope and CPU accounting](../../docs/results/2026-09-14-channel-workers.md);
 no native selection, NUMA placement or throughput gain follows automatically.
+
+### Explicit independent-plane READ
+
+[D](../../docs/adr/0023-independent-plane-read.md) adds a NAND resource policy,
+not an FTL algorithm. The new `scale_storage_parallel_channel_lab_factory_init`
+uses the existing format2 read pool; ordinary writes prepare the image, then
+`scale_storage_begin_parallel_read` drains lower control one step per retry and
+enters readonly mode. B3's write-pool construction still has serial READ.
+
+```sh
+make -C media/file-nand-v2 check-nfc-plane
+make -C frontends/headless-scale -f ftl.mk check-plane-read-j0
+```
+
+The [real paired result](../../docs/results/2026-09-14-independent-plane-read.md)
+uses ordinary allocation for two-plane mappings, unchanged physical media and
+same-format recovery. Model-time overlap is not Host bandwidth; old constructors
+and the native binding remain LUN-exclusive/R0 as previously selected.
 
 ### Earlier constructions
 

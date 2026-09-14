@@ -47,6 +47,7 @@ These are constructor selections, not automatic fallback chains:
 | Explicit cooperative channel LAB | Same profile/lifecycle/Block and serial format-2 FTL | WAVE4 PAGE2 hub, independently owned timed NFC and physical-v2 shard per channel; [ADR-0020](adr/0020-cooperative-nand-channel-domains.md) |
 | Explicit multi-head format3 LAB | Same profile/lifecycle/Block, physical head domains and ordered DATA-wave/MAP FTL | Same cooperative hub and real v2 channel shards; no OS threads/native selection; [ADR-0021](adr/0021-multihead-ftl-write-waves.md) |
 | Explicit channel-worker LAB | Same format3 FTL and portable actors, optional construction-time executor | Cooperative/one/four Linux data workers over the same timed NAND and real shards; actual join before release, no native selection; [ADR-0022](adr/0022-channel-worker-execution.md) |
+| Explicit independent-plane READ LAB | Same protocol/lifecycle and existing format2 parallel-read pool; readonly after normal preparation | Policy-selected channel actors: READ plane registers, whole-LUN mutations, same bus/media; [ADR-0023](adr/0023-independent-plane-read.md) |
 
 `j0_construction.c` binds a ready volume and its actual Block service;
 `scale_storage.c` constructs the selected FTL/NFC pair. Both reside below
@@ -70,6 +71,9 @@ capabilities remain distinct from NAND address geometry.
 The optional Linux executor transports PREP/RUN/RETIRE/CLOSE jobs, not FTL
 commands. Its threads share no actor/media engine concurrently; only the
 coordinator publishes JOIN results and retains the global token registry.
+IPR is an explicit resource policy in that same NAND event engine, not another
+thread hierarchy. Existing constructors remain LUN-exclusive. Its readonly
+FTL consumer is not a silent extension of B3 or the native R0 binding.
 
 Physical versions v0/v1 retain their own redo-based engines. Physical v2 orders
 INTENT, physical homes and terminal COMMIT; interrupted reservations recover
