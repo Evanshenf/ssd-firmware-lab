@@ -153,14 +153,23 @@ selected-profile records and owner sockets elsewhere. First format requires
 an empty private directory. Retain the global UUID; recovery reads child
 UUIDs and geometry from the manifest and never regenerates them.
 
-The source option does not enable OS workers or mapped shards. Its synthetic
+The source option alone does not enable OS workers or mapped shards. Its synthetic
 timing is unpaced, not a throughput limit, and prior R0 cost measurements do
 not apply. Include the NAND-profile choice and namespace in any later
 operator binding manifest along with exact ELF hashes; do not reuse an R0
 run's identity or treat the M4 media-family number as FTL format3. Online
 qualification has its own [bounded x86-64 result](results/2026-09-14-native-channel-l1.md).
-ARM/M5, per-runtime worker reconstruction and performance remain separate
-tasks; this section does not authorize changing an existing media directory.
+The additional `--nand-workers 1` or `--nand-workers 4` option now selects fresh
+workers for each runtime through [ADR-0026](adr/0026-native-worker-lifetime.md).
+For its existing offline fixture, append that option to the command above.
+It is valid only with channel-lab4k/64MiB and **cannot be combined with
+`--owner-dir`**. Do not reuse the earlier owner-transfer example for this
+L1-only mode. Startup/recovery/drain use short control-service waits and an
+operational60-second deadline; failure does not permit autoformat or release.
+The [software result](results/2026-09-14-native-worker-lifetime.md) does not
+qualify actual threaded kernel operation. That native journey, ARM/M5 and
+performance remain separate tasks; this section does not authorize changing
+an existing media directory.
 
 The [development results](results/2026-09-10-scaled-storage-mq2.md) identify the
 executed native and ownership cases. Later

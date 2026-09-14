@@ -48,6 +48,13 @@ It measured no throughput or RSS benchmark; its 1 MiB workloads were split
 into eight 128 KiB wire commands. No older R0 rate is relabeled as channel
 performance, and OS-worker/NUMA measurements remain a separate task.
 
+The later [native worker lifetime checks](results/2026-09-14-native-worker-lifetime.md)
+connect actual1/4Linux workers to the same native constructor/loop with fake
+Host ioctls. They preserve the same channel/LUN/plane geometry and media, with
+no NUMA placement or timing throttle. Whole-fixture times include deliberate
+startup/return holds and recovery; they do not establish a throughput gain
+or extend any prior native R0 rate to this threaded construction.
+
 ## Objective and measurement boundary
 
 The objective is at least 10 decimal GB/s for large sequential reads and writes,

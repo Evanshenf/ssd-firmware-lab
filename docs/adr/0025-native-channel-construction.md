@@ -42,6 +42,10 @@ operator-supplied binding manifest. An old R0 run is not this option's proof.
 
 ## Why cooperative first
 
+This first construction is retained as the control. The later optional worker
+lifetime refinement is [ADR-0026](0026-native-worker-lifetime.md); it does not
+broaden the original cooperative evidence or change the media format.
+
 This binding passes a NULL external executor. Existing cooperative jobs feed
 the MQ2 progress report without a main-loop change. A Linux executor is
 permanently stopped by close: reusing its pointer after reset would be wrong.

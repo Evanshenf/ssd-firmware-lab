@@ -49,7 +49,8 @@ These are constructor selections, not automatic fallback chains:
 | Explicit channel-worker LAB | Same format3 FTL and portable actors, optional construction-time executor | Cooperative/one/four Linux data workers over the same timed NAND and real shards; actual join before release, no native selection; [ADR-0022](adr/0022-channel-worker-execution.md) |
 | Explicit independent-plane READ LAB | Same protocol/lifecycle and existing format2 parallel-read pool; readonly after normal preparation | Policy-selected channel actors: READ plane registers, whole-LUN mutations, same bus/media; [ADR-0023](adr/0023-independent-plane-read.md) |
 | Explicit mutable READ/WRITE LAB | Same protocol/lifecycle, one writable format3 instance with disjoint existing pools and one Host parent | Same IPR actors/physical shards, cooperative or selected worker; existing multihead factory with PARALLEL option; [ADR-0024](adr/0024-mutable-format3-read-write.md) |
-| MQ2 opt-in channel LAB | Same actual native constructor/loop and mutable format3 factory, no protocol/lifecycle or main-loop rewrite | Process-lived strict POSIX channel volume and cooperative IPR actors; [bounded actual native x86-64 L1](results/2026-09-14-native-channel-l1.md), not new M5/thread/ARM-native evidence; [ADR-0025](adr/0025-native-channel-construction.md) |
+| MQ2 opt-in channel LAB | Same actual native constructor/loop and mutable format3 factory, no protocol/lifecycle rewrite | Process-lived strict POSIX channel volume and cooperative IPR actors; [bounded actual native x86-64 L1](results/2026-09-14-native-channel-l1.md), not new M5/thread/ARM-native evidence; [ADR-0025](adr/0025-native-channel-construction.md) |
+| Same MQ2 channel option with `--nand-workers 1\|4` | Same semantic implementations; native-private prepare/release/wait composition | Fresh per-runtime workers, actual joins before zero/replacement, same process-lived media; [offline native-loop evidence](results/2026-09-14-native-worker-lifetime.md), not real threaded native/M5/NUMA or throughput proof; [ADR-0026](adr/0026-native-worker-lifetime.md) |
 
 `j0_construction.c` binds a ready volume and its actual Block service;
 `scale_storage.c` constructs the selected FTL/NFC pair. Both reside below
@@ -81,8 +82,12 @@ NAND/job/worker semantics. Parent ownership and active-pool maintenance exclusio
 protect read snapshots; `parallel_reads` is distinct from readonly permission.
 The MQ2 channel opt-in reuses this construction. Its physical assembly and
 factory survive reset/NO_OWNER while drained volatile runtimes are rebuilt.
-It uses cooperative jobs; a future Linux executor must be recreated after
-its actual shutdown/join, not reused as a process-lived worker pointer.
+It defaults to cooperative jobs. The explicit Linux-worker option reconstructs
+its executor after actual shutdown/join, not by reusing a process-lived worker
+pointer. Native retains a separate resource association across NULL-J0 startup
+failure and never calls J0/hub again after fini. Only a never-stepped runner can
+return worker cleanup responsibility to that native owner; normal stepped
+shutdown is unchanged. This later software integration has its own evidence.
 
 Physical versions v0/v1 retain their own redo-based engines. Physical v2 orders
 INTENT, physical homes and terminal COMMIT; interrupted reservations recover
