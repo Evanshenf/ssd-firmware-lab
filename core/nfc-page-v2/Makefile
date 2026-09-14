@@ -16,8 +16,10 @@ BUILD_CONFIG_VALUES = $(call config_quote,CC=$(CC)) \
 	$(call config_quote,LDLIBS=$(LDLIBS))
 PROGRAM := $(BUILD_DIR)/test_nfc_page_v2
 LAB_PROGRAM := $(BUILD_DIR)/test_nfc_page_v2_lab
+MUTATION_PROGRAM := $(BUILD_DIR)/test_nfc_page_v2_mutation
 SOURCES := nfc_page_v2.c tests/test_nfc_page_v2.c
 LAB_SOURCES := nfc_page_v2.c nfc_page_v2_lab.c tests/test_nfc_page_v2_lab.c
+MUTATION_SOURCES := nfc_page_v2.c nfc_page_v2_lab.c tests/test_nfc_page_v2_mutation.c
 HEADERS := nfc_page_v2_internal.h ../../include/fwlab/contracts/nfc_page_v2_types.h \
     ../../include/fwlab/contracts/nfc_page_v2_provider.h \
     ../../include/fwlab/private/nfc_page_v2_model.h \
@@ -25,7 +27,7 @@ HEADERS := nfc_page_v2_internal.h ../../include/fwlab/contracts/nfc_page_v2_type
     ../../include/fwlab/contracts/nand_media.h \
     ../../include/fwlab/portable/nfc_types.h
 .PHONY: all check FORCE_BUILD_CONFIG
-all: $(PROGRAM) $(LAB_PROGRAM)
+all: $(PROGRAM) $(LAB_PROGRAM) $(MUTATION_PROGRAM)
 FORCE_BUILD_CONFIG:
 $(BUILD_CONFIG): FORCE_BUILD_CONFIG
 	@mkdir -p "$(BUILD_DIR)"
@@ -37,6 +39,13 @@ $(PROGRAM): $(SOURCES) $(HEADERS) Makefile $(BUILD_CONFIG)
 $(LAB_PROGRAM): $(LAB_SOURCES) $(HEADERS) ../../include/fwlab/private/nfc_page_v2_lab.h Makefile $(BUILD_CONFIG)
 	mkdir -p "$(BUILD_DIR)"
 	$(CC) -I../../include $(CPPFLAGS) $(CFLAGS) $(LAB_SOURCES) $(LDFLAGS) $(LDLIBS) -o "$@"
-check: $(PROGRAM) $(LAB_PROGRAM)
+$(MUTATION_PROGRAM): $(MUTATION_SOURCES) tests/test_nfc_page_v2_lab.c $(HEADERS) ../../include/fwlab/private/nfc_page_v2_lab.h Makefile $(BUILD_CONFIG)
+	mkdir -p "$(BUILD_DIR)"
+	$(CC) -I../../include $(CPPFLAGS) $(CFLAGS) $(MUTATION_SOURCES) $(LDFLAGS) $(LDLIBS) -o "$@"
+.PHONY: check-mutation
+check-mutation: $(MUTATION_PROGRAM)
+	"$(MUTATION_PROGRAM)"
+check: $(PROGRAM) $(LAB_PROGRAM) $(MUTATION_PROGRAM)
 	"$(PROGRAM)"
 	"$(LAB_PROGRAM)"
+	"$(MUTATION_PROGRAM)"

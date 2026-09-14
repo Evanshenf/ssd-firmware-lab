@@ -113,4 +113,63 @@ static inline void page2_read_fact(struct fwlab_nfc_page_v2_page_result *out,
     }
 }
 
+static inline uint8_t page2_mutation_reason(uint16_t kind, uint16_t first_page,
+    const struct fwlab_nand_block_info *b, const struct fwlab_nand_page_info *p)
+{
+    if (b->health != FWLAB_NFC_BLOCK_GOOD) return FWLAB_NFC_REASON_BAD_BLOCK;
+    if (kind == FWLAB_NFC_PAGE_V2_PROGRAM_GROUP &&
+        (b->erase_state != FWLAB_NAND_ERASE_CLEAN || p->state != FWLAB_NAND_PAGE_ERASED ||
+         p->program_count || first_page != b->next_program_page))
+        return first_page != b->next_program_page ? FWLAB_NFC_REASON_PROGRAM_ORDER : FWLAB_NFC_REASON_NOT_ERASED;
+    return FWLAB_NFC_REASON_NONE;
+}
+static inline bool page2_effect_valid(const struct fwlab_nand_media_result *r)
+{
+    return r->version == FWLAB_NFC_CONTRACT_VERSION && r->size == sizeof(*r) &&
+        page2_zero(r->reserved0, sizeof(r->reserved0)) && !r->reserved1 &&
+        r->physical_outcome <= FWLAB_NFC_PHYS_APPLIED && r->integrity <= FWLAB_NFC_INTEGRITY_TORN &&
+        r->block_health <= FWLAB_NFC_BLOCK_RUNTIME_BAD && r->reason <= FWLAB_NFC_REASON_INTERNAL &&
+        !(r->applied_region_mask & (uint8_t)~FWLAB_NFC_REGION_MASK) &&
+        (r->physical_outcome != FWLAB_NFC_PHYS_NO_EFFECT ||
+         (!r->applied_main_bytes && !r->applied_oob_bytes && !r->applied_pages &&
+          !r->applied_region_mask && r->integrity == FWLAB_NFC_INTEGRITY_NOT_APPLICABLE &&
+          r->base_erase_generation == r->final_erase_generation));
+}
+static inline bool page2_effect_matches(const struct fwlab_nfc_geometry *g,
+    const struct fwlab_nand_media_result *p, uint16_t generation, bool erase)
+{
+    return page2_effect_valid(p) && p->base_erase_generation == generation &&
+        (erase ? p->applied_pages <= g->pages_per_block :
+         p->final_erase_generation == generation &&
+         p->applied_main_bytes <= FWLAB_NFC_PAGE_V2_MAIN_BYTES &&
+         p->applied_oob_bytes <= FWLAB_NFC_PAGE_V2_OOB_BYTES);
+}
+static inline bool page2_effect_complete(const struct fwlab_nfc_geometry *g,
+    const struct fwlab_nand_media_result *p, bool erase)
+{
+    return p->physical_outcome == FWLAB_NFC_PHYS_APPLIED &&
+        p->integrity == FWLAB_NFC_INTEGRITY_COMPLETE &&
+        p->block_health == FWLAB_NFC_BLOCK_GOOD && p->reason == FWLAB_NFC_REASON_NONE &&
+        (erase ? p->applied_pages == g->pages_per_block &&
+                 p->final_erase_generation > p->base_erase_generation :
+         p->applied_main_bytes == FWLAB_NFC_PAGE_V2_MAIN_BYTES &&
+         p->applied_oob_bytes == FWLAB_NFC_PAGE_V2_OOB_BYTES &&
+         p->applied_region_mask == FWLAB_NFC_REGION_MASK);
+}
+static inline void page2_copy_effect(struct fwlab_nfc_page_v2_page_result *p,
+    const struct fwlab_nand_media_result *r, bool complete)
+{
+    memset(p, 0, sizeof(*p));
+    p->facts_valid = FWLAB_NFC_PAGE_V2_FACT_GENERATION | FWLAB_NFC_PAGE_V2_FACT_HEALTH |
+                     FWLAB_NFC_PAGE_V2_FACT_EFFECT;
+    p->base_erase_generation = r->base_erase_generation;
+    p->final_erase_generation = r->final_erase_generation;
+    p->block_health = r->block_health; p->integrity = r->integrity;
+    p->applied_region_mask = r->applied_region_mask;
+    p->applied_main_bytes = r->applied_main_bytes; p->applied_oob_bytes = r->applied_oob_bytes;
+    p->applied_pages = r->applied_pages; p->reason = r->reason;
+    p->effect = r->physical_outcome == FWLAB_NFC_PHYS_NO_EFFECT ? FWLAB_NFC_PAGE_V2_EFFECT_NONE :
+        complete ? FWLAB_NFC_PAGE_V2_EFFECT_APPLIED_COMPLETE : FWLAB_NFC_PAGE_V2_EFFECT_NONCOMPLETE;
+}
+
 #endif
