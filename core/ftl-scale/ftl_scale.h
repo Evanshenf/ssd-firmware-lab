@@ -109,6 +109,17 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init_multihead_v3(
     const struct fwlab_ftl_scale_extended_config *config,
     const struct fwlab_controller_buffer_port_v0 *controller_buffer,
     const struct fwlab_nfc_page_v2_provider *nfc, struct fwlab_ftl_scale **ftl);
+/* Explicit mutable format3 construction with both existing bounded schedules:
+ * parallel READ runs and multi-head WRITE waves, still one Host parent. The
+ * pools have disjoint constructor-owned storage and one shared NFC UID issuer.
+ * No readonly transition, format conversion or NAND/worker policy is selected. */
+size_t fwlab_ftl_scale_read_write_v3_arena_size(
+    const struct fwlab_ftl_scale_extended_config *config);
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_read_write_v3(
+    void *arena, size_t arena_size,
+    const struct fwlab_ftl_scale_extended_config *config,
+    const struct fwlab_controller_buffer_port_v0 *controller_buffer,
+    const struct fwlab_nfc_page_v2_provider *nfc, struct fwlab_ftl_scale **ftl);
 enum fwlab_spine_result_v0 fwlab_ftl_scale_can_enter_read_only(
     const struct fwlab_ftl_scale *ftl);
 enum fwlab_spine_result_v0 fwlab_ftl_scale_enter_read_only(

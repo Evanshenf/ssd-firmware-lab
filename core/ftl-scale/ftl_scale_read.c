@@ -42,7 +42,9 @@ static void stop(struct fwlab_ftl_scale *f, uint32_t fault)
 enum fwlab_spine_result_v0 sf_read_parent_prepare(struct fwlab_ftl_scale *f,
                                                 const struct sf_parent *p)
 {
-    if (!f->reads || !f->read_only || sf_read_pool_busy(f) || !sf_io_idle(f) ||
+    /* The sole parent and active-pool maintenance exclusion keep these map
+     * snapshots immutable even when later Host requests may write. */
+    if (!f->reads || !f->parallel_reads || sf_read_pool_busy(f) || !sf_io_idle(f) ||
         p->request.operation != FWLAB_BLOCK_V0_READ) return FWLAB_SPINE_V0_WRONG_STATE;
     f->reads->issued_lbas = f->reads->fault = 0;
     f->reads->stopping = 0; f->reads->active = 1;

@@ -233,6 +233,8 @@ struct fwlab_ftl_scale {
     struct sf_parent parent;
     struct sf_window window;
     struct sf_read_pool *reads;
+    /* Volatile scheduling capability, independent of Host write permission. */
+    uint8_t parallel_reads;
     uint8_t read_only;
 };
 

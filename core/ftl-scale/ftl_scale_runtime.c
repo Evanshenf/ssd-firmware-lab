@@ -87,6 +87,30 @@ size_t fwlab_ftl_scale_multihead_v3_arena_size(const struct fwlab_ftl_scale_exte
     return base && extra && base <= SIZE_MAX - extra ? base + extra : 0;
 }
 
+static size_t read_write_v3_layout(const struct fwlab_ftl_scale_extended_config *c,
+                                   size_t *write_offset, size_t *read_offset)
+{
+    const size_t alignment = alignof(max_align_t);
+    size_t base = fwlab_ftl_scale_window_v2_arena_size(c);
+    size_t writes = sf_write_pool_bytes(), reads, total;
+    _Static_assert(alignof(struct sf_read_pool) <= alignof(max_align_t),
+                   "read pool fits the common arena alignment");
+    if (!base || !writes || base > SIZE_MAX - writes) return 0;
+    reads = base + writes;
+    if (reads > SIZE_MAX - (alignment - 1u)) return 0;
+    reads = (reads + alignment - 1u) & ~(alignment - 1u);
+    if (reads > SIZE_MAX - sizeof(struct sf_read_pool)) return 0;
+    total = reads + sizeof(struct sf_read_pool);
+    if (total > SIZE_MAX - (alignment - 1u)) return 0;
+    total = (total + alignment - 1u) & ~(alignment - 1u);
+    if (write_offset) *write_offset = base;
+    if (read_offset) *read_offset = reads;
+    return total;
+}
+
+size_t fwlab_ftl_scale_read_write_v3_arena_size(const struct fwlab_ftl_scale_extended_config *c)
+{ return read_write_v3_layout(c, NULL, NULL); }
+
 static void submit_result(struct fwlab_block_submit_result_v0 *out,
                           const struct fwlab_block_request_v0 *r,
                           uint32_t disposition, uint32_t fault)
@@ -415,6 +439,32 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_init_multihead_v3(void *arena, size_t
     return FWLAB_SPINE_V0_OK;
 }
 
+enum fwlab_spine_result_v0 fwlab_ftl_scale_init_read_write_v3(void *arena, size_t size,
+    const struct fwlab_ftl_scale_extended_config *c,
+    const struct fwlab_controller_buffer_port_v0 *buffer,
+    const struct fwlab_nfc_page_v2_provider *nfc, struct fwlab_ftl_scale **out)
+{
+    size_t write_offset, read_offset;
+    size_t total = read_write_v3_layout(c, &write_offset, &read_offset);
+    struct fwlab_ftl_scale *f;
+    enum fwlab_spine_result_v0 result;
+    if (out) *out = NULL;
+    if (!total || size < total || !out) return FWLAB_SPINE_V0_INVALID;
+    /* Initialize the common state once. The two old pool constructors both
+     * start at the window tail and therefore cannot be composed in sequence. */
+    result = fwlab_ftl_scale_init_window_v2(arena, write_offset, c, buffer, nfc, &f);
+    if (result != FWLAB_SPINE_V0_OK) return result;
+    f->disk_format = SF_MULTIHEAD_FORMAT_VERSION;
+    if (!sf_heads_init(f) || !sf_write_pool_init(f, (uint8_t *)arena + write_offset, sf_write_pool_bytes()))
+        return FWLAB_SPINE_V0_INVALID;
+    f->reads = (struct sf_read_pool *)((uint8_t *)arena + read_offset);
+    memset(f->reads, 0, sizeof(*f->reads));
+    f->parallel_reads = 1;
+    f->arena_bytes = total;
+    *out = f;
+    return FWLAB_SPINE_V0_OK;
+}
+
 enum fwlab_spine_result_v0 fwlab_ftl_scale_can_enter_read_only(const struct fwlab_ftl_scale *f)
 {
     if (!live(f) || !f->reads) return FWLAB_SPINE_V0_INVALID;
@@ -425,7 +475,10 @@ enum fwlab_spine_result_v0 fwlab_ftl_scale_can_enter_read_only(const struct fwla
 enum fwlab_spine_result_v0 fwlab_ftl_scale_enter_read_only(struct fwlab_ftl_scale *f)
 {
     enum fwlab_spine_result_v0 result = fwlab_ftl_scale_can_enter_read_only(f);
-    if (result == FWLAB_SPINE_V0_OK) f->read_only = 1;
+    if (result == FWLAB_SPINE_V0_OK) {
+        f->parallel_reads = 1;
+        f->read_only = 1;
+    }
     return result;
 }
 
