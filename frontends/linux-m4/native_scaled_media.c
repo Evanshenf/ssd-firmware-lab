@@ -140,24 +140,6 @@ failed:
     return 0;
 }
 
-static struct fwlab_nfc_geometry channel_geometry(void)
-{
-    struct fwlab_nfc_geometry geometry = {0};
-    geometry.version = FWLAB_NFC_CONTRACT_VERSION;
-    geometry.size = (uint16_t)sizeof(geometry);
-    geometry.channels = 4;
-    geometry.luns_per_channel = 1;
-    geometry.planes_per_lun = 2;
-    geometry.blocks_per_plane = 40;
-    geometry.pages_per_block = 64;
-    geometry.plane_parallelism_per_lun = 2;
-    geometry.main_bytes_per_page = 4096;
-    geometry.oob_bytes_per_page = 128;
-    geometry.max_programs_per_erase = 1;
-    geometry.program_order = FWLAB_NFC_PROGRAM_ASCENDING;
-    return geometry;
-}
-
 static void channel_timing(struct fwlab_nfc_page_v2_lab_mutation_config *timing)
 {
     memset(timing, 0, sizeof(*timing));
@@ -230,7 +212,8 @@ static int open_channel_lab4k(struct native_scaled_media *media,
     const uint8_t uuid[16], int format, uint32_t logical_mib)
 {
     struct fwlab_nand_channel_volume_config config = {0};
-    struct fwlab_nfc_geometry geometry = channel_geometry();
+    struct fwlab_nfc_geometry geometry;
+    uint64_t lba_count;
     struct statfs fs;
     enum fwlab_nfc_api_result result;
     size_t alignment, bytes;
@@ -238,7 +221,8 @@ static int open_channel_lab4k(struct native_scaled_media *media,
     if (!media || media->opened || !owner || owner->runtime ||
         owner->runtime_media || !directory ||
         !uuid || j0_bytes_zero(uuid, 16) || (format != 0 && format != 1) ||
-        logical_mib != 64)
+        !scale_storage_profile_capacity_mib(SCALE_STORAGE_CAPACITY_CHANNEL_LAB4K,
+                                            logical_mib, &geometry, &lba_count))
         return 0;
     memset(media, 0, sizeof(*media));
     media->native.directory_fd = -1;
@@ -291,7 +275,7 @@ static int open_channel_lab4k(struct native_scaled_media *media,
     scale_storage_multihead_lab_factory_init(&media->factory, &media->options);
     media->native.media_binding = &media->binding;
     media->native.storage_factory = &media->factory;
-    media->native.format_lba_count = UINT64_C(64) * 2048u;
+    media->native.format_lba_count = lba_count;
     media->native.expected_lba_count = media->native.format_lba_count;
     media->opened = 1;
     return 1;
@@ -460,7 +444,6 @@ int native_scaled_media_enable_workers(struct native_scaled_media *media,
 {
     if (!media || !media->opened || !media->owner ||
         media->profile != NATIVE_NAND_CHANNEL_LAB4K || !media->volume ||
-        media->native.expected_lba_count != UINT64_C(64) * 2048u ||
         (workers != 1 && workers != 4) || media->owner->runtime ||
         media->owner->runtime_media ||
         media->workers || media->native.runtime_ops)

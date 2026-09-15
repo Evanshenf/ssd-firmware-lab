@@ -840,12 +840,9 @@ int main(int argc, char **argv)
         else goto usage;
     }
 #if FWLAB_NATIVE_MQ2
-    if (nand_profile == NATIVE_NAND_CHANNEL_LAB4K && logical_mib != 64)
-        goto usage;
     /* This slice services kernel control, not asynchronous owner socket grants.
      * Reject unsupported composition BEFORE open(device) or media side effects. */
-    if (nand_workers && (nand_profile != NATIVE_NAND_CHANNEL_LAB4K ||
-                         logical_mib != 64 || owner_directory))
+    if (nand_workers && (nand_profile != NATIVE_NAND_CHANNEL_LAB4K || owner_directory))
         goto usage;
 #endif
     if (!device || strncmp(device, "/dev/fwlab-native-", 18) || !directory ||
@@ -871,8 +868,8 @@ int main(int argc, char **argv)
     if (nand_workers && !native_scaled_media_enable_workers(&media_owner, nand_workers))
         goto done;
     if (nand_profile == NATIVE_NAND_CHANNEL_LAB4K)
-        printf("NATIVE_STORAGE_PROFILE|profile=channel-lab4k|namespace_mib=64|ftl_format=3|physical_format=2|channels=4|luns_per_channel=1|planes_per_lun=2|execution=%s|workers=%u|backend=strict_posix|timing=synthetic_unpaced|not_vendor_or_throughput_claim=1\n",
-               nand_workers ? "linux_threads" : "cooperative", nand_workers);
+        printf("NATIVE_STORAGE_PROFILE|profile=channel-lab4k|namespace_mib=%u|ftl_format=3|physical_format=2|channels=4|luns_per_channel=1|planes_per_lun=2|execution=%s|workers=%u|backend=strict_posix|timing=synthetic_unpaced|not_vendor_or_throughput_claim=1\n",
+               logical_mib, nand_workers ? "linux_threads" : "cooperative", nand_workers);
 #endif
 #if FWLAB_NATIVE_LARGE
     if (native_attach_profile(context, FWLAB_NATIVE_MQ2
@@ -959,7 +956,7 @@ usage:
                     " [--namespace-mib 64|256|65536]"
 #endif
 #if FWLAB_NATIVE_MQ2
-                    " [--nand-profile channel-lab4k (64 MiB only)]"
+                    " [--nand-profile channel-lab4k]"
                     " [--nand-workers 1|4 (channel-lab4k, L1 only, no --owner-dir)]"
 #endif
                     "\n", argv[0]);

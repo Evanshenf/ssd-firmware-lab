@@ -50,8 +50,8 @@ int native_scaled_media_open(struct native_scaled_media *media,
     struct native_context *owner, const char *directory,
     const uint8_t uuid[16], int format, uint32_t logical_mib);
 /* Explicit construction only. R0 is the unchanged default above. CHANNEL_LAB4K
- * selects only the 64-MiB, four-channel strict POSIX assembly and mutable
- * format3/IPR cooperative runtime. No threads, mmap or format conversion.
+ * selects the 64/256/65536-MiB, four-channel strict POSIX assembly and mutable
+ * format3/IPR cooperative runtime. No implicit threads, mmap or format conversion.
  * Fresh format needs an empty private directory; recovery uses its manifest
  * identities and checks the selected geometry before any runtime is created. */
 int native_scaled_media_open_profile(struct native_scaled_media *media,
@@ -59,7 +59,7 @@ int native_scaled_media_open_profile(struct native_scaled_media *media,
     const uint8_t uuid[16], int format, uint32_t logical_mib,
     enum native_nand_profile profile);
 /* Opt in while no runtime/association is active. No thread starts here. Only
- * opened channel LAB4K/64-MiB media accepts 1 or 4 workers; configuration cannot
+ * opened channel LAB4K media accepts 1 or 4 workers; configuration cannot
  * be replaced.
  * Every runtime prepare gets fresh workers, without changing media or timing. */
 int native_scaled_media_enable_workers(struct native_scaled_media *media,
