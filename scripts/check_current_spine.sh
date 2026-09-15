@@ -31,8 +31,8 @@ $(stat -f -c '%T %S %b %a' -- "$FWLAB_TEST_MEDIA_DIR")
 EOF
 if [ "$spine_type" != tmpfs ] ||
    [ "$((spine_block_bytes * spine_total_blocks))" -gt 1073741824 ] ||
-   [ "$((spine_block_bytes * spine_free_blocks))" -lt 268435456 ]; then
-  echo 'CURRENT_SPINE_PREFLIGHT_ERROR|tmpfs_cap_1GiB_and_free_256MiB_required|no_disk_fallback=1' >&2
+   [ "$((spine_block_bytes * spine_free_blocks))" -lt 536870912 ]; then
+  echo 'CURRENT_SPINE_PREFLIGHT_ERROR|tmpfs_cap_1GiB_and_free_512MiB_required|no_disk_fallback=1' >&2
   exit 1
 fi
 stage() {
@@ -82,6 +82,14 @@ make -j1 -B -C frontends/headless-scale -f ftl.mk CC="$spine_cc" \
 # over real FTL/PAGE2/physical-v2 storage with a fake ioctl Host. This does NOT
 # load the kernel transport or establish native IRQ/M5/multi-queue concurrency.
 stage serial-credit-MQ2-userspace
+spine_scaled_build=build/scaled-offline
 make -j1 -B -C frontends/linux-m4 CC="$spine_cc" \
+  SCALED_BUILD="$spine_scaled_build" \
   mq2-worker profile-check attach-check check-progress-runtime
+stage channel-capacity-userspace
+"frontends/linux-m4/$spine_scaled_build/native_progress_offline" --capacity-plan
+"frontends/linux-m4/$spine_scaled_build/native_progress_offline" \
+  --nand-profile channel-lab4k --namespace-mib 64
+"frontends/linux-m4/$spine_scaled_build/native_progress_offline" \
+  --nand-profile channel-lab4k --namespace-mib 256 --nand-workers 4
 stage complete

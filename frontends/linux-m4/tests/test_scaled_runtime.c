@@ -21,7 +21,7 @@
     exit(1); \
 } } while (0)
 #define OFFLINE_DESCRIPTOR (-179)
-#define HOST_ROWS 4u
+#define HOST_ROWS 5u
 #if FWLAB_NATIVE_LARGE
 #define TEST_IO_BYTES 1048576u
 #else
@@ -39,7 +39,7 @@
 struct host_row {
     struct fwlab_m4_native_message capture;
     uint8_t bytes[TEST_IO_BYTES]; /* fake Host memory, not a DUT payload pool */
-    uint32_t direction, length, copied, code, code_type;
+    uint32_t direction, length, copied, code, code_type, expected_code;
     uint8_t shaped, dma_done, dma_retired, authority_released, published, retired;
 };
 static struct {
@@ -57,9 +57,129 @@ static struct fwlab_m4_attachment attached_identity;
 static unsigned owner_identity_fault;
 static enum native_nand_profile test_nand_profile = NATIVE_NAND_R0;
 static uint32_t test_workers;
+static uint32_t test_logical_mib = NATIVE_SCALED_DEFAULT_MIB;
+
+struct capacity_case {
+    uint32_t logical_mib, blocks_per_plane, physical_blocks, physical_pages;
+    uint64_t lba_count, child_bytes, volume_bytes;
+};
+/* Independent expected presets, not values copied back from the constructor. */
+static const struct capacity_case capacity_cases[] = {
+    {64, 40, 320, 20480, UINT64_C(131072), UINT64_C(22303744), UINT64_C(89216000)},
+    {256, 160, 1280, 81920, UINT64_C(524288), UINT64_C(89165824), UINT64_C(356664320)},
+    {65536, 40960, 327680, 20971520, UINT64_C(134217728), UINT64_C(22822273024), UINT64_C(91289093120)}
+};
+
+static const struct capacity_case *test_capacity_case(uint32_t logical_mib)
+{
+    for (size_t index = 0; index < sizeof(capacity_cases) / sizeof(capacity_cases[0]); ++index)
+        if (capacity_cases[index].logical_mib == logical_mib)
+            return &capacity_cases[index];
+    REQUIRE(0 && "capacity must name an independent expected preset");
+    return NULL;
+}
+
+static struct fwlab_nfc_geometry test_channel_geometry(const struct capacity_case *preset)
+{
+    struct fwlab_nfc_geometry geometry = {0};
+    geometry.version = FWLAB_NFC_CONTRACT_VERSION;
+    geometry.size = (uint16_t)sizeof(geometry);
+    geometry.channels = 4;
+    geometry.luns_per_channel = 1;
+    geometry.planes_per_lun = 2;
+    geometry.blocks_per_plane = (uint16_t)preset->blocks_per_plane;
+    geometry.pages_per_block = 64;
+    geometry.plane_parallelism_per_lun = 2;
+    geometry.main_bytes_per_page = 4096;
+    geometry.oob_bytes_per_page = 128;
+    geometry.max_programs_per_erase = 1;
+    geometry.program_order = FWLAB_NFC_PROGRAM_ASCENDING;
+    return geometry;
+}
 
 #if FWLAB_NATIVE_MQ2
 #include "ftl_scale_internal.h"
+
+static void test_capacity_plan(void)
+{
+    const size_t nfc_bytes = fwlab_nfc_channel_v2_arena_size();
+    const size_t volume_bytes = fwlab_nand_channel_volume_arena_size();
+    const size_t physical_bytes = fwlab_file_nand_v2_arena_size();
+    REQUIRE(nfc_bytes && volume_bytes && physical_bytes);
+    for (size_t index = 0; index < sizeof(capacity_cases) / sizeof(capacity_cases[0]); ++index) {
+        const struct capacity_case *preset = &capacity_cases[index];
+        struct fwlab_nfc_geometry expected = test_channel_geometry(preset), geometry, r0, wrapped;
+        struct fwlab_file_nand_v2_config child = {0};
+        struct fwlab_ftl_scale_extended_config ftl = {0};
+        struct sf_layout layout;
+        uint64_t lbas = 0, r0_lbas = 0, wrapped_lbas = 0, image_bytes = 1024;
+        size_t ftl_bytes;
+
+        REQUIRE(scale_storage_profile_capacity_mib(SCALE_STORAGE_CAPACITY_CHANNEL_LAB4K,
+                    preset->logical_mib, &geometry, &lbas) && lbas == preset->lba_count &&
+                !memcmp(&geometry, &expected, sizeof(geometry)));
+        REQUIRE(sf_layout_make(&geometry, lbas, &layout) &&
+                layout.lba_count == preset->lba_count &&
+                layout.physical_blocks == preset->physical_blocks &&
+                layout.physical_pages == preset->physical_pages);
+        child.geometry = geometry;
+        child.geometry.channels = 1;
+        for (uint32_t channel = 0; channel < 4; ++channel) {
+            uint64_t bytes;
+            child.media_uuid[0] = (uint8_t)(channel + 1u);
+            bytes = fwlab_file_nand_v2_image_bytes(&child);
+            REQUIRE(bytes == preset->child_bytes && bytes <= UINT64_MAX - image_bytes);
+            image_bytes += bytes;
+        }
+        REQUIRE(image_bytes == preset->volume_bytes);
+
+        ftl.version = FWLAB_FTL_SCALE_EXTENDED_VERSION;
+        ftl.size = (uint16_t)sizeof(ftl);
+        ftl.max_transfer_lbas = FWLAB_FTL_SCALE_EXTENDED_MAX_LBAS;
+        ftl.base.version = FWLAB_FTL_SCALE_VERSION;
+        ftl.base.size = (uint16_t)sizeof(ftl.base);
+        ftl.base.geometry = geometry;
+        ftl.base.media_uuid[0] = 1;
+        ftl.base.namespace_ref.word[0] = 1;
+        ftl.base.instance_nonce = 1;
+        ftl.base.provider_nonce = 2;
+        ftl.base.nfc_instance_nonce = 3;
+        ftl.base.nfc_operation_uid_limit = UINT64_MAX;
+        ftl.base.host_sequence_limit = ftl.base.record_sequence_limit = UINT64_MAX - 1u;
+        ftl.base.mapping_slots = preset->physical_pages;
+        ftl.base.generation = ftl.base.execution_epoch = ftl.base.nfc_epoch = 1;
+        ftl_bytes = fwlab_ftl_scale_read_write_v3_arena_size(&ftl);
+        REQUIRE(ftl_bytes);
+
+        /* Preserve the exact old R0 geometries as well as wrapper agreement. */
+        expected.channels = expected.luns_per_channel = expected.planes_per_lun =
+            preset->logical_mib == 64 ? 1 : 2;
+        expected.plane_parallelism_per_lun = expected.planes_per_lun;
+        expected.blocks_per_plane = preset->logical_mib == 64 ? 320 :
+            (uint16_t)preset->blocks_per_plane;
+        REQUIRE(scale_storage_profile_capacity_mib(SCALE_STORAGE_CAPACITY_R0,
+                    preset->logical_mib, &r0, &r0_lbas) &&
+                scale_storage_capacity_mib(preset->logical_mib, &wrapped, &wrapped_lbas) &&
+                r0_lbas == preset->lba_count && wrapped_lbas == preset->lba_count &&
+                !memcmp(&r0, &expected, sizeof(r0)) && !memcmp(&wrapped, &expected, sizeof(wrapped)));
+        printf("NATIVE_CAPACITY_PLAN|logical_mib=%u|lbas=%" PRIu64 "|channels=4|luns_per_channel=1|planes_per_lun=2|blocks_per_plane=%u|physical_blocks=%u|physical_pages=%u|child_image_bytes=%" PRIu64 "|images_and_manifest_bytes=%" PRIu64 "|ftl_RW3_arena_bytes=%zu|NFC_channel_arena_bytes=%zu|volume_arena_bytes=%zu|physical_arena_bytes=%zu|R0_wrapper_exact=1|sizing_only=1|no_media_allocation=1|no_runtime_or_recovery_pass_claim=1\n",
+               preset->logical_mib, lbas, preset->blocks_per_plane, preset->physical_blocks,
+               preset->physical_pages, preset->child_bytes, image_bytes, ftl_bytes, nfc_bytes,
+               volume_bytes, physical_bytes);
+    }
+    struct fwlab_nfc_geometry geometry;
+    uint64_t lbas;
+    REQUIRE(!scale_storage_profile_capacity_mib((enum scale_storage_capacity_profile)2,
+                64, &geometry, &lbas));
+    REQUIRE(!scale_storage_profile_capacity_mib(SCALE_STORAGE_CAPACITY_CHANNEL_LAB4K,
+                65, &geometry, &lbas));
+    REQUIRE(!scale_storage_capacity_mib(65, &geometry, &lbas));
+    REQUIRE(!scale_storage_profile_capacity_mib(SCALE_STORAGE_CAPACITY_CHANNEL_LAB4K,
+                64, NULL, &lbas));
+    REQUIRE(!scale_storage_profile_capacity_mib(SCALE_STORAGE_CAPACITY_CHANNEL_LAB4K,
+                64, &geometry, NULL));
+    puts("NATIVE_CAPACITY_PLAN_PASS|presets=64,256,65536|same_four_channel_resources=1|sizing_only=1|no_NAND_io=1|no_runtime_or_recovery_pass_claim=1");
+}
 
 /* Link wrappers control real Linux thread entry/return, never actor results or
  * join success. Every successful creation is matched to a real successful
@@ -669,11 +789,27 @@ static void check_runtime_profile(const struct native_context *context)
 #if FWLAB_NATIVE_MQ2
     if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K) {
         const struct fwlab_ftl_scale *ftl = context->runtime->block.context;
+        const struct capacity_case *preset = test_capacity_case(test_logical_mib);
+        const struct fwlab_nfc_geometry geometry = test_channel_geometry(preset);
+        const struct j0_runtime_config *config = &context->runtime->config;
         struct fwlab_nfc_channel_v2_stats stats;
         REQUIRE(ftl && ftl->disk_format == SF_MULTIHEAD_FORMAT_VERSION &&
                 ftl->root.disk_format == SF_MULTIHEAD_FORMAT_VERSION &&
                 ftl->reads && ftl->writes && ftl->parallel_reads && !ftl->read_only &&
                 !ftl->quarantined && !ftl->admission_closed);
+        REQUIRE(context->runtime->volume.lba_count == preset->lba_count &&
+                ftl->root.layout.lba_count == preset->lba_count &&
+                ftl->physical_blocks == preset->physical_blocks &&
+                ftl->physical_pages == preset->physical_pages &&
+                ftl->root.layout.physical_blocks == preset->physical_blocks &&
+                ftl->root.layout.physical_pages == preset->physical_pages &&
+                ftl->config.mapping_slots == preset->physical_pages &&
+                !memcmp(&ftl->config.geometry, &geometry, sizeof(geometry)) &&
+                !memcmp(&ftl->root.layout.geometry, &geometry, sizeof(geometry)) &&
+                config->media_binding &&
+                !memcmp(&config->media_binding->geometry, &geometry, sizeof(geometry)) &&
+                (config->media_mode == J0_MEDIA_FORMAT ? config->format_lba_count :
+                                                       config->expected_lba_count) == preset->lba_count);
         REQUIRE(scale_storage_channel_snapshot(context->runtime, &stats) == FWLAB_SPINE_V0_OK &&
                 !stats.closed && !stats.quarantined && !stats.poisoned && !stats.counters_saturated);
         for (uint32_t channel = 0; channel < 4; ++channel)
@@ -724,8 +860,12 @@ static void run_script(struct native_context *context, struct native_scaled_medi
     REQUIRE(host.next == host.count && !host.occupied);
     for (uint32_t index = 0; index < host.count; ++index) {
         const struct host_row *row = &host.row[index];
-        REQUIRE(row->retired && row->published && !row->code && !row->code_type);
-        if (row->length)
+        REQUIRE(row->retired && row->published && row->code == row->expected_code && !row->code_type);
+        if (row->expected_code) {
+            REQUIRE(row->expected_code == 0x80 && row->capture.sqe[0] == 2 &&
+                    !row->shaped && !row->dma_done && !row->dma_retired &&
+                    !row->authority_released && !row->copied);
+        } else if (row->length)
             REQUIRE(row->copied == row->length && row->dma_retired && row->authority_released);
     }
     for (uint32_t index = 0; index < NATIVE_COMMANDS; ++index)
@@ -810,7 +950,11 @@ static void test_media_snapshot(int directory_fd, struct test_media_identity *id
         REQUIRE(fstatat(directory_fd, test_media_file_name(index), &identity->file[index],
                         AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(identity->file[index].st_mode));
     if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K) {
+        const struct capacity_case *preset = test_capacity_case(test_logical_mib);
         struct stat absent;
+        for (uint32_t index = 0; index < 4; ++index)
+            REQUIRE((uint64_t)identity->file[index].st_size == preset->child_bytes);
+        REQUIRE(identity->file[4].st_size == 1024 && identity->file[5].st_size == 0);
         REQUIRE(fstatat(directory_fd, "nand.bin", &absent, AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
         REQUIRE(fstatat(directory_fd, FWLAB_NAND_CHANNEL_VOLUME_PENDING, &absent,
                         AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
@@ -836,21 +980,25 @@ static void test_media_activity(const struct native_context *context,
         REQUIRE(fwlab_file_nand_v2_sequence(media->physical) > 0);
         return;
     }
+    const struct capacity_case *preset = test_capacity_case(test_logical_mib);
+    struct fwlab_nfc_geometry geometry = test_channel_geometry(preset);
     struct fwlab_nfc_channel_v2_stats stats;
     REQUIRE(!media->physical &&
             ((!test_workers && media->options.channel_executor == NULL) ||
              (test_workers && media->options.channel_executor != NULL)) &&
             media->options.multihead_read_schedule == SCALE_STORAGE_READ_PARALLEL &&
             media->options.read_policy == FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE &&
-            media->channels.geometry.channels == 4 && media->channels.geometry.luns_per_channel == 1 &&
-            media->channels.geometry.planes_per_lun == 2 && media->channels.geometry.blocks_per_plane == 40 &&
-            media->channels.geometry.pages_per_block == 64 &&
-            media->channels.geometry.plane_parallelism_per_lun == 2);
+            media->native.format_lba_count == preset->lba_count &&
+            media->native.expected_lba_count == preset->lba_count &&
+            !memcmp(&media->channels.geometry, &geometry, sizeof(geometry)) &&
+            !memcmp(&media->binding.geometry, &geometry, sizeof(geometry)));
     REQUIRE(scale_storage_channel_snapshot(context->runtime, &stats) == FWLAB_SPINE_V0_OK &&
             stats.now_ns && stats.accepted_requests && stats.sealed_batches && stats.joined_batches &&
             !stats.closed && !stats.quarantined && !stats.poisoned && !stats.counters_saturated);
+    geometry.channels = 1;
     for (uint32_t channel = 0; channel < 4; ++channel) {
         const struct fwlab_nfc_page_v2_lab_stats *child = &stats.channel[channel];
+        REQUIRE(!memcmp(&media->channels.channel[channel].geometry, &geometry, sizeof(geometry)));
         REQUIRE(fwlab_file_nand_v2_sequence(media->channels.channel[channel].scalar.context) > 0 &&
                 child->read_policy == FWLAB_NFC_PAGE_V2_LAB_INDEPENDENT_PLANE &&
                 child->accepted_reads && child->materialized_pages && child->data_out_main_bytes &&
@@ -899,7 +1047,8 @@ static void test_runtime_closed(const struct native_context *context)
 }
 
 static void test_retained_lock(struct native_context *context,
-    const struct native_scaled_media *media, int directory_fd, const char *directory)
+    const struct native_scaled_media *media, int directory_fd, const char *directory,
+    uint32_t logical_mib)
 {
     if (test_nand_profile != NATIVE_NAND_CHANNEL_LAB4K)
         return;
@@ -909,7 +1058,7 @@ static void test_retained_lock(struct native_context *context,
     test_media_snapshot(directory_fd, &before);
     /* A new open description must not acquire the process-lived volume lock
      * merely because the original firmware runtime is now NULL. */
-    REQUIRE(!test_media_open(other, context, directory, media->native.uuid, 0, 64) &&
+    REQUIRE(!test_media_open(other, context, directory, media->native.uuid, 0, logical_mib) &&
             !other->opened && !other->volume);
     test_media_snapshot(directory_fd, &after);
     test_media_identity_check(&before, &after, 1);
@@ -1031,6 +1180,13 @@ static void legacy_constructor_smoke(int directory_fd, const char *directory,
 
 int main(int argc, char **argv)
 {
+#if FWLAB_NATIVE_MQ2
+    /* This path does not allocate/open media or construct a runtime. */
+    if (argc == 2 && !strcmp(argv[1], "--capacity-plan")) {
+        test_capacity_plan();
+        return 0;
+    }
+#endif
     const char *root = getenv("FWLAB_TEST_MEDIA_DIR");
     const uint8_t uuid[16] = {0x4d,0x31,0x41,0x2d,0x53,0x43,0x41,0x4c,0x45,1,2,3,4,5,6,7};
     const uint8_t binding[32] = {0x4d,0x31,0x42,0x49,0x44,0x45,0x4e,0x54};
@@ -1069,8 +1225,8 @@ int main(int argc, char **argv)
             ++index;
         }
     }
-    REQUIRE(test_nand_profile == NATIVE_NAND_R0 || logical_mib == 64);
     REQUIRE(!test_workers || test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K);
+    test_logical_mib = logical_mib;
 #if FWLAB_NATIVE_MQ2
     thread_gate.context = context;
     thread_gate.media = media;
@@ -1106,7 +1262,6 @@ int main(int argc, char **argv)
     if (test_nand_profile == NATIVE_NAND_CHANNEL_LAB4K) {
         REQUIRE(!native_scaled_media_open_profile(media, context, directory, uuid, 1, 64,
                                                   (enum native_nand_profile)2));
-        REQUIRE(!test_media_open(media, context, directory, uuid, 1, 256));
         REQUIRE(fstatat(directory_fd, FWLAB_NAND_CHANNEL_VOLUME_PENDING, &absent,
                         AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
     }
@@ -1114,6 +1269,8 @@ int main(int argc, char **argv)
         REQUIRE(fstatat(directory_fd, test_media_file_name(index), &absent, AT_SYMLINK_NOFOLLOW) == -1 && errno == ENOENT);
     started = wall_ns();
     REQUIRE(test_media_open(media, context, directory, uuid, 1, logical_mib));
+    REQUIRE(media->native.format_lba_count == lba_count &&
+            media->native.expected_lba_count == lba_count);
     test_media_snapshot(directory_fd, &created);
     retained_volume = media->volume;
     retained_physical = media->physical;
@@ -1161,11 +1318,15 @@ int main(int argc, char **argv)
     add_command(1, lba_count - TEST_IO_LBAS, 0x5a);
     add_command(0, 0, 0);
     add_command(2, lba_count - TEST_IO_LBAS, 0);
+    add_command(2, lba_count, 0);
+    host.row[4].expected_code = 0x80;
     run_script(context, media);
     check_identify(&host.row[0], lba_count);
     pattern(expected, sizeof(expected), 0x5a);
     REQUIRE(memcmp(host.row[3].bytes, expected, sizeof(expected)) == 0);
     REQUIRE(host.dma_in == 1 && host.dma_out == 2);
+    printf("NATIVE_CAPACITY_RANGE_PASS|logical_mib=%u|past_end_READ_status=0x80|status_type=0|no_shape_DMA_or_host_copy=1|fake_ioctl_only=1\n",
+           logical_mib);
     test_media_activity(context, media);
     REQUIRE(media->volume == retained_volume && media->physical == retained_physical);
     /* An owner may hold this exact media pointer while runtime is absent.
@@ -1175,7 +1336,7 @@ int main(int argc, char **argv)
     test_runtime_closed(context);
     REQUIRE(owner.media == &media->native && test_media_present(media) &&
             media->volume == retained_volume && media->physical == retained_physical);
-    test_retained_lock(context, media, directory_fd, directory);
+    test_retained_lock(context, media, directory_fd, directory, logical_mib);
     ++context->epoch;
     script_begin(context);
     REQUIRE(native_runtime_create(context, owner.media, 0));
