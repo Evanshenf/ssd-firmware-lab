@@ -57,8 +57,17 @@ struct scale_storage_options {
     enum scale_storage_read_schedule multihead_read_schedule;
 };
 
+enum scale_storage_capacity_profile {
+    SCALE_STORAGE_CAPACITY_R0 = 0,
+    SCALE_STORAGE_CAPACITY_CHANNEL_LAB4K = 1
+};
+
 /* Shared construction presets, not FTL capacity truth. Recovery still validates
- * the stored volume. MiB choices: 64, 256, 65536; no existing-image resize. */
+ * the stored volume. MiB choices: 64, 256, 65536; no existing-image resize.
+ * Channel capacity changes blocks/plane, not parallel resource or worker count. */
+int scale_storage_profile_capacity_mib(enum scale_storage_capacity_profile profile,
+    uint32_t logical_mib, struct fwlab_nfc_geometry *geometry, uint64_t *lba_count);
+/* Preserve the existing single-file R0 geometry and callers. */
 int scale_storage_capacity_mib(uint32_t logical_mib,
     struct fwlab_nfc_geometry *geometry, uint64_t *lba_count);
 

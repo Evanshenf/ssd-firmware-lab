@@ -16,22 +16,31 @@
 enum scale_binding { SCALE_C3, SCALE_PAGE2, SCALE_READ_LAB, SCALE_MUTATION_LAB,
                      SCALE_CHANNEL_LAB, SCALE_MULTIHEAD_LAB, SCALE_PARALLEL_CHANNEL_LAB };
 
-int scale_storage_capacity_mib(uint32_t logical_mib,
-    struct fwlab_nfc_geometry *geometry, uint64_t *lba_count)
+int scale_storage_profile_capacity_mib(enum scale_storage_capacity_profile profile,
+    uint32_t logical_mib, struct fwlab_nfc_geometry *geometry, uint64_t *lba_count)
 {
     struct fwlab_nfc_geometry g = {0};
     struct sf_layout layout;
     uint64_t lbas;
     if (!geometry || !lba_count ||
+        (profile != SCALE_STORAGE_CAPACITY_R0 &&
+         profile != SCALE_STORAGE_CAPACITY_CHANNEL_LAB4K) ||
         (logical_mib != 64 && logical_mib != 256 && logical_mib != 65536))
         return 0;
     g.version = FWLAB_NFC_CONTRACT_VERSION;
     g.size = (uint16_t)sizeof(g);
-    g.channels = logical_mib == 64 ? 1 : 2;
-    g.luns_per_channel = g.channels;
-    g.planes_per_lun = g.channels;
-    g.blocks_per_plane = logical_mib == 64 ? 320 :
-                        (logical_mib == 256 ? 160 : 40960);
+    if (profile == SCALE_STORAGE_CAPACITY_CHANNEL_LAB4K) {
+        g.channels = 4;
+        g.luns_per_channel = 1;
+        g.planes_per_lun = 2;
+        g.blocks_per_plane = (uint16_t)(40u * (logical_mib / 64u));
+    } else {
+        g.channels = logical_mib == 64 ? 1 : 2;
+        g.luns_per_channel = g.channels;
+        g.planes_per_lun = g.channels;
+        g.blocks_per_plane = logical_mib == 64 ? 320 :
+                            (logical_mib == 256 ? 160 : 40960);
+    }
     g.pages_per_block = 64;
     g.plane_parallelism_per_lun = g.planes_per_lun;
     g.main_bytes_per_page = SF_PAGE_BYTES;
@@ -44,6 +53,13 @@ int scale_storage_capacity_mib(uint32_t logical_mib,
     *geometry = g;
     *lba_count = lbas;
     return 1;
+}
+
+int scale_storage_capacity_mib(uint32_t logical_mib,
+    struct fwlab_nfc_geometry *geometry, uint64_t *lba_count)
+{
+    return scale_storage_profile_capacity_mib(SCALE_STORAGE_CAPACITY_R0,
+                                              logical_mib, geometry, lba_count);
 }
 
 struct scale_storage {
