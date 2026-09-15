@@ -16,6 +16,8 @@ lifecycle, data mover, FTL algorithms and NAND effects are unchanged. The
 first preset is a 64-MiB namespace over four channels, one LUN per channel,
 two planes per LUN and forty 64-page blocks per plane. Pages remain 4KiB
 main plus128B OOB. It is not a modern vendor geometry or capacity graduation.
+The later capacity-only refinement is [ADR-0027](0027-channel-capacity-presets.md);
+it does not broaden this original64MiB native evidence.
 
 ## Lifetime and storage
 

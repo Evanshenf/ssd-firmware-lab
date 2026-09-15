@@ -149,6 +149,17 @@ remain in the storage engines.
 
 ## Selected scaled worker
 
+For the later explicit `channel-lab4k` option, see
+[channel capacity construction](../../docs/adr/0027-channel-capacity-presets.md).
+It also accepts64/256/65536MiB, retaining four channels and the same FTL3/NFC
+engines; its physical volume is four shards plus a manifest, not the default
+single mapped `nand.bin` described below. Worker mode remains L1-only and
+rejects `--owner-dir`. Old single-file media cannot be recovered as this profile.
+The existing `progress-runtime` executable accepts `--capacity-plan` without
+media allocation, and its channel64/256MiB software cases have
+[separate results](../../docs/results/2026-09-15-channel-capacity.md).
+New64GiB channel-native readiness/recovery has not been qualified.
+
 `make -C frontends/linux-m4 scaled-worker` builds
 `build/scaled-offline/fwlab_native_scaled_worker`. It selects the same
 physical-v2 construction at compile time, while sharing the ordinary

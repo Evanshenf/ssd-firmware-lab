@@ -16,6 +16,11 @@ it is not covered by the older native deployment/performance results below.
 The later [bounded native channel result](results/2026-09-14-native-channel-l1.md)
 qualifies actual-driver functional use on the named x86-64 L1 profile only;
 it does not extend that evidence to ARM, M5 or worker threads.
+The later [worker-lifetime refinement](adr/0026-native-worker-lifetime.md)
+adds optional1/4workers (L1-only, no `--owner-dir`).
+[ADR-0027](adr/0027-channel-capacity-presets.md) connects64/256/65536MiB to
+the channel construction. Its [current capacity evidence](results/2026-09-15-channel-capacity.md)
+uses simulated Host ioctls and real small media; it is not new64GiB native proof.
 
 ## 1. Choose matching builds
 
@@ -65,8 +70,9 @@ do not substitute an unmounted directory, a slow system-disk directory or NFS.
 The image is 89165824 bytes: 80 MiB physical NAND main area plus physical
 records/OOB/health/transaction metadata, exposing **64 MiB** logical capacity.
 Those are three different sizes. Recovery requires the same UUID and compatible
-format/geometry. Moving to a larger file or `/dev/sdb` is not a capacity option
-in this worker. Raw block backing is not implemented here.
+format/geometry. Other R0 presets use explicit `--namespace-mib`, not a larger
+file chosen independently of geometry/FTL capacity. Moving to `/dev/sdb` is
+not a capacity option; raw block backing is not implemented here.
 
 Tmpfs supports process-restart testing while the mount survives. It does not
 survive reboot or prove physical power-loss persistence. Never move, truncate,

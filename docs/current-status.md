@@ -4,7 +4,7 @@
 # Development status and supported constructions
 
 This page describes the development source, including the ARM native and
-MSI/readiness corrections through `823f04c`, not an
+MSI/readiness corrections and channel-capacity construction through `4fe7051`, not an
 expansion of the immutable `v0.1.0-spine-preview.1` tag. The project remains
 **pre-alpha research software**. Publishing source is not a production release
 or a claim that every historical test was rerun on the newest revision. The
@@ -22,12 +22,13 @@ code without treating historical directory names as dependency boundaries.
 | `scaled-worker` / `scaled-pump-worker` | 64 MiB / 8 KiB | Scalable FTL format 2 + PAGE2-R0 + mapped physical-v2 on bounded tmpfs |
 | `large-worker`, Host profile 2 | 64 MiB / 1 MiB, one I/O pair | Same storage stack, explicit PUMP construction, bounded PRP graph |
 | `mq2-worker` default, Host profile 3 | 64 MiB / 1 MiB, two depth-32 I/O pairs, three MSI-X vectors | Same storage stack, **one global I/O frame plus one Admin reserve**; serialized FTL execution, not parallel storage throughput |
-| Same `mq2-worker`, opt-in `channel-lab4k` | 64 MiB only / 1 MiB; unchanged Host limits | Mutable format3 + IPR cooperative channel hub + four strict POSIX physical-v2 shards; [offline construction](results/2026-09-14-native-channel-construction.md) and [bounded actual x86-64 native L1](results/2026-09-14-native-channel-l1.md); not ARM native channel, M5, threads or performance qualification |
-| Same channel option plus `--nand-workers 1\|4` | 64 MiB only, L1-only; rejects `--owner-dir` before device access | Same NAND path and per-runtime workers; [software1/4checks](results/2026-09-14-native-worker-lifetime.md) and [actual x86-64 native4worker episode](results/2026-09-14-native-four-worker-l1.md); one-worker native/ARM/M5/NUMA/performance not qualified |
+| Same `mq2-worker`, opt-in `channel-lab4k` | 64/256/65536MiB construction /1MiB transfer; unchanged Host limits | Mutable format3 + IPR channel hub + four strict POSIX shards; [64/256MiB software capacity checks](results/2026-09-15-channel-capacity.md), with64GiB sizing only. Earlier [actual x86-64 native L1](results/2026-09-14-native-channel-l1.md) remains64MiB; no ARM native-channel/M5/performance qualification |
+| Same channel option plus `--nand-workers 1\|4` | Same capacity choices, L1-only; rejects `--owner-dir` before device access | Same NAND path/per-runtime workers; [256MiB fourworker software checks](results/2026-09-15-channel-capacity.md) on actualARM/x86-64 and earlier [x86-64 native64MiB workers4](results/2026-09-14-native-four-worker-l1.md);64GiB native, one-worker native, ARM native-channel/M5/NUMA/performance not qualified |
 
 The R0 rows' native capacities are the default 64-MiB configurations. Scaled native
-workers without the channel opt-in accept `--namespace-mib 64|256|65536` using the same construction
-presets as headless. Native Linux 256 MiB has passed Identify, tail I/O, reset,
+workers accept `--namespace-mib 64|256|65536`; the profile-specific shared helper
+keeps R0 geometry unchanged and scales channel blocks/plane separately.
+The following older native results concern R0. Native Linux 256 MiB has passed Identify, tail I/O, reset,
 rebind, cold recovery and an ext4 mount/fsync/reset/remount check. Later ARM64
 native 64-GiB data/control/performance groups have their own
 [exact-source results](results/2026-09-13-native-arm64.md), including the completed
@@ -37,6 +38,8 @@ image. Logical capacity, physical
 geometry, arena budget, media-format version and Host transfer profile remain
 separate choices. See [capacity results](results/2026-09-10-current-capacity.md)
 and [ADR-0015](adr/0015-capacity-presets-and-mapped-budgets.md).
+Channel capacity construction and its narrower current evidence are in
+[ADR-0027](adr/0027-channel-capacity-presets.md).
 See [ADR-0013](adr/0013-scalable-ftl-and-page-windows.md) and
 [ADR-0014](adr/0014-native-profile-and-serial-mq2.md).
 

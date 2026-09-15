@@ -30,6 +30,11 @@
 见[当前能力与平台边界](docs/current-status.md)、[开发证据](docs/results/2026-09-10-scaled-storage-mq2.md)
 和[分层性能与全部成对样本](docs/results/2026-09-10-throughput.md)。本次公开开发成果，不改旧标签，也不宣称新的冻结版本。
 
+新加入的通道／线程路径也已接通64／256／65536MiB容量构造。
+[64／256MiB软件检查](docs/results/2026-09-15-channel-capacity.md)已在x86-64和实际ARM64上运行，
+数据经过真实FTL3／NFC／分片介质，但Host ioctl为模拟边界。
+新通道路径的64GiB原生NVMe仍待单独验证，不能用旧R0结果代替。
+
 ## 先在 Linux 上运行软件检查
 
 准备 Git、GNU Make 和带 Linux/POSIX 开发头文件的 C11 编译器，用普通用户执行：

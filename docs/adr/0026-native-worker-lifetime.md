@@ -9,7 +9,10 @@ Refine the cooperative-first construction in
 [ADR-0025](0025-native-channel-construction.md), using the existing execution
 transport from [ADR-0022](0022-channel-worker-execution.md).
 The same MQ2 executable can opt in with `--nand-workers 1|4`, only alongside
-`--nand-profile channel-lab4k` and the 64-MiB preset. Omission preserves the
+`--nand-profile channel-lab4k`, initially with the64MiB preset. The later
+[ADR-0027](0027-channel-capacity-presets.md) extends capacity construction
+without changing this worker lifetime or broadening its original evidence.
+Omission preserves the
 cooperative channel path; omission of the channel profile preserves mapped R0.
 No new protocol, FTL, NAND engine, media format or kernel ABI is introduced.
 

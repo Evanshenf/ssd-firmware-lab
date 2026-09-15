@@ -42,6 +42,12 @@ See [current constructions and platform limits](docs/current-status.md),
 [performance samples](docs/results/2026-09-10-throughput.md). This is development
 publication, not a new frozen release or a change to the old tag.
 
+The newer opt-in channel/worker path now has64/256/65536MiB capacity
+construction. Its [current64/256MiB software checks](docs/results/2026-09-15-channel-capacity.md)
+ran with real FTL3/NFC/shards on x86-64 and ARM64, but simulated Host ioctls.
+New64GiB channel-native operation remains unqualified; the older R0 result
+above does not substitute for it.
+
 ## Try the software path on Linux
 
 Start with an ordinary, unprivileged Linux user. You need Git, GNU Make and a
