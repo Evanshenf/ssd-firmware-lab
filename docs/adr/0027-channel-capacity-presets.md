@@ -47,6 +47,9 @@ retained locks, runtime reconstruction, cold recovery and actual joins.
 Its Host ioctls are simulated; storage uses the real firmware stack. GCC and
 Clang sanitizer cases ran on x86-64 and actual ARM64. See the
 [exact-source result](../results/2026-09-15-channel-capacity.md).
+The later [actual ARM64 native256MiB episode](../results/2026-09-22-native-arm-channel-256.md)
+adds selected I/O, quiet reset and cold recovery with four workers, without
+changing this decision or the source. It is not a full-capacity campaign.
 
 `--capacity-plan` on that fixture checks all three literal presets, image
 lengths and real arena-size queries without creating media. Cross-compiled

@@ -21,6 +21,8 @@ adds optional1/4workers (L1-only, no `--owner-dir`).
 [ADR-0027](adr/0027-channel-capacity-presets.md) connects64/256/65536MiB to
 the channel construction. Its [current capacity evidence](results/2026-09-15-channel-capacity.md)
 uses simulated Host ioctls and real small media; it is not new64GiB native proof.
+The subsequent [ARM64 native256MiB result](results/2026-09-22-native-arm-channel-256.md)
+adds real-driver selected I/O, four workers, quiet reset and cold recovery.
 
 ## 1. Choose matching builds
 
@@ -168,14 +170,15 @@ qualification has its own [bounded x86-64 result](results/2026-09-14-native-chan
 The additional `--nand-workers 1` or `--nand-workers 4` option now selects fresh
 workers for each runtime through [ADR-0026](adr/0026-native-worker-lifetime.md).
 For its existing offline fixture, append that option to the command above.
-It is valid only with channel-lab4k/64MiB and **cannot be combined with
+It is valid only with channel-lab4k and the shared64/256/65536MiB presets, and **cannot be combined with
 `--owner-dir`**. Do not reuse the earlier owner-transfer example for this
 L1-only mode. Startup/recovery/drain use short control-service waits and an
 operational60-second deadline; failure does not permit autoformat or release.
 The [software result](results/2026-09-14-native-worker-lifetime.md) does not by
 itself qualify kernel operation. The later [four-worker x86-64 native journey](results/2026-09-14-native-four-worker-l1.md)
-passed the bounded actual-driver data/reset/recovery checks. One-worker native,
-ARM/M5 and performance remain separate tasks; this section does not authorize
+passed the bounded actual-driver data/reset/recovery checks, followed by
+[ARM64 native256MiB workers4](results/2026-09-22-native-arm-channel-256.md).
+One-worker native, channel64GiB, M5 and performance remain separate tasks; this section does not authorize
 changing an existing media directory.
 
 The [development results](results/2026-09-10-scaled-storage-mq2.md) identify the

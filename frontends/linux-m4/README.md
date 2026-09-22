@@ -158,6 +158,9 @@ rejects `--owner-dir`. Old single-file media cannot be recovered as this profile
 The existing `progress-runtime` executable accepts `--capacity-plan` without
 media allocation, and its channel64/256MiB software cases have
 [separate results](../../docs/results/2026-09-15-channel-capacity.md).
+The later [ARM64 native256MiB episode](../../docs/results/2026-09-22-native-arm-channel-256.md)
+uses the real Linux driver and four workers for selected data/reset/cold
+recovery; it is not full-capacity, NUMA or throughput qualification.
 New64GiB channel-native readiness/recovery has not been qualified.
 
 `make -C frontends/linux-m4 scaled-worker` builds

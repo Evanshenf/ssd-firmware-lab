@@ -33,6 +33,8 @@
 新加入的通道／线程路径也已接通64／256／65536MiB容量构造。
 [64／256MiB软件检查](docs/results/2026-09-15-channel-capacity.md)已在x86-64和实际ARM64上运行，
 数据经过真实FTL3／NFC／分片介质，但Host ioctl为模拟边界。
+后续[256 MiB ARM64 原生验证](docs/results/2026-09-22-native-arm-channel-256.md)已通过真实驱动读写、
+四线程 reset／重建及冷恢复；不是全盘填满测试，也不是吞吐或 NUMA 加速证明。
 新通道路径的64GiB原生NVMe仍待单独验证，不能用旧R0结果代替。
 
 ## 先在 Linux 上运行软件检查

@@ -45,6 +45,8 @@ publication, not a new frozen release or a change to the old tag.
 The newer opt-in channel/worker path now has64/256/65536MiB capacity
 construction. Its [current64/256MiB software checks](docs/results/2026-09-15-channel-capacity.md)
 ran with real FTL3/NFC/shards on x86-64 and ARM64, but simulated Host ioctls.
+The subsequent [256 MiB ARM64 native episode](docs/results/2026-09-22-native-arm-channel-256.md)
+passed real-driver I/O, four-worker reset/reconstruction and cold recovery.
 New64GiB channel-native operation remains unqualified; the older R0 result
 above does not substitute for it.
 

@@ -7,6 +7,7 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 
 ## Current entry points
 
+- [2026-09-22: ARM64 native channel 256 MiB](2026-09-22-native-arm-channel-256.md): actual Linux driver, four NAND workers, six selected I/O shapes, quiet reset, cold recovery and old-instance restoration; not full capacity, new64GiB, M5, NUMA or performance.
 - [2026-09-15: channel capacity construction](2026-09-15-channel-capacity.md):64/256MiB real-storage native-runtime fixtures on x86-64/ARM64 with simulated Host ioctls;64GiB sizing only, not native large-device or performance qualification.
 - [2026-09-14: actual four-worker native L1](2026-09-14-native-four-worker-l1.md): real Linux driver, same FTL/NAND, four actual workers, quiescent reset/reconstruction, cold recovery and prior-instance restoration; not M5/ARM/NUMA/performance.
 - [2026-09-14: native worker lifetime, offline Host](2026-09-14-native-worker-lifetime.md): same native loop with real1/4workers, startup/join-pending service, reset reconstruction and pre-step failure cleanup; no new real-kernel/M5/NUMA or performance proof.
