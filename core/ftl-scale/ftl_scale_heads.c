@@ -3,9 +3,6 @@
 #include "ftl_scale_internal.h"
 #include <string.h>
 
-bool sf_format_windowed(uint16_t format)
-{ return format == SF_WINDOW_FORMAT_VERSION || format == SF_MULTIHEAD_FORMAT_VERSION; }
-
 bool sf_heads_init(struct fwlab_ftl_scale *f)
 {
     uint32_t blocks, pages, offset = 0;

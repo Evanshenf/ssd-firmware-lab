@@ -10,6 +10,10 @@
 #define SF_JOURNAL_TAG UINT32_C(0x314a4653)
 enum { SF_PAGE_ROOT = 1, SF_PAGE_CP, SF_PAGE_RAIL, SF_PAGE_JOURNAL, SF_PAGE_DATA };
 
+/* Keep format-only consumers independent of the mutable head implementation. */
+bool sf_format_windowed(uint16_t format)
+{ return format == SF_WINDOW_FORMAT_VERSION || format == SF_MULTIHEAD_FORMAT_VERSION; }
+
 static uint16_t get16(const uint8_t *p) { return (uint16_t)((uint16_t)p[0] | (uint16_t)((uint16_t)p[1] << 8)); }
 static uint32_t get32(const uint8_t *p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
 static uint64_t get64(const uint8_t *p) { return get32(p) | ((uint64_t)get32(p + 4) << 32); }
