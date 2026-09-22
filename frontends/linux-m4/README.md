@@ -161,7 +161,9 @@ media allocation, and its channel64/256MiB software cases have
 The later [ARM64 native256MiB episode](../../docs/results/2026-09-22-native-arm-channel-256.md)
 uses the real Linux driver and four workers for selected data/reset/cold
 recovery; it is not full-capacity, NUMA or throughput qualification.
-New64GiB channel-native readiness/recovery has not been qualified.
+The later [64GiB channel-native data episode](../../docs/results/2026-09-22-native-arm-channel-64g.md)
+passed full write/read, overwrite/GC and same-volume cold recovery. This does
+not qualify arbitrary startup latency, a new filesystem matrix, M5 or bandwidth.
 
 `make -C frontends/linux-m4 scaled-worker` builds
 `build/scaled-offline/fwlab_native_scaled_worker`. It selects the same

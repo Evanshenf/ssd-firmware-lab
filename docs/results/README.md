@@ -7,6 +7,7 @@ Results record the exact evidence profile and stop boundary. A passing sub-gate 
 
 ## Current entry points
 
+- [2026-09-22: ARM64 native channel64GiB full-volume data](2026-09-22-native-arm-channel-64g.md):64GiB full write/read,32GiB striped overwrite, actual GC, cold reconstruction and full complementary readback;224GiB bulk I/O, not a new filesystem/M5/performance matrix.
 - [2026-09-22: ARM64 native channel 256 MiB](2026-09-22-native-arm-channel-256.md): actual Linux driver, four NAND workers, six selected I/O shapes, quiet reset, cold recovery and old-instance restoration; not full capacity, new64GiB, M5, NUMA or performance.
 - [2026-09-15: channel capacity construction](2026-09-15-channel-capacity.md):64/256MiB real-storage native-runtime fixtures on x86-64/ARM64 with simulated Host ioctls;64GiB sizing only, not native large-device or performance qualification.
 - [2026-09-14: actual four-worker native L1](2026-09-14-native-four-worker-l1.md): real Linux driver, same FTL/NAND, four actual workers, quiescent reset/reconstruction, cold recovery and prior-instance restoration; not M5/ARM/NUMA/performance.

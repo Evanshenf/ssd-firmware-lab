@@ -52,6 +52,10 @@ These are constructor selections, not automatic fallback chains:
 | MQ2 opt-in channel LAB | Same actual native constructor/loop and mutable format3 factory, no protocol/lifecycle rewrite | Process-lived strict POSIX channel volume and cooperative IPR actors; [bounded actual native x86-64 L1](results/2026-09-14-native-channel-l1.md), not new M5/thread/ARM-native evidence; [ADR-0025](adr/0025-native-channel-construction.md) |
 | Same MQ2 channel option with `--nand-workers 1\|4` | Same semantic implementations; native-private prepare/release/wait composition | Fresh per-runtime workers, same persistent media; [software1/4evidence](results/2026-09-14-native-worker-lifetime.md), [x86-64 native4workers](results/2026-09-14-native-four-worker-l1.md) and [ARM64 native256MiB workers4](results/2026-09-22-native-arm-channel-256.md); not M5/NUMA/throughput; [ADR-0026](adr/0026-native-worker-lifetime.md) |
 
+The same four-worker ARM64 construction also passed a
+[64GiB native full-volume data/GC/cold-recovery episode](results/2026-09-22-native-arm-channel-64g.md).
+No architecture or engine replacement was needed for that execution.
+
 `j0_construction.c` binds a ready volume and its actual Block service;
 `scale_storage.c` constructs the selected FTL/NFC pair. Both reside below
 historically named `frontends/headless-*` directories, but they are also linked

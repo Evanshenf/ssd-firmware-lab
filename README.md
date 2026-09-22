@@ -47,8 +47,10 @@ construction. Its [current64/256MiB software checks](docs/results/2026-09-15-cha
 ran with real FTL3/NFC/shards on x86-64 and ARM64, but simulated Host ioctls.
 The subsequent [256 MiB ARM64 native episode](docs/results/2026-09-22-native-arm-channel-256.md)
 passed real-driver I/O, four-worker reset/reconstruction and cold recovery.
-New64GiB channel-native operation remains unqualified; the older R0 result
-above does not substitute for it.
+The [new64GiB channel-native full-volume episode](docs/results/2026-09-22-native-arm-channel-64g.md)
+also passed full write/read, striped overwrite, actual GC and cold-recovered
+whole-volume verification. This is separate from R0 and is not a throughput,
+NUMA, M5 or production-readiness claim.
 
 ## Try the software path on Linux
 

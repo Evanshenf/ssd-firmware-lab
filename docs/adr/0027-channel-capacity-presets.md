@@ -55,10 +55,12 @@ changing this decision or the source. It is not a full-capacity campaign.
 lengths and real arena-size queries without creating media. Cross-compiled
 AArch64/RISC-V64/s390x plan execution is sizing evidence only.
 
-The new64GiB channel profile has not passed native Linux device qualification.
-Its four images plus manifest total91289093120bytes. Existing full-image
-resource admission and60-second threaded operational deadlines remain;
-successful small tests do not prove large startup/recovery meets them.
-Large testing needs a separate resource/identity plan, not a VM reinstall or
-automatic deletion of a retained dataset. No new test framework, capacity
-campaign, NUMA-locality or performance claim is introduced.
+At the original construction checkpoint,64GiB had sizing evidence only. The
+subsequent [ARM64 native64GiB episode](../results/2026-09-22-native-arm-channel-64g.md)
+passed full write/read,32GiB striped overwrite, actualGC and cold-recovered
+whole-volume readback on the unchanged source. Four images plus the manifest
+total91289093120bytes. Full-image admission and60-second threaded operational
+deadlines remain; measured format/recovery are not arbitrary-platform bounds.
+The user explicitly retired one completed old test image to reuse existing
+RAM; no automatic conversion, archive disk or VM reinstall was required.
+The decision introduces no new framework, NUMA-locality or performance claim.

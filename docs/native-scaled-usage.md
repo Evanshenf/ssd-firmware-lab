@@ -23,6 +23,8 @@ the channel construction. Its [current capacity evidence](results/2026-09-15-cha
 uses simulated Host ioctls and real small media; it is not new64GiB native proof.
 The subsequent [ARM64 native256MiB result](results/2026-09-22-native-arm-channel-256.md)
 adds real-driver selected I/O, four workers, quiet reset and cold recovery.
+The later [64GiB channel-native run](results/2026-09-22-native-arm-channel-64g.md)
+passed bounded full-volume data/GC/cold recovery on the same source.
 
 ## 1. Choose matching builds
 
@@ -178,7 +180,9 @@ The [software result](results/2026-09-14-native-worker-lifetime.md) does not by
 itself qualify kernel operation. The later [four-worker x86-64 native journey](results/2026-09-14-native-four-worker-l1.md)
 passed the bounded actual-driver data/reset/recovery checks, followed by
 [ARM64 native256MiB workers4](results/2026-09-22-native-arm-channel-256.md).
-One-worker native, channel64GiB, M5 and performance remain separate tasks; this section does not authorize
+The [64GiB four-worker data episode](results/2026-09-22-native-arm-channel-64g.md)
+also passed full write/read, overwrite/GC and cold recovery. One-worker native,
+M5 and performance remain separate tasks; this section does not authorize
 changing an existing media directory.
 
 The [development results](results/2026-09-10-scaled-storage-mq2.md) identify the

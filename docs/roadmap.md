@@ -121,8 +121,10 @@ now passes its fixed software/real-thread checks. A subsequent
 [native four-worker L1 journey](results/2026-09-14-native-four-worker-l1.md)
 also passed real-driver data, reset and cold recovery. The subsequent
 [ARM64 native256MiB episode](results/2026-09-22-native-arm-channel-256.md)
-passed the same bounded four-worker path with selected extents. New-construction
-64GiB native/full-capacity, M5, NUMA/performance and vendor geometry
+passed the same bounded four-worker path with selected extents, followed by
+[64GiB full-volume native data/GC/cold recovery](results/2026-09-22-native-arm-channel-64g.md).
+New-construction filesystem/pending-I/O-control coverage, M5,
+NUMA/performance and vendor geometry
 remain separate finite work, not reasons to
 repeat or broaden the completed A–D tests.
 Threads/NUMA do not define NAND topology or guarantee a throughput multiplier.
